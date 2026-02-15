@@ -1,11 +1,9 @@
-import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { ARCHETYPES, type Archetype } from "@/data/archetypes";
 import { Card, CardContent } from "@/components/ui/card";
 
 const ChooseBackground = () => {
   const { dispatch } = useGame();
-  const navigate = useNavigate();
 
   const handleSelect = (archetype: Archetype) => {
     dispatch({
@@ -23,7 +21,6 @@ const ChooseBackground = () => {
       },
     });
     dispatch({ type: "SET_PHASE", payload: "INTERVIEWS" });
-    navigate("/interviews");
   };
 
   return (

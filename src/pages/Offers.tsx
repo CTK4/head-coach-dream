@@ -11,7 +11,6 @@ const Offers = () => {
 
   const handleAccept = (offer: typeof state.offers[0]) => {
     dispatch({ type: "ACCEPT_OFFER", payload: offer });
-    navigate("/coordinators");
   };
 
   if (state.offers.length === 0) {

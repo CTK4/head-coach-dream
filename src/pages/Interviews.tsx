@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useGame, type InterviewResult } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import {
@@ -85,7 +84,6 @@ const InterviewSession = ({
 
 const Interviews = () => {
   const { state, dispatch } = useGame();
-  const navigate = useNavigate();
   const [activeInterview, setActiveInterview] = useState<string | null>(null);
 
   const handleComplete = (teamId: string, answers: Record<string, number>, result: InterviewResult) => {
@@ -96,9 +94,8 @@ const Interviews = () => {
   useEffect(() => {
     if (state.interviews.completedCount === 3 && state.offers.length === 0) {
       dispatch({ type: "GENERATE_OFFERS" });
-      navigate("/offers");
     }
-  }, [dispatch, navigate, state.interviews.completedCount, state.offers.length]);
+  }, [dispatch, state.interviews.completedCount, state.offers.length]);
 
   if (activeInterview) {
     return (

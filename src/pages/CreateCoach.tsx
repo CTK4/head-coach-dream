@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getLeagueCities, getTeams } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +17,6 @@ function findHometownTeamId(hometown: string): string | undefined {
 
 const CreateCoach = () => {
   const { state, dispatch } = useGame();
-  const navigate = useNavigate();
   const [name, setName] = useState(state.coach.name);
   const [ageTier, setAgeTier] = useState(state.coach.ageTier || AGE_TIERS[0]);
   const [hometown, setHometown] = useState(state.coach.hometown);
@@ -37,7 +35,6 @@ const CreateCoach = () => {
       },
     });
     dispatch({ type: "SET_PHASE", payload: "BACKGROUND" });
-    navigate("/background");
   };
 
   return (
