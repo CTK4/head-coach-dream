@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from "react";
+import { generateOffers } from "@/engine/offers";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 
@@ -19,7 +20,14 @@ export type InterviewItem = {
   result?: InterviewResult;
 };
 
-export type OfferItem = { teamId: string; years: number; salary: number };
+export type OfferItem = {
+  teamId: string;
+  years: number;
+  salary: number;
+  autonomy: number;
+  patience: number;
+  mediaNarrativeKey: string;
+};
 
 export type GameState = {
   coach: {
@@ -41,6 +49,9 @@ export type GameState = {
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
+  autonomyRating?: number;
+  ownerPatience?: number;
+  memoryLog: string[];
   staff: { ocId?: string; dcId?: string; stcId?: string };
   hub: { news: string[] };
   saveSeed: number;
@@ -82,6 +93,7 @@ function createInitialState(): GameState {
       completedCount: 0,
     },
     offers: [],
+    memoryLog: [],
     staff: {},
     hub: {
       news: [
@@ -139,26 +151,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "GENERATE_OFFERS": {
-      // Generate 1-3 offers from interview teams
-      const completedTeams = state.interviews.items
-        .filter((i) => i.completed)
-        .map((i) => i.teamId);
-      const offerCount = Math.max(1, Math.min(completedTeams.length, 1 + Math.floor(Math.random() * 2)));
-      const shuffled = [...completedTeams].sort(() => Math.random() - 0.5);
-      const offers = shuffled.slice(0, offerCount).map((teamId) => ({
-        teamId,
-        years: 3 + Math.floor(Math.random() * 3),
-        salary: 4_000_000 + Math.floor(Math.random() * 6_000_000),
-      }));
-      // Guarantee at least one
-      if (offers.length === 0 && completedTeams.length > 0) {
-        offers.push({ teamId: completedTeams[0], years: 4, salary: 5_000_000 });
-      }
+      const offers = generateOffers(state);
       return { ...state, offers, phase: "OFFERS" };
     }
 
-    case "ACCEPT_OFFER":
-      return { ...state, acceptedOffer: action.payload, phase: "COORD_HIRING" };
+    case "ACCEPT_OFFER": {
+      const teamLabel = action.payload.teamId.replaceAll("_", " ");
+      const hireEvent = `Accepted ${teamLabel} HC offer (${action.payload.years}y/$${(action.payload.salary / 1_000_000).toFixed(1)}M, autonomy ${action.payload.autonomy}, patience ${action.payload.patience}).`;
+      return {
+        ...state,
+        acceptedOffer: action.payload,
+        autonomyRating: action.payload.autonomy,
+        ownerPatience: action.payload.patience,
+        memoryLog: [...state.memoryLog, hireEvent],
+        phase: "COORD_HIRING",
+      };
+    }
 
     case "HIRE_STAFF": {
       const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
@@ -257,6 +265,7 @@ function loadState(): GameState {
       hub: { ...initial.hub, ...parsed.hub },
       staff: { ...initial.staff, ...parsed.staff },
       game: { ...initial.game, ...parsed.game },
+      memoryLog: parsed.memoryLog ?? initial.memoryLog,
     };
   } catch {
     return initial;
