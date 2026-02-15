@@ -54,6 +54,14 @@ const Offers = () => {
                       <p className="text-xs text-muted-foreground">Salary</p>
                       <p className="font-bold">${(offer.salary / 1_000_000).toFixed(1)}M/yr</p>
                     </div>
+                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
+                      <p className="text-xs text-muted-foreground">Autonomy</p>
+                      <p className="font-bold">{offer.autonomy}</p>
+                    </div>
+                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
+                      <p className="text-xs text-muted-foreground">Patience</p>
+                      <p className="font-bold">{offer.patience}</p>
+                    </div>
                   </div>
                   <Button onClick={() => handleAccept(offer)} className="w-full">
                     Accept Offer
