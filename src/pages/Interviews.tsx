@@ -1,15 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
 import { useGame, type InterviewResult } from "@/context/GameContext";
-import { getTeamById } from "@/data/leagueDb";
+import { getOwnerByTeam, getTeamById } from "@/data/leagueDb";
 import {
   computeInterviewResults,
   getInterviewProfile,
   selectInterviewQuestions,
   type InterviewQuestion,
 } from "@/data/interviewQuestions";
+import { getFlavorLine, type OfferTier } from "@/engine/interviewFlavor";
+import { parsePersonalityTags } from "@/engine/personalityTags";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+function average(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function resolveOfferTier(result: InterviewResult, profile: ReturnType<typeof getInterviewProfile>): OfferTier {
+  const threshold = average([
+    profile.offerThreshold.ownerAlignScore,
+    profile.offerThreshold.gmTrustScore,
+    profile.offerThreshold.schemeFitScore,
+    profile.offerThreshold.mediaScore,
+  ]);
+  const score = average([
+    result.ownerAlignScore,
+    result.gmTrustScore,
+    result.schemeFitScore,
+    result.mediaScore,
+  ]) + result.autonomyDelta * 0.2 + result.leashDelta * 0.1;
+  const normalized = threshold > 0 ? score / threshold : 0;
+
+  if (normalized >= 1.45) return "PREMIUM";
+  if (normalized >= 1.25) return "STANDARD";
+  if (normalized >= 1.05) return "CONDITIONAL";
+  return "REJECT";
+}
 
 const InterviewSession = ({
   teamId,
@@ -24,9 +52,14 @@ const InterviewSession = ({
 }) => {
   const team = getTeamById(teamId);
   const profile = getInterviewProfile(teamId);
+  const ownerTags = useMemo(() => {
+    const owner = getOwnerByTeam(teamId);
+    return parsePersonalityTags(owner?.Column1);
+  }, [teamId]);
   const questions = useMemo<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed), [teamId, saveSeed]);
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [finalResult, setFinalResult] = useState<{ result: InterviewResult; tier: OfferTier; answers: Record<string, number> } | null>(null);
 
   const question = questions[currentQ];
   if (!question) return null;
@@ -39,11 +72,32 @@ const InterviewSession = ({
     setScores(newScores);
 
     if (currentQ + 1 >= questions.length) {
-      onComplete(newScores, computeInterviewResults(newScores, profile));
+      const result = computeInterviewResults(newScores, profile);
+      const tier = resolveOfferTier(result, profile);
+      setFinalResult({ result, tier, answers: newScores });
     } else {
       setCurrentQ(currentQ + 1);
     }
   };
+
+  if (finalResult) {
+    return (
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="max-w-2xl mx-auto">
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <h2 className="text-2xl font-bold">Interview Complete</h2>
+              <Badge className="w-fit" variant="secondary">{finalResult.tier}</Badge>
+              <p className="text-sm text-muted-foreground">
+                {getFlavorLine({ ownerTags, theme: "END", phase: "END", tier: finalResult.tier })}
+              </p>
+              <Button onClick={() => onComplete(finalResult.answers, finalResult.result)}>Return to Interviews</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 md:p-8">
@@ -52,13 +106,14 @@ const InterviewSession = ({
         <div className="mb-6">
           <h2 className="text-2xl font-bold">{team?.name ?? teamId} Interview</h2>
           <p className="text-sm text-muted-foreground">Question {currentQ + 1} of {questions.length}</p>
-          <div className="w-full bg-secondary rounded-full h-2 mt-2">
-            <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${((currentQ + 1) / questions.length) * 100}%` }} />
-          </div>
         </div>
         <Card>
           <CardContent className="p-6">
             <p className="text-lg font-medium mb-6 leading-relaxed">{question.prompt}</p>
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground mb-2">THEME · {question.cluster.toUpperCase()}</p>
+            <p className="text-sm text-muted-foreground mb-6">
+              {getFlavorLine({ ownerTags, theme: question.cluster, phase: "DURING" })}
+            </p>
             <div className="space-y-3">
               {question.answers.map((ans) => (
                 <Card

@@ -33,6 +33,7 @@ export type PersonnelRow = {
   fullName: string;
   role?: string;
   teamId?: string;
+  Column1?: string;
   status?: string;
   age?: number;
   reputation?: number;
@@ -82,6 +83,12 @@ export function getPlayersByTeam(teamId: string): PlayerRow[] {
 export function getPlayers(): PlayerRow[] { return players; }
 
 export function getPersonnel(): PersonnelRow[] { return personnel; }
+
+export function getOwnerByTeam(teamId: string): PersonnelRow | undefined {
+  return personnel.find(
+    (person) => person.teamId === teamId && String(person.role ?? "").toUpperCase() === "OWNER"
+  );
+}
 
 export function getPersonnelFreeAgents(): PersonnelRow[] {
   return personnel.filter((p) => {
