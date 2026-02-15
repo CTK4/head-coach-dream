@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
+import { useGame, type InterviewResult } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
-import { getInterviewQuestions, type InterviewQuestion } from "@/data/interviewQuestions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  computeInterviewResults,
+  getInterviewProfile,
+  selectInterviewQuestions,
+  type InterviewQuestion,
+} from "@/data/interviewQuestions";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -13,11 +18,13 @@ const InterviewSession = ({
   onBack,
 }: {
   teamId: string;
-  onComplete: (answers: Record<string, number>) => void;
+  saveSeed: number;
+  onComplete: (answers: Record<string, number>, result: InterviewResult) => void;
   onBack: () => void;
 }) => {
   const team = getTeamById(teamId);
-  const [questions] = useState<InterviewQuestion[]>(() => getInterviewQuestions(4));
+  const profile = getInterviewProfile(teamId);
+  const [questions] = useState<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed));
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
 
@@ -32,7 +39,7 @@ const InterviewSession = ({
     setScores(newScores);
 
     if (currentQ + 1 >= questions.length) {
-      onComplete(newScores);
+      onComplete(newScores, computeInterviewResults(newScores, profile));
     } else {
       setCurrentQ(currentQ + 1);
     }
@@ -80,8 +87,8 @@ const Interviews = () => {
   const navigate = useNavigate();
   const [activeInterview, setActiveInterview] = useState<string | null>(null);
 
-  const handleComplete = (teamId: string, answers: Record<string, number>) => {
-    dispatch({ type: "COMPLETE_INTERVIEW", payload: { teamId, answers } });
+  const handleComplete = (teamId: string, answers: Record<string, number>, result: InterviewResult) => {
+    dispatch({ type: "COMPLETE_INTERVIEW", payload: { teamId, answers, result } });
     setActiveInterview(null);
 
     // Check if all completed
@@ -98,7 +105,8 @@ const Interviews = () => {
     return (
       <InterviewSession
         teamId={activeInterview}
-        onComplete={(answers) => handleComplete(activeInterview, answers)}
+        saveSeed={state.saveSeed}
+        onComplete={(answers, result) => handleComplete(activeInterview, answers, result)}
         onBack={() => setActiveInterview(null)}
       />
     );
@@ -126,7 +134,14 @@ const Interviews = () => {
                     <p className="text-sm text-muted-foreground">{team?.region}</p>
                   </div>
                   {item.completed ? (
-                    <Badge className="bg-primary text-primary-foreground">✓ Done</Badge>
+                    <div className="text-right">
+                      <Badge className="bg-primary text-primary-foreground">✓ Done</Badge>
+                      {item.result && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Owner {item.result.ownerAlignScore >= 1 ? "Strong" : "Weak"} · GM {item.result.gmTrustScore >= 1 ? "Strong" : "Weak"}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <Badge variant="outline">Pending</Badge>
                   )}

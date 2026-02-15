@@ -2,7 +2,22 @@ import React, { createContext, useContext, useReducer, useEffect } from "react";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 
-export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number> };
+export type InterviewResult = {
+  ownerAlignScore: number;
+  gmTrustScore: number;
+  schemeFitScore: number;
+  mediaScore: number;
+  autonomyDelta: number;
+  leashDelta: number;
+  axisTotals: Record<string, number>;
+};
+
+export type InterviewItem = {
+  teamId: string;
+  completed: boolean;
+  answers: Record<string, number>;
+  result?: InterviewResult;
+};
 
 export type OfferItem = { teamId: string; years: number; salary: number };
 
@@ -28,6 +43,7 @@ export type GameState = {
   acceptedOffer?: OfferItem;
   staff: { ocId?: string; dcId?: string; stcId?: string };
   hub: { news: string[] };
+  saveSeed: number;
   game: {
     opponentTeamId?: string;
     homeScore: number;
@@ -75,6 +91,7 @@ function createInitialState(): GameState {
         "Coaching carousel in full swing",
       ],
     },
+    saveSeed: Date.now(),
     game: { homeScore: 0, awayScore: 0, quarter: 1, down: 1, distance: 10, ballOn: 25, seed: Date.now() },
   };
 }
@@ -82,7 +99,10 @@ function createInitialState(): GameState {
 export type GameAction =
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
-  | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number> } }
+  | {
+      type: "COMPLETE_INTERVIEW";
+      payload: { teamId: string; answers: Record<string, number>; result: InterviewResult };
+    }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
@@ -111,7 +131,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId
-          ? { ...item, completed: true, answers: action.payload.answers }
+          ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result }
           : item
       );
       const completedCount = items.filter((i) => i.completed).length;
