@@ -20,6 +20,9 @@ const Offers = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-6 text-center">
             <p className="text-lg">No offers yet. Complete all interviews first.</p>
+            <p className="text-xs text-muted-foreground mt-2 break-all">
+              Debug: phase={state.phase} completedCount={state.interviews.completedCount} completed=[{state.interviews.items.map((item) => String(item.completed)).join(", ")}]
+            </p>
             <Button onClick={() => navigate("/interviews")} className="mt-4">Back to Interviews</Button>
           </CardContent>
         </Card>
