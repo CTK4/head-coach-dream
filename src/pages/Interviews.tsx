@@ -23,14 +23,12 @@ import { useEffect, useMemo, useState } from "react";
    onComplete: (answers: Record<string, number>, result: InterviewResult) => void;
    onBack: () => void;
  }) => {
-   const team = getTeamById(teamId);
-   const profile = getInterviewProfile(teamId);
--  const [questions] = useState<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed));
--  const questions = useMemo<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed), [teamId, saveSeed]);
-+  const questions = useMemo<InterviewQuestion[]>(
-+    () => selectInterviewQuestions(teamId, 4, saveSeed),
-+    [teamId, saveSeed]
-+  );
+  const team = getTeamById(teamId);
+  const profile = getInterviewProfile(teamId);
+  const questions = useMemo<InterviewQuestion[]>(
+    () => selectInterviewQuestions(teamId, 4, saveSeed),
+    [teamId, saveSeed]
+  );
    const [currentQ, setCurrentQ] = useState(0);
    const [scores, setScores] = useState<Record<string, number>>({});
  
@@ -101,31 +99,22 @@ import { useEffect, useMemo, useState } from "react";
      setActiveInterview(null);
    };
  
-+  useEffect(() => {
-+    if (state.interviews.completedCount === 3 && state.offers.length === 0) {
-+      dispatch({ type: "GENERATE_OFFERS" });
-+      navigate("/offers");
-+    }
-+  }, [dispatch, navigate, state.interviews.completedCount, state.offers.length]);
-+
-   if (activeInterview) {
-+    const saveSeed =
-+      // supports either newer state.game.saveSeed or older state.game.seed
-+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-+      ((state as any).game?.saveSeed as number | undefined) ??
-+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-+      ((state as any).game?.seed as number | undefined) ??
-+      Date.now();
-+
-     return (
-       <InterviewSession
-         key={activeInterview}
-         teamId={activeInterview}
--        saveSeed={state.saveSeed}
-+        saveSeed={saveSeed}
-         onComplete={(answers, result) => handleComplete(activeInterview, answers, result)}
-         onBack={() => setActiveInterview(null)}
-       />
+  useEffect(() => {
+    if (state.interviews.completedCount === 3 && state.offers.length === 0) {
+      dispatch({ type: "GENERATE_OFFERS" });
+      navigate("/offers");
+    }
+  }, [dispatch, navigate, state.interviews.completedCount, state.offers.length]);
+
+  if (activeInterview) {
+    return (
+      <InterviewSession
+        key={activeInterview}
+        teamId={activeInterview}
+        saveSeed={state.saveSeed}
+        onComplete={(answers, result) => handleComplete(activeInterview, answers, result)}
+        onBack={() => setActiveInterview(null)}
+      />
      );
    }
  
