@@ -65,6 +65,16 @@ const teamsById = new Map(teams.map((t) => [t.teamId, t]));
 export function getTeams(): TeamRow[] { return teams; }
 export function getTeamById(teamId: string): TeamRow | undefined { return teamsById.get(teamId); }
 
+export function getLeagueCities(): string[] {
+  return Array.from(
+    new Set(
+      getTeams()
+        .map((team) => team.region?.trim())
+        .filter((region): region is string => Boolean(region))
+    )
+  ).sort((a, b) => a.localeCompare(b));
+}
+
 export function getPlayersByTeam(teamId: string): PlayerRow[] {
   return players.filter((p) => p.teamId === teamId);
 }

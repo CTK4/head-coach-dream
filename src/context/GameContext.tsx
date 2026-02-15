@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useReducer, useEffect } from "react";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 
@@ -7,7 +7,17 @@ export type InterviewItem = { teamId: string; completed: boolean; answers: Recor
 export type OfferItem = { teamId: string; years: number; salary: number };
 
 export type GameState = {
-  coach: { name: string; age: number; hometown: string; background: string };
+  coach: {
+    name: string;
+    ageTier: string;
+    hometown: string;
+    background: string;
+    hometownTeamId?: string;
+    repBaseline?: number;
+    ownerPerceptionMod?: number;
+    mediaToneSeed?: number;
+    hometownPressureEligible?: boolean;
+  };
   phase: GamePhase;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
@@ -31,7 +41,17 @@ const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VUL
 
 function createInitialState(): GameState {
   return {
-    coach: { name: "", age: 35, hometown: "", background: "" },
+    coach: {
+      name: "",
+      ageTier: "32-35",
+      hometown: "",
+      background: "",
+      hometownTeamId: undefined,
+      repBaseline: 50,
+      ownerPerceptionMod: 3,
+      mediaToneSeed: 0,
+      hometownPressureEligible: false,
+    },
     phase: "CREATE",
     interviews: {
       items: INTERVIEW_TEAMS.map((t) => ({ teamId: t, completed: false, answers: {} })),
@@ -195,11 +215,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 const STORAGE_KEY = "hc_career_save";
 
 function loadState(): GameState {
+  const initial = createInitialState();
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return createInitialState();
+    if (!saved) return initial;
+
+    const parsed = JSON.parse(saved) as Partial<GameState>;
+    return {
+      ...initial,
+      ...parsed,
+      coach: { ...initial.coach, ...parsed.coach },
+      interviews: { ...initial.interviews, ...parsed.interviews },
+      hub: { ...initial.hub, ...parsed.hub },
+      staff: { ...initial.staff, ...parsed.staff },
+      game: { ...initial.game, ...parsed.game },
+    };
+  } catch {
+    return initial;
+  }
 }
 
 type GameContextType = {
