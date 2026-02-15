@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame, type InterviewResult } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 
 const InterviewSession = ({
   teamId,
+  saveSeed,
   onComplete,
   onBack,
 }: {
@@ -24,7 +25,7 @@ const InterviewSession = ({
 }) => {
   const team = getTeamById(teamId);
   const profile = getInterviewProfile(teamId);
-  const [questions] = useState<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed));
+  const questions = useMemo<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, 4, saveSeed), [teamId, saveSeed]);
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
 
@@ -90,20 +91,19 @@ const Interviews = () => {
   const handleComplete = (teamId: string, answers: Record<string, number>, result: InterviewResult) => {
     dispatch({ type: "COMPLETE_INTERVIEW", payload: { teamId, answers, result } });
     setActiveInterview(null);
-
-    // Check if all completed
-    const newCompleted = state.interviews.completedCount + 1;
-    if (newCompleted >= 3) {
-      setTimeout(() => {
-        dispatch({ type: "GENERATE_OFFERS" });
-        navigate("/offers");
-      }, 500);
-    }
   };
+
+  useEffect(() => {
+    if (state.interviews.completedCount === 3 && state.offers.length === 0) {
+      dispatch({ type: "GENERATE_OFFERS" });
+      navigate("/offers");
+    }
+  }, [dispatch, navigate, state.interviews.completedCount, state.offers.length]);
 
   if (activeInterview) {
     return (
       <InterviewSession
+        key={activeInterview}
         teamId={activeInterview}
         saveSeed={state.saveSeed}
         onComplete={(answers, result) => handleComplete(activeInterview, answers, result)}
@@ -119,6 +119,9 @@ const Interviews = () => {
         <p className="text-muted-foreground text-center mb-8">
           Complete all three interviews to receive offers ({state.interviews.completedCount}/3)
         </p>
+        <p className="text-xs text-muted-foreground text-center mb-4">
+          Debug: completedCount={state.interviews.completedCount}
+        </p>
         <div className="grid gap-4">
           {state.interviews.items.map((item) => {
             const team = getTeamById(item.teamId);
@@ -132,6 +135,7 @@ const Interviews = () => {
                   <div>
                     <h3 className="font-semibold text-lg">{team?.name ?? item.teamId}</h3>
                     <p className="text-sm text-muted-foreground">{team?.region}</p>
+                    <p className="text-xs text-muted-foreground">debug completed={String(item.completed)}</p>
                   </div>
                   {item.completed ? (
                     <div className="text-right">
