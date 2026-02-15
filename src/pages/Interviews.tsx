@@ -1,4 +1,4 @@
- import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
  import { useNavigate } from "react-router-dom";
  import { useGame, type InterviewResult } from "@/context/GameContext";
  import { getTeamById } from "@/data/leagueDb";
