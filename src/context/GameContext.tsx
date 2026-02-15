@@ -29,6 +29,15 @@ export type OfferItem = {
   mediaNarrativeKey: string;
 };
 
+export type MemoryEvent = {
+  type: string;
+  season: number;
+  week?: number;
+  payload: any;
+};
+
+const CURRENT_SAVE_VERSION = 1;
+
 export type GameState = {
   coach: {
     name: string;
@@ -51,7 +60,10 @@ export type GameState = {
   acceptedOffer?: OfferItem;
   autonomyRating?: number;
   ownerPatience?: number;
-  memoryLog: string[];
+  season: number;
+  week?: number;
+  saveVersion: number;
+  memoryLog: MemoryEvent[];
   staff: { ocId?: string; dcId?: string; stcId?: string };
   hub: { news: string[] };
   saveSeed: number;
@@ -93,6 +105,9 @@ function createInitialState(): GameState {
       completedCount: 0,
     },
     offers: [],
+    season: 2026,
+    week: 1,
+    saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
     staff: {},
     hub: {
@@ -156,14 +171,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "ACCEPT_OFFER": {
-      const teamLabel = action.payload.teamId.replaceAll("_", " ");
-      const hireEvent = `Accepted ${teamLabel} HC offer (${action.payload.years}y/$${(action.payload.salary / 1_000_000).toFixed(1)}M, autonomy ${action.payload.autonomy}, patience ${action.payload.patience}).`;
+      const memoryLog = addMemoryEvent(state, "HIRED_COACH", {
+        teamId: action.payload.teamId,
+        years: action.payload.years,
+        salary: action.payload.salary,
+        autonomy: action.payload.autonomy,
+        patience: action.payload.patience,
+      });
       return {
         ...state,
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
-        memoryLog: [...state.memoryLog, hireEvent],
+        memoryLog,
         phase: "COORD_HIRING",
       };
     }
@@ -250,6 +270,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
 const STORAGE_KEY = "hc_career_save";
 
+function addMemoryEvent(state: GameState, type: string, payload: any): MemoryEvent[] {
+  return [
+    ...state.memoryLog,
+    {
+      type,
+      season: state.season,
+      week: state.week,
+      payload,
+    },
+  ];
+}
+
+function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
+  return oldState;
+}
+
 function loadState(): GameState {
   const initial = createInitialState();
   try {
@@ -257,15 +293,19 @@ function loadState(): GameState {
     if (!saved) return initial;
 
     const parsed = JSON.parse(saved) as Partial<GameState>;
+    const parsedVersion = parsed.saveVersion ?? 0;
+    const migrated = parsedVersion < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
+
     return {
       ...initial,
-      ...parsed,
-      coach: { ...initial.coach, ...parsed.coach },
-      interviews: { ...initial.interviews, ...parsed.interviews },
-      hub: { ...initial.hub, ...parsed.hub },
-      staff: { ...initial.staff, ...parsed.staff },
-      game: { ...initial.game, ...parsed.game },
-      memoryLog: parsed.memoryLog ?? initial.memoryLog,
+      ...migrated,
+      coach: { ...initial.coach, ...migrated.coach },
+      interviews: { ...initial.interviews, ...migrated.interviews },
+      hub: { ...initial.hub, ...migrated.hub },
+      staff: { ...initial.staff, ...migrated.staff },
+      game: { ...initial.game, ...migrated.game },
+      saveVersion: CURRENT_SAVE_VERSION,
+      memoryLog: migrated.memoryLog ?? initial.memoryLog,
     };
   } catch {
     return initial;
