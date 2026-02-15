@@ -12,24 +12,6 @@ const AGE_TIERS = ["32-35", "36-39", "40-43", "44-47", "48-51", "52-55"] as cons
 
 const LEAGUE_CITIES = getLeagueCities();
 
-function computeRepBaseline(ageTier: string): number {
-  const tierIndex = AGE_TIERS.indexOf(ageTier as (typeof AGE_TIERS)[number]);
-  return 50 + Math.max(0, tierIndex) * 4;
-}
-
-function computeOwnerPerceptionMod(ageTier: string): number {
-  const tierIndex = AGE_TIERS.indexOf(ageTier as (typeof AGE_TIERS)[number]);
-  return 3 - Math.max(0, tierIndex);
-}
-
-function computeMediaToneSeed(ageTier: string, hometown: string): number {
-  return (ageTier + hometown).split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 100;
-}
-
-function computeHometownPressureEligible(hometown: string): boolean {
-  return getTeams().some((team) => team.region === hometown);
-}
-
 function findHometownTeamId(hometown: string): string | undefined {
   return getTeams().find((team) => team.region === hometown)?.teamId;
 }
@@ -52,10 +34,6 @@ const CreateCoach = () => {
         hometown,
         ageTier,
         hometownTeamId,
-        repBaseline: computeRepBaseline(ageTier),
-        ownerPerceptionMod: computeOwnerPerceptionMod(ageTier),
-        mediaToneSeed: computeMediaToneSeed(ageTier, hometown),
-        hometownPressureEligible: computeHometownPressureEligible(hometown),
       },
     });
     dispatch({ type: "SET_PHASE", payload: "BACKGROUND" });

@@ -11,12 +11,16 @@ export type GameState = {
     name: string;
     ageTier: string;
     hometown: string;
-    background: string;
+    archetypeId: string;
     hometownTeamId?: string;
     repBaseline?: number;
-    ownerPerceptionMod?: number;
-    mediaToneSeed?: number;
-    hometownPressureEligible?: boolean;
+    autonomy?: number;
+    ownerTrustBaseline?: number;
+    gmRelationship?: number;
+    coordDeferenceLevel?: number;
+    mediaExpectation?: number;
+    lockerRoomCred?: number;
+    volatility?: number;
   };
   phase: GamePhase;
   interviews: { items: InterviewItem[]; completedCount: number };
@@ -45,12 +49,16 @@ function createInitialState(): GameState {
       name: "",
       ageTier: "32-35",
       hometown: "",
-      background: "",
+      archetypeId: "",
       hometownTeamId: undefined,
-      repBaseline: 50,
-      ownerPerceptionMod: 3,
-      mediaToneSeed: 0,
-      hometownPressureEligible: false,
+      repBaseline: undefined,
+      autonomy: undefined,
+      ownerTrustBaseline: undefined,
+      gmRelationship: undefined,
+      coordDeferenceLevel: undefined,
+      mediaExpectation: undefined,
+      lockerRoomCred: undefined,
+      volatility: undefined,
     },
     phase: "CREATE",
     interviews: {
