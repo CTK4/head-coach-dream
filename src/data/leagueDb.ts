@@ -53,7 +53,6 @@ export type ContractRow = {
   [key: string]: unknown;
 };
 
-// The JSON is flat (not wrapped in "sheets")
 const root = leagueDbJson as Record<string, unknown[]>;
 
 const teams: TeamRow[] = (root.Teams ?? []) as TeamRow[];
@@ -61,15 +60,30 @@ const players: PlayerRow[] = (root.Players ?? []) as PlayerRow[];
 const personnel: PersonnelRow[] = (root.Personnel ?? []) as PersonnelRow[];
 const contracts: ContractRow[] = (root.Contracts ?? []) as ContractRow[];
 
-const teamsById = new Map(teams.map((t) => [t.teamId, t]));
+const teamsById = new Map(teams.map((team) => [team.teamId, team]));
 
-export function getTeams(): TeamRow[] { return teams; }
-export function getTeamById(teamId: string): TeamRow | undefined { return teamsById.get(teamId); }
+const EXCLUDED_ASSISTANT_HC_ROLES = new Set(["OWNER", "GENERAL_MANAGER", "HEAD_COACH"]);
+
+export type PositionCoachRole = "QB_COACH" | "OL_COACH" | "DL_COACH" | "LB_COACH" | "DB_COACH" | "RB_COACH" | "WR_COACH";
+
+function isFreeAgentPersonnel(person: PersonnelRow): boolean {
+  const status = String(person.status ?? "").toUpperCase();
+  const teamId = String(person.teamId ?? "").toUpperCase();
+  return status === "FREE_AGENT" || !teamId || teamId === "FREE_AGENT";
+}
+
+export function getTeams(): TeamRow[] {
+  return teams;
+}
+
+export function getTeamById(teamId: string): TeamRow | undefined {
+  return teamsById.get(teamId);
+}
 
 export function getLeagueCities(): string[] {
   return Array.from(
     new Set(
-      getTeams()
+      teams
         .map((team) => team.region?.trim())
         .filter((region): region is string => Boolean(region))
     )
@@ -77,12 +91,16 @@ export function getLeagueCities(): string[] {
 }
 
 export function getPlayersByTeam(teamId: string): PlayerRow[] {
-  return players.filter((p) => p.teamId === teamId);
+  return players.filter((player) => player.teamId === teamId);
 }
 
-export function getPlayers(): PlayerRow[] { return players; }
+export function getPlayers(): PlayerRow[] {
+  return players;
+}
 
-export function getPersonnel(): PersonnelRow[] { return personnel; }
+export function getPersonnel(): PersonnelRow[] {
+  return personnel;
+}
 
 export function getOwnerByTeam(teamId: string): PersonnelRow | undefined {
   return personnel.find(
@@ -91,11 +109,7 @@ export function getOwnerByTeam(teamId: string): PersonnelRow | undefined {
 }
 
 export function getPersonnelFreeAgents(): PersonnelRow[] {
-  return personnel.filter((p) => {
-    const status = String(p.status ?? "").toUpperCase();
-    const teamId = String(p.teamId ?? "");
-    return status === "FREE_AGENT" || !teamId || teamId === "FREE_AGENT";
-  });
+  return personnel.filter(isFreeAgentPersonnel);
 }
 
 export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRow[] {
@@ -104,30 +118,52 @@ export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRo
     DC: "DEF_COORDINATOR",
     STC: "ST_COORDINATOR",
   };
-  const targetRole = roleMap[role];
+
   return getPersonnelFreeAgents().filter(
-    (p) => String(p.role ?? "").toUpperCase() === targetRole
+    (person) => String(person.role ?? "").toUpperCase() === roleMap[role]
+  );
+}
+
+export function getAssistantHeadCoachCandidates(): PersonnelRow[] {
+  return getPersonnelFreeAgents().filter((person) => {
+    const role = String(person.role ?? "").toUpperCase();
+    return !EXCLUDED_ASSISTANT_HC_ROLES.has(role);
+  });
+}
+
+export function getPositionCoachCandidates(role: PositionCoachRole): PersonnelRow[] {
+  return getPersonnelFreeAgents().filter(
+    (person) => String(person.role ?? "").toUpperCase() === role
   );
 }
 
 export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
-  const r = role.toUpperCase();
-  if (r === "OFF_COORDINATOR") return "OC";
-  if (r === "DEF_COORDINATOR") return "DC";
-  if (r === "ST_COORDINATOR") return "STC";
+  const upper = role.toUpperCase();
+  if (upper === "OFF_COORDINATOR") return "OC";
+  if (upper === "DEF_COORDINATOR") return "DC";
+  if (upper === "ST_COORDINATOR") return "STC";
   return null;
 }
 
 export function getTeamSummary(teamId: string) {
   const team = getTeamById(teamId);
   if (!team) return null;
+
   const teamPlayers = getPlayersByTeam(teamId);
   const overall = teamPlayers.length
-    ? Math.round(teamPlayers.reduce((s, p) => s + Number(p.overall ?? 0), 0) / teamPlayers.length)
+    ? Math.round(teamPlayers.reduce((sum, player) => sum + Number(player.overall ?? 0), 0) / teamPlayers.length)
     : 0;
+
   const capHits = contracts
-    .filter((c) => c.entityType === "PLAYER" && c.teamId === teamId)
-    .reduce((s, c) => s + Number(c.salaryY1 ?? 0), 0);
+    .filter((contract) => contract.entityType === "PLAYER" && contract.teamId === teamId)
+    .reduce((sum, contract) => sum + Number(contract.salaryY1 ?? 0), 0);
+
   const capSpace = 250_000_000 - capHits;
-  return { team, overall, capSpace, playerCount: teamPlayers.length };
+
+  return {
+    team,
+    overall,
+    capSpace,
+    playerCount: teamPlayers.length,
+  };
 }

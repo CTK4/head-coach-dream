@@ -1,7 +1,39 @@
-import React, { createContext, useContext, useReducer, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useReducer } from "react";
 import { generateOffers } from "@/engine/offers";
+import {
+  PRESEASON_WEEKS,
+  REGULAR_SEASON_WEEKS,
+  generateLeagueSchedule,
+  getTeamMatchup,
+  type GameType,
+  type LeagueSchedule,
+} from "@/engine/schedule";
+import { getTeams } from "@/data/leagueDb";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
+
+export type CareerStage =
+  | "OFFSEASON_HUB"
+  | "ASSISTANT_HIRING"
+  | "ROSTER_REVIEW"
+  | "RESIGN"
+  | "COMBINE"
+  | "FREE_AGENCY"
+  | "DRAFT"
+  | "PRESEASON"
+  | "REGULAR_SEASON";
+
+const CAREER_STAGE_ORDER: CareerStage[] = [
+  "OFFSEASON_HUB",
+  "ASSISTANT_HIRING",
+  "ROSTER_REVIEW",
+  "RESIGN",
+  "COMBINE",
+  "FREE_AGENCY",
+  "DRAFT",
+  "PRESEASON",
+  "REGULAR_SEASON",
+];
 
 export type InterviewResult = {
   ownerAlignScore: number;
@@ -33,10 +65,22 @@ export type MemoryEvent = {
   type: string;
   season: number;
   week?: number;
-  payload: any;
+  payload: unknown;
 };
 
-const CURRENT_SAVE_VERSION = 1;
+const CURRENT_SAVE_VERSION = 2;
+const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
+
+export type AssistantStaff = {
+  assistantHcId?: string;
+  qbCoachId?: string;
+  olCoachId?: string;
+  dlCoachId?: string;
+  lbCoachId?: string;
+  dbCoachId?: string;
+  rbCoachId?: string;
+  wrCoachId?: string;
+};
 
 export type GameState = {
   coach: {
@@ -55,6 +99,7 @@ export type GameState = {
     volatility?: number;
   };
   phase: GamePhase;
+  careerStage: CareerStage;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
@@ -65,7 +110,13 @@ export type GameState = {
   saveVersion: number;
   memoryLog: MemoryEvent[];
   staff: { ocId?: string; dcId?: string; stcId?: string };
-  hub: { news: string[] };
+  assistantStaff: AssistantStaff;
+  hub: {
+    news: string[];
+    preseasonWeek: number;
+    regularSeasonWeek: number;
+    schedule: LeagueSchedule | null;
+  };
   saveSeed: number;
   game: {
     opponentTeamId?: string;
@@ -77,10 +128,10 @@ export type GameState = {
     ballOn: number;
     lastResult?: string;
     seed: number;
+    weekType?: GameType;
+    weekNumber?: number;
   };
 };
-
-const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 
 function createInitialState(): GameState {
   return {
@@ -89,19 +140,11 @@ function createInitialState(): GameState {
       ageTier: "32-35",
       hometown: "",
       archetypeId: "",
-      hometownTeamId: undefined,
-      repBaseline: undefined,
-      autonomy: undefined,
-      ownerTrustBaseline: undefined,
-      gmRelationship: undefined,
-      coordDeferenceLevel: undefined,
-      mediaExpectation: undefined,
-      lockerRoomCred: undefined,
-      volatility: undefined,
     },
     phase: "CREATE",
+    careerStage: "OFFSEASON_HUB",
     interviews: {
-      items: INTERVIEW_TEAMS.map((t) => ({ teamId: t, completed: false, answers: {} })),
+      items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })),
       completedCount: 0,
     },
     offers: [],
@@ -110,6 +153,7 @@ function createInitialState(): GameState {
     saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
     staff: {},
+    assistantStaff: {},
     hub: {
       news: [
         "League announces 2026 salary cap at $250M",
@@ -117,6 +161,9 @@ function createInitialState(): GameState {
         "Draft combine results expected soon",
         "Coaching carousel in full swing",
       ],
+      preseasonWeek: 1,
+      regularSeasonWeek: 1,
+      schedule: null,
     },
     saveSeed: Date.now(),
     game: { homeScore: 0, awayScore: 0, quarter: 1, down: 1, distance: 10, ballOn: 25, seed: Date.now() },
@@ -133,7 +180,10 @@ export type GameAction =
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
-  | { type: "START_GAME"; payload: { opponentTeamId: string } }
+  | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
+  | { type: "ADVANCE_CAREER_STAGE" }
+  | { type: "SET_CAREER_STAGE"; payload: CareerStage }
+  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType: GameType; weekNumber: number } }
   | { type: "RESOLVE_PLAY"; payload: { playType: string } }
   | { type: "RESET" };
 
@@ -147,6 +197,44 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+function createSchedule(seed: number): LeagueSchedule {
+  const teamIds = getTeams()
+    .filter((team) => team.isActive !== false)
+    .map((team) => team.teamId);
+  return generateLeagueSchedule(teamIds, seed);
+}
+
+function areAllAssistantsHired(assistantStaff: AssistantStaff): boolean {
+  return Boolean(
+    assistantStaff.assistantHcId &&
+      assistantStaff.qbCoachId &&
+      assistantStaff.olCoachId &&
+      assistantStaff.dlCoachId &&
+      assistantStaff.lbCoachId &&
+      assistantStaff.dbCoachId &&
+      assistantStaff.rbCoachId &&
+      assistantStaff.wrCoachId
+  );
+}
+
+function nextCareerStage(stage: CareerStage): CareerStage {
+  const idx = CAREER_STAGE_ORDER.indexOf(stage);
+  if (idx < 0 || idx === CAREER_STAGE_ORDER.length - 1) return stage;
+  return CAREER_STAGE_ORDER[idx + 1];
+}
+
+function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
+  return [
+    ...state.memoryLog,
+    {
+      type,
+      season: state.season,
+      week: state.week,
+      payload,
+    },
+  ];
+}
+
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
@@ -155,44 +243,68 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_PHASE":
       return { ...state, phase: action.payload };
 
+    case "SET_CAREER_STAGE":
+      return { ...state, careerStage: action.payload };
+
+    case "ADVANCE_CAREER_STAGE":
+      return { ...state, careerStage: nextCareerStage(state.careerStage) };
+
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId
           ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result }
           : item
       );
-      const completedCount = items.filter((i) => i.completed).length;
-      return { ...state, interviews: { items, completedCount } };
+      return { ...state, interviews: { items, completedCount: items.filter((i) => i.completed).length } };
     }
 
-    case "GENERATE_OFFERS": {
-      const offers = generateOffers(state);
-      return { ...state, offers, phase: "OFFERS" };
-    }
+    case "GENERATE_OFFERS":
+      return { ...state, offers: generateOffers(state), phase: "OFFERS" };
 
-    case "ACCEPT_OFFER": {
-      const memoryLog = addMemoryEvent(state, "HIRED_COACH", {
-        teamId: action.payload.teamId,
-        years: action.payload.years,
-        salary: action.payload.salary,
-        autonomy: action.payload.autonomy,
-        patience: action.payload.patience,
-      });
+    case "ACCEPT_OFFER":
       return {
         ...state,
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
-        memoryLog,
+        memoryLog: addMemoryEvent(state, "HIRED_COACH", {
+          teamId: action.payload.teamId,
+          years: action.payload.years,
+          salary: action.payload.salary,
+          autonomy: action.payload.autonomy,
+          patience: action.payload.patience,
+        }),
         phase: "COORD_HIRING",
       };
-    }
 
     case "HIRE_STAFF": {
       const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
-      const newStaff = { ...state.staff, [key]: action.payload.personId };
-      const allHired = newStaff.ocId && newStaff.dcId && newStaff.stcId;
-      return { ...state, staff: newStaff, phase: allHired ? "HUB" : state.phase };
+      const staff = { ...state.staff, [key]: action.payload.personId };
+      const allHired = staff.ocId && staff.dcId && staff.stcId;
+      if (!allHired) return { ...state, staff };
+
+      const schedule = createSchedule(state.saveSeed);
+      return {
+        ...state,
+        staff,
+        phase: "HUB",
+        careerStage: "OFFSEASON_HUB",
+        hub: {
+          ...state.hub,
+          schedule,
+          preseasonWeek: 1,
+          regularSeasonWeek: 1,
+        },
+      };
+    }
+
+    case "HIRE_ASSISTANT": {
+      const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
+      return {
+        ...state,
+        assistantStaff,
+        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage,
+      };
     }
 
     case "START_GAME":
@@ -207,6 +319,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           distance: 10,
           ballOn: 25,
           seed: Date.now(),
+          weekType: action.payload.weekType,
+          weekNumber: action.payload.weekNumber,
         },
       };
 
@@ -215,12 +329,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const rng = mulberry32(g.seed + g.down * 7 + g.ballOn * 13);
       const rand = rng();
 
-      const baseMean: Record<string, number> = {
-        RUN: 3.8, SHORT_PASS: 6, DEEP_PASS: 10.5, PLAY_ACTION: 7.2,
-      };
-      const baseVol: Record<string, number> = {
-        RUN: 3, SHORT_PASS: 5, DEEP_PASS: 12, PLAY_ACTION: 7,
-      };
+      const baseMean: Record<string, number> = { RUN: 3.8, SHORT_PASS: 6, DEEP_PASS: 10.5, PLAY_ACTION: 7.2 };
+      const baseVol: Record<string, number> = { RUN: 3, SHORT_PASS: 5, DEEP_PASS: 12, PLAY_ACTION: 7 };
 
       const mean = baseMean[action.payload.playType] ?? 5;
       const vol = baseVol[action.payload.playType] ?? 5;
@@ -270,19 +380,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
 const STORAGE_KEY = "hc_career_save";
 
-function addMemoryEvent(state: GameState, type: string, payload: any): MemoryEvent[] {
-  return [
-    ...state.memoryLog,
-    {
-      type,
-      season: state.season,
-      week: state.week,
-      payload,
-    },
-  ];
-}
-
 function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
+  if (!oldState.hub?.schedule) {
+    return {
+      ...oldState,
+      hub: {
+        ...(oldState.hub ?? { news: [] }),
+        schedule: createSchedule(oldState.saveSeed ?? Date.now()),
+        preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
+        regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
+      },
+      careerStage: oldState.careerStage ?? "OFFSEASON_HUB",
+      assistantStaff: oldState.assistantStaff ?? {},
+    };
+  }
   return oldState;
 }
 
@@ -293,8 +404,7 @@ function loadState(): GameState {
     if (!saved) return initial;
 
     const parsed = JSON.parse(saved) as Partial<GameState>;
-    const parsedVersion = parsed.saveVersion ?? 0;
-    const migrated = parsedVersion < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
+    const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
     return {
       ...initial,
@@ -303,6 +413,7 @@ function loadState(): GameState {
       interviews: { ...initial.interviews, ...migrated.interviews },
       hub: { ...initial.hub, ...migrated.hub },
       staff: { ...initial.staff, ...migrated.staff },
+      assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
       game: { ...initial.game, ...migrated.game },
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
@@ -315,6 +426,7 @@ function loadState(): GameState {
 type GameContextType = {
   state: GameState;
   dispatch: React.Dispatch<GameAction>;
+  getCurrentTeamMatchup: (gameType: GameType) => { week: number; matchup: ReturnType<typeof getTeamMatchup> } | null;
 };
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -326,11 +438,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  return (
-    <GameContext.Provider value={{ state, dispatch }}>
-      {children}
-    </GameContext.Provider>
-  );
+  const getCurrentTeamMatchup: GameContextType["getCurrentTeamMatchup"] = (gameType) => {
+    const teamId = state.acceptedOffer?.teamId;
+    const schedule = state.hub.schedule;
+    if (!teamId || !schedule) return null;
+
+    const week = gameType === "PRESEASON" ? state.hub.preseasonWeek : state.hub.regularSeasonWeek;
+    const weeks = gameType === "PRESEASON" ? schedule.preseasonWeeks : schedule.regularSeasonWeeks;
+    const currentWeek = weeks.find((item) => item.week === week);
+    if (!currentWeek) return null;
+
+    return {
+      week,
+      matchup: getTeamMatchup(currentWeek, teamId),
+    };
+  };
+
+  return <GameContext.Provider value={{ state, dispatch, getCurrentTeamMatchup }}>{children}</GameContext.Provider>;
 }
 
 export function useGame() {
@@ -338,3 +462,5 @@ export function useGame() {
   if (!ctx) throw new Error("useGame must be used within GameProvider");
   return ctx;
 }
+
+export { PRESEASON_WEEKS, REGULAR_SEASON_WEEKS };
