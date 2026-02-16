@@ -45,7 +45,7 @@ export type PersonnelRow = {
 export type ContractRow = {
   contractId: string;
   entityType: string;
-  entityId: string;
+  personId: string;
   teamId?: string;
   startSeason?: number;
   endSeason?: number;
@@ -61,6 +61,7 @@ const personnel: PersonnelRow[] = (root.Personnel ?? []) as PersonnelRow[];
 const contracts: ContractRow[] = (root.Contracts ?? []) as ContractRow[];
 
 const teamsById = new Map(teams.map((team) => [team.teamId, team]));
+const personnelById = new Map(personnel.map((p) => [p.personId, p]));
 
 const EXCLUDED_ASSISTANT_HC_ROLES = new Set(["OWNER", "GENERAL_MANAGER", "HEAD_COACH"]);
 
@@ -78,6 +79,10 @@ export function getTeams(): TeamRow[] {
 
 export function getTeamById(teamId: string): TeamRow | undefined {
   return teamsById.get(teamId);
+}
+
+export function getPersonnelById(personId: string): PersonnelRow | undefined {
+  return personnelById.get(personId);
 }
 
 export function getLeagueCities(): string[] {

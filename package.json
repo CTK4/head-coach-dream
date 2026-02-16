@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/validateJson.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "repair:leagueDb": "node scripts/repairLeagueDbJson.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

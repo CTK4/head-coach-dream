@@ -3,6 +3,7 @@ import { useGame, type AssistantStaff } from "@/context/GameContext";
 import {
   getAssistantHeadCoachCandidates,
   getPositionCoachCandidates,
+  getPersonnelById,
   type PersonnelRow,
   type PositionCoachRole,
 } from "@/data/leagueDb";
@@ -21,9 +22,27 @@ const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: Posit
   { key: "wrCoachId", label: "WR Coach", role: "WR_COACH" },
 ];
 
+function normScheme(s?: unknown): string {
+  return String(s ?? "").trim().toLowerCase();
+}
+
+function computeCoachScore(person: PersonnelRow, preferredSchemes: Set<string>): number {
+  const rep = Number(person.reputation ?? 0);
+  const scheme = normScheme(person.scheme);
+  const schemeMatch =
+    preferredSchemes.size > 0 &&
+    scheme &&
+    Array.from(preferredSchemes).some((ps) => scheme.includes(ps) || ps.includes(scheme));
+  return (schemeMatch ? 1_000_000 : 0) + rep * 100 + (person.age ? Math.max(0, 80 - person.age) : 0);
+}
+
 const AssistantHiring = () => {
   const { state, dispatch } = useGame();
   const [activeRole, setActiveRole] = useState<keyof AssistantStaff>("assistantHcId");
+
+  const ocScheme = state.staff.ocId ? normScheme(getPersonnelById(state.staff.ocId)?.scheme) : "";
+  const dcScheme = state.staff.dcId ? normScheme(getPersonnelById(state.staff.dcId)?.scheme) : "";
+  const preferredSchemes = new Set([ocScheme, dcScheme].filter(Boolean));
 
   const getCandidates = (roleKey: keyof AssistantStaff): PersonnelRow[] => {
     const role = ROLE_ORDER.find((item) => item.key === roleKey)?.role;
@@ -31,8 +50,10 @@ const AssistantHiring = () => {
     return getPositionCoachCandidates(role);
   };
 
-  const candidates = getCandidates(activeRole);
   const hiredSet = new Set(Object.values(state.assistantStaff).filter(Boolean));
+  const candidates = getCandidates(activeRole)
+    .filter((p) => !hiredSet.has(p.personId))
+    .sort((a, b) => computeCoachScore(b, preferredSchemes) - computeCoachScore(a, preferredSchemes));
 
   const allFilled = ROLE_ORDER.every((role) => Boolean(state.assistantStaff[role.key]));
 
@@ -71,14 +92,19 @@ const AssistantHiring = () => {
 
       <div className="grid gap-3">
         {candidates.map((person) => {
-          const hired = hiredSet.has(person.personId);
+          const hired = false;
+          const scheme = normScheme(person.scheme);
+          const schemeMatch =
+            preferredSchemes.size > 0 &&
+            scheme &&
+            Array.from(preferredSchemes).some((ps) => scheme.includes(ps) || ps.includes(scheme));
           return (
             <Card key={person.personId} className={hired ? "opacity-60" : ""}>
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
                   <p className="font-semibold">{person.fullName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {person.role} • Rep {person.reputation ?? "?"} • Age {person.age ?? "?"}
+                    {person.role} • Rep {person.reputation ?? "?"} • Age {person.age ?? "?"} • {schemeMatch ? "Scheme Fit ✓" : "Scheme Fit —"}
                   </p>
                 </div>
                 <Button size="sm" disabled={hired} onClick={() => handleHire(person.personId)}>
