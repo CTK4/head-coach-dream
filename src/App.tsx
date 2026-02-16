@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { GameProvider, useGame } from "@/context/GameContext";
 import CreateCoach from "./pages/CreateCoach";
 import ChooseBackground from "./pages/ChooseBackground";
@@ -14,13 +14,16 @@ import Roster from "./pages/Roster";
 import Draft from "./pages/Draft";
 import Playcall from "./pages/Playcall";
 import NotFound from "./pages/NotFound";
+import HubLayout from "./pages/hub/HubLayout";
+import AssistantHiring from "./pages/hub/AssistantHiring";
+import PreseasonWeek from "./pages/hub/PreseasonWeek";
+import RegularSeason from "./pages/hub/RegularSeason";
 
 const queryClient = new QueryClient();
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
   if (!requiredPhase.includes(state.phase)) {
-    // Redirect to appropriate phase
     const phaseRoutes: Record<string, string> = {
       CREATE: "/",
       BACKGROUND: "/background",
@@ -62,10 +65,17 @@ const App = () => (
             <Route path="/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
             <Route path="/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
             <Route path="/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
-            <Route path="/hub" element={<HubGate><Hub /></HubGate>} />
-            <Route path="/roster" element={<HubGate><Roster /></HubGate>} />
-            <Route path="/draft" element={<HubGate><Draft /></HubGate>} />
-            <Route path="/playcall" element={<HubGate><Playcall /></HubGate>} />
+
+            <Route path="/hub" element={<HubGate><HubLayout /></HubGate>}>
+              <Route index element={<Hub />} />
+              <Route path="assistant-hiring" element={<AssistantHiring />} />
+              <Route path="roster" element={<Roster />} />
+              <Route path="draft" element={<Draft />} />
+              <Route path="preseason" element={<PreseasonWeek />} />
+              <Route path="regular-season" element={<RegularSeason />} />
+              <Route path="playcall" element={<Playcall />} />
+            </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
