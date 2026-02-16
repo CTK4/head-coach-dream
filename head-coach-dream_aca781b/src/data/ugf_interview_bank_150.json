@@ -1,0 +1,6255 @@
+{
+  "schema_version": "1.0",
+  "generated_utc": "2026-02-15T21:17:54.375788Z",
+  "axes": [
+    "stability",
+    "aggression",
+    "media_sensitivity",
+    "accountability",
+    "timeline_urgency",
+    "ego_compatibility",
+    "autonomy_desire",
+    "loyalty_continuity",
+    "player_empowerment",
+    "risk_appetite"
+  ],
+  "owners": [
+    {
+      "owner_id": "CON_OWN_0018",
+      "name": "Gerald Monroe",
+      "team": "ATLANTA_APEX",
+      "persona_tags": [
+        "Traditional",
+        "continuity-minded",
+        "institution-first",
+        "convention-oriented"
+      ],
+      "axis_weights": {
+        "stability": 1.5,
+        "aggression": -0.8,
+        "media_sensitivity": 0.5,
+        "accountability": 1.2,
+        "timeline_urgency": 0.4,
+        "ego_compatibility": 1.0,
+        "autonomy_desire": -0.4,
+        "loyalty_continuity": 1.4,
+        "player_empowerment": -0.6,
+        "risk_appetite": -1.0
+      }
+    },
+    {
+      "owner_id": "CON_OWN_0019",
+      "name": "Marcus Hill",
+      "team": "BIRMINGHAM_VULCANS",
+      "persona_tags": [
+        "Volatile",
+        "emotionally reactive",
+        "media-aware",
+        "narrative-sensitive"
+      ],
+      "axis_weights": {
+        "stability": -0.8,
+        "aggression": 1.2,
+        "media_sensitivity": 1.5,
+        "accountability": 0.7,
+        "timeline_urgency": 1.2,
+        "ego_compatibility": 1.3,
+        "autonomy_desire": 0.6,
+        "loyalty_continuity": -0.4,
+        "player_empowerment": 0.5,
+        "risk_appetite": 1.0
+      }
+    },
+    {
+      "owner_id": "CON_OWN_0027",
+      "name": "Elaine Fischer",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "persona_tags": [
+        "Demanding",
+        "high expectations",
+        "accountability-enforcing",
+        "performance-intolerant"
+      ],
+      "axis_weights": {
+        "stability": 0.8,
+        "aggression": 0.4,
+        "media_sensitivity": 0.2,
+        "accountability": 1.6,
+        "timeline_urgency": 1.4,
+        "ego_compatibility": -1.0,
+        "autonomy_desire": -0.5,
+        "loyalty_continuity": 0.6,
+        "player_empowerment": -0.3,
+        "risk_appetite": 0.5
+      }
+    }
+  ],
+  "questions": [
+    {
+      "question_id": "CON_OWN_0018_Q01",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "culture_definition",
+      "text": "How do you define winning culture inside the building?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Non‑negotiable standards, routines, and accountability before anything else.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Player-led energy and freedom; let stars set the tone and keep it loose.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": -1,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q02",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "star_discipline",
+      "text": "If a star player violates team rules the week of a big game, what do you do?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bench him if necessary—standards don’t change based on status.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -2,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Handle it privately; keep him available and protect the locker-room mood.",
+          "axis_delta": {
+            "stability": 0,
+            "aggression": 1,
+            "media_sensitivity": -1,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": 0,
+            "player_empowerment": 1,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q03",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "scheme_identity",
+      "text": "What should drive our identity year to year?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Continuity—build a recognizable system and evolve it incrementally.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Adaptation—rebuild the scheme around roster strengths every offseason.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q04",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "timeline",
+      "text": "What timeline do you expect before we judge the regime?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Multi-year plan; I’ll earn trust through process and steady improvement.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Fast turnaround; push every lever immediately to win now.",
+          "axis_delta": {
+            "stability": -2,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q05",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "analytics_role",
+      "text": "What role should analytics play in football decisions?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Support tool—use data to confirm coaching judgment, not replace it.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Driver—use models to dictate aggressiveness, personnel, and play calls.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q06",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "media_criticism",
+      "text": "After a bad loss, what’s your approach with the media?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Shield players, own the outcome, keep messaging consistent and boring.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Control the narrative; be direct, emotional, and set the agenda publicly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q07",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "4th_down",
+      "text": "How aggressive are you on 4th down?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Situational—protect field position unless the math is overwhelming.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive by default—be the team that dictates terms.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q08",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "cap_philosophy",
+      "text": "What’s your cap/contract philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Avoid future dead money; flexible structures; pay for sustained performance.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Push money forward if it buys wins; restructure aggressively to compete.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q09",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "staff_conflict",
+      "text": "If your OC and DC can’t coexist, what happens?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "I set hierarchy and expectations; conflict ends or someone goes.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let them battle it out; competition sharpens the building.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q10",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "young_qb",
+      "text": "How do you handle a young QB struggling early?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Protect him with structure and reps; development over short-term optics.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let him throw; trial by fire; if he can’t handle it, pivot quickly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q11",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "continuity_staff",
+      "text": "Do you prefer keeping staff stable even after a mediocre season?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Yes—continuity compounds; fix issues within the same system.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "No—replace underperformers quickly; loyalty is earned weekly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": 0,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q12",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "veteran_respect",
+      "text": "How do you treat long-tenured veterans near the end?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "With respect—clear roles, dignified exits, no surprises.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Coldly—if production drops, move on immediately.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": -1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q13",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "trade_block",
+      "text": "How often should we shop players publicly?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Rarely—keep negotiations private to preserve trust.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Often—use the market noise to create leverage.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q14",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "owner_involvement",
+      "text": "How do you want ownership involvement to work?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Clear lanes—ownership sets principles; football ops runs football.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": 1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "High-touch—ownership in the room for major roster decisions.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q15",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "public_face",
+      "text": "Who should be the public face: coach, GM, or shared?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Shared—consistent messaging; no freelancing.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Coach-led—big personality; set narrative personally.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q16",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "draft_philosophy",
+      "text": "Draft approach?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Safe floor early, development later; minimize bust risk.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Swing for upside early; accept busts to find stars.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q17",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "discipline_style",
+      "text": "How do you enforce discipline day-to-day?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Rules, standards, predictable consequences.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Case-by-case; read the room; keep morale high.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 1,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q18",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "scheme_changes",
+      "text": "Would you ever overhaul scheme in Year 1?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Only if absolutely necessary; prefer incremental installs.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Yes—install my identity immediately regardless of friction.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q19",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "player_power",
+      "text": "Role of players in decisions?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Voice, not veto—respect input but keep hierarchy.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Collaborative—leaders help decide scheme/usage.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 1,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q20",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "legacy",
+      "text": "What matters more: legacy or weekly edge?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Legacy—protect the institution and its standards.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Edge—whatever wins this week; tradition is optional.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q21",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "draft_risk",
+      "text": "In Round 1, do you prioritize floor or ceiling?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q22",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "fa_strategy",
+      "text": "In free agency, do you pay premium or shop bargains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q23",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "injury_management",
+      "text": "How do you handle questionable stars on short weeks?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q24",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "captaincy",
+      "text": "How do you choose team captains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q25",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "scouting_integration",
+      "text": "How do you integrate scouting reports into weekly plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q26",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "playbook_install",
+      "text": "How large is your weekly install?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q27",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "in_game_adjustments",
+      "text": "How quickly do you pivot when a plan fails?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q28",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "penalty_focus",
+      "text": "How do you reduce penalties?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q29",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "turnover_philosophy",
+      "text": "How do you talk about turnovers?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q30",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "special_teams_value",
+      "text": "How much do you value special teams edge?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q31",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "sports_science",
+      "text": "How do you use sports science / workload tracking?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q32",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "trade_deadline",
+      "text": "Do you buy or sell at the deadline?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q33",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "rookie_usage",
+      "text": "Do rookies start immediately or earn snaps?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q34",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "veteran_rest",
+      "text": "Do you rest vets in practice?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q35",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "discipline_public",
+      "text": "Do you ever call out players publicly?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q36",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "scheme_vs_personnel",
+      "text": "Do you fit scheme to players or players to scheme?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q37",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "game_management",
+      "text": "How do you handle clock management responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q38",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "challenge_usage",
+      "text": "How aggressive are you on challenges?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q39",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "self_scout",
+      "text": "What does self-scout look like?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q40",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "opponent_scout",
+      "text": "How do you handle opponent tendencies?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q41",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "red_zone",
+      "text": "Red zone philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q42",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "third_down",
+      "text": "3rd down philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q43",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "two_minute",
+      "text": "Two-minute philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q44",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "short_yardage",
+      "text": "Short yardage identity?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q45",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "goal_line",
+      "text": "Goal-line approach?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q46",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "staff_hiring",
+      "text": "How do you hire coordinators?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q47",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "staff_delegation",
+      "text": "How do you delegate weekly responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q48",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "player_development",
+      "text": "How do you build development plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q49",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "capturing_accountability",
+      "text": "How do you grade players week to week?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0018_Q50",
+      "owner_id": "CON_OWN_0018",
+      "team": "ATLANTA_APEX",
+      "theme": "grading_staff",
+      "text": "How do you evaluate your staff?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Structured, conservative, continuity, process.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive, disruptive, reinvent, chase edges.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q01",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "culture_definition",
+      "text": "How do you define winning culture inside the building?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Non‑negotiable standards, routines, and accountability before anything else.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Player-led energy and freedom; let stars set the tone and keep it loose.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": -1,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q02",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "star_discipline",
+      "text": "If a star player violates team rules the week of a big game, what do you do?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bench him if necessary—standards don’t change based on status.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -2,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Handle it privately; keep him available and protect the locker-room mood.",
+          "axis_delta": {
+            "stability": 0,
+            "aggression": 1,
+            "media_sensitivity": -1,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": 0,
+            "player_empowerment": 1,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q03",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "scheme_identity",
+      "text": "What should drive our identity year to year?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Continuity—build a recognizable system and evolve it incrementally.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Adaptation—rebuild the scheme around roster strengths every offseason.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q04",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "timeline",
+      "text": "What timeline do you expect before we judge the regime?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Multi-year plan; I’ll earn trust through process and steady improvement.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Fast turnaround; push every lever immediately to win now.",
+          "axis_delta": {
+            "stability": -2,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q05",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "analytics_role",
+      "text": "What role should analytics play in football decisions?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Support tool—use data to confirm coaching judgment, not replace it.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Driver—use models to dictate aggressiveness, personnel, and play calls.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q06",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "media_criticism",
+      "text": "After a bad loss, what’s your approach with the media?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Shield players, own the outcome, keep messaging consistent and boring.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Control the narrative; be direct, emotional, and set the agenda publicly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q07",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "4th_down",
+      "text": "How aggressive are you on 4th down?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Situational—protect field position unless the math is overwhelming.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive by default—be the team that dictates terms.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q08",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "cap_philosophy",
+      "text": "What’s your cap/contract philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Avoid future dead money; flexible structures; pay for sustained performance.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Push money forward if it buys wins; restructure aggressively to compete.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q09",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "staff_conflict",
+      "text": "If your OC and DC can’t coexist, what happens?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "I set hierarchy and expectations; conflict ends or someone goes.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let them battle it out; competition sharpens the building.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q10",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "young_qb",
+      "text": "How do you handle a young QB struggling early?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Protect him with structure and reps; development over short-term optics.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let him throw; trial by fire; if he can’t handle it, pivot quickly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q11",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "press_conference",
+      "text": "How do you use press conferences?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Set narrative, motivate, apply pressure publicly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Keep it minimal and internal; no theatrics.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q12",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "star_marketing",
+      "text": "Do you lean into star marketing?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Yes—spotlight stars; build brand; accept some ego.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 2,
+            "accountability": -1,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "No—team-first messaging; avoid celebrity culture.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q13",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "big_swing_trades",
+      "text": "Would you trade two 1sts for a star?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "If it changes perception and wins now, yes.",
+          "axis_delta": {
+            "stability": -2,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -2,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Only if it’s clearly under market; otherwise no.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q14",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "fire_midseason",
+      "text": "When do you fire a coordinator?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Immediately if narrative turns; don’t let rot spread.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "End of season unless truly toxic.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q15",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "fan_pressure",
+      "text": "How do you react to fan backlash?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Engage—answer it, redirect it, own the story.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Ignore it; fans don’t run football.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": -1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q16",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "risk_on_field",
+      "text": "Late game: up 3, 4th & 2 at midfield—go?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Go—win with aggression; finish the story.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Punt—make them drive; avoid headline mistakes.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q17",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "message_to_team",
+      "text": "What’s your message after embarrassing loss?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Public accountability + urgency; call it out.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 2,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Keep it inside; protect confidence; move on.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q18",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "bold_identity",
+      "text": "What identity sells?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Explosive offense, swagger, stars.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Physical, disciplined, boring wins.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q19",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "coach_brand",
+      "text": "Is your personal brand an asset?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Yes—use it; be visible; control perception.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "No—let results speak; stay low profile.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q20",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "pressure_cooker",
+      "text": "How do you handle ownership pressure?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "I thrive on it; I’ll raise the temperature.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "I prefer calm process; pressure hurts decisions.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": -1,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q21",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "draft_risk",
+      "text": "In Round 1, do you prioritize floor or ceiling?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q22",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "fa_strategy",
+      "text": "In free agency, do you pay premium or shop bargains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q23",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "injury_management",
+      "text": "How do you handle questionable stars on short weeks?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q24",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "captaincy",
+      "text": "How do you choose team captains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q25",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "scouting_integration",
+      "text": "How do you integrate scouting reports into weekly plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q26",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "playbook_install",
+      "text": "How large is your weekly install?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q27",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "in_game_adjustments",
+      "text": "How quickly do you pivot when a plan fails?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q28",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "penalty_focus",
+      "text": "How do you reduce penalties?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q29",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "turnover_philosophy",
+      "text": "How do you talk about turnovers?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q30",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "special_teams_value",
+      "text": "How much do you value special teams edge?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q31",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "sports_science",
+      "text": "How do you use sports science / workload tracking?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q32",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "trade_deadline",
+      "text": "Do you buy or sell at the deadline?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q33",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "rookie_usage",
+      "text": "Do rookies start immediately or earn snaps?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q34",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "veteran_rest",
+      "text": "Do you rest vets in practice?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q35",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "discipline_public",
+      "text": "Do you ever call out players publicly?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q36",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "scheme_vs_personnel",
+      "text": "Do you fit scheme to players or players to scheme?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q37",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "game_management",
+      "text": "How do you handle clock management responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q38",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "challenge_usage",
+      "text": "How aggressive are you on challenges?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q39",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "self_scout",
+      "text": "What does self-scout look like?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q40",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "opponent_scout",
+      "text": "How do you handle opponent tendencies?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q41",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "red_zone",
+      "text": "Red zone philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q42",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "third_down",
+      "text": "3rd down philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q43",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "two_minute",
+      "text": "Two-minute philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q44",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "short_yardage",
+      "text": "Short yardage identity?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q45",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "goal_line",
+      "text": "Goal-line approach?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q46",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "staff_hiring",
+      "text": "How do you hire coordinators?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q47",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "staff_delegation",
+      "text": "How do you delegate weekly responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q48",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "player_development",
+      "text": "How do you build development plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q49",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "capturing_accountability",
+      "text": "How do you grade players week to week?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0019_Q50",
+      "owner_id": "CON_OWN_0019",
+      "team": "BIRMINGHAM_VULCANS",
+      "theme": "grading_staff",
+      "text": "How do you evaluate your staff?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bold, narrative-driven, aggressive, visible.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 2,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Quiet, conservative, internal, minimize headlines.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q01",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "culture_definition",
+      "text": "How do you define winning culture inside the building?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Non‑negotiable standards, routines, and accountability before anything else.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Player-led energy and freedom; let stars set the tone and keep it loose.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": -1,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q02",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "star_discipline",
+      "text": "If a star player violates team rules the week of a big game, what do you do?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Bench him if necessary—standards don’t change based on status.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -2,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Handle it privately; keep him available and protect the locker-room mood.",
+          "axis_delta": {
+            "stability": 0,
+            "aggression": 1,
+            "media_sensitivity": -1,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": 0,
+            "player_empowerment": 1,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q03",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "scheme_identity",
+      "text": "What should drive our identity year to year?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Continuity—build a recognizable system and evolve it incrementally.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Adaptation—rebuild the scheme around roster strengths every offseason.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 1,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q04",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "timeline",
+      "text": "What timeline do you expect before we judge the regime?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Multi-year plan; I’ll earn trust through process and steady improvement.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Fast turnaround; push every lever immediately to win now.",
+          "axis_delta": {
+            "stability": -2,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 2,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q05",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "analytics_role",
+      "text": "What role should analytics play in football decisions?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Support tool—use data to confirm coaching judgment, not replace it.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Driver—use models to dictate aggressiveness, personnel, and play calls.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q06",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "media_criticism",
+      "text": "After a bad loss, what’s your approach with the media?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Shield players, own the outcome, keep messaging consistent and boring.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 1,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Control the narrative; be direct, emotional, and set the agenda publicly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q07",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "4th_down",
+      "text": "How aggressive are you on 4th down?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Situational—protect field position unless the math is overwhelming.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Aggressive by default—be the team that dictates terms.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q08",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "cap_philosophy",
+      "text": "What’s your cap/contract philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Avoid future dead money; flexible structures; pay for sustained performance.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Push money forward if it buys wins; restructure aggressively to compete.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q09",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "staff_conflict",
+      "text": "If your OC and DC can’t coexist, what happens?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "I set hierarchy and expectations; conflict ends or someone goes.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let them battle it out; competition sharpens the building.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 0,
+            "accountability": -1,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q10",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "young_qb",
+      "text": "How do you handle a young QB struggling early?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Protect him with structure and reps; development over short-term optics.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Let him throw; trial by fire; if he can’t handle it, pivot quickly.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 2,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q11",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "benchmarks",
+      "text": "What benchmarks do you use to evaluate progress?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Clear KPIs weekly: efficiency, penalties, win-prob leverage.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Feel-based; trust the process and locker room vibe.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 0,
+            "media_sensitivity": 1,
+            "accountability": -2,
+            "timeline_urgency": -1,
+            "ego_compatibility": 1,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 2,
+            "risk_appetite": 1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q12",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "excuses",
+      "text": "If injuries hit, what’s the expectation?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "No excuses; adjust and hit targets anyway.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Injuries change expectations materially.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": -1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q13",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "staff_accountability",
+      "text": "How do you handle an assistant who misses details?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Replace quickly; details are the job.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Coach them up; give them runway.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q14",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "practice_intensity",
+      "text": "Practice style?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "High-tempo, high standards; competition every period.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Player-friendly; manage load; keep bodies fresh.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q15",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "firing_line",
+      "text": "What triggers are unacceptable?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Repeated procedural errors: penalties, missed fits, busted coverages.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Mainly effort/attitude; errors happen.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 1,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": 1,
+            "risk_appetite": 0
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q16",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "qb_plan",
+      "text": "If QB regresses, what do you do?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Immediate intervention: mechanics, staff changes, simplify plan.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": 0,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Stay course; trust talent; avoid overreacting.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": -1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q17",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "contract_outs",
+      "text": "Contract structure preference?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Two-year practical guarantees with clean outs.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 1,
+            "timeline_urgency": 1,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Long guarantees; stability buys buy-in.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 2,
+            "player_empowerment": 0,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q18",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "locker_room",
+      "text": "How do you manage locker room conflict?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Confront directly; consequences; reset standards.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Empower leaders to resolve it informally.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 1,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 2,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q19",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "owner_updates",
+      "text": "How often should you brief ownership?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Weekly with metrics and action items.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Only when significant events occur.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": 1,
+            "loyalty_continuity": 0,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q20",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "playcalling_mistake",
+      "text": "After a high-profile strategic mistake, what do you do?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Own it and change process immediately.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 0,
+            "media_sensitivity": 1,
+            "accountability": 2,
+            "timeline_urgency": 1,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": 0,
+            "risk_appetite": 0
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Defend it publicly; don’t show weakness.",
+          "axis_delta": {
+            "stability": -1,
+            "aggression": 1,
+            "media_sensitivity": 2,
+            "accountability": 0,
+            "timeline_urgency": 1,
+            "ego_compatibility": 2,
+            "autonomy_desire": 1,
+            "loyalty_continuity": -1,
+            "player_empowerment": 0,
+            "risk_appetite": 2
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q21",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "draft_risk",
+      "text": "In Round 1, do you prioritize floor or ceiling?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q22",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "fa_strategy",
+      "text": "In free agency, do you pay premium or shop bargains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q23",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "injury_management",
+      "text": "How do you handle questionable stars on short weeks?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q24",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "captaincy",
+      "text": "How do you choose team captains?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q25",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "scouting_integration",
+      "text": "How do you integrate scouting reports into weekly plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q26",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "playbook_install",
+      "text": "How large is your weekly install?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q27",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "in_game_adjustments",
+      "text": "How quickly do you pivot when a plan fails?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q28",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "penalty_focus",
+      "text": "How do you reduce penalties?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q29",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "turnover_philosophy",
+      "text": "How do you talk about turnovers?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q30",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "special_teams_value",
+      "text": "How much do you value special teams edge?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q31",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "sports_science",
+      "text": "How do you use sports science / workload tracking?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q32",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "trade_deadline",
+      "text": "Do you buy or sell at the deadline?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q33",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "rookie_usage",
+      "text": "Do rookies start immediately or earn snaps?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q34",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "veteran_rest",
+      "text": "Do you rest vets in practice?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q35",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "discipline_public",
+      "text": "Do you ever call out players publicly?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q36",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "scheme_vs_personnel",
+      "text": "Do you fit scheme to players or players to scheme?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q37",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "game_management",
+      "text": "How do you handle clock management responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q38",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "challenge_usage",
+      "text": "How aggressive are you on challenges?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q39",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "self_scout",
+      "text": "What does self-scout look like?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q40",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "opponent_scout",
+      "text": "How do you handle opponent tendencies?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q41",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "red_zone",
+      "text": "Red zone philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q42",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "third_down",
+      "text": "3rd down philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q43",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "two_minute",
+      "text": "Two-minute philosophy?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q44",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "short_yardage",
+      "text": "Short yardage identity?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q45",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "goal_line",
+      "text": "Goal-line approach?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q46",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "staff_hiring",
+      "text": "How do you hire coordinators?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q47",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "staff_delegation",
+      "text": "How do you delegate weekly responsibilities?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q48",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "player_development",
+      "text": "How do you build development plans?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q49",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "capturing_accountability",
+      "text": "How do you grade players week to week?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    },
+    {
+      "question_id": "CON_OWN_0027_Q50",
+      "owner_id": "CON_OWN_0027",
+      "team": "MILWAUKEE_NORTHSHORE",
+      "theme": "grading_staff",
+      "text": "How do you evaluate your staff?",
+      "options": {
+        "A": {
+          "answer_id": "A",
+          "text": "Metric-driven, strict, urgent, consequences.",
+          "axis_delta": {
+            "stability": 1,
+            "aggression": 1,
+            "media_sensitivity": 0,
+            "accountability": 2,
+            "timeline_urgency": 2,
+            "ego_compatibility": -1,
+            "autonomy_desire": 0,
+            "loyalty_continuity": 0,
+            "player_empowerment": -1,
+            "risk_appetite": 1
+          }
+        },
+        "B": {
+          "answer_id": "B",
+          "text": "Flexible, player-friendly, slower pace.",
+          "axis_delta": {
+            "stability": 2,
+            "aggression": -1,
+            "media_sensitivity": 0,
+            "accountability": 0,
+            "timeline_urgency": 0,
+            "ego_compatibility": 0,
+            "autonomy_desire": -1,
+            "loyalty_continuity": 1,
+            "player_empowerment": 1,
+            "risk_appetite": -1
+          }
+        }
+      }
+    }
+  ],
+  "scoring_engine": {
+    "answer_delta_range": {
+      "min": -2,
+      "max": 2
+    },
+    "alignment_formula": "alignment_raw = sum_over_axes( owner.axis_weights[axis] * answer.axis_delta[axis] )",
+    "alignment_norm": "alignment = clamp01( (alignment_raw - raw_min) / (raw_max - raw_min) ) where raw_min/max are computed from weights and delta bounds",
+    "question_quality_formula": "q_quality = 0.80 + 0.20 * (abs(alignment_raw) / raw_max)",
+    "composite_score": "interview_score = weighted_mean(alignment by question, weights=q_quality)",
+    "offer_rule": "if interview_score>=0.80 premium; else if >=0.60 standard; else if >=0.45 conditional; else reject",
+    "tie_breakers": [
+      "owner_ego_compatibility axis must be >= -2 cumulative for premium",
+      "accountability axis cumulative must be >= +10 for Elaine premium",
+      "media_sensitivity axis cumulative must be >= +6 for Marcus premium"
+    ]
+  }
+}
