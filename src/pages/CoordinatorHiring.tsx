@@ -1,33 +1,26 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { computeStaffAcceptance } from "@/engine/assistantHiring";
-import { expectedSalary, offerQualityScore, offerSalary, type SalaryOfferLevel } from "@/engine/staffSalary";
-import { getCoordinatorCandidates, getPersonnelById, type PersonnelRow } from "@/data/leagueDb";
+import { expectedSalary, offerSalary, type SalaryOfferLevel } from "@/engine/staffSalary";
+import { getCoordinatorFreeAgents, getCoordinatorFreeAgentsAll, type PersonnelRow } from "@/data/leagueDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 
-function normScheme(s?: unknown): string {
-  return String(s ?? "").trim().toLowerCase();
-}
-function clamp100(n: number) {
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
 }
 
 const LEVELS: SalaryOfferLevel[] = ["LOW", "FAIR", "HIGH"];
 const LEVEL_LABEL: Record<SalaryOfferLevel, string> = { LOW: "Low", FAIR: "Fair", HIGH: "High" };
+const MIN_REQUIRED = 3;
+
+type Cand = { p: PersonnelRow; exp: number; salary: number; safety: boolean; emergency: boolean };
 
 export default function CoordinatorHiring() {
   const { state, dispatch } = useGame();
   const [role, setRole] = useState<"OC" | "DC" | "STC">("OC");
   const [levelIdx, setLevelIdx] = useState(1);
-
-  const rep = state.coach.reputation;
-  const teamOutlook = clamp100(45 + (state.acceptedOffer?.score ?? 0) * 40);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
@@ -39,46 +32,55 @@ export default function CoordinatorHiring() {
     [state.staff, state.assistantStaff]
   );
 
-  const ocScheme = state.staff.ocId ? normScheme(getPersonnelById(state.staff.ocId)?.scheme) : "";
-  const dcScheme = state.staff.dcId ? normScheme(getPersonnelById(state.staff.dcId)?.scheme) : "";
-  const preferredSchemes = new Set([ocScheme, dcScheme].filter(Boolean));
-
-  const focus = role === "OC" ? "OFF" : role === "DC" ? "DEF" : "ST";
   const level = LEVELS[levelIdx];
 
   const candidates = useMemo(() => {
-    const raw = getCoordinatorCandidates(role).filter((p: PersonnelRow) => !hiredSet.has((p as any).personId));
-    const pool = raw
-      .map((p: PersonnelRow) => {
-        const scheme = normScheme((p as any).scheme);
-        const schemeCompat =
-          preferredSchemes.size ? (Array.from(preferredSchemes).some((x) => scheme.includes(x) || x.includes(scheme)) ? 80 : 55) : 60;
-
-        const exp = expectedSalary(role, Number((p as any).reputation ?? 55));
+    const strict: Cand[] = getCoordinatorFreeAgents(role)
+      .filter((p) => !hiredSet.has(p.personId))
+      .map((p) => {
+        const exp = expectedSalary(role, Number(p.reputation ?? 60));
         const salary = offerSalary(exp, level);
-        const offerQuality = offerQualityScore(salary, exp);
-
-        const acc = computeStaffAcceptance({
-          saveSeed: state.saveSeed,
-          rep,
-          staffRep: Number((p as any).reputation ?? 0),
-          personId: (p as any).personId,
-          schemeCompat,
-          offerQuality,
-          teamOutlook,
-          roleFocus: focus as any,
-          kind: "COORDINATOR",
-        });
-
-        return { p, acc, exp, salary };
+        return { p, exp, salary, safety: false, emergency: false };
       })
-      .filter((x) => x.acc.accept)
       .filter((x) => x.salary <= remainingBudget)
-      .sort((a, b) => Number((b.p as any).reputation ?? 0) - Number((a.p as any).reputation ?? 0))
-      .slice(0, 18);
+      .sort((a, b) => Number(b.p.reputation ?? 0) - Number(a.p.reputation ?? 0));
 
-    return pool;
-  }, [role, hiredSet, preferredSchemes, state.saveSeed, rep, teamOutlook, level, remainingBudget]);
+    if (strict.length >= MIN_REQUIRED) return strict.slice(0, 30);
+
+    const seen = new Set(strict.map((x) => x.p.personId));
+    const need1 = MIN_REQUIRED - strict.length;
+
+    const safetyAffordable: Cand[] = getCoordinatorFreeAgentsAll(role)
+      .filter((p) => !hiredSet.has(p.personId))
+      .filter((p) => !seen.has(p.personId))
+      .map((p) => {
+        const exp = expectedSalary(role, Number(p.reputation ?? 60));
+        const salary = offerSalary(exp, level);
+        return { p, exp, salary, safety: true, emergency: false };
+      })
+      .filter((x) => x.salary <= remainingBudget)
+      .sort((a, b) => Number(a.p.reputation ?? 999) - Number(b.p.reputation ?? 999))
+      .slice(0, need1);
+
+    const base = [...strict, ...safetyAffordable];
+    if (base.length >= MIN_REQUIRED) return base.slice(0, 30);
+
+    const seen2 = new Set(base.map((x) => x.p.personId));
+    const need2 = MIN_REQUIRED - base.length;
+
+    const emergencyAny: Cand[] = getCoordinatorFreeAgentsAll(role)
+      .filter((p) => !hiredSet.has(p.personId))
+      .filter((p) => !seen2.has(p.personId))
+      .map((p) => {
+        const exp = expectedSalary(role, Number(p.reputation ?? 60));
+        const salary = offerSalary(exp, "LOW");
+        return { p, exp, salary, safety: true, emergency: true };
+      })
+      .sort((a, b) => Number(a.p.reputation ?? 999) - Number(b.p.reputation ?? 999))
+      .slice(0, need2);
+
+    return [...base, ...emergencyAny].slice(0, 30);
+  }, [role, hiredSet, level, remainingBudget]);
 
   const hire = (personId: string, salary: number) => dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
 
@@ -88,7 +90,7 @@ export default function CoordinatorHiring() {
         <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="text-2xl font-bold">Coordinator Hiring</div>
-            <div className="text-sm text-muted-foreground">Interested candidates only. Salary offers impact acceptance.</div>
+            <div className="text-sm text-muted-foreground">Pool backfills with safety and emergency options when needed.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
@@ -127,29 +129,26 @@ export default function CoordinatorHiring() {
       <Card>
         <CardContent className="p-4 space-y-2">
           {candidates.length ? (
-            candidates.map(({ p, acc, exp, salary }) => (
-              <div key={(p as any).personId} className="border rounded-md px-3 py-2 flex items-center justify-between">
+            candidates.map(({ p, exp, salary, safety, emergency }) => (
+              <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between">
                 <div className="min-w-0">
                   <div className="font-medium truncate">
-                    {(p as any).fullName} <span className="text-muted-foreground">({String((p as any).scheme ?? "-")})</span>
+                    {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Rep {Number((p as any).reputation ?? 0)} · Expected {money(exp)}
+                    Rep {Number(p.reputation ?? 0)} · Expected {money(exp)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge title={`Tier ${acc.tier} · Score ${acc.score} · Threshold ${acc.threshold}`} variant="outline">
-                    Tier {acc.tier}
-                  </Badge>
-                  <Badge variant="secondary">AS {acc.score}</Badge>
-                  <Button size="sm" variant="outline" onClick={() => hire((p as any).personId, salary)} disabled={salary > remainingBudget}>
-                    Offer {money(salary)}
+                  {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
+                  <Button size="sm" variant="outline" onClick={() => hire(p.personId, salary)}>
+                    Offer {money(salary)} {emergency ? "(Emergency)" : safety ? "(Safety)" : ""}
                   </Button>
                 </div>
               </div>
             ))
           ) : (
-            <div className="text-sm text-muted-foreground">No interested candidates for this role at this offer level.</div>
+            <div className="text-sm text-muted-foreground">No candidates available for this role.</div>
           )}
         </CardContent>
       </Card>

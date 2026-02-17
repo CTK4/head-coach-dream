@@ -462,8 +462,18 @@ function applyOwnerPenalty(state: GameState, amount: number, reason: string): Ga
   return { ...tmp, owner: { ...tmp.owner, financialRating, jobSecurity: computeJobSecurity(approval, financialRating) } };
 }
 
-function canAffordStaff(state: GameState, salary: number) {
-  return state.staffBudget.used + salary <= state.staffBudget.total;
+function overBudgetPenaltyAmount(overBy: number) {
+  if (overBy <= 0) return 0;
+  if (overBy <= 500_000) return 1;
+  if (overBy <= 1_500_000) return 2;
+  if (overBy <= 3_000_000) return 3;
+  return 4;
+}
+
+function allowStaffOverageWithPenalty(state: GameState, salary: number, reason: string): GameState {
+  const overBy = state.staffBudget.used + salary - state.staffBudget.total;
+  const penalty = overBudgetPenaltyAmount(overBy);
+  return penalty ? applyOwnerPenalty(state, penalty, `${reason} (over by $${Math.round(overBy / 1_000_000)}M)`) : state;
 }
 
 function addStaffSalaryAndCash(state: GameState, personId: string, salary: number): GameState {
@@ -755,33 +765,31 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
 
-      if (!canAffordStaff(state, action.payload.salary)) {
-        return applyOwnerPenalty(state, 4, "Exceeded staff budget");
-      }
+      let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
 
       const staff =
         action.payload.role === "OC"
-          ? { ...state.staff, ocId: action.payload.personId }
+          ? { ...nextState.staff, ocId: action.payload.personId }
           : action.payload.role === "DC"
-            ? { ...state.staff, dcId: action.payload.personId }
-            : { ...state.staff, stcId: action.payload.personId };
+            ? { ...nextState.staff, dcId: action.payload.personId }
+            : { ...nextState.staff, stcId: action.payload.personId };
 
       const res = setPersonnelTeamAndContract({
         personId: action.payload.personId,
         teamId,
-        startSeason: state.season,
+        startSeason: nextState.season,
         years: 3,
         salary: action.payload.salary,
         notes: `${action.payload.role} hired`,
       });
 
-      const next = addStaffSalaryAndCash({ ...state, staff }, action.payload.personId, action.payload.salary);
+      nextState = addStaffSalaryAndCash({ ...nextState, staff }, action.payload.personId, action.payload.salary);
 
       return {
-        ...next,
-        phase: staff.ocId && staff.dcId && staff.stcId ? "HUB" : next.phase,
-        careerStage: staff.ocId && staff.dcId && staff.stcId ? "OFFSEASON_HUB" : next.careerStage,
-        memoryLog: addMemoryEvent(state, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
+        ...nextState,
+        phase: staff.ocId && staff.dcId && staff.stcId ? "HUB" : nextState.phase,
+        careerStage: staff.ocId && staff.dcId && staff.stcId ? "OFFSEASON_HUB" : nextState.careerStage,
+        memoryLog: addMemoryEvent(nextState, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
       };
     }
     case "ASSISTANT_ATTEMPT_HIRE": {
@@ -830,31 +838,29 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
 
-      if (!canAffordStaff(state, action.payload.salary)) {
-        return applyOwnerPenalty(state, 2, "Exceeded staff budget");
-      }
+      let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
 
-      const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
+      const assistantStaff = { ...nextState.assistantStaff, [action.payload.role]: action.payload.personId };
 
       const res = setPersonnelTeamAndContract({
         personId: action.payload.personId,
         teamId,
-        startSeason: state.season,
+        startSeason: nextState.season,
         years: 2,
         salary: action.payload.salary,
         notes: `${String(action.payload.role)} hired`,
       });
 
-      const next = addStaffSalaryAndCash(
-        { ...state, assistantStaff },
+      nextState = addStaffSalaryAndCash(
+        { ...nextState, assistantStaff },
         action.payload.personId,
         action.payload.salary
       );
 
       return {
-        ...next,
-        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : next.careerStage,
-        memoryLog: addMemoryEvent(state, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
+        ...nextState,
+        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : nextState.careerStage,
+        memoryLog: addMemoryEvent(nextState, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
       };
     }
     case "OFFSEASON_SET_TASK": {

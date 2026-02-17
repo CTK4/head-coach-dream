@@ -1903,7 +1903,7 @@
       "status": "FREE_AGENT",
       "age": 39,
       "scheme": "Spread RPO",
-      "reputation": 79,
+      "reputation": 47,
       "contractId": null,
       "Column1": "Innovative; tempo-oriented thinker; spacing-focused play designer"
     },
@@ -2431,7 +2431,7 @@
       "status": "FREE_AGENT",
       "age": 50,
       "scheme": "Power Run (Gap)",
-      "reputation": 76,
+      "reputation": 40,
       "contractId": null,
       "Column1": "Analytical; reserved; skeptical; structured; slow to embrace hype"
     },
@@ -2443,7 +2443,7 @@
       "status": "FREE_AGENT",
       "age": 37,
       "scheme": "Vertical Spread",
-      "reputation": 76,
+      "reputation": 33,
       "contractId": null,
       "Column1": "Player-first; overly trusting at times; adaptable; communicative; emotionally perceptive"
     },
@@ -2527,7 +2527,7 @@
       "status": "FREE_AGENT",
       "age": 38,
       "scheme": "College Hybrid (Tempo-Based)",
-      "reputation": 78,
+      "reputation": 43,
       "contractId": null,
       "Column1": "Relational; collaborative; consensus-driven; occasionally indecisive; steady"
     },
@@ -3391,7 +3391,7 @@
       "status": "FREE_AGENT",
       "age": 44,
       "scheme": "Fangio Shell (Two-High Match)",
-      "reputation": 82,
+      "reputation": 36,
       "contractId": null,
       "Column1": "Process-oriented; structured; rigid; reliable; calm"
     },
@@ -3427,7 +3427,7 @@
       "status": "FREE_AGENT",
       "age": 45,
       "scheme": "Aggressive Blitz-Heavy",
-      "reputation": 77,
+      "reputation": 35,
       "contractId": null,
       "Column1": "Calculated; disciplined; distrustful; structured; resilient"
     },
@@ -3499,7 +3499,7 @@
       "status": "FREE_AGENT",
       "age": 45,
       "scheme": "Aggressive Blitz-Heavy",
-      "reputation": 78,
+      "reputation": 31,
       "contractId": null,
       "Column1": "Balanced; steady; moderate risk tolerance; loyal; structured"
     },
@@ -4039,7 +4039,7 @@
       "status": "FREE_AGENT",
       "age": 47,
       "scheme": "Hybrid Front (Multiple)",
-      "reputation": 85,
+      "reputation": 50,
       "contractId": null,
       "Column1": "Methodical; stubborn; steady; resistant to rapid change; detail-oriented"
     },
@@ -5695,7 +5695,7 @@
       "status": "FREE_AGENT",
       "age": 51,
       "scheme": "Two-High Match (Fangio)",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Vision-focused; charismatic; ambitious; scattered under stress; confident"
     },
@@ -5731,7 +5731,7 @@
       "status": "FREE_AGENT",
       "age": 42,
       "scheme": "Tampa 2 (Kiffin)",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Reserved; calculating; patient; strategic; slow to adjust midstream"
     },
@@ -5767,7 +5767,7 @@
       "status": "FREE_AGENT",
       "age": 49,
       "scheme": "Two-High Match (Fangio)",
-      "reputation": 52,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Inspirational; emotional; reactive; loyal; fiery"
     },
@@ -6031,7 +6031,7 @@
       "status": "FREE_AGENT",
       "age": 51,
       "scheme": "Cover 3 (Carroll)",
-      "reputation": 53,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Innovative; bold; risk-tolerant; occasionally scattered; confident"
     },
@@ -6139,7 +6139,7 @@
       "status": "FREE_AGENT",
       "age": 40,
       "scheme": "West Coast (Walsh)",
-      "reputation": 53,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Low-profile; observant; cautious; steady; loyal"
     },
@@ -6235,7 +6235,7 @@
       "status": "FREE_AGENT",
       "age": 53,
       "scheme": "Power / Gap (Landry)",
-      "reputation": 53,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Intense; competitive; demanding; impatient; strategic"
     },
@@ -6259,7 +6259,7 @@
       "status": "FREE_AGENT",
       "age": 44,
       "scheme": "Pro Style Balanced",
-      "reputation": 67,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Relational; adaptable; empathetic; sometimes lenient; steady"
     },
@@ -6283,7 +6283,7 @@
       "status": "FREE_AGENT",
       "age": 41,
       "scheme": "West Coast (Walsh)",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Visionary; charismatic; ego-sensitive; ambitious; inconsistent discipline"
     },
@@ -6379,7 +6379,7 @@
       "status": "FREE_AGENT",
       "age": 40,
       "scheme": "Power / Gap (Landry)",
-      "reputation": 52,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Emotionally steady; predictable; patient; resistant to abrupt change; loyal"
     },
@@ -6607,7 +6607,7 @@
       "status": "FREE_AGENT",
       "age": 42,
       "scheme": "Pro Style Balanced",
-      "reputation": 52,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Structured; conservative; disciplined; patient; resistant to experimentation"
     },
@@ -6619,7 +6619,7 @@
       "status": "FREE_AGENT",
       "age": 49,
       "scheme": "Erhardt–Perkins",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Innovative; bold; risk-tolerant; occasionally scattered; confident"
     },
@@ -6763,7 +6763,7 @@
       "status": "FREE_AGENT",
       "age": 42,
       "scheme": "West Coast (Walsh)",
-      "reputation": 52,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Methodical; stubborn; steady; resistant to rapid change; detail-oriented"
     },
@@ -6787,7 +6787,7 @@
       "status": "FREE_AGENT",
       "age": 68,
       "scheme": "Power / Gap (Landry)",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Adaptive; politically astute; guarded; opportunistic; ambitious"
     },
@@ -6859,7 +6859,7 @@
       "status": "FREE_AGENT",
       "age": 41,
       "scheme": "Cover 3 (Carroll)",
-      "reputation": 71,
+      "reputation": 39,
       "contractId": null,
       "Column1": "Confrontational; demanding; high standards; intense; thin tolerance for excuses"
     },
@@ -6895,7 +6895,7 @@
       "status": "FREE_AGENT",
       "age": 40,
       "scheme": "Zone Blitz (LeBeau)",
-      "reputation": 80,
+      "reputation": 31,
       "contractId": null,
       "Column1": "High-motor; restless; impulsive; competitive; image-aware"
     },
@@ -6967,7 +6967,7 @@
       "status": "FREE_AGENT",
       "age": 42,
       "scheme": "Tampa 2 (Kiffin)",
-      "reputation": 58,
+      "reputation": 36,
       "contractId": null,
       "Column1": "Command-heavy; rigid; structured; emotionally reserved; uncompromising"
     },
@@ -9523,7 +9523,7 @@
       "status": "FREE_AGENT",
       "age": 57,
       "scheme": "Power / Gap (Landry)",
-      "reputation": 59,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Shrewd; politically aware; guarded; opportunistic; quietly ambitious"
     },
@@ -9715,7 +9715,7 @@
       "status": "FREE_AGENT",
       "age": 48,
       "scheme": "Pro Style Balanced",
-      "reputation": 60,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Experimental; forward-looking; impatient with tradition; bold; divisive"
     },
@@ -9787,7 +9787,7 @@
       "status": "FREE_AGENT",
       "age": 46,
       "scheme": "Pro Style Balanced",
-      "reputation": 59,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Hardline; direct; demanding; efficient; intolerant of complacency"
     },
@@ -9823,7 +9823,7 @@
       "status": "FREE_AGENT",
       "age": 48,
       "scheme": "Vertical Passing",
-      "reputation": 60,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Confident; media-attuned; impulsive; persuasive; competitive"
     },
@@ -9871,7 +9871,7 @@
       "status": "FREE_AGENT",
       "age": 70,
       "scheme": "West Coast (Walsh)",
-      "reputation": 62,
+      "reputation": 47,
       "contractId": null,
       "Column1": "Inspirational; emotional; reactive; loyal; fiery"
     },
@@ -9931,7 +9931,7 @@
       "status": "FREE_AGENT",
       "age": 44,
       "scheme": "Power / Gap (Landry)",
-      "reputation": 51,
+      "reputation": 49,
       "contractId": null,
       "Column1": "Balanced; pragmatic; moderate risk appetite; dependable; steady"
     },
@@ -10135,7 +10135,7 @@
       "status": "FREE_AGENT",
       "age": 60,
       "scheme": "Erhardt–Perkins",
-      "reputation": 52,
+      "reputation": 48,
       "contractId": null,
       "Column1": "Innovative; bold; risk-tolerant; occasionally scattered; confident"
     },
