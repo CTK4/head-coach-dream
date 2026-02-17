@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getPlayersByTeam, type PlayerRow } from "@/data/leagueDb";
+import { type PlayerRow } from "@/data/leagueDb";
+import { getEffectivePlayersByTeam, getDepthSlotLabel } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ const Roster = () => {
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
-  const allPlayers = getPlayersByTeam(teamId);
+  const allPlayers = getEffectivePlayersByTeam(state, teamId);
   const filtered = allPlayers.filter((p) => getGroup(p.pos ?? "") === tab);
   const sorted = [...filtered].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
 
@@ -69,6 +70,11 @@ const Roster = () => {
                       <Badge variant="outline" className="w-10 justify-center text-xs font-mono">
                         {player.pos}
                       </Badge>
+                      {getDepthSlotLabel(state, String(player.playerId)) ? (
+                        <Badge variant="outline" className="text-xs">
+                          {getDepthSlotLabel(state, String(player.playerId))}
+                        </Badge>
+                      ) : null}
                       <div>
                         <p className="font-medium text-sm">{player.fullName}</p>
                         <p className="text-xs text-muted-foreground">
