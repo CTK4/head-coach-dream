@@ -18,6 +18,7 @@ const ChooseBackground = () => {
         mediaExpectation: archetype.mediaExpectation,
         lockerRoomCred: archetype.lockerRoomCred,
         volatility: archetype.volatility,
+        reputation: archetype.reputationProfile,
       },
     });
     dispatch({ type: "SET_PHASE", payload: "INTERVIEWS" });

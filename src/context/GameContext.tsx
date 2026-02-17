@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import draftClassJson from "@/data/draftClass.json";
-import { getTeams } from "@/data/leagueDb";
+import { getPersonnelById, getPlayersByTeam, getTeams } from "@/data/leagueDb";
+import type { CoachReputation } from "@/engine/reputation";
+import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost } from "@/engine/reputation";
+import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
 import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
@@ -166,6 +169,7 @@ export type GameState = {
     mediaExpectation?: number;
     lockerRoomCred?: number;
     volatility?: number;
+    reputation?: CoachReputation;
   };
   phase: GamePhase;
   careerStage: CareerStage;
@@ -192,6 +196,27 @@ export type GameState = {
   league: LeagueState;
   saveSeed: number;
   game: GameSim;
+  draft: { picks: string[]; withdrawnBoardIds: Record<string, true> };
+  rookies: RookiePlayer[];
+  rookieContracts: Record<string, RookieContract>;
+};
+
+export type RookieContract = {
+  startSeason: number;
+  years: 4;
+  capBySeason: Record<number, number>;
+  total: number;
+};
+
+export type RookiePlayer = {
+  playerId: string;
+  prospectId: string;
+  name: string;
+  pos: string;
+  age: number;
+  ovr: number;
+  dev: number;
+  apy: number;
 };
 
 export type GameAction =
@@ -202,6 +227,8 @@ export type GameAction =
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
+  | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
+  | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
@@ -284,7 +311,77 @@ function createInitialState(): GameState {
     league: initLeagueState(teams),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
+    draft: { picks: [], withdrawnBoardIds: {} },
+    rookies: [],
+    rookieContracts: {},
   };
+}
+
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+function moneyRound(n: number) {
+  return Math.round(n / 50_000) * 50_000;
+}
+
+function rookieApyFromRank(rank: number): number {
+  const r = Math.max(1, Math.min(300, rank));
+  const max = 6_000_000;
+  const min = 850_000;
+  const t = (300 - r) / 299;
+  return moneyRound(min + (max - min) * t ** 1.25);
+}
+
+function rookieOvrFromRank(rank: number): number {
+  const r = Math.max(1, Math.min(300, rank));
+  const t = (300 - r) / 299;
+  return Math.round(58 + t * 26);
+}
+
+function rookieDevFromTier(row: Record<string, unknown>): number {
+  const x = Number(row["DraftTier"] ?? row["Tier"] ?? 60);
+  if (!Number.isFinite(x)) return 60;
+  return Math.max(40, Math.min(90, Math.round(x)));
+}
+
+function rookieContractFromApy(startSeason: number, apy: number): RookieContract {
+  const y1 = moneyRound(apy);
+  const y2 = moneyRound(apy * 1.05);
+  const y3 = moneyRound(apy * 1.1);
+  const y4 = moneyRound(apy * 1.15);
+  const capBySeason: Record<number, number> = { [startSeason]: y1, [startSeason + 1]: y2, [startSeason + 2]: y3, [startSeason + 3]: y4 };
+  return { startSeason, years: 4, capBySeason, total: y1 + y2 + y3 + y4 };
+}
+
+function getProspectRow(prospectId: string): Record<string, unknown> | null {
+  return DRAFT_ROWS.find((r) => String(r["Player ID"]) === prospectId) ?? null;
+}
+
+function deriveCoordFocus(role: "OC" | "DC" | "STC"): RoleFocus {
+  if (role === "OC") return "OFF";
+  if (role === "DC") return "DEF";
+  return "ST";
+}
+
+function deriveAssistantFocus(role: keyof AssistantStaff): RoleFocus {
+  return role === "qbCoachId" || role === "olCoachId" || role === "rbCoachId" || role === "wrCoachId"
+    ? "OFF"
+    : role === "dlCoachId" || role === "lbCoachId" || role === "dbCoachId"
+      ? "DEF"
+      : "GEN";
+}
+
+function schemeCompatForPerson(state: GameState, personId: string): number {
+  const person = getPersonnelById(personId);
+  if (!person) return 60;
+  const ocScheme = state.staff.ocId ? String(getPersonnelById(state.staff.ocId)?.scheme ?? "").toLowerCase() : "";
+  const dcScheme = state.staff.dcId ? String(getPersonnelById(state.staff.dcId)?.scheme ?? "").toLowerCase() : "";
+  const ps = new Set([ocScheme, dcScheme].filter(Boolean));
+  const scheme = String(person.scheme ?? "").toLowerCase();
+  return ps.size ? (Array.from(ps).some((x) => scheme.includes(x) || x.includes(scheme)) ? 80 : 55) : 60;
 }
 
 function areAllAssistantsHired(assistantStaff: AssistantStaff): boolean {
@@ -339,11 +436,63 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
       };
+    case "COORD_ATTEMPT_HIRE": {
+      const person = getPersonnelById(action.payload.personId);
+      if (!person) return state;
+      const rep = state.coach.reputation;
+      const res = computeStaffAcceptance({
+        saveSeed: state.saveSeed,
+        rep,
+        staffRep: Number(person.reputation ?? 0),
+        personId: person.personId,
+        schemeCompat: schemeCompatForPerson(state, action.payload.personId),
+        offerQuality: 70,
+        teamOutlook: clamp100(45 + (state.acceptedOffer ? 30 : 0)),
+        roleFocus: deriveCoordFocus(action.payload.role),
+        kind: "COORDINATOR",
+      });
+      if (!res.accept) {
+        return {
+          ...state,
+          coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
+          memoryLog: addMemoryEvent(state, "COORD_REJECTED", { ...action.payload, score: res.score, tier: res.tier, threshold: res.threshold }),
+        };
+      }
+      const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
+      const staff = { ...state.staff, [key]: action.payload.personId };
+      if (!(staff.ocId && staff.dcId && staff.stcId)) return { ...state, staff };
+      return { ...state, staff, phase: "HUB", careerStage: "OFFSEASON_HUB" };
+    }
     case "HIRE_STAFF": {
       const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
       const staff = { ...state.staff, [key]: action.payload.personId };
       if (!(staff.ocId && staff.dcId && staff.stcId)) return { ...state, staff };
       return { ...state, staff, phase: "HUB", careerStage: "OFFSEASON_HUB" };
+    }
+    case "ASSISTANT_ATTEMPT_HIRE": {
+      const person = getPersonnelById(action.payload.personId);
+      if (!person) return state;
+      const rep = state.coach.reputation;
+      const res = computeStaffAcceptance({
+        saveSeed: state.saveSeed,
+        rep,
+        staffRep: Number(person.reputation ?? 0),
+        personId: person.personId,
+        schemeCompat: schemeCompatForPerson(state, action.payload.personId),
+        offerQuality: 70,
+        teamOutlook: clamp100(45 + (state.acceptedOffer ? 30 : 0)),
+        roleFocus: deriveAssistantFocus(action.payload.role),
+        kind: "ASSISTANT",
+      });
+      if (!res.accept) {
+        return {
+          ...state,
+          coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
+          memoryLog: addMemoryEvent(state, "ASSISTANT_REJECTED", { ...action.payload, score: res.score, tier: res.tier, threshold: res.threshold }),
+        };
+      }
+      const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
+      return { ...state, assistantStaff, careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage };
     }
     case "HIRE_ASSISTANT": {
       const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
@@ -463,7 +612,17 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const seed = state.saveSeed ^ 0x44444444;
       const pool = genFreeAgents(seed, 25);
       const carry = state.offseasonData.tampering.offers.slice(0, 10);
-      const offers = mergeOffers(carry, pool);
+      const offers = mergeOffers(carry, pool).map((o) => {
+        const rep = state.coach.reputation;
+        if (!rep) return o;
+        const p = String(o.pos ?? "").toUpperCase();
+        const boost = ["QB", "RB", "WR", "TE", "OL", "OT", "OG", "C"].includes(p)
+          ? offenseInterestBoost(rep)
+          : ["DL", "EDGE", "DE", "DT", "LB", "DB", "CB", "S"].includes(p)
+            ? defenseInterestBoost(rep)
+            : 0;
+        return { ...o, interest: clamp01(Number(o.interest ?? 0) + boost) };
+      });
 
       return {
         ...state,
@@ -539,13 +698,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
     case "DRAFT_PICK": {
-      if (state.offseasonData.draft.completed) return state;
-      const p = state.offseasonData.draft.board.find((x) => x.id === action.payload.prospectId);
-      if (!p) return state;
-      const board = state.offseasonData.draft.board.filter((x) => x.id !== p.id);
-      const picks = [...state.offseasonData.draft.picks, p];
-      const completed = picks.length >= 7;
-      return { ...state, offseasonData: { ...state.offseasonData, draft: { ...state.offseasonData.draft, board, picks, completed } } };
+      if (state.draft.picks.length >= 7) return state;
+      if (state.draft.withdrawnBoardIds[action.payload.prospectId]) return state;
+      const row = getProspectRow(action.payload.prospectId);
+      const rank = row ? Number(row["Rank"] ?? 200) : 200;
+      const idx = state.rookies.length + 1;
+      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+      const rookie: RookiePlayer = {
+        playerId,
+        prospectId: action.payload.prospectId,
+        name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
+        pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : "UNK",
+        age: row ? Number(row["Age"] ?? 22) : 22,
+        ovr: rookieOvrFromRank(rank),
+        dev: rookieDevFromTier(row ?? {}),
+        apy: rookieApyFromRank(rank),
+      };
+      const contract = rookieContractFromApy(state.season + 1, rookie.apy);
+
+      return {
+        ...state,
+        rookies: [...state.rookies, rookie],
+        rookieContracts: { ...state.rookieContracts, [rookie.playerId]: contract },
+        draft: {
+          ...state.draft,
+          picks: [...state.draft.picks, action.payload.prospectId],
+          withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [action.payload.prospectId]: true },
+        },
+      };
     }
     case "CAMP_SET":
       return {
@@ -746,6 +926,9 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     },
     league,
     game,
+    draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
+    rookies: oldState.rookies ?? [],
+    rookieContracts: oldState.rookieContracts ?? {},
   };
 }
 
@@ -787,6 +970,9 @@ function loadState(): GameState {
       },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
+      draft: { ...initial.draft, ...migrated.draft },
+      rookies: migrated.rookies ?? initial.rookies,
+      rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
     };
@@ -831,5 +1017,7 @@ export function useGame() {
   if (!ctx) throw new Error("useGame must be used within GameProvider");
   return ctx;
 }
+
+export const getDraftClass = () => draftClassJson as Record<string, unknown>[];
 
 export { PRESEASON_WEEKS, REGULAR_SEASON_WEEKS };

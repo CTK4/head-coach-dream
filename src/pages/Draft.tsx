@@ -1,163 +1,118 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
-import { getPlayers, type PlayerRow } from "@/data/leagueDb";
+import { useGame, getDraftClass } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+type Row = Record<string, unknown>;
+
+function num(v: unknown, d = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+function s(v: unknown) {
+  return String(v ?? "");
+}
+function posKey(v: unknown) {
+  return String(v ?? "").toUpperCase();
+}
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+function confidence(rep: number, visited: boolean, worked: boolean) {
+  const base = clamp(35 + rep * 0.5, 40, 85);
+  return clamp(base + (visited ? 10 : 0) + (worked ? 6 : 0), 0, 99);
+}
+
 const Draft = () => {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const navigate = useNavigate();
-  const [selectedPlayer, setSelectedPlayer] = useState<PlayerRow | null>(null);
-  const [scouted, setScouted] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Generate draft prospects from free agents / young players
-  const prospects = useMemo(() => {
-    const all = getPlayers();
-    return all
-      .filter((p) => {
-        const age = p.age ?? 30;
-        const status = String(p.status ?? "").toUpperCase();
-        return age <= 24 || status === "DRAFT_ELIGIBLE" || status === "ROOKIE";
-      })
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 60);
-  }, []);
+  const board = useMemo(() => {
+    const rows = (getDraftClass() as Row[]).slice();
+    return rows
+      .sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999))
+      .filter((r) => !state.draft.withdrawnBoardIds[String(r["Player ID"])])
+      .slice(0, 120);
+  }, [state.draft.withdrawnBoardIds]);
 
-  const handleScout = (playerId: string) => {
-    setScouted((prev) => new Set(prev).add(playerId));
-  };
+  const selected = useMemo(() => {
+    if (!selectedId) return null;
+    const rows = getDraftClass() as Row[];
+    return rows.find((r) => String(r["Player ID"]) === selectedId) ?? null;
+  }, [selectedId]);
+
+  const picks = state.draft.picks;
+  const visits = state.offseasonData.preDraft.visits;
+  const workouts = state.offseasonData.preDraft.workouts;
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">Draft / Scouting</h1>
-            <p className="text-sm text-muted-foreground">{prospects.length} prospects</p>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle>Draft Execution</CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Badge variant="secondary">Your Picks</Badge>
+            <Badge variant="outline">{picks.length}/7</Badge>
+            <Badge variant="outline">Visits {Object.keys(visits).length}/30</Badge>
+            <Badge variant="outline">Workouts {Object.keys(workouts).length}</Badge>
           </div>
-          <Button variant="ghost" onClick={() => navigate("/hub")}>← Hub</Button>
-        </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/hub/offseason/pre-draft")}>Back</Button>
+            <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })} disabled={picks.length < 7}>Continue →</Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Prospect List */}
-          <ScrollArea className="h-[70vh]">
-            <div className="space-y-2 pr-4">
-              {prospects.map((p, i) => (
-                <Card
-                  key={p.playerId}
-                  className={`cursor-pointer transition-all ${selectedPlayer?.playerId === p.playerId ? "border-primary" : "hover:border-primary/50"}`}
-                  onClick={() => setSelectedPlayer(p)}
-                >
-                  <CardContent className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-6">#{i + 1}</span>
-                      <Badge variant="outline" className="text-xs w-10 justify-center">{p.pos}</Badge>
-                      <div>
-                        <p className="font-medium text-sm">{p.fullName}</p>
-                        <p className="text-xs text-muted-foreground">{p.college ?? "Unknown"}</p>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader><CardTitle>Board</CardTitle></CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[620px] pr-2">
+              <div className="space-y-2">
+                {board.map((r) => {
+                  const id = String(r["Player ID"]);
+                  const pos = posKey(r["POS"]);
+                  const rep = num(r["DraftTier"], 60);
+                  const visited = !!visits[id];
+                  const worked = !!workouts[id];
+                  const conf = confidence(rep, visited, worked);
+                  return (
+                    <button key={id} className={`w-full text-left border rounded-md px-3 py-2 flex items-center justify-between gap-3 ${selectedId === id ? "bg-secondary/50" : ""}`} onClick={() => setSelectedId(id)}>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">#{num(r["Rank"])} {s(r["Name"])} <span className="text-muted-foreground">({pos})</span></div>
+                        <div className="text-xs text-muted-foreground">College {s(r["College"])} · 40 {s(r["40"])} · Vert {s(r["Vert"])}</div>
                       </div>
-                    </div>
-                    {scouted.has(p.playerId) && (
-                      <Badge className="bg-primary text-primary-foreground text-xs">{p.overall}</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </ScrollArea>
-
-          {/* Detail Panel */}
-          <div className="hidden md:block">
-            {selectedPlayer ? (
-              <Card className="sticky top-4">
-                <CardHeader>
-                  <CardTitle>{selectedPlayer.fullName}</CardTitle>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{selectedPlayer.pos}</Badge>
-                    <Badge variant="secondary">Age {selectedPlayer.age}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">College</p>
-                    <p className="font-medium">{selectedPlayer.college ?? "Unknown"}</p>
-                  </div>
-                  {scouted.has(selectedPlayer.playerId) ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-secondary rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">Overall</p>
-                          <p className="text-2xl font-bold">{selectedPlayer.overall ?? "?"}</p>
-                        </div>
-                        <div className="bg-secondary rounded-lg p-3 text-center">
-                          <p className="text-xs text-muted-foreground">Potential</p>
-                          <p className="text-2xl font-bold">{selectedPlayer.potential ?? "?"}</p>
-                        </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline">Conf {conf}</Badge>
+                        <Badge variant="secondary">Tier {rep}</Badge>
                       </div>
-                      {selectedPlayer.Archetype && (
-                        <div>
-                          <p className="text-sm text-muted-foreground">Archetype</p>
-                          <Badge>{selectedPlayer.Archetype}</Badge>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <Button onClick={() => handleScout(selectedPlayer.playerId)} className="w-full">
-                      🔍 Scout Player
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                  Select a prospect to view details
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
-        {/* Mobile Detail Overlay */}
-        {selectedPlayer && (
-          <div className="md:hidden fixed inset-0 bg-background/95 z-50 p-4 overflow-auto">
-            <Button variant="ghost" onClick={() => setSelectedPlayer(null)} className="mb-4">← Back</Button>
-            <Card>
-              <CardHeader>
-                <CardTitle>{selectedPlayer.fullName}</CardTitle>
-                <div className="flex gap-2">
-                  <Badge variant="outline">{selectedPlayer.pos}</Badge>
-                  <Badge variant="secondary">Age {selectedPlayer.age}</Badge>
+        <Card>
+          <CardHeader><CardTitle>Pick Card</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {selected ? (
+              <>
+                <div className="space-y-1">
+                  <div className="text-xl font-bold">{s(selected["Name"])} <span className="text-muted-foreground">({posKey(selected["POS"])})</span></div>
+                  <div className="text-sm text-muted-foreground">Rank #{num(selected["Rank"])} · College {s(selected["College"])}</div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">College</p>
-                  <p className="font-medium">{selectedPlayer.college ?? "Unknown"}</p>
-                </div>
-                {scouted.has(selectedPlayer.playerId) ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-secondary rounded-lg p-3 text-center">
-                      <p className="text-xs text-muted-foreground">Overall</p>
-                      <p className="text-2xl font-bold">{selectedPlayer.overall ?? "?"}</p>
-                    </div>
-                    <div className="bg-secondary rounded-lg p-3 text-center">
-                      <p className="text-xs text-muted-foreground">Potential</p>
-                      <p className="text-2xl font-bold">{selectedPlayer.potential ?? "?"}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <Button onClick={() => handleScout(selectedPlayer.playerId)} className="w-full">
-                    🔍 Scout Player
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                <Button onClick={() => dispatch({ type: "DRAFT_PICK", payload: { prospectId: String(selected["Player ID"]) } })} disabled={picks.length >= 7 || state.draft.withdrawnBoardIds[String(selected["Player ID"])]}>Draft Player</Button>
+                <Card><CardContent className="p-4 text-sm">Picks: {picks.join(", ") || "None"}</CardContent></Card>
+              </>
+            ) : <div className="text-sm text-muted-foreground">Select a prospect from the board.</div>}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
