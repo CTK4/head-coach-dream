@@ -16,6 +16,7 @@ const HubLayout = () => {
         location.pathname.startsWith("/hub/staff") ||
         location.pathname.startsWith("/hub/depth-chart") ||
         location.pathname.startsWith("/hub/finance") ||
+        location.pathname.startsWith("/hub/firing-meter") ||
         location.pathname.startsWith("/hub/assistant-hiring") ||
         location.pathname.startsWith("/hub/coord-hiring") ||
         location.pathname.startsWith("/hub/coordinators");
@@ -53,6 +54,9 @@ const HubLayout = () => {
           </NavLink>
           <NavLink className={baseLinkClass} to="/hub/finance">
             Finances
+          </NavLink>
+          <NavLink className={baseLinkClass} to="/hub/firing-meter">
+            Job Security
           </NavLink>
           <NavLink
             className={`${baseLinkClass} ${preseasonLocked ? "opacity-50 pointer-events-none" : ""}`}

@@ -32,6 +32,7 @@ import CutDowns from "@/pages/hub/offseason/CutDowns";
 import Finance from "@/pages/hub/Finance";
 import DepthChart from "@/pages/hub/DepthChart";
 import StaffManagement from "@/pages/hub/StaffManagement";
+import FiringMeter from "@/pages/hub/FiringMeter";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +101,7 @@ const App = () => (
               <Route path="depth-chart" element={<DepthChart />} />
               <Route path="staff" element={<StaffManagement />} />
               <Route path="finance" element={<Finance />} />
+              <Route path="firing-meter" element={<FiringMeter />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="regular-season" element={<RegularSeason />} />
               <Route path="playcall" element={<Playcall />} />

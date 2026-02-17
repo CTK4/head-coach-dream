@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ function money(n: number) {
 
 export default function Finance() {
   const { state } = useGame();
+  const navigate = useNavigate();
   const dmThis = state.teamFinances.deadMoneyBySeason[state.season] ?? 0;
   const dmNext = state.teamFinances.deadMoneyBySeason[state.season + 1] ?? 0;
 
@@ -21,7 +23,9 @@ export default function Finance() {
           <Badge variant="outline">Dead Money Y{state.season + 1} {money(dmNext)}</Badge>
           <Badge variant="outline">Owner Approval {state.owner.approval}</Badge>
           <Badge variant="outline">Financial Rating {state.owner.financialRating}</Badge>
-          <Badge variant="secondary">Job Security {state.owner.jobSecurity}</Badge>
+          <Badge variant="secondary" className="cursor-pointer" onClick={() => navigate("/hub/firing-meter")}>
+            Job Security {state.owner.jobSecurity}
+          </Badge>
         </CardContent>
       </Card>
     </div>
