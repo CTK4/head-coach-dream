@@ -1,13 +1,20 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { useGame } from "@/context/GameContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function Combine() {
+  const { dispatch } = useGame();
   return (
     <Card>
-      <CardContent className="p-6 space-y-2">
-        <h2 className="text-2xl font-bold">Scouting Combine</h2>
-        <p className="text-sm text-muted-foreground">
-          Placeholder page. Next: reveal athletic testing, interviews, and RAS.
-        </p>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Scouting Combine</CardTitle>
+        <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+          Continue
+        </Button>
+      </CardHeader>
+      <CardContent className="text-sm text-muted-foreground space-y-2">
+        <div>Combine results + RAS reveal will be wired into the draft board here.</div>
+        <div>For now: stage screen exists + flow is correct.</div>
       </CardContent>
     </Card>
   );

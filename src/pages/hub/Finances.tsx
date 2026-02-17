@@ -21,7 +21,7 @@ export default function Finances() {
   const rows = useMemo(() => {
     const ps = getEffectivePlayersByTeam(state, teamId);
     return ps
-      .map((p) => {
+      .map((p: any) => {
         const c = getContractSummaryForPlayer(state, String(p.playerId));
         return {
           id: String(p.playerId),
@@ -42,22 +42,16 @@ export default function Finances() {
         <CardTitle className="flex items-center justify-between gap-3">
           <span>Finances</span>
           <div className="flex items-center gap-2">
-            <Badge variant={state.finances.capSpace < 0 ? "destructive" : "secondary"}>
-              Cap Space: {moneyShort(state.finances.capSpace)}
-            </Badge>
+            <Badge variant={state.finances.capSpace < 0 ? "destructive" : "secondary"}>Cap Space: {moneyShort(state.finances.capSpace)}</Badge>
             <Badge variant="outline">Cash: {moneyShort(state.finances.cash)}</Badge>
           </div>
         </CardTitle>
-        {state.finances.capSpace < 0 ? (
-          <div className="text-sm text-destructive">Cap Illegal. Cut/Trade players to get under the cap.</div>
-        ) : null}
+        {state.finances.capSpace < 0 ? <div className="text-sm text-destructive">Cap Illegal. Cut/Trade players to get under the cap.</div> : null}
       </CardHeader>
 
       <CardContent className="p-0">
         <div className="px-6 pb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            {rows.length} players · Season {state.season}
-          </div>
+          <div className="text-sm text-muted-foreground">{rows.length} players · Season {state.season}</div>
           <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_SEASON" })}>
             Advance Season
           </Button>
@@ -69,8 +63,7 @@ export default function Finances() {
               <div key={r.id} className="rounded-xl border border-border bg-card/50 p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-semibold truncate">
-                    {r.name} <span className="text-muted-foreground">({r.pos})</span>{" "}
-                    <span className="text-muted-foreground">· OVR {r.ovr}</span>
+                    {r.name} <span className="text-muted-foreground">({r.pos})</span> <span className="text-muted-foreground">· OVR {r.ovr}</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Cap Hit {moneyShort(r.capHit)} · Years Left {r.yearsLeft} {r.isOverride ? "· (Override)" : ""}

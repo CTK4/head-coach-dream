@@ -1,10 +1,42 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
+import { useGame, type CareerStage } from "@/context/GameContext";
 import { getTeamById, getTeamSummary } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+function stageToRoute(stage: CareerStage): string {
+  switch (stage) {
+    case "STAFF_CONSTRUCTION":
+      return "/hub/assistant-hiring";
+    case "ROSTER_REVIEW":
+      return "/hub/roster";
+    case "RESIGN":
+      return "/hub/resign";
+    case "COMBINE":
+      return "/hub/combine";
+    case "TAMPERING":
+      return "/hub/tampering";
+    case "FREE_AGENCY":
+      return "/hub/free-agency";
+    case "PRE_DRAFT":
+      return "/hub/pre-draft";
+    case "DRAFT":
+      return "/hub/draft";
+    case "TRAINING_CAMP":
+      return "/hub/training-camp";
+    case "PRESEASON":
+      return "/hub/preseason";
+    case "CUTDOWNS":
+      return "/hub/cutdowns";
+    case "REGULAR_SEASON":
+      return "/hub/regular-season";
+    default:
+      return "/hub";
+  }
+}
 
 const Hub = () => {
   const { state, dispatch } = useGame();
@@ -13,6 +45,19 @@ const Hub = () => {
   const teamId = state.acceptedOffer?.teamId;
   const team = teamId ? getTeamById(teamId) : null;
   const summary = teamId ? getTeamSummary(teamId) : null;
+
+  const stageLabel = state.careerStage.replaceAll("_", " ");
+
+  const drivers = useMemo(() => {
+    const last = state.memoryLog.slice(-8).reverse();
+    return last.map((e) => {
+      if (e.type === "FA_SIGNED") return "Signed free agent";
+      if (e.type === "PLAYER_CUT") return "Roster cut";
+      if (e.type === "STAGE_ADVANCED") return "Advanced offseason stage";
+      if (e.type === "SEASON_ADVANCED") return "New season";
+      return e.type;
+    });
+  }, [state.memoryLog]);
 
   if (!teamId || !team) {
     return (
@@ -30,64 +75,67 @@ const Hub = () => {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">{team.name}</h2>
-              <p className="text-muted-foreground">{team.region} • {team.stadium}</p>
-              <p className="text-sm text-muted-foreground mt-1">HC: {state.coach.name}</p>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="text-2xl font-bold">{team.name}</div>
+              <Badge variant="secondary">Season {state.season}</Badge>
             </div>
-            <Badge className="text-lg px-3 py-1">{summary?.overall ?? 0} OVR</Badge>
+            <Badge variant="outline">Stage: {stageLabel}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            {summary ? `OVR ${summary.overall} · Off ${summary.offense} · Def ${summary.defense}` : "—"}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => navigate(stageToRoute(state.careerStage))}>
+              Go to Stage
+            </Button>
+            <Button
+              className="bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
+              onClick={() => {
+                dispatch({ type: "ADVANCE_CAREER_STAGE" });
+                navigate(stageToRoute(state.careerStage === "OFFSEASON_HUB" ? "STAFF_CONSTRUCTION" : (undefined as any)));
+              }}
+            >
+              Continue
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">Players</p>
-            <p className="text-2xl font-bold">{summary?.playerCount ?? 0}</p>
+          <CardHeader>
+            <CardTitle>News</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[320px] pr-3">
+              <div className="space-y-2">
+                {state.hub.news.map((n, i) => (
+                  <div key={i} className="text-sm border-b border-border/50 pb-2 last:border-0">
+                    {n}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">Cap Space</p>
-            <p className="text-2xl font-bold">${((summary?.capSpace ?? 0) / 1_000_000).toFixed(0)}M</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">Contract</p>
-            <p className="text-2xl font-bold">{state.acceptedOffer?.years ?? 0}yr</p>
-          </CardContent>
-        </Card>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">League News</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-48">
-            <div className="space-y-3">
-              {state.hub.news.map((item, i) => (
-                <div key={i} className="flex gap-3 items-start border-b border-border/50 pb-3 last:border-0">
-                  <Badge variant="outline" className="shrink-0 mt-0.5 text-xs">
-                    NEWS
-                  </Badge>
-                  <p className="text-sm">{item}</p>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>Advance Career Stage</Button>
-        <Button variant="ghost" onClick={() => { dispatch({ type: "RESET" }); navigate("/"); }}>
-          Reset Save
-        </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Drivers</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {drivers.length === 0 ? <div className="text-sm text-muted-foreground">No events yet.</div> : null}
+            {drivers.slice(0, 6).map((d, i) => (
+              <div key={i} className="text-sm text-muted-foreground">
+                • {d}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

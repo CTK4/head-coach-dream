@@ -10,7 +10,6 @@ import Interviews from "./pages/Interviews";
 import Offers from "./pages/Offers";
 import CoordinatorHiring from "./pages/CoordinatorHiring";
 import Hub from "./pages/Hub";
-import Offseason from "./pages/hub/Offseason";
 import Roster from "./pages/Roster";
 import Draft from "./pages/Draft";
 import Playcall from "./pages/Playcall";
@@ -19,23 +18,15 @@ import HubLayout from "./pages/hub/HubLayout";
 import AssistantHiring from "./pages/hub/AssistantHiring";
 import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
-import Resigning from "@/pages/hub/offseason/Resigning";
-import Combine from "@/pages/hub/offseason/Combine";
-import Tampering from "@/pages/hub/offseason/Tampering";
-import OffseasonFreeAgency from "@/pages/hub/offseason/FreeAgency";
-import FreeAgency from "@/pages/hub/FreeAgency";
-import PlayerProfile from "@/pages/hub/PlayerProfile";
-import PreDraft from "@/pages/hub/offseason/PreDraft";
-import OffseasonDraft from "@/pages/hub/offseason/Draft";
-import OffseasonTrainingCamp from "@/pages/hub/offseason/TrainingCamp";
-import TrainingCamp from "@/pages/hub/TrainingCamp";
-import PreseasonStep from "@/pages/hub/offseason/Preseason";
-import CutDowns from "@/pages/hub/offseason/CutDowns";
-import Finance from "@/pages/hub/Finance";
-import Finances from "@/pages/hub/Finances";
-import DepthChart from "@/pages/hub/DepthChart";
-import StaffManagement from "@/pages/hub/StaffManagement";
-import FiringMeter from "@/pages/hub/FiringMeter";
+import FreeAgency from "./pages/hub/FreeAgency";
+import ResignPlayers from "./pages/hub/ResignPlayers";
+import Combine from "./pages/hub/Combine";
+import Tampering from "./pages/hub/Tampering";
+import PreDraft from "./pages/hub/PreDraft";
+import TrainingCamp from "./pages/hub/TrainingCamp";
+import Cutdowns from "./pages/hub/Cutdowns";
+import Finances from "./pages/hub/Finances";
+import PlayerProfile from "./pages/hub/PlayerProfile";
 
 const queryClient = new QueryClient();
 
@@ -85,30 +76,20 @@ const App = () => (
             <Route path="/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
 
             <Route path="/hub" element={<HubGate><HubLayout /></HubGate>}>
-              <Route index element={<Navigate to="/hub/offseason" replace />} />
-              <Route path="offseason" element={<Offseason />} />
-              <Route path="offseason/resigning" element={<Resigning />} />
-              <Route path="offseason/combine" element={<Combine />} />
-              <Route path="offseason/tampering" element={<Tampering />} />
-              <Route path="offseason/free-agency" element={<OffseasonFreeAgency />} />
-              <Route path="offseason/pre-draft" element={<PreDraft />} />
-              <Route path="offseason/draft" element={<OffseasonDraft />} />
-              <Route path="offseason/training-camp" element={<OffseasonTrainingCamp />} />
-              <Route path="offseason/preseason" element={<PreseasonStep />} />
-              <Route path="offseason/cut-downs" element={<CutDowns />} />
-              <Route path="home" element={<Hub />} />
+              <Route index element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />
+              <Route path="resign" element={<ResignPlayers />} />
+              <Route path="combine" element={<Combine />} />
+              <Route path="tampering" element={<Tampering />} />
+              <Route path="free-agency" element={<FreeAgency />} />
+              <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
               <Route path="training-camp" element={<TrainingCamp />} />
-              <Route path="depth-chart" element={<DepthChart />} />
-              <Route path="staff" element={<StaffManagement />} />
-              <Route path="finance" element={<Finance />} />
-              <Route path="finances" element={<Finances />} />
-              <Route path="firing-meter" element={<FiringMeter />} />
               <Route path="preseason" element={<PreseasonWeek />} />
+              <Route path="cutdowns" element={<Cutdowns />} />
               <Route path="regular-season" element={<RegularSeason />} />
-              <Route path="free-agency" element={<FreeAgency />} />
+              <Route path="finances" element={<Finances />} />
               <Route path="player/:playerId" element={<PlayerProfile />} />
               <Route path="playcall" element={<Playcall />} />
             </Route>
