@@ -8,7 +8,7 @@ const PreseasonWeek = () => {
   const { state, dispatch, getCurrentTeamMatchup } = useGame();
   const navigate = useNavigate();
 
-  if (state.careerStage === "OFFSEASON_HUB" || state.careerStage === "TRAINING_CAMP") return <Navigate to="/hub/offseason" replace />;
+  if (state.careerStage !== "PRESEASON") return <Navigate to="/hub/offseason" replace />;
 
   const current = getCurrentTeamMatchup("PRESEASON");
   const matchup = current?.matchup;
