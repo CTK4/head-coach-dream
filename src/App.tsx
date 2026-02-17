@@ -25,7 +25,8 @@ import Tampering from "@/pages/hub/offseason/Tampering";
 import FreeAgency from "@/pages/hub/offseason/FreeAgency";
 import PreDraft from "@/pages/hub/offseason/PreDraft";
 import OffseasonDraft from "@/pages/hub/offseason/Draft";
-import TrainingCamp from "@/pages/hub/offseason/TrainingCamp";
+import OffseasonTrainingCamp from "@/pages/hub/offseason/TrainingCamp";
+import TrainingCamp from "@/pages/hub/TrainingCamp";
 import PreseasonStep from "@/pages/hub/offseason/Preseason";
 import CutDowns from "@/pages/hub/offseason/CutDowns";
 
@@ -85,13 +86,14 @@ const App = () => (
               <Route path="offseason/free-agency" element={<FreeAgency />} />
               <Route path="offseason/pre-draft" element={<PreDraft />} />
               <Route path="offseason/draft" element={<OffseasonDraft />} />
-              <Route path="offseason/training-camp" element={<TrainingCamp />} />
+              <Route path="offseason/training-camp" element={<OffseasonTrainingCamp />} />
               <Route path="offseason/preseason" element={<PreseasonStep />} />
               <Route path="offseason/cut-downs" element={<CutDowns />} />
               <Route path="home" element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />
               <Route path="draft" element={<Draft />} />
+              <Route path="training-camp" element={<TrainingCamp />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="regular-season" element={<RegularSeason />} />
               <Route path="playcall" element={<Playcall />} />

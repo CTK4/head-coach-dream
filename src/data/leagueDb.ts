@@ -50,6 +50,12 @@ export type ContractRow = {
   startSeason?: number;
   endSeason?: number;
   salaryY1?: number;
+  salaryY2?: number;
+  salaryY3?: number;
+  salaryY4?: number;
+  guaranteed?: number | null;
+  isExpired?: boolean;
+  notes?: string | null;
   [key: string]: unknown;
 };
 
@@ -61,9 +67,9 @@ const personnel: PersonnelRow[] = (root.Personnel ?? []) as PersonnelRow[];
 const contracts: ContractRow[] = (root.Contracts ?? []) as ContractRow[];
 
 const teamsById = new Map(teams.map((team) => [team.teamId, team]));
+const playersById = new Map(players.map((player) => [player.playerId, player]));
 const personnelById = new Map(personnel.map((p) => [p.personId, p]));
-
-const EXCLUDED_ASSISTANT_HC_ROLES = new Set(["OWNER", "GENERAL_MANAGER", "HEAD_COACH"]);
+const contractsById = new Map(contracts.map((c) => [c.contractId, c]));
 
 export type PositionCoachRole = "QB_COACH" | "OL_COACH" | "DL_COACH" | "LB_COACH" | "DB_COACH" | "RB_COACH" | "WR_COACH";
 
@@ -85,6 +91,10 @@ export function getPersonnelById(personId: string): PersonnelRow | undefined {
   return personnelById.get(personId);
 }
 
+export function getPlayerById(playerId: string): PlayerRow | undefined {
+  return playersById.get(playerId);
+}
+
 export function getLeagueCities(): string[] {
   return Array.from(
     new Set(
@@ -99,11 +109,19 @@ export function getPlayersByTeam(teamId: string): PlayerRow[] {
   return players.filter((player) => player.teamId === teamId);
 }
 
+export function getTeamRosterPlayers(teamId: string): PlayerRow[] {
+  return getPlayersByTeam(teamId);
+}
+
 export function getPlayers(): PlayerRow[] {
   return players;
 }
 
 export function getPersonnel(): PersonnelRow[] {
+  return personnel;
+}
+
+export function getAllPersonnel(): PersonnelRow[] {
   return personnel;
 }
 
@@ -129,10 +147,20 @@ export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRo
   );
 }
 
+export function getCoordinatorCandidates(role: "OC" | "DC" | "STC"): PersonnelRow[] {
+  return getCoordinatorFreeAgents(role);
+}
+
 export function getAssistantHeadCoachCandidates(): PersonnelRow[] {
-  return getPersonnelFreeAgents().filter((person) => {
-    const role = String(person.role ?? "").toUpperCase();
-    return !EXCLUDED_ASSISTANT_HC_ROLES.has(role);
+  const pool = getAllPersonnel()
+    .filter((p) => String(p.teamId ?? "") === "FREE_AGENT")
+    .filter((p) => String(p.status ?? "ACTIVE").toUpperCase() !== "RETIRED");
+
+  return pool.filter((p) => {
+    const role = String(p.role ?? "").toUpperCase();
+    if (role.includes("COORDINATOR")) return false;
+    if (role === "HEAD_COACH" || role === "OWNER" || role === "GENERAL_MANAGER") return false;
+    return true;
   });
 }
 
@@ -148,6 +176,79 @@ export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
   if (upper === "DEF_COORDINATOR") return "DC";
   if (upper === "ST_COORDINATOR") return "STC";
   return null;
+}
+
+export function getContractById(contractId: string): ContractRow | undefined {
+  return contractsById.get(contractId);
+}
+
+export function getContracts(): ContractRow[] {
+  return contracts;
+}
+
+export function upsertContract(row: ContractRow): ContractRow {
+  const existing = row.contractId ? contractsById.get(row.contractId) : undefined;
+  if (existing) {
+    Object.assign(existing, row);
+    contractsById.set(existing.contractId, existing);
+    return existing;
+  }
+  contracts.push(row);
+  contractsById.set(row.contractId, row);
+  return row;
+}
+
+function nextContractId(prefix: string): string {
+  const n = contracts.length + 1;
+  return `${prefix}${String(n).padStart(4, "0")}`;
+}
+
+export function setPersonnelTeamAndContract(args: {
+  personId: string;
+  teamId: string;
+  status?: string;
+  startSeason: number;
+  years: number;
+  salary: number;
+  notes?: string;
+}): { contractId: string } | null {
+  const p = getPersonnelById(args.personId);
+  if (!p) return null;
+
+  const contractId = nextContractId("CON_STF_");
+  const endSeason = args.startSeason + Math.max(1, args.years) - 1;
+
+  const c: ContractRow = {
+    contractId,
+    entityType: "PERSONNEL",
+    personId: args.personId,
+    teamId: args.teamId,
+    startSeason: args.startSeason,
+    endSeason,
+    salaryY1: args.salary,
+    salaryY2: args.salary,
+    salaryY3: args.salary,
+    salaryY4: args.salary,
+    guaranteed: null,
+    isExpired: false,
+    notes: args.notes ?? null,
+  };
+
+  upsertContract(c);
+
+  p.teamId = args.teamId;
+  p.status = args.status ?? "ACTIVE";
+  p.contractId = contractId;
+
+  return { contractId };
+}
+
+export function cutPlayerToFreeAgent(playerId: string): boolean {
+  const p = getPlayerById(playerId);
+  if (!p) return false;
+  p.teamId = "FREE_AGENT";
+  p.status = "FREE_AGENT";
+  return true;
 }
 
 export function getTeamSummary(teamId: string) {

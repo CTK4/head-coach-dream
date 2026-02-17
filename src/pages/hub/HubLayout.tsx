@@ -40,6 +40,9 @@ const HubLayout = () => {
           <NavLink className={baseLinkClass} to="/hub/draft">
             Draft
           </NavLink>
+          <NavLink className={baseLinkClass} to="/hub/training-camp">
+            Training Camp
+          </NavLink>
           <NavLink
             className={`${baseLinkClass} ${preseasonLocked ? "opacity-50 pointer-events-none" : ""}`}
             to="/hub/preseason"

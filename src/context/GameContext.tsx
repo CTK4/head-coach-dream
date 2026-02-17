@@ -1,9 +1,17 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import draftClassJson from "@/data/draftClass.json";
-import { getPersonnelById, getPlayersByTeam, getTeams } from "@/data/leagueDb";
+import {
+  cutPlayerToFreeAgent,
+  getPersonnelById,
+  getPlayersByTeam,
+  getTeamRosterPlayers,
+  getTeams,
+  setPersonnelTeamAndContract,
+} from "@/data/leagueDb";
 import type { CoachReputation } from "@/engine/reputation";
 import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost } from "@/engine/reputation";
 import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
+import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
 import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
@@ -104,7 +112,7 @@ export type InterviewResult = {
 };
 
 export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number>; result?: InterviewResult };
-export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string };
+export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string; score?: number };
 export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
 
 const CURRENT_SAVE_VERSION = 2;
@@ -184,6 +192,10 @@ export type GameState = {
   week?: number;
   saveVersion: number;
   memoryLog: MemoryEvent[];
+  teamFinances: { cash: number };
+  owner: { approval: number; budgetBreaches: number };
+  staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
+  rosterMgmt: { active: Record<string, true>; cuts: Record<string, true>; finalized: boolean };
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
@@ -225,14 +237,14 @@ export type GameAction =
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
-  | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
-  | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
+  | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
+  | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
   | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
-  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType: GameType; weekNumber: number } }
+  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number; gameType?: GameType; week?: number } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType } }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
@@ -253,6 +265,11 @@ export type GameAction =
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
+  | { type: "INIT_TRAINING_CAMP_ROSTER" }
+  | { type: "AUTO_CUT_TO_53" }
+  | { type: "TOGGLE_ACTIVE"; payload: { playerId: string } }
+  | { type: "FINALIZE_CUTS" }
+  | { type: "OWNER_PENALTY"; payload: { reason: string; amount: number } }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
@@ -302,6 +319,10 @@ function createInitialState(): GameState {
     week: 1,
     saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
+    teamFinances: { cash: 60_000_000 },
+    owner: { approval: 65, budgetBreaches: 0 },
+    staffBudget: { total: 18_000_000, used: 0, byPersonId: {} },
+    rosterMgmt: { active: {}, cuts: {}, finalized: false },
     staff: {},
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
@@ -407,6 +428,60 @@ function addMemoryEvent(state: GameState, type: string, payload: unknown): Memor
   return [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
 }
 
+function applyOwnerPenalty(state: GameState, amount: number, reason: string): GameState {
+  return {
+    ...state,
+    owner: {
+      ...state.owner,
+      approval: clamp100(state.owner.approval - amount),
+      budgetBreaches: state.owner.budgetBreaches + 1,
+    },
+    memoryLog: addMemoryEvent(state, "OWNER_PENALTY", { reason, amount }),
+  };
+}
+
+function canAffordStaffBudget(state: GameState, salary: number) {
+  return state.staffBudget.used + salary <= state.staffBudget.total;
+}
+
+function addStaffSalaryAndCash(state: GameState, personId: string, salary: number): GameState {
+  const nextCash = state.teamFinances.cash - salary;
+  const base: GameState = {
+    ...state,
+    teamFinances: { cash: nextCash },
+    staffBudget: {
+      ...state.staffBudget,
+      used: state.staffBudget.used + salary,
+      byPersonId: { ...state.staffBudget.byPersonId, [personId]: salary },
+    },
+  };
+  if (nextCash >= 0) return base;
+  return applyOwnerPenalty(base, 6, "Staff payroll exceeded available cash");
+}
+
+function getUserTeamRosterIds(teamId: string) {
+  return getTeamRosterPlayers(teamId)
+    .filter((p) => String((p as any).status ?? "").toUpperCase() !== "IR")
+    .map((p) => String((p as any).playerId));
+}
+
+function top53Active(teamId: string) {
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => String((p as any).status ?? "").toUpperCase() !== "IR")
+    .sort((a, b) => Number((b as any).overall ?? 0) - Number((a as any).overall ?? 0));
+
+  const active: Record<string, true> = {};
+  const cuts: Record<string, true> = {};
+
+  roster.forEach((p, i) => {
+    const id = String((p as any).playerId);
+    if (i < 53) active[id] = true;
+    else cuts[id] = true;
+  });
+
+  return { active, cuts };
+}
+
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
@@ -439,64 +514,150 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "COORD_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
+
       const rep = state.coach.reputation;
+      const schemeCompat = schemeCompatForPerson(state, action.payload.personId);
+      const teamOutlook = clamp100(45 + (state.acceptedOffer?.score ?? 0) * 40);
+
+      const expected = expectedSalary(action.payload.role, Number((person as any).reputation ?? 55));
+      const offered = offerSalary(expected, "FAIR");
+      const offerQuality = offerQualityScore(offered, expected);
+
       const res = computeStaffAcceptance({
         saveSeed: state.saveSeed,
         rep,
-        staffRep: Number(person.reputation ?? 0),
-        personId: person.personId,
-        schemeCompat: schemeCompatForPerson(state, action.payload.personId),
-        offerQuality: 70,
-        teamOutlook: clamp100(45 + (state.acceptedOffer ? 30 : 0)),
+        staffRep: Number((person as any).reputation ?? 0),
+        personId: (person as any).personId,
+        schemeCompat,
+        offerQuality,
+        teamOutlook,
         roleFocus: deriveCoordFocus(action.payload.role),
         kind: "COORDINATOR",
       });
+
       if (!res.accept) {
         return {
           ...state,
           coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
-          memoryLog: addMemoryEvent(state, "COORD_REJECTED", { ...action.payload, score: res.score, tier: res.tier, threshold: res.threshold }),
+          memoryLog: addMemoryEvent(state, "COORD_REJECTED", {
+            ...action.payload,
+            score: res.score,
+            tier: res.tier,
+            threshold: res.threshold,
+          }),
         };
       }
-      const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
-      const staff = { ...state.staff, [key]: action.payload.personId };
-      if (!(staff.ocId && staff.dcId && staff.stcId)) return { ...state, staff };
-      return { ...state, staff, phase: "HUB", careerStage: "OFFSEASON_HUB" };
+
+      return gameReducer(state, {
+        type: "HIRE_STAFF",
+        payload: { role: action.payload.role, personId: action.payload.personId, salary: offered },
+      });
     }
     case "HIRE_STAFF": {
-      const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
-      const staff = { ...state.staff, [key]: action.payload.personId };
-      if (!(staff.ocId && staff.dcId && staff.stcId)) return { ...state, staff };
-      return { ...state, staff, phase: "HUB", careerStage: "OFFSEASON_HUB" };
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      if (!canAffordStaffBudget(state, action.payload.salary)) {
+        return applyOwnerPenalty(state, 4, "Exceeded staff budget");
+      }
+
+      const staff =
+        action.payload.role === "OC"
+          ? { ...state.staff, ocId: action.payload.personId }
+          : action.payload.role === "DC"
+            ? { ...state.staff, dcId: action.payload.personId }
+            : { ...state.staff, stcId: action.payload.personId };
+
+      const res = setPersonnelTeamAndContract({
+        personId: action.payload.personId,
+        teamId,
+        startSeason: state.season,
+        years: 3,
+        salary: action.payload.salary,
+        notes: `${action.payload.role} hired`,
+      });
+
+      const next = addStaffSalaryAndCash({ ...state, staff }, action.payload.personId, action.payload.salary);
+
+      return {
+        ...next,
+        phase: staff.ocId && staff.dcId && staff.stcId ? "HUB" : next.phase,
+        careerStage: staff.ocId && staff.dcId && staff.stcId ? "OFFSEASON_HUB" : next.careerStage,
+        memoryLog: addMemoryEvent(state, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
+      };
     }
     case "ASSISTANT_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
+
       const rep = state.coach.reputation;
+      const schemeCompat = schemeCompatForPerson(state, action.payload.personId);
+      const teamOutlook = clamp100(45 + (state.acceptedOffer?.score ?? 0) * 40);
+
+      const expected = expectedSalary(action.payload.role as any, Number((person as any).reputation ?? 55));
+      const offered = offerSalary(expected, "FAIR");
+      const offerQuality = offerQualityScore(offered, expected);
+
       const res = computeStaffAcceptance({
         saveSeed: state.saveSeed,
         rep,
-        staffRep: Number(person.reputation ?? 0),
-        personId: person.personId,
-        schemeCompat: schemeCompatForPerson(state, action.payload.personId),
-        offerQuality: 70,
-        teamOutlook: clamp100(45 + (state.acceptedOffer ? 30 : 0)),
+        staffRep: Number((person as any).reputation ?? 0),
+        personId: (person as any).personId,
+        schemeCompat,
+        offerQuality,
+        teamOutlook,
         roleFocus: deriveAssistantFocus(action.payload.role),
         kind: "ASSISTANT",
       });
+
       if (!res.accept) {
         return {
           ...state,
           coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
-          memoryLog: addMemoryEvent(state, "ASSISTANT_REJECTED", { ...action.payload, score: res.score, tier: res.tier, threshold: res.threshold }),
+          memoryLog: addMemoryEvent(state, "ASSISTANT_REJECTED", {
+            ...action.payload,
+            score: res.score,
+            tier: res.tier,
+            threshold: res.threshold,
+          }),
         };
       }
-      const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
-      return { ...state, assistantStaff, careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage };
+
+      return gameReducer(state, {
+        type: "HIRE_ASSISTANT",
+        payload: { role: action.payload.role, personId: action.payload.personId, salary: offered },
+      });
     }
     case "HIRE_ASSISTANT": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      if (!canAffordStaffBudget(state, action.payload.salary)) {
+        return applyOwnerPenalty(state, 2, "Exceeded staff budget");
+      }
+
       const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
-      return { ...state, assistantStaff, careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage };
+
+      const res = setPersonnelTeamAndContract({
+        personId: action.payload.personId,
+        teamId,
+        startSeason: state.season,
+        years: 2,
+        salary: action.payload.salary,
+        notes: `${String(action.payload.role)} hired`,
+      });
+
+      const next = addStaffSalaryAndCash(
+        { ...state, assistantStaff },
+        action.payload.personId,
+        action.payload.salary
+      );
+
+      return {
+        ...next,
+        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : next.careerStage,
+        memoryLog: addMemoryEvent(state, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
+      };
     }
     case "OFFSEASON_SET_TASK": {
       const completed = { ...state.offseason.completed, [action.payload.taskId]: action.payload.completed };
@@ -746,6 +907,63 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
+    case "INIT_TRAINING_CAMP_ROSTER": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const m = top53Active(teamId);
+      return { ...state, rosterMgmt: { ...m, finalized: false } };
+    }
+    case "AUTO_CUT_TO_53": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const m = top53Active(teamId);
+      return { ...state, rosterMgmt: { ...m, finalized: false } };
+    }
+    case "TOGGLE_ACTIVE": {
+      if (state.rosterMgmt.finalized) return state;
+
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const allIds = new Set(getUserTeamRosterIds(teamId));
+      const pid = action.payload.playerId;
+      if (!allIds.has(pid)) return state;
+
+      const active = { ...state.rosterMgmt.active };
+      const cuts = { ...state.rosterMgmt.cuts };
+      const activeCount = Object.keys(active).length;
+
+      if (active[pid]) {
+        delete active[pid];
+        cuts[pid] = true;
+        return { ...state, rosterMgmt: { active, cuts, finalized: false } };
+      }
+
+      if (activeCount >= 53) return state;
+
+      delete cuts[pid];
+      active[pid] = true;
+      return { ...state, rosterMgmt: { active, cuts, finalized: false } };
+    }
+    case "FINALIZE_CUTS": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const activeCount = Object.keys(state.rosterMgmt.active).length;
+      if (activeCount !== 53) return state;
+
+      const cuts = Object.keys(state.rosterMgmt.cuts);
+      for (const pid of cuts) cutPlayerToFreeAgent(pid);
+
+      return {
+        ...state,
+        rosterMgmt: { ...state.rosterMgmt, finalized: true },
+        memoryLog: addMemoryEvent(state, "FINAL_CUTS", { cutCount: cuts.length }),
+      };
+    }
+    case "OWNER_PENALTY": {
+      return applyOwnerPenalty(state, action.payload.amount, action.payload.reason);
+    }
     case "AUTO_ADVANCE_STAGE_IF_READY": {
       const step = state.offseason.stepId;
       if (step === "TRAINING_CAMP") return { ...state, careerStage: "TRAINING_CAMP" };
@@ -754,6 +972,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return state;
     }
     case "START_GAME": {
+      if ((action.payload.gameType ?? action.payload.weekType) === "PRESEASON" && !state.rosterMgmt.finalized) {
+        return applyOwnerPenalty(state, 1, "Attempted to start preseason without finalizing cutdowns");
+      }
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
       return {
@@ -762,8 +983,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           homeTeamId: teamId,
           awayTeamId: action.payload.opponentTeamId,
           seed: state.saveSeed + (state.hub.preseasonWeek + state.hub.regularSeasonWeek) * 1009,
-          weekType: action.payload.weekType,
-          weekNumber: action.payload.weekNumber,
+          weekType: action.payload.weekType ?? action.payload.gameType,
+          weekNumber: action.payload.weekNumber ?? action.payload.week,
         }),
       };
     }
