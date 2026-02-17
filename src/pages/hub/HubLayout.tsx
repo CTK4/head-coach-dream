@@ -19,7 +19,9 @@ const HubLayout = () => {
         location.pathname.startsWith("/hub/firing-meter") ||
         location.pathname.startsWith("/hub/assistant-hiring") ||
         location.pathname.startsWith("/hub/coord-hiring") ||
-        location.pathname.startsWith("/hub/coordinators");
+        location.pathname.startsWith("/hub/coordinators") ||
+        location.pathname.startsWith("/hub/free-agency") ||
+        location.pathname.startsWith("/hub/player/");
       if (!ok) navigate("/hub/offseason", { replace: true });
     }
   }, [state.careerStage, location.pathname, navigate]);
@@ -54,6 +56,9 @@ const HubLayout = () => {
           </NavLink>
           <NavLink className={baseLinkClass} to="/hub/finance">
             Finances
+          </NavLink>
+          <NavLink className={baseLinkClass} to="/hub/free-agency">
+            Free Agency
           </NavLink>
           <NavLink className={baseLinkClass} to="/hub/firing-meter">
             Job Security

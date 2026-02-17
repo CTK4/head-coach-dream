@@ -22,7 +22,9 @@ import RegularSeason from "./pages/hub/RegularSeason";
 import Resigning from "@/pages/hub/offseason/Resigning";
 import Combine from "@/pages/hub/offseason/Combine";
 import Tampering from "@/pages/hub/offseason/Tampering";
-import FreeAgency from "@/pages/hub/offseason/FreeAgency";
+import OffseasonFreeAgency from "@/pages/hub/offseason/FreeAgency";
+import FreeAgency from "@/pages/hub/FreeAgency";
+import PlayerProfile from "@/pages/hub/PlayerProfile";
 import PreDraft from "@/pages/hub/offseason/PreDraft";
 import OffseasonDraft from "@/pages/hub/offseason/Draft";
 import OffseasonTrainingCamp from "@/pages/hub/offseason/TrainingCamp";
@@ -87,7 +89,7 @@ const App = () => (
               <Route path="offseason/resigning" element={<Resigning />} />
               <Route path="offseason/combine" element={<Combine />} />
               <Route path="offseason/tampering" element={<Tampering />} />
-              <Route path="offseason/free-agency" element={<FreeAgency />} />
+              <Route path="offseason/free-agency" element={<OffseasonFreeAgency />} />
               <Route path="offseason/pre-draft" element={<PreDraft />} />
               <Route path="offseason/draft" element={<OffseasonDraft />} />
               <Route path="offseason/training-camp" element={<OffseasonTrainingCamp />} />
@@ -104,6 +106,8 @@ const App = () => (
               <Route path="firing-meter" element={<FiringMeter />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="regular-season" element={<RegularSeason />} />
+              <Route path="free-agency" element={<FreeAgency />} />
+              <Route path="player/:playerId" element={<PlayerProfile />} />
               <Route path="playcall" element={<Playcall />} />
             </Route>
 

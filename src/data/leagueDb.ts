@@ -149,6 +149,14 @@ export function getPlayers(): PlayerRow[] {
   return players;
 }
 
+export function getFreeAgents(): PlayerRow[] {
+  return players.filter((p) => {
+    const teamId = String(p.teamId ?? "").toUpperCase();
+    const status = String(p.status ?? "").toUpperCase();
+    return teamId === "FREE_AGENT" || status === "FREE_AGENT" || !teamId;
+  });
+}
+
 export function getPersonnel(): PersonnelRow[] {
   return personnel;
 }
@@ -242,6 +250,22 @@ export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
 
 export function getContractById(contractId: string): ContractRow | undefined {
   return contractsById.get(contractId);
+}
+
+export function getPlayerContract(playerId: string): ContractRow | undefined {
+  const p = getPlayerById(playerId);
+  const cid = p?.contractId ? String(p.contractId) : "";
+  return cid ? getContractById(cid) : undefined;
+}
+
+export function getPlayerSeasonStats(playerId: string, season: number): Record<string, unknown> | undefined {
+  const rows = (root.PlayerSeasonStats ?? []) as Record<string, unknown>[];
+  return rows.find((r) => String(r.playerId) === String(playerId) && Number(r.season) === Number(season));
+}
+
+export function getPlayerAwards(playerId: string): Record<string, unknown>[] {
+  const rows = (root.PlayerAwards ?? []) as Record<string, unknown>[];
+  return rows.filter((r) => String(r.playerId) === String(playerId));
 }
 
 export function getContracts(): ContractRow[] {

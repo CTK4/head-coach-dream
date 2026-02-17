@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ function depthLabels(players: Array<{ playerId: string; pos: string; overall: nu
 
 export default function ResignPlayers() {
   const { state } = useGame();
+  const navigate = useNavigate();
   const teamId = state.acceptedOffer?.teamId;
 
   const rows = useMemo(() => {
@@ -81,7 +83,7 @@ export default function ResignPlayers() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-semibold truncate">
-                    {p.fullName} <span className="text-muted-foreground">({p.pos})</span>
+                    <button onClick={() => navigate(`/hub/player/${p.playerId}`)} className="hover:underline text-left">{p.fullName}</button> <span className="text-muted-foreground">({p.pos})</span>
                   </div>
                   <div className="text-sm text-muted-foreground">
                     Age {p.age} · {p.depth || "—"} · Ask: {moneyM(p.ask)}
