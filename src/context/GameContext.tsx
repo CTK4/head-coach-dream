@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
+import { getTeams } from "@/data/leagueDb";
+import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
+import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
 import {
   PRESEASON_WEEKS,
@@ -8,10 +11,8 @@ import {
   type GameType,
   type LeagueSchedule,
 } from "@/engine/schedule";
-import { getTeams } from "@/data/leagueDb";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
-
 export type CareerStage =
   | "OFFSEASON_HUB"
   | "ASSISTANT_HIRING"
@@ -51,28 +52,9 @@ export type InterviewResult = {
   premiumGatesPassed: boolean;
 };
 
-export type InterviewItem = {
-  teamId: string;
-  completed: boolean;
-  answers: Record<string, number>;
-  result?: InterviewResult;
-};
-
-export type OfferItem = {
-  teamId: string;
-  years: number;
-  salary: number;
-  autonomy: number;
-  patience: number;
-  mediaNarrativeKey: string;
-};
-
-export type MemoryEvent = {
-  type: string;
-  season: number;
-  week?: number;
-  payload: unknown;
-};
+export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number>; result?: InterviewResult };
+export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string };
+export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
 
 const CURRENT_SAVE_VERSION = 2;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
@@ -117,72 +99,16 @@ export type GameState = {
   memoryLog: MemoryEvent[];
   staff: { ocId?: string; dcId?: string; stcId?: string };
   assistantStaff: AssistantStaff;
-  hub: {
-    news: string[];
-    preseasonWeek: number;
-    regularSeasonWeek: number;
-    schedule: LeagueSchedule | null;
-  };
+  hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
+  league: LeagueState;
   saveSeed: number;
-  game: {
-    opponentTeamId?: string;
-    homeScore: number;
-    awayScore: number;
-    quarter: number;
-    down: number;
-    distance: number;
-    ballOn: number;
-    lastResult?: string;
-    seed: number;
-    weekType?: GameType;
-    weekNumber?: number;
-  };
+  game: GameSim;
 };
-
-function createInitialState(): GameState {
-  return {
-    coach: {
-      name: "",
-      ageTier: "32-35",
-      hometown: "",
-      archetypeId: "",
-    },
-    phase: "CREATE",
-    careerStage: "OFFSEASON_HUB",
-    interviews: {
-      items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })),
-      completedCount: 0,
-    },
-    offers: [],
-    season: 2026,
-    week: 1,
-    saveVersion: CURRENT_SAVE_VERSION,
-    memoryLog: [],
-    staff: {},
-    assistantStaff: {},
-    hub: {
-      news: [
-        "League announces 2026 salary cap at $250M",
-        "Free agency period opens next week",
-        "Draft combine results expected soon",
-        "Coaching carousel in full swing",
-      ],
-      preseasonWeek: 1,
-      regularSeasonWeek: 1,
-      schedule: null,
-    },
-    saveSeed: Date.now(),
-    game: { homeScore: 0, awayScore: 0, quarter: 1, down: 1, distance: 10, ballOn: 25, seed: Date.now() },
-  };
-}
 
 export type GameAction =
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
-  | {
-      type: "COMPLETE_INTERVIEW";
-      payload: { teamId: string; answers: Record<string, number>; result: InterviewResult };
-    }
+  | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
@@ -190,24 +116,41 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType: GameType; weekNumber: number } }
-  | { type: "RESOLVE_PLAY"; payload: { playType: string } }
+  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType } }
+  | { type: "EXIT_GAME" }
+  | { type: "ADVANCE_WEEK" }
   | { type: "RESET" };
 
-function mulberry32(seed: number): () => number {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), 1 | t);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
+function createSchedule(seed: number): LeagueSchedule {
+  const teamIds = getTeams().filter((team) => team.isActive !== false).map((team) => team.teamId);
+  return generateLeagueSchedule(teamIds, seed);
 }
 
-function createSchedule(seed: number): LeagueSchedule {
-  const teamIds = getTeams()
-    .filter((team) => team.isActive !== false)
-    .map((team) => team.teamId);
-  return generateLeagueSchedule(teamIds, seed);
+function createInitialAssistantStaff(): AssistantStaff {
+  return {};
+}
+
+function createInitialState(): GameState {
+  const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+  const saveSeed = Date.now();
+
+  return {
+    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "" },
+    phase: "CREATE",
+    careerStage: "OFFSEASON_HUB",
+    interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
+    offers: [],
+    season: 2026,
+    week: 1,
+    saveVersion: CURRENT_SAVE_VERSION,
+    memoryLog: [],
+    staff: {},
+    assistantStaff: createInitialAssistantStaff(),
+    hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    league: initLeagueState(teams),
+    saveSeed,
+    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
+  };
 }
 
 function areAllAssistantsHired(assistantStaff: AssistantStaff): boolean {
@@ -230,155 +173,131 @@ function nextCareerStage(stage: CareerStage): CareerStage {
 }
 
 function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
-  return [
-    ...state.memoryLog,
-    {
-      type,
-      season: state.season,
-      week: state.week,
-      payload,
-    },
-  ];
+  return [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
       return { ...state, coach: { ...state.coach, ...action.payload } };
-
     case "SET_PHASE":
       return { ...state, phase: action.payload };
-
     case "SET_CAREER_STAGE":
       return { ...state, careerStage: action.payload };
-
     case "ADVANCE_CAREER_STAGE":
       return { ...state, careerStage: nextCareerStage(state.careerStage) };
-
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
-        item.teamId === action.payload.teamId
-          ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result }
-          : item
+        item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item
       );
       return { ...state, interviews: { items, completedCount: items.filter((i) => i.completed).length } };
     }
-
     case "GENERATE_OFFERS":
       return { ...state, offers: generateOffers(state), phase: "OFFERS" };
-
     case "ACCEPT_OFFER":
       return {
         ...state,
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
-        memoryLog: addMemoryEvent(state, "HIRED_COACH", {
-          teamId: action.payload.teamId,
-          years: action.payload.years,
-          salary: action.payload.salary,
-          autonomy: action.payload.autonomy,
-          patience: action.payload.patience,
-        }),
+        memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
       };
-
     case "HIRE_STAFF": {
       const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
       const staff = { ...state.staff, [key]: action.payload.personId };
-      const allHired = staff.ocId && staff.dcId && staff.stcId;
-      if (!allHired) return { ...state, staff };
-
-      const schedule = createSchedule(state.saveSeed);
-      return {
-        ...state,
-        staff,
-        phase: "HUB",
-        careerStage: "OFFSEASON_HUB",
-        hub: {
-          ...state.hub,
-          schedule,
-          preseasonWeek: 1,
-          regularSeasonWeek: 1,
-        },
-      };
+      if (!(staff.ocId && staff.dcId && staff.stcId)) return { ...state, staff };
+      return { ...state, staff, phase: "HUB", careerStage: "OFFSEASON_HUB" };
     }
-
     case "HIRE_ASSISTANT": {
       const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
-      return {
-        ...state,
-        assistantStaff,
-        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage,
-      };
+      return { ...state, assistantStaff, careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage };
     }
-
-    case "START_GAME":
+    case "START_GAME": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
       return {
         ...state,
-        game: {
-          opponentTeamId: action.payload.opponentTeamId,
-          homeScore: 0,
-          awayScore: 0,
-          quarter: 1,
-          down: 1,
-          distance: 10,
-          ballOn: 25,
-          seed: Date.now(),
+        game: initGameSim({
+          homeTeamId: teamId,
+          awayTeamId: action.payload.opponentTeamId,
+          seed: state.saveSeed + (state.hub.preseasonWeek + state.hub.regularSeasonWeek) * 1009,
           weekType: action.payload.weekType,
           weekNumber: action.payload.weekNumber,
-        },
-      };
-
-    case "RESOLVE_PLAY": {
-      const g = state.game;
-      const rng = mulberry32(g.seed + g.down * 7 + g.ballOn * 13);
-      const rand = rng();
-
-      const baseMean: Record<string, number> = { RUN: 3.8, SHORT_PASS: 6, DEEP_PASS: 10.5, PLAY_ACTION: 7.2 };
-      const baseVol: Record<string, number> = { RUN: 3, SHORT_PASS: 5, DEEP_PASS: 12, PLAY_ACTION: 7 };
-
-      const mean = baseMean[action.payload.playType] ?? 5;
-      const vol = baseVol[action.payload.playType] ?? 5;
-      const yards = Math.round(mean + (rand - 0.5) * 2 * vol);
-      const clampedYards = Math.max(-12, Math.min(60, yards));
-
-      let ballOn = Math.max(1, Math.min(99, g.ballOn + clampedYards));
-      let down = g.down;
-      let distance = g.distance;
-      let homeScore = g.homeScore;
-      let lastResult = `${action.payload.playType.replace("_", " ")} for ${clampedYards} yards`;
-
-      if (ballOn >= 99) {
-        homeScore += 7;
-        lastResult = `TOUCHDOWN! ${action.payload.playType.replace("_", " ")} for ${clampedYards} yards!`;
-        ballOn = 25;
-        down = 1;
-        distance = 10;
-      } else if (clampedYards >= distance) {
-        down = 1;
-        distance = 10;
-        lastResult += " — First down!";
-      } else {
-        distance = Math.max(1, distance - clampedYards);
-        down += 1;
-        if (down > 4) {
-          lastResult += " — Turnover on downs!";
-          down = 1;
-          distance = 10;
-          ballOn = 25;
-        }
-      }
-
-      return {
-        ...state,
-        game: { ...g, ballOn, down, distance, homeScore, lastResult, seed: g.seed + 1 },
+        }),
       };
     }
+    case "RESOLVE_PLAY": {
+      if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
+      const stepped = stepPlay(state.game, action.payload.playType);
+      const next = { ...state, game: stepped.sim };
+      if (!stepped.ended) return next;
 
+      const schedule = state.hub.schedule;
+      if (!schedule || !state.game.weekType || !state.game.weekNumber) return next;
+
+      const league = simulateLeagueWeek({
+        schedule,
+        gameType: state.game.weekType,
+        week: state.game.weekNumber,
+        userHomeTeamId: state.game.homeTeamId,
+        userAwayTeamId: state.game.awayTeamId,
+        userScore: { homeScore: state.game.homeScore, awayScore: state.game.awayScore },
+        seed: state.saveSeed,
+        league: state.league,
+      });
+
+      const hub =
+        state.game.weekType === "PRESEASON"
+          ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
+          : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+
+      return {
+        ...next,
+        league,
+        hub,
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777 }),
+      };
+    }
+    case "EXIT_GAME":
+      return {
+        ...state,
+        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: state.saveSeed + 555 }),
+      };
+    case "ADVANCE_WEEK": {
+      const schedule = state.hub.schedule;
+      const teamId = state.acceptedOffer?.teamId;
+      if (!schedule || !teamId) return state;
+
+      const gameType: GameType = state.careerStage === "PRESEASON" ? "PRESEASON" : "REGULAR_SEASON";
+      const week = gameType === "PRESEASON" ? state.hub.preseasonWeek : state.hub.regularSeasonWeek;
+      const weeks = gameType === "PRESEASON" ? schedule.preseasonWeeks : schedule.regularSeasonWeeks;
+      const weekSchedule = weeks.find((w) => w.week === week);
+      if (!weekSchedule) return state;
+
+      const matchup = getTeamMatchup(weekSchedule, teamId);
+      if (!matchup) return state;
+
+      const league = simulateLeagueWeek({
+        schedule,
+        gameType,
+        week,
+        userHomeTeamId: matchup.homeTeamId,
+        userAwayTeamId: matchup.awayTeamId,
+        userScore: { homeScore: 0, awayScore: 0 },
+        seed: state.saveSeed + week * 1013 + (gameType === "PRESEASON" ? 17 : 31),
+        league: state.league,
+      });
+
+      const hub =
+        gameType === "PRESEASON"
+          ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
+          : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+
+      return { ...state, league, hub };
+    }
     case "RESET":
       return createInitialState();
-
     default:
       return state;
   }
@@ -387,20 +306,37 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 const STORAGE_KEY = "hc_career_save";
 
 function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
-  if (!oldState.hub?.schedule) {
-    return {
-      ...oldState,
-      hub: {
-        ...(oldState.hub ?? { news: [] }),
-        schedule: createSchedule(oldState.saveSeed ?? Date.now()),
-        preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
-        regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
-      },
-      careerStage: oldState.careerStage ?? "OFFSEASON_HUB",
-      assistantStaff: oldState.assistantStaff ?? {},
-    };
-  }
-  return oldState;
+  const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+  const saveSeed = oldState.saveSeed ?? Date.now();
+  const league = oldState.league ?? initLeagueState(teams);
+  const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
+
+  const game =
+    oldState.game && (oldState.game as any).clock
+      ? ({
+          ...oldState.game,
+          driveNumber: (oldState.game as any).driveNumber ?? 1,
+          playNumberInDrive: (oldState.game as any).playNumberInDrive ?? 0,
+          driveLog: (oldState.game as any).driveLog ?? [],
+        } as GameSim)
+      : initGameSim({
+          homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",
+          awayTeamId: (oldState.game as any)?.opponentTeamId ?? "AWAY",
+          seed: saveSeed,
+        });
+
+  return {
+    ...oldState,
+    saveSeed,
+    hub: {
+      ...(oldState.hub ?? { news: [] }),
+      schedule,
+      preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
+      regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
+    },
+    league,
+    game,
+  };
 }
 
 function loadState(): GameState {
@@ -420,6 +356,7 @@ function loadState(): GameState {
       hub: { ...initial.hub, ...migrated.hub },
       staff: { ...initial.staff, ...migrated.staff },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
+      league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
@@ -451,13 +388,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const week = gameType === "PRESEASON" ? state.hub.preseasonWeek : state.hub.regularSeasonWeek;
     const weeks = gameType === "PRESEASON" ? schedule.preseasonWeeks : schedule.regularSeasonWeeks;
-    const currentWeek = weeks.find((item) => item.week === week);
-    if (!currentWeek) return null;
+    const weekSchedule = weeks.find((item) => item.week === week);
+    if (!weekSchedule) return null;
 
-    return {
-      week,
-      matchup: getTeamMatchup(currentWeek, teamId),
-    };
+    return { week, matchup: getTeamMatchup(weekSchedule, teamId) };
   };
 
   return <GameContext.Provider value={{ state, dispatch, getCurrentTeamMatchup }}>{children}</GameContext.Provider>;
