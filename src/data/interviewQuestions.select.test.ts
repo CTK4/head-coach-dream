@@ -4,13 +4,12 @@ import { selectInterviewQuestions } from "@/data/interviewQuestions";
 const TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
 
 describe("selectInterviewQuestions()", () => {
-  it("returns 5..10 questions (deterministic count per team+seed)", () => {
+  it("returns at most 5 questions", () => {
     const seeds = [1, 2, 3, 42, 1337, 2026, 99999];
     for (const teamId of TEAMS) {
       for (const seed of seeds) {
         const qs = selectInterviewQuestions(teamId, seed);
-        expect(qs.length).toBeGreaterThanOrEqual(5);
-        expect(qs.length).toBeLessThanOrEqual(10);
+        expect(qs.length).toBeLessThanOrEqual(5);
       }
     }
   });
@@ -36,6 +35,6 @@ describe("selectInterviewQuestions()", () => {
     const teamId = "MILWAUKEE_NORTHSHORE";
     const seed = 7;
     expect(selectInterviewQuestions(teamId, seed, 5)).toHaveLength(5);
-    expect(selectInterviewQuestions(teamId, seed, 10)).toHaveLength(10);
+    expect(selectInterviewQuestions(teamId, seed, 10)).toHaveLength(5);
   });
 });

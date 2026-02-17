@@ -7,6 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+const MAX_INTERVIEW_QUESTIONS = 5;
+
 const InterviewSession = ({
   teamId,
   saveSeed,
@@ -19,7 +21,10 @@ const InterviewSession = ({
   onBack: () => void;
 }) => {
   const team = getTeamById(teamId);
-  const questions = useMemo<InterviewQuestion[]>(() => selectInterviewQuestions(teamId, saveSeed), [teamId, saveSeed]);
+  const questions = useMemo<InterviewQuestion[]>(
+    () => selectInterviewQuestions(teamId, saveSeed, MAX_INTERVIEW_QUESTIONS).slice(0, MAX_INTERVIEW_QUESTIONS),
+    [teamId, saveSeed]
+  );
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [answersByQuestionId, setAnswersByQuestionId] = useState<Record<string, number>>({});

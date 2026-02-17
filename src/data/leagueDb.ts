@@ -73,10 +73,47 @@ const contractsById = new Map(contracts.map((c) => [c.contractId, c]));
 
 export type PositionCoachRole = "QB_COACH" | "OL_COACH" | "DL_COACH" | "LB_COACH" | "DB_COACH" | "RB_COACH" | "WR_COACH";
 
+export const AUTO_ACCEPT_COACH_REP_MAX = 50;
+export const SAFETY_VALVE_REP_MAX = 65;
+
 function isFreeAgentPersonnel(person: PersonnelRow): boolean {
   const status = String(person.status ?? "").toUpperCase();
   const teamId = String(person.teamId ?? "").toUpperCase();
   return status === "FREE_AGENT" || !teamId || teamId === "FREE_AGENT";
+}
+
+function coachAutoAccept(person: PersonnelRow): boolean {
+  return String(person.status ?? "").toUpperCase() === "FREE_AGENT" && Number(person.reputation ?? 0) <= AUTO_ACCEPT_COACH_REP_MAX;
+}
+
+export function isSafetyValveCoach(person: PersonnelRow): boolean {
+  return String(person.status ?? "").toUpperCase() === "FREE_AGENT" && Number(person.reputation ?? 0) <= SAFETY_VALVE_REP_MAX;
+}
+
+export function isCoachInterested(args: {
+  coach: PersonnelRow;
+  role: PersonnelRow["role"];
+  hcHrs: number;
+  teamOutlook: number;
+  orgPrestige: number;
+  schemeCompat: number;
+  contractOffer: number;
+  egoPenalty: number;
+  careerRisk: number;
+  tierThreshold: number;
+}): boolean {
+  if (coachAutoAccept(args.coach)) return true;
+
+  const acceptanceScore =
+    0.4 * args.hcHrs +
+    0.2 * args.teamOutlook +
+    0.15 * args.contractOffer +
+    0.1 * args.orgPrestige +
+    0.1 * args.schemeCompat -
+    0.15 * args.egoPenalty -
+    0.1 * args.careerRisk;
+
+  return acceptanceScore >= args.tierThreshold;
 }
 
 export function getTeams(): TeamRow[] {
@@ -142,9 +179,12 @@ export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRo
     STC: "ST_COORDINATOR",
   };
 
-  return getPersonnelFreeAgents().filter(
-    (person) => String(person.role ?? "").toUpperCase() === roleMap[role]
-  );
+  return getPersonnelFreeAgents()
+    .filter((person) => String(person.role ?? "").toUpperCase() === roleMap[role])
+    .filter((person) => {
+      if (coachAutoAccept(person)) return true;
+      return true;
+    });
 }
 
 export function getCoordinatorCandidates(role: "OC" | "DC" | "STC"): PersonnelRow[] {
@@ -156,18 +196,45 @@ export function getAssistantHeadCoachCandidates(): PersonnelRow[] {
     .filter((p) => String(p.teamId ?? "") === "FREE_AGENT")
     .filter((p) => String(p.status ?? "ACTIVE").toUpperCase() !== "RETIRED");
 
-  return pool.filter((p) => {
-    const role = String(p.role ?? "").toUpperCase();
-    if (role.includes("COORDINATOR")) return false;
-    if (role === "HEAD_COACH" || role === "OWNER" || role === "GENERAL_MANAGER") return false;
-    return true;
-  });
+  return pool
+    .filter((p) => {
+      const role = String(p.role ?? "").toUpperCase();
+      if (role.includes("COORDINATOR")) return false;
+      if (role === "HEAD_COACH" || role === "OWNER" || role === "GENERAL_MANAGER") return false;
+      return true;
+    })
+    .filter((p) => {
+      if (coachAutoAccept(p)) return true;
+      return true;
+    });
 }
 
 export function getPositionCoachCandidates(role: PositionCoachRole): PersonnelRow[] {
-  return getPersonnelFreeAgents().filter(
-    (person) => String(person.role ?? "").toUpperCase() === role
-  );
+  return getPersonnelFreeAgents()
+    .filter((person) => String(person.role ?? "").toUpperCase() === role)
+    .filter((person) => {
+      if (coachAutoAccept(person)) return true;
+      return true;
+    });
+}
+
+export function getCoordinatorFreeAgentsAll(role: "OC" | "DC" | "STC"): PersonnelRow[] {
+  const targetRole = role === "OC" ? "OFF_COORDINATOR" : role === "DC" ? "DEF_COORDINATOR" : "ST_COORDINATOR";
+  return personnel
+    .filter((p) => String(p.role ?? "").toUpperCase() === targetRole)
+    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
+}
+
+export function getAssistantHeadCoachCandidatesAll(): PersonnelRow[] {
+  return personnel
+    .filter((p) => String(p.role ?? "").toUpperCase() === "ASSISTANT_HC")
+    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
+}
+
+export function getPositionCoachCandidatesAll(role: PositionCoachRole): PersonnelRow[] {
+  return personnel
+    .filter((p) => String(p.role ?? "").toUpperCase() === role)
+    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
 }
 
 export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
