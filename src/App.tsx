@@ -19,6 +19,15 @@ import HubLayout from "./pages/hub/HubLayout";
 import AssistantHiring from "./pages/hub/AssistantHiring";
 import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
+import Resigning from "@/pages/hub/offseason/Resigning";
+import Combine from "@/pages/hub/offseason/Combine";
+import Tampering from "@/pages/hub/offseason/Tampering";
+import FreeAgency from "@/pages/hub/offseason/FreeAgency";
+import PreDraft from "@/pages/hub/offseason/PreDraft";
+import OffseasonDraft from "@/pages/hub/offseason/Draft";
+import TrainingCamp from "@/pages/hub/offseason/TrainingCamp";
+import PreseasonStep from "@/pages/hub/offseason/Preseason";
+import CutDowns from "@/pages/hub/offseason/CutDowns";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +79,15 @@ const App = () => (
             <Route path="/hub" element={<HubGate><HubLayout /></HubGate>}>
               <Route index element={<Navigate to="/hub/offseason" replace />} />
               <Route path="offseason" element={<Offseason />} />
+              <Route path="offseason/resigning" element={<Resigning />} />
+              <Route path="offseason/combine" element={<Combine />} />
+              <Route path="offseason/tampering" element={<Tampering />} />
+              <Route path="offseason/free-agency" element={<FreeAgency />} />
+              <Route path="offseason/pre-draft" element={<PreDraft />} />
+              <Route path="offseason/draft" element={<OffseasonDraft />} />
+              <Route path="offseason/training-camp" element={<TrainingCamp />} />
+              <Route path="offseason/preseason" element={<PreseasonStep />} />
+              <Route path="offseason/cut-downs" element={<CutDowns />} />
               <Route path="home" element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />

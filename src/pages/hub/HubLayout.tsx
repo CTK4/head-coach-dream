@@ -10,11 +10,12 @@ const HubLayout = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (state.careerStage === "OFFSEASON_HUB" || state.careerStage === "TRAINING_CAMP") {
+    if (state.careerStage === "OFFSEASON_HUB") {
       const ok =
         location.pathname.startsWith("/hub/offseason") ||
         location.pathname.startsWith("/hub/staff") ||
         location.pathname.startsWith("/hub/assistant-hiring") ||
+        location.pathname.startsWith("/hub/coord-hiring") ||
         location.pathname.startsWith("/hub/coordinators");
       if (!ok) navigate("/hub/offseason", { replace: true });
     }
