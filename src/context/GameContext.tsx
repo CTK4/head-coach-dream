@@ -167,6 +167,21 @@ export type AssistantStaff = {
   wrCoachId?: string;
 };
 
+export type TeamFinances = {
+  cap: number;
+  baseCommitted: number;
+  capCommitted: number;
+  capSpace: number;
+  cash: number;
+};
+
+export type PlayerContractOverride = {
+  startSeason: number;
+  endSeason: number;
+  salaries: number[];
+  signingBonus: number;
+};
+
 export type BuyoutLedger = { bySeason: Record<number, number> };
 export type DepthChart = { startersByPos: Record<string, string | undefined> };
 export type PreseasonRotation = { byPlayerId: Record<string, number> };
@@ -191,7 +206,7 @@ export type FreeAgencyUI =
 export type FreeAgencyState = {
   ui: FreeAgencyUI;
   offersByPlayerId: Record<string, FreeAgencyOffer[]>;
-  signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number }>;
+  signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
   nextOfferSeq: number;
 };
 
@@ -253,6 +268,7 @@ export type GameState = {
   };
   scouting?: { boardSeed: number; combineRun?: boolean };
   hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
+  finances: TeamFinances;
   league: LeagueState;
   saveSeed: number;
   game: GameSim;
@@ -260,7 +276,7 @@ export type GameState = {
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
   playerTeamOverrides: Record<string, string>;
-  playerContractOverrides: Record<string, { startSeason: number; endSeason: number; aav: number; signingBonus: number }>;
+  playerContractOverrides: Record<string, PlayerContractOverride>;
   firing: FiringMeter;
 };
 
@@ -319,6 +335,9 @@ export type GameAction =
   | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
   | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
   | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "CUT_PLAYER"; payload: { playerId: string } }
+  | { type: "TRADE_PLAYER"; payload: { playerId: string } }
+  | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
@@ -403,6 +422,7 @@ function createInitialState(): GameState {
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    finances: { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000 },
     league: initLeagueState(teams),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
@@ -448,6 +468,100 @@ function upsertOffers(state: GameState, playerId: string, nextOffers: FreeAgency
 
 function moneyRound(n: number) {
   return Math.round(n / 50_000) * 50_000;
+}
+
+function makeEscalatingSalaries(totalCash: number, years: number, annualGrowth = 0.06): number[] {
+  const y = Math.max(1, years);
+  const g = Math.max(0, annualGrowth);
+  const weights = Array.from({ length: y }, (_, i) => Math.pow(1 + g, i));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const base = totalCash / sum;
+  return weights.map((w) => Math.round((base * w) / 50_000) * 50_000);
+}
+
+function proration(o: PlayerContractOverride): number {
+  const years = Math.max(1, o.salaries.length);
+  return Math.round((o.signingBonus / years) / 50_000) * 50_000;
+}
+
+function capHitForOverride(o: PlayerContractOverride, season: number): number {
+  const idx = season - o.startSeason;
+  const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
+  return salary + proration(o);
+}
+
+function computeUserCapCommitted(state: GameState): number {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId) return state.finances.baseCommitted;
+  let sum = state.finances.baseCommitted;
+  for (const [pid, o] of Object.entries(state.playerContractOverrides)) {
+    const t = state.playerTeamOverrides[pid];
+    if (String(t) !== String(teamId)) continue;
+    if (state.season > o.endSeason) continue;
+    sum += capHitForOverride(o, state.season);
+  }
+  return sum;
+}
+
+function applyFinances(state: GameState, patch: Partial<TeamFinances> = {}): GameState {
+  const next = { ...state, finances: { ...state.finances, ...patch } };
+  const capCommitted = computeUserCapCommitted(next);
+  const capSpace = Math.round((next.finances.cap - capCommitted) / 50_000) * 50_000;
+  return { ...next, finances: { ...next.finances, capCommitted, capSpace } };
+}
+
+function defaultNews(season: number): string[] {
+  return [
+    `League announces ${season} salary cap at $250M`,
+    "Coaching staffs begin offseason installs",
+    "Front offices prepare for free agency",
+    "Draft prospects begin pro day circuit",
+  ];
+}
+
+function seasonRollover(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId;
+  const nextSeason = state.season + 1;
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  const playerContractOverrides = { ...state.playerContractOverrides };
+
+  for (const [pid, o] of Object.entries(playerContractOverrides)) {
+    if (nextSeason > o.endSeason) {
+      playerTeamOverrides[pid] = "FREE_AGENT";
+      delete playerContractOverrides[pid];
+    }
+  }
+
+  let cash = state.finances.cash;
+  if (teamId) {
+    for (const [pid, o] of Object.entries(playerContractOverrides)) {
+      if (String(playerTeamOverrides[pid]) !== String(teamId)) continue;
+      const idx = nextSeason - o.startSeason;
+      const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
+      cash -= salary;
+    }
+  }
+
+  const schedule = createSchedule(state.saveSeed ^ nextSeason);
+
+  return applyFinances({
+    ...state,
+    season: nextSeason,
+    week: 1,
+    careerStage: "OFFSEASON_HUB",
+    hub: {
+      ...state.hub,
+      news: defaultNews(nextSeason),
+      preseasonWeek: 1,
+      regularSeasonWeek: 1,
+      schedule,
+    },
+    freeAgency: { ui: { mode: "NONE" }, offersByPlayerId: {}, signingsByPlayerId: {}, nextOfferSeq: 1 },
+    playerTeamOverrides,
+    playerContractOverrides,
+    finances: { ...state.finances, cash },
+  });
 }
 
 function rookieApyFromRank(rank: number): number {
@@ -1329,32 +1443,35 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             : o,
       );
 
-      const signingsByPlayerId = {
-        ...state.freeAgency.signingsByPlayerId,
-        [winner.playerId]: { teamId: winner.teamId, years: winner.years, aav: winner.aav },
+      const years = Math.max(1, winner.years);
+      const totalCash = winner.aav * years;
+      const signingBonus = Math.round((totalCash * 0.22) / 50_000) * 50_000;
+      const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
+
+      const ovr: PlayerContractOverride = {
+        startSeason: state.season,
+        endSeason: state.season + years - 1,
+        salaries,
+        signingBonus,
       };
 
-      const playerTeamOverrides = {
-        ...state.playerTeamOverrides,
-        [winner.playerId]: winner.teamId,
-      };
-
-      const playerContractOverrides = {
-        ...state.playerContractOverrides,
-        [winner.playerId]: {
-          startSeason: state.season,
-          endSeason: state.season + Math.max(1, winner.years) - 1,
-          aav: winner.aav,
-          signingBonus: Math.round(winner.aav * 0.2),
+      const cashY1 = (salaries[0] ?? 0) + signingBonus;
+      const nextState = {
+        ...state,
+        playerTeamOverrides: { ...state.playerTeamOverrides, [winner.playerId]: winner.teamId },
+        playerContractOverrides: { ...state.playerContractOverrides, [winner.playerId]: ovr },
+        finances: { ...state.finances, cash: state.finances.cash - cashY1 },
+        freeAgency: {
+          ...state.freeAgency,
+          offersByPlayerId: { ...state.freeAgency.offersByPlayerId, [winner.playerId]: nextOffers },
+          signingsByPlayerId: {
+            ...state.freeAgency.signingsByPlayerId,
+            [winner.playerId]: { teamId: winner.teamId, years, aav: winner.aav, signingBonus },
+          },
         },
       };
 
-      return {
-        ...state,
-        playerTeamOverrides,
-        playerContractOverrides,
-        freeAgency: { ...upsertOffers(state, action.payload.playerId, nextOffers), signingsByPlayerId },
-      };
+      return applyFinances(nextState);
     }
 
     case "FA_REJECT_OFFER": {
@@ -1364,18 +1481,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "FA_RESOLVE_WEEK": {
-      const nextOffersByPlayerId: Record<string, FreeAgencyOffer[]> = { ...state.freeAgency.offersByPlayerId };
-      const nextSignings: Record<string, { teamId: string; years: number; aav: number }> = { ...state.freeAgency.signingsByPlayerId };
-      const playerTeamOverrides = { ...state.playerTeamOverrides };
-      const playerContractOverrides = { ...state.playerContractOverrides };
+      const offersByPlayerId = { ...state.freeAgency.offersByPlayerId };
+      const signingsByPlayerId = { ...state.freeAgency.signingsByPlayerId };
 
-      for (const [playerId, offers] of Object.entries(nextOffersByPlayerId)) {
-        if (nextSignings[playerId]) continue;
+      for (const [playerId, offers] of Object.entries(offersByPlayerId)) {
+        if (signingsByPlayerId[playerId]) continue;
         const pending = offers.filter((o) => o.status === "PENDING");
         if (!pending.length) continue;
 
         const best = pending.reduce((a, b) => (b.aav > a.aav ? b : a));
-        nextOffersByPlayerId[playerId] = offers.map((o) =>
+        offersByPlayerId[playerId] = offers.map((o) =>
           o.offerId === best.offerId
             ? { ...o, status: "ACCEPTED" as const }
             : o.status === "PENDING"
@@ -1383,23 +1498,67 @@ function gameReducer(state: GameState, action: GameAction): GameState {
               : o,
         );
 
-        nextSignings[playerId] = { teamId: best.teamId, years: best.years, aav: best.aav };
-        playerTeamOverrides[playerId] = best.teamId;
-        playerContractOverrides[playerId] = {
-          startSeason: state.season,
-          endSeason: state.season + Math.max(1, best.years) - 1,
-          aav: best.aav,
-          signingBonus: Math.round(best.aav * 0.2),
-        };
+        const years = Math.max(1, best.years);
+        const totalCash = best.aav * years;
+        const signingBonus = Math.round((totalCash * 0.22) / 50_000) * 50_000;
+        signingsByPlayerId[playerId] = { teamId: best.teamId, years, aav: best.aav, signingBonus };
+
+        if (best.isUser) {
+          const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
+          const ovr: PlayerContractOverride = {
+            startSeason: state.season,
+            endSeason: state.season + years - 1,
+            salaries,
+            signingBonus,
+          };
+
+          const cashY1 = (salaries[0] ?? 0) + signingBonus;
+
+          const nextState = {
+            ...state,
+            playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: best.teamId },
+            playerContractOverrides: { ...state.playerContractOverrides, [playerId]: ovr },
+            finances: { ...state.finances, cash: state.finances.cash - cashY1 },
+            freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId },
+          };
+
+          return applyFinances(nextState);
+        }
       }
 
-      return {
-        ...state,
-        playerTeamOverrides,
-        playerContractOverrides,
-        freeAgency: { ...state.freeAgency, offersByPlayerId: nextOffersByPlayerId, signingsByPlayerId: nextSignings },
-      };
+      return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
     }
+
+    case "CUT_PLAYER": {
+      const pid = action.payload.playerId;
+      const o = state.playerContractOverrides[pid];
+
+      const playerTeamOverrides = { ...state.playerTeamOverrides, [pid]: "FREE_AGENT" };
+      const playerContractOverrides = { ...state.playerContractOverrides };
+
+      if (o) {
+        const years = Math.max(1, o.salaries.length);
+        const pro = Math.round((o.signingBonus / years) / 50_000) * 50_000;
+        const yearsElapsed = Math.max(0, Math.min(years, state.season - o.startSeason + 1));
+        const paid = pro * yearsElapsed;
+        const unamort = Math.max(0, o.signingBonus - paid);
+        delete playerContractOverrides[pid];
+        return applyFinances({
+          ...state,
+          playerTeamOverrides,
+          playerContractOverrides,
+          finances: { ...state.finances, baseCommitted: state.finances.baseCommitted + unamort },
+        });
+      }
+
+      return { ...state, playerTeamOverrides };
+    }
+
+    case "TRADE_PLAYER":
+      return gameReducer(state, { type: "CUT_PLAYER", payload: action.payload });
+
+    case "ADVANCE_SEASON":
+      return seasonRollover(state);
 
     case "PREDRAFT_TOGGLE_VISIT": {
       const cur = !!state.offseasonData.preDraft.visits[action.payload.prospectId];
@@ -1847,6 +2006,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
     },
+    finances: (oldState as any).finances ?? { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000 },
     league,
     game,
     draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
@@ -1871,6 +2031,7 @@ function loadState(): GameState {
       coach: { ...initial.coach, ...migrated.coach },
       interviews: { ...initial.interviews, ...migrated.interviews },
       hub: { ...initial.hub, ...migrated.hub },
+      finances: { ...initial.finances, ...(migrated as any).finances },
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
@@ -1919,7 +2080,14 @@ function loadState(): GameState {
       rookies: migrated.rookies ?? initial.rookies,
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
       playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
-      playerContractOverrides: { ...initial.playerContractOverrides, ...migrated.playerContractOverrides },
+      playerContractOverrides: Object.fromEntries(
+        Object.entries({ ...initial.playerContractOverrides, ...migrated.playerContractOverrides }).map(([k, v]: any) => {
+          if (Array.isArray(v?.salaries)) return [k, v];
+          const years = Math.max(1, Number(v?.endSeason ?? initial.season) - Number(v?.startSeason ?? initial.season) + 1);
+          const aav = Number(v?.aav ?? 0);
+          return [k, { startSeason: Number(v?.startSeason ?? initial.season), endSeason: Number(v?.endSeason ?? initial.season), salaries: Array.from({ length: years }, () => aav), signingBonus: Number(v?.signingBonus ?? 0) }];
+        }),
+      ) as Record<string, PlayerContractOverride>,
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
     };

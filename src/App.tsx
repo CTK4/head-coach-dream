@@ -32,6 +32,7 @@ import TrainingCamp from "@/pages/hub/TrainingCamp";
 import PreseasonStep from "@/pages/hub/offseason/Preseason";
 import CutDowns from "@/pages/hub/offseason/CutDowns";
 import Finance from "@/pages/hub/Finance";
+import Finances from "@/pages/hub/Finances";
 import DepthChart from "@/pages/hub/DepthChart";
 import StaffManagement from "@/pages/hub/StaffManagement";
 import FiringMeter from "@/pages/hub/FiringMeter";
@@ -103,6 +104,7 @@ const App = () => (
               <Route path="depth-chart" element={<DepthChart />} />
               <Route path="staff" element={<StaffManagement />} />
               <Route path="finance" element={<Finance />} />
+              <Route path="finances" element={<Finances />} />
               <Route path="firing-meter" element={<FiringMeter />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="regular-season" element={<RegularSeason />} />

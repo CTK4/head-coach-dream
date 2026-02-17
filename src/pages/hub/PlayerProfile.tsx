@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getPlayerAwards, getPlayerById, getPlayerContract, getPlayerSeasonStats } from "@/data/leagueDb";
+import { getPlayerAwards, getPlayerSeasonStats } from "@/data/leagueDb";
+import { getEffectivePlayer, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,25 +20,22 @@ export default function PlayerProfile() {
   const navigate = useNavigate();
   const { playerId = "" } = useParams();
 
-  const base = useMemo(() => getPlayerById(playerId), [playerId]);
+  const base = useMemo(() => getEffectivePlayer(state, playerId), [state, playerId]);
   if (!base) return <div className="p-6">Player not found.</div>;
 
   const overrideTeam = state.playerTeamOverrides[playerId];
-  const overrideContract = state.playerContractOverrides[playerId];
-  const contract = useMemo(() => getPlayerContract(playerId), [playerId]);
+  const contract = getContractSummaryForPlayer(state, playerId);
   const stats = useMemo(() => getPlayerSeasonStats(playerId, state.season), [playerId, state.season]);
   const awards = useMemo(() => getPlayerAwards(playerId).slice(0, 3), [playerId]);
 
   const name = String(base.fullName);
-  const pos = String(base.pos ?? "UNK").toUpperCase();
+  const pos = normalizePos(String(base.pos ?? "UNK"));
   const teamId = String(overrideTeam ?? base.teamId ?? "");
   const isFA = !teamId || teamId.toUpperCase() === "FREE_AGENT";
   const ovr = clamp100(Number(base.overall ?? 0));
-  const yearsRemaining = overrideContract
-    ? Math.max(0, overrideContract.endSeason - state.season + 1)
-    : contract?.endSeason != null
-      ? Math.max(0, Number(contract.endSeason) - state.season + 1)
-      : 0;
+  const yearsRemaining = contract?.yearsRemaining ?? 0;
+  const capHit = contract?.capHit ?? 0;
+  const totalValue = contract?.total ?? 0;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
@@ -69,8 +67,9 @@ export default function PlayerProfile() {
         <CardHeader><CardTitle className="text-base">Contract</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span>Years Remaining</span><span>{yearsRemaining || "—"}</span></div>
-          <div className="flex justify-between"><span>Cap Hit</span><span>{overrideContract ? money(overrideContract.aav) : contract?.salaryY1 ? money(Number(contract.salaryY1)) : "—"}</span></div>
-          <div className="flex justify-between"><span>Signing Bonus</span><span>{overrideContract ? money(overrideContract.signingBonus) : "—"}</span></div>
+          <div className="flex justify-between"><span>Cap Hit</span><span className="font-semibold">{contract ? money(capHit) : "—"}</span></div>
+          <div className="flex justify-between"><span>Total Value</span><span className="font-semibold">{contract ? money(totalValue) : "—"}</span></div>
+          <div className="flex justify-between"><span>Signing Bonus</span><span className="font-semibold">{contract ? money(contract.signingBonus) : "—"}</span></div>
         </CardContent>
       </Card>
 
