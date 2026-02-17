@@ -170,6 +170,31 @@ export type AssistantStaff = {
 export type BuyoutLedger = { bySeason: Record<number, number> };
 export type DepthChart = { startersByPos: Record<string, string | undefined> };
 export type PreseasonRotation = { byPlayerId: Record<string, number> };
+export type FreeAgencyOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
+
+export type FreeAgencyOffer = {
+  offerId: string;
+  playerId: string;
+  teamId: string;
+  isUser: boolean;
+  years: number;
+  aav: number;
+  createdWeek: number;
+  status: FreeAgencyOfferStatus;
+};
+
+export type FreeAgencyUI =
+  | { mode: "NONE" }
+  | { mode: "PLAYER"; playerId: string }
+  | { mode: "MY_OFFERS" };
+
+export type FreeAgencyState = {
+  ui: FreeAgencyUI;
+  offersByPlayerId: Record<string, FreeAgencyOffer[]>;
+  signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number }>;
+  nextOfferSeq: number;
+};
+
 export type FiringMeter = {
   pWeekly: number;
   pSeasonEnd: number;
@@ -202,6 +227,7 @@ export type GameState = {
   careerStage: CareerStage;
   offseason: OffseasonState;
   offseasonData: OffseasonData;
+  freeAgency: FreeAgencyState;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
@@ -233,6 +259,8 @@ export type GameState = {
   draft: { picks: string[]; withdrawnBoardIds: Record<string, true> };
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
+  playerTeamOverrides: Record<string, string>;
+  playerContractOverrides: Record<string, { startSeason: number; endSeason: number; aav: number; signingBonus: number }>;
   firing: FiringMeter;
 };
 
@@ -283,6 +311,14 @@ export type GameAction =
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
   | { type: "FA_SIGN"; payload: { offerId: string } }
+  | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
+  | { type: "FA_OPEN_MY_OFFERS" }
+  | { type: "FA_CLOSE_MODAL" }
+  | { type: "FA_SUBMIT_OFFER"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "FA_WITHDRAW_OFFER"; payload: { offerId: string; playerId: string } }
+  | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
+  | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
@@ -348,6 +384,7 @@ function createInitialState(): GameState {
       cutDowns: { decisions: {} },
     },
     interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
+    freeAgency: { ui: { mode: "NONE" }, offersByPlayerId: {}, signingsByPlayerId: {}, nextOfferSeq: 1 },
     offers: [],
     season: 2026,
     week: 1,
@@ -372,6 +409,8 @@ function createInitialState(): GameState {
     draft: { picks: [], withdrawnBoardIds: {} },
     rookies: [],
     rookieContracts: {},
+    playerTeamOverrides: {},
+    playerContractOverrides: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
   };
 }
@@ -380,6 +419,31 @@ function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function detRand(saveSeed: number, key: string): number {
+  return mulberry32(saveSeed ^ hashStr(key))();
+}
+
+function makeOfferId(state: GameState) {
+  return `FA_OFFER_${state.season}_${state.freeAgency.nextOfferSeq}`;
+}
+
+function upsertOffers(state: GameState, playerId: string, nextOffers: FreeAgencyOffer[]): FreeAgencyState {
+  return {
+    ...state.freeAgency,
+    offersByPlayerId: { ...state.freeAgency.offersByPlayerId, [playerId]: nextOffers },
+  };
 }
 
 function moneyRound(n: number) {
@@ -1185,6 +1249,158 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
+    case "FA_OPEN_PLAYER":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
+
+    case "FA_OPEN_MY_OFFERS":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "MY_OFFERS" } } };
+
+    case "FA_CLOSE_MODAL":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "NONE" } } };
+
+    case "FA_SUBMIT_OFFER": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const week = state.hub.regularSeasonWeek ?? 1;
+      const playerId = action.payload.playerId;
+      const offers = state.freeAgency.offersByPlayerId[playerId] ?? [];
+      const cleaned = offers.map((o) => (o.isUser && o.status === "PENDING" ? { ...o, status: "WITHDRAWN" as const } : o));
+
+      const offerId = makeOfferId(state);
+      const userOffer: FreeAgencyOffer = {
+        offerId,
+        playerId,
+        teamId,
+        isUser: true,
+        years: Math.max(1, Math.min(5, Math.round(action.payload.years))),
+        aav: Math.max(750_000, Math.round(action.payload.aav / 50_000) * 50_000),
+        createdWeek: week,
+        status: "PENDING",
+      };
+
+      const r = detRand(state.saveSeed, `FA_AI_COUNT|S${state.season}|W${week}|P${playerId}|${userOffer.aav}`);
+      const aiCount = r < 0.35 ? 0 : r < 0.75 ? 1 : 2;
+
+      const aiOffers: FreeAgencyOffer[] = [];
+      for (let i = 0; i < aiCount; i++) {
+        const rr = detRand(state.saveSeed, `FA_AI_OFFER|S${state.season}|W${week}|P${playerId}|I${i}`);
+        const bump = 0.92 + rr * 0.18;
+        aiOffers.push({
+          offerId: `FA_AI_${state.season}_${week}_${playerId}_${i}`,
+          playerId,
+          teamId: `AI_TEAM_${(Math.floor(rr * 30) + 1).toString().padStart(2, "0")}`,
+          isUser: false,
+          years: userOffer.years,
+          aav: Math.round((userOffer.aav * bump) / 50_000) * 50_000,
+          createdWeek: week,
+          status: "PENDING",
+        });
+      }
+
+      const nextOffers = [...cleaned, userOffer, ...aiOffers];
+
+      return {
+        ...state,
+        freeAgency: upsertOffers(
+          { ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } },
+          playerId,
+          nextOffers,
+        ),
+      };
+    }
+
+    case "FA_WITHDRAW_OFFER": {
+      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
+      const nextOffers = offers.map((o) => (o.offerId === action.payload.offerId ? { ...o, status: "WITHDRAWN" as const } : o));
+      return { ...state, freeAgency: upsertOffers(state, action.payload.playerId, nextOffers) };
+    }
+
+    case "FA_ACCEPT_OFFER": {
+      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
+      const winner = offers.find((o) => o.offerId === action.payload.offerId);
+      if (!winner) return state;
+
+      const nextOffers = offers.map((o) =>
+        o.offerId === winner.offerId
+          ? { ...o, status: "ACCEPTED" as const }
+          : o.status === "PENDING"
+            ? { ...o, status: "REJECTED" as const }
+            : o,
+      );
+
+      const signingsByPlayerId = {
+        ...state.freeAgency.signingsByPlayerId,
+        [winner.playerId]: { teamId: winner.teamId, years: winner.years, aav: winner.aav },
+      };
+
+      const playerTeamOverrides = {
+        ...state.playerTeamOverrides,
+        [winner.playerId]: winner.teamId,
+      };
+
+      const playerContractOverrides = {
+        ...state.playerContractOverrides,
+        [winner.playerId]: {
+          startSeason: state.season,
+          endSeason: state.season + Math.max(1, winner.years) - 1,
+          aav: winner.aav,
+          signingBonus: Math.round(winner.aav * 0.2),
+        },
+      };
+
+      return {
+        ...state,
+        playerTeamOverrides,
+        playerContractOverrides,
+        freeAgency: { ...upsertOffers(state, action.payload.playerId, nextOffers), signingsByPlayerId },
+      };
+    }
+
+    case "FA_REJECT_OFFER": {
+      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
+      const nextOffers = offers.map((o) => (o.offerId === action.payload.offerId ? { ...o, status: "REJECTED" as const } : o));
+      return { ...state, freeAgency: upsertOffers(state, action.payload.playerId, nextOffers) };
+    }
+
+    case "FA_RESOLVE_WEEK": {
+      const nextOffersByPlayerId: Record<string, FreeAgencyOffer[]> = { ...state.freeAgency.offersByPlayerId };
+      const nextSignings: Record<string, { teamId: string; years: number; aav: number }> = { ...state.freeAgency.signingsByPlayerId };
+      const playerTeamOverrides = { ...state.playerTeamOverrides };
+      const playerContractOverrides = { ...state.playerContractOverrides };
+
+      for (const [playerId, offers] of Object.entries(nextOffersByPlayerId)) {
+        if (nextSignings[playerId]) continue;
+        const pending = offers.filter((o) => o.status === "PENDING");
+        if (!pending.length) continue;
+
+        const best = pending.reduce((a, b) => (b.aav > a.aav ? b : a));
+        nextOffersByPlayerId[playerId] = offers.map((o) =>
+          o.offerId === best.offerId
+            ? { ...o, status: "ACCEPTED" as const }
+            : o.status === "PENDING"
+              ? { ...o, status: "REJECTED" as const }
+              : o,
+        );
+
+        nextSignings[playerId] = { teamId: best.teamId, years: best.years, aav: best.aav };
+        playerTeamOverrides[playerId] = best.teamId;
+        playerContractOverrides[playerId] = {
+          startSeason: state.season,
+          endSeason: state.season + Math.max(1, best.years) - 1,
+          aav: best.aav,
+          signingBonus: Math.round(best.aav * 0.2),
+        };
+      }
+
+      return {
+        ...state,
+        playerTeamOverrides,
+        playerContractOverrides,
+        freeAgency: { ...state.freeAgency, offersByPlayerId: nextOffersByPlayerId, signingsByPlayerId: nextSignings },
+      };
+    }
+
     case "PREDRAFT_TOGGLE_VISIT": {
       const cur = !!state.offseasonData.preDraft.visits[action.payload.prospectId];
       return {
@@ -1691,11 +1907,19 @@ function loadState(): GameState {
         camp: { ...initial.offseasonData.camp, ...migrated.offseasonData?.camp },
         cutDowns: { ...initial.offseasonData.cutDowns, ...migrated.offseasonData?.cutDowns },
       },
+      freeAgency: {
+        ...initial.freeAgency,
+        ...migrated.freeAgency,
+        offersByPlayerId: { ...initial.freeAgency.offersByPlayerId, ...(migrated.freeAgency?.offersByPlayerId ?? {}) },
+        signingsByPlayerId: { ...initial.freeAgency.signingsByPlayerId, ...(migrated.freeAgency?.signingsByPlayerId ?? {}) },
+      },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
       draft: { ...initial.draft, ...migrated.draft },
       rookies: migrated.rookies ?? initial.rookies,
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
+      playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
+      playerContractOverrides: { ...initial.playerContractOverrides, ...migrated.playerContractOverrides },
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
     };
