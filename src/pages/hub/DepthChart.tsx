@@ -39,9 +39,6 @@ const GROUPS: SlotGroup[] = [
   ]},
 ];
 
-function money(n: number) {
-  return `$${(n / 1_000_000).toFixed(2)}M`;
-}
 
 export default function DepthChart() {
   const { state, dispatch } = useGame();
@@ -77,13 +74,13 @@ export default function DepthChart() {
         <CardContent className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2 text-sm">
             <Badge variant="outline">Active {Object.keys(state.rosterMgmt.active).length}/53</Badge>
-            <Badge variant="outline">Preseason uses these starters for rotation seeding</Badge>
+            <Badge variant="secondary">Preseason seeds from this</Badge>
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant="outline">Approval {state.owner.approval}</Badge>
-            <Badge variant="outline">Financial {state.owner.financialRating}</Badge>
-            <Badge variant="secondary">Job Security {state.owner.jobSecurity}</Badge>
-            <Badge variant="outline">Cash {money(state.teamFinances.cash)}</Badge>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => dispatch({ type: "AUTOFILL_DEPTH_CHART" })}>
+              Auto-Fill Empty
+            </Button>
+            <Button onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>Reset to Best</Button>
           </div>
         </CardContent>
       </Card>

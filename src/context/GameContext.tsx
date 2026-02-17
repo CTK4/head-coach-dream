@@ -21,6 +21,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
+import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
   CutDecision,
@@ -169,6 +170,15 @@ export type AssistantStaff = {
 export type BuyoutLedger = { bySeason: Record<number, number> };
 export type DepthChart = { startersByPos: Record<string, string | undefined> };
 export type PreseasonRotation = { byPlayerId: Record<string, number> };
+export type FiringMeter = {
+  pWeekly: number;
+  pSeasonEnd: number;
+  drivers: Array<{ label: string; value: number }>;
+  lastWeekComputed: number;
+  lastSeasonComputed: number;
+  fired: boolean;
+  firedAt?: { season: number; week?: number; checkpoint: "WEEKLY" | "SEASON_END" };
+};
 
 export type GameState = {
   coach: {
@@ -185,6 +195,7 @@ export type GameState = {
     mediaExpectation?: number;
     lockerRoomCred?: number;
     volatility?: number;
+    tenureYear: number;
     reputation?: CoachReputation;
   };
   phase: GamePhase;
@@ -222,6 +233,7 @@ export type GameState = {
   draft: { picks: string[]; withdrawnBoardIds: Record<string, true> };
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
+  firing: FiringMeter;
 };
 
 export type RookieContract = {
@@ -288,6 +300,10 @@ export type GameAction =
   | { type: "INIT_PRESEASON_ROTATION" }
   | { type: "SET_PLAYER_SNAP"; payload: { playerId: string; pct: number } }
   | { type: "APPLY_PRESEASON_DEV"; payload: { week: number } }
+  | { type: "RESET_DEPTH_CHART_BEST" }
+  | { type: "AUTOFILL_DEPTH_CHART" }
+  | { type: "RECALC_FIRING_METER"; payload: { week: number; winPct?: number; goalsDelta?: number } }
+  | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
@@ -305,7 +321,7 @@ function createInitialState(): GameState {
   const saveSeed = Date.now();
 
   return {
-    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "" },
+    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1 },
     phase: "CREATE",
     careerStage: "OFFSEASON_HUB",
     offseason: {
@@ -356,6 +372,7 @@ function createInitialState(): GameState {
     draft: { picks: [], withdrawnBoardIds: {} },
     rookies: [],
     rookieContracts: {},
+    firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
   };
 }
 
@@ -682,6 +699,135 @@ function top53Active(teamId: string) {
   });
 
   return { active, cuts };
+}
+
+function ownerAxesFromState(state: GameState) {
+  const owner: any = (state as any).acceptedOffer?.ownerProfile ?? (state as any).acceptedOffer?.owner;
+  return owner?.axis_weights ?? owner?.axes;
+}
+
+function currentDeadMoney(state: GameState, season: number) {
+  return state.teamFinances.deadMoneyBySeason[season] ?? 0;
+}
+
+function computeWinPctFallback(state: GameState): number {
+  const w = Number((state as any).seasonRecord?.wins ?? 0);
+  const l = Number((state as any).seasonRecord?.losses ?? 0);
+  const t = Number((state as any).seasonRecord?.ties ?? 0);
+  const g = Math.max(1, w + l + t);
+  return Math.max(0, Math.min(1, (w + 0.5 * t) / g));
+}
+
+function computeGoalsDeltaFallback(state: GameState): number {
+  return Number((state as any).ownerGoals?.delta ?? 0);
+}
+
+const SLOT_RULES: Array<{ slot: string; pos: string[] }> = [
+  { slot: "QB1", pos: ["QB"] },
+  { slot: "RB1", pos: ["RB"] },
+  { slot: "WR1", pos: ["WR"] },
+  { slot: "WR2", pos: ["WR"] },
+  { slot: "TE1", pos: ["TE"] },
+  { slot: "LT", pos: ["OT", "OL"] },
+  { slot: "LG", pos: ["OG", "OL"] },
+  { slot: "C", pos: ["C", "OL"] },
+  { slot: "RG", pos: ["OG", "OL"] },
+  { slot: "RT", pos: ["OT", "OL"] },
+  { slot: "EDGE1", pos: ["EDGE", "DE", "DL"] },
+  { slot: "DT1", pos: ["DT", "DL"] },
+  { slot: "DT2", pos: ["DT", "DL"] },
+  { slot: "EDGE2", pos: ["EDGE", "DE", "DL"] },
+  { slot: "LB1", pos: ["LB"] },
+  { slot: "LB2", pos: ["LB"] },
+  { slot: "CB1", pos: ["CB", "DB"] },
+  { slot: "CB2", pos: ["CB", "DB"] },
+  { slot: "FS", pos: ["S", "DB"] },
+  { slot: "SS", pos: ["S", "DB"] },
+  { slot: "K", pos: ["K"] },
+  { slot: "P", pos: ["P"] },
+];
+
+function fillDepthChart(state: GameState, mode: "RESET" | "AUTOFILL"): GameState {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId) return state;
+
+  const activeSet = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeSet.has(String(p.playerId)))
+    .map((p) => ({ id: String(p.playerId), pos: String(p.pos ?? "UNK").toUpperCase(), ovr: Number(p.overall ?? 0) }))
+    .sort((a, b) => b.ovr - a.ovr);
+
+  const starters = mode === "RESET" ? {} : { ...state.depthChart.startersByPos };
+  const used = new Set<string>();
+  if (mode !== "RESET") {
+    for (const v of Object.values(starters)) if (v) used.add(String(v));
+  }
+
+  for (const rule of SLOT_RULES) {
+    if (mode === "AUTOFILL" && starters[rule.slot]) continue;
+    const eligible = roster.filter((p) => rule.pos.includes(p.pos));
+    const pick = eligible.find((p) => !used.has(p.id)) ?? eligible[0];
+    if (!pick) continue;
+    starters[rule.slot] = pick.id;
+    used.add(pick.id);
+  }
+
+  return { ...state, depthChart: { startersByPos: starters } };
+}
+
+function computeAndStoreFiringMeter(state: GameState, week: number, winPct?: number, goalsDelta?: number): GameState {
+  const seasonYear = state.coach.tenureYear;
+  const seasonNumber = state.season;
+  const win = winPct ?? computeWinPctFallback(state);
+  const goals = goalsDelta ?? computeGoalsDeltaFallback(state);
+  const deadMoneyThisSeason = currentDeadMoney(state, seasonNumber);
+  const ownerAxes = ownerAxesFromState(state);
+
+  const weekly = computeTerminationRisk({
+    saveSeed: state.saveSeed,
+    seasonYear,
+    seasonNumber,
+    week,
+    checkpoint: "WEEKLY",
+    jobSecurity: state.owner.jobSecurity,
+    ownerApproval: state.owner.approval,
+    financialRating: state.owner.financialRating,
+    cash: state.teamFinances.cash,
+    deadMoneyThisSeason,
+    budgetBreaches: state.owner.budgetBreaches,
+    ownerAxes,
+    goalsDelta: goals,
+    winPct: win,
+  });
+
+  const seasonEnd = computeTerminationRisk({
+    saveSeed: state.saveSeed,
+    seasonYear,
+    seasonNumber,
+    week,
+    checkpoint: "SEASON_END",
+    jobSecurity: state.owner.jobSecurity,
+    ownerApproval: state.owner.approval,
+    financialRating: state.owner.financialRating,
+    cash: state.teamFinances.cash,
+    deadMoneyThisSeason,
+    budgetBreaches: state.owner.budgetBreaches,
+    ownerAxes,
+    goalsDelta: goals,
+    winPct: win,
+  });
+
+  return {
+    ...state,
+    firing: {
+      ...state.firing,
+      pWeekly: seasonYear === 1 ? 0 : weekly.p,
+      pSeasonEnd: seasonEnd.p,
+      drivers: seasonEnd.drivers,
+      lastWeekComputed: week,
+      lastSeasonComputed: seasonNumber,
+    },
+  };
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -1212,6 +1358,36 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         depthChart: { startersByPos: { ...state.depthChart.startersByPos, [action.payload.slot]: action.payload.playerId } },
       };
     }
+    case "RESET_DEPTH_CHART_BEST": {
+      return fillDepthChart(state, "RESET");
+    }
+    case "AUTOFILL_DEPTH_CHART": {
+      return fillDepthChart(state, "AUTOFILL");
+    }
+    case "RECALC_FIRING_METER": {
+      return computeAndStoreFiringMeter(state, action.payload.week, action.payload.winPct, action.payload.goalsDelta);
+    }
+    case "CHECK_FIRING": {
+      if (state.firing.fired) return state;
+      const week = action.payload.week ?? state.firing.lastWeekComputed ?? 1;
+      const next = computeAndStoreFiringMeter(state, week, action.payload.winPct, action.payload.goalsDelta);
+      if (next.coach.tenureYear === 1 && action.payload.checkpoint === "WEEKLY") return next;
+
+      const p = action.payload.checkpoint === "WEEKLY" ? next.firing.pWeekly : next.firing.pSeasonEnd;
+      const key = `FIRE|S${next.season}|Y${next.coach.tenureYear}|W${week}|${action.payload.checkpoint}`;
+      const fire = shouldFireDeterministic({ saveSeed: next.saveSeed, key, p });
+      if (!fire) return next;
+
+      return {
+        ...next,
+        firing: {
+          ...next.firing,
+          fired: true,
+          firedAt: { season: next.season, week, checkpoint: action.payload.checkpoint },
+        },
+        memoryLog: addMemoryEvent(next, "FIRED", { season: next.season, week, checkpoint: action.payload.checkpoint, p }),
+      };
+    }
     case "RECALC_OWNER_FINANCIAL": {
       const season = action.payload?.season ?? state.season;
       const financialRating = computeFinancialRating(state, season);
@@ -1328,12 +1504,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
-      return {
+      let nextState = {
         ...next,
         league,
         hub,
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777 }),
       };
+      if (state.game.weekType === "REGULAR_SEASON") {
+        nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
+        if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
+          nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
+        }
+      }
+      return nextState;
     }
     case "EXIT_GAME":
       return {
@@ -1370,7 +1553,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
 
-      return { ...state, league, hub };
+      let nextState = { ...state, league, hub };
+      if (gameType === "REGULAR_SEASON") {
+        nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
+        if (week >= REGULAR_SEASON_WEEKS) {
+          nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
+        }
+      }
+      return nextState;
     }
     case "RESET":
       return createInitialState();
@@ -1446,6 +1636,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
+    firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
   };
 }
 
@@ -1467,6 +1658,7 @@ function loadState(): GameState {
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
+      firing: { ...initial.firing, ...migrated.firing },
       owner: { ...initial.owner, ...migrated.owner },
       teamFinances: {
         ...initial.teamFinances,
