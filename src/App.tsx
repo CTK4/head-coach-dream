@@ -29,6 +29,9 @@ import OffseasonTrainingCamp from "@/pages/hub/offseason/TrainingCamp";
 import TrainingCamp from "@/pages/hub/TrainingCamp";
 import PreseasonStep from "@/pages/hub/offseason/Preseason";
 import CutDowns from "@/pages/hub/offseason/CutDowns";
+import Finance from "@/pages/hub/Finance";
+import DepthChart from "@/pages/hub/DepthChart";
+import StaffManagement from "@/pages/hub/StaffManagement";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +97,9 @@ const App = () => (
               <Route path="roster" element={<Roster />} />
               <Route path="draft" element={<Draft />} />
               <Route path="training-camp" element={<TrainingCamp />} />
+              <Route path="depth-chart" element={<DepthChart />} />
+              <Route path="staff" element={<StaffManagement />} />
+              <Route path="finance" element={<Finance />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="regular-season" element={<RegularSeason />} />
               <Route path="playcall" element={<Playcall />} />
