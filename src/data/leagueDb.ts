@@ -74,7 +74,6 @@ const contractsById = new Map(contracts.map((c) => [c.contractId, c]));
 export type PositionCoachRole = "QB_COACH" | "OL_COACH" | "DL_COACH" | "LB_COACH" | "DB_COACH" | "RB_COACH" | "WR_COACH";
 
 export const AUTO_ACCEPT_COACH_REP_MAX = 50;
-export const SAFETY_VALVE_REP_MAX = 65;
 
 function isFreeAgentPersonnel(person: PersonnelRow): boolean {
   const status = String(person.status ?? "").toUpperCase();
@@ -84,10 +83,6 @@ function isFreeAgentPersonnel(person: PersonnelRow): boolean {
 
 function coachAutoAccept(person: PersonnelRow): boolean {
   return String(person.status ?? "").toUpperCase() === "FREE_AGENT" && Number(person.reputation ?? 0) <= AUTO_ACCEPT_COACH_REP_MAX;
-}
-
-export function isSafetyValveCoach(person: PersonnelRow): boolean {
-  return String(person.status ?? "").toUpperCase() === "FREE_AGENT" && Number(person.reputation ?? 0) <= SAFETY_VALVE_REP_MAX;
 }
 
 export function isCoachInterested(args: {

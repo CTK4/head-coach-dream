@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { expectedSalary, offerSalary, type SalaryOfferLevel } from "@/engine/staffSalary";
-import { getCoordinatorFreeAgents, getCoordinatorFreeAgentsAll, isSafetyValveCoach, type PersonnelRow } from "@/data/leagueDb";
+import { getCoordinatorFreeAgents, getCoordinatorFreeAgentsAll, type PersonnelRow } from "@/data/leagueDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,12 +50,9 @@ export default function CoordinatorHiring() {
     const seen = new Set(strict.map((x) => x.p.personId));
     const need1 = MIN_REQUIRED - strict.length;
 
-    const safetyPool = getCoordinatorFreeAgentsAll(role)
+    const safetyAffordable: Cand[] = getCoordinatorFreeAgentsAll(role)
       .filter((p) => !hiredSet.has(p.personId))
       .filter((p) => !seen.has(p.personId))
-      .filter((p) => isSafetyValveCoach(p));
-
-    const safetyAffordable: Cand[] = safetyPool
       .map((p) => {
         const exp = expectedSalary(role, Number(p.reputation ?? 60));
         const salary = offerSalary(exp, level);
@@ -71,7 +68,8 @@ export default function CoordinatorHiring() {
     const seen2 = new Set(base.map((x) => x.p.personId));
     const need2 = MIN_REQUIRED - base.length;
 
-    const emergencyAny: Cand[] = safetyPool
+    const emergencyAny: Cand[] = getCoordinatorFreeAgentsAll(role)
+      .filter((p) => !hiredSet.has(p.personId))
       .filter((p) => !seen2.has(p.personId))
       .map((p) => {
         const exp = expectedSalary(role, Number(p.reputation ?? 60));

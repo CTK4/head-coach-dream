@@ -5,7 +5,6 @@ import {
   getAssistantHeadCoachCandidatesAll,
   getPositionCoachCandidates,
   getPositionCoachCandidatesAll,
-  isSafetyValveCoach,
   type PersonnelRow,
   type PositionCoachRole,
 } from "@/data/leagueDb";
@@ -87,12 +86,9 @@ export default function AssistantHiring() {
     const seen = new Set(strict.map((x) => x.p.personId));
     const need1 = MIN_REQUIRED - strict.length;
 
-    const safetyPool = getAllPool(activeRole)
+    const safetyAffordable: Cand[] = getAllPool(activeRole)
       .filter((p) => !hiredSet.has(p.personId))
       .filter((p) => !seen.has(p.personId))
-      .filter((p) => isSafetyValveCoach(p));
-
-    const safetyAffordable: Cand[] = safetyPool
       .map((p) => {
         const exp = expectedSalary(activeRole as any, Number(p.reputation ?? 55));
         const salary = offerSalary(exp, level);
@@ -108,7 +104,8 @@ export default function AssistantHiring() {
     const seen2 = new Set(base.map((x) => x.p.personId));
     const need2 = MIN_REQUIRED - base.length;
 
-    const emergencyAny: Cand[] = safetyPool
+    const emergencyAny: Cand[] = getAllPool(activeRole)
+      .filter((p) => !hiredSet.has(p.personId))
       .filter((p) => !seen2.has(p.personId))
       .map((p) => {
         const exp = expectedSalary(activeRole as any, Number(p.reputation ?? 55));
