@@ -4,6 +4,14 @@ import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gam
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import type {
+  CampSettings,
+  CutDecision,
+  FreeAgentOffer,
+  Prospect,
+  ResignDecision,
+  ScoutingCombineResult,
+} from "@/engine/offseasonData";
 import {
   PRESEASON_WEEKS,
   REGULAR_SEASON_WEEKS,
@@ -32,6 +40,17 @@ export type OffseasonState = {
   stepId: OffseasonStepId;
   completed: Record<OffseasonTaskId, boolean>;
   stepsComplete: Partial<Record<OffseasonStepId, boolean>>;
+};
+
+export type OffseasonData = {
+  resigning: { decisions: Record<string, ResignDecision> };
+  combine: { results: ScoutingCombineResult[]; generated: boolean };
+  tampering: { offers: FreeAgentOffer[] };
+  freeAgency: { offers: FreeAgentOffer[]; signings: string[] };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean> };
+  draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
+  camp: { settings: CampSettings };
+  cutDowns: { decisions: Record<string, CutDecision> };
 };
 
 export type OrgRoles = {
@@ -107,6 +126,7 @@ export type GameState = {
   phase: GamePhase;
   careerStage: CareerStage;
   offseason: OffseasonState;
+  offseasonData: OffseasonData;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
@@ -150,6 +170,14 @@ export type GameAction =
   | { type: "OFFSEASON_COMPLETE_STEP"; payload: { stepId: OffseasonStepId } }
   | { type: "OFFSEASON_ADVANCE_STEP" }
   | { type: "OFFSEASON_SET_STEP"; payload: { stepId: OffseasonStepId } }
+  | { type: "RESIGN_SET_DECISION"; payload: { playerId: string; decision: ResignDecision } }
+  | { type: "COMBINE_GENERATE" }
+  | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
+  | { type: "FA_SIGN"; payload: { offerId: string } }
+  | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
+  | { type: "DRAFT_PICK"; payload: { prospectId: string } }
+  | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
+  | { type: "CUT_TOGGLE"; payload: { playerId: string } }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
@@ -174,6 +202,16 @@ function createInitialState(): GameState {
       stepId: OFFSEASON_STEPS[0].id,
       completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
       stepsComplete: {},
+    },
+    offseasonData: {
+      resigning: { decisions: {} },
+      combine: { results: [], generated: false },
+      tampering: { offers: [] },
+      freeAgency: { offers: [], signings: [] },
+      preDraft: { board: [], visits: {} },
+      draft: { board: [], picks: [], completed: false },
+      camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
+      cutDowns: { decisions: {} },
     },
     interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
     offers: [],
@@ -306,7 +344,86 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!state.offseason.stepsComplete[cur]) return state;
       const next = nextOffseasonStepId(cur);
       if (!next) return state;
-      return { ...state, offseason: { ...state.offseason, stepId: next } };
+      const stage: CareerStage =
+        next === "TRAINING_CAMP"
+          ? "TRAINING_CAMP"
+          : next === "PRESEASON"
+            ? "PRESEASON"
+            : next === "CUT_DOWNS"
+              ? "OFFSEASON_HUB"
+              : state.careerStage;
+      return { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: next } };
+    }
+    case "RESIGN_SET_DECISION":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          resigning: { decisions: { ...state.offseasonData.resigning.decisions, [action.payload.playerId]: action.payload.decision } },
+        },
+      };
+    case "COMBINE_GENERATE":
+      return {
+        ...state,
+        offseasonData: { ...state.offseasonData, combine: { ...state.offseasonData.combine, generated: true } },
+      };
+    case "TAMPERING_ADD_OFFER":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          tampering: { offers: [action.payload.offer, ...state.offseasonData.tampering.offers].slice(0, 30) },
+        },
+      };
+    case "FA_SIGN": {
+      const offer = state.offseasonData.freeAgency.offers.find((o) => o.id === action.payload.offerId);
+      if (!offer) return state;
+      if (state.offseasonData.freeAgency.signings.includes(offer.playerId)) return state;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: { ...state.offseasonData.freeAgency, signings: [...state.offseasonData.freeAgency.signings, offer.playerId] },
+        },
+      };
+    }
+    case "PREDRAFT_TOGGLE_VISIT": {
+      const cur = !!state.offseasonData.preDraft.visits[action.payload.prospectId];
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: { ...state.offseasonData.preDraft, visits: { ...state.offseasonData.preDraft.visits, [action.payload.prospectId]: !cur } },
+        },
+      };
+    }
+    case "DRAFT_PICK": {
+      if (state.offseasonData.draft.completed) return state;
+      const p = state.offseasonData.draft.board.find((x) => x.id === action.payload.prospectId);
+      if (!p) return state;
+      const board = state.offseasonData.draft.board.filter((x) => x.id !== p.id);
+      const picks = [...state.offseasonData.draft.picks, p];
+      const completed = picks.length >= 7;
+      return { ...state, offseasonData: { ...state.offseasonData, draft: { ...state.offseasonData.draft, board, picks, completed } } };
+    }
+    case "CAMP_SET":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          camp: { settings: { ...state.offseasonData.camp.settings, ...action.payload.settings } },
+        },
+      };
+    case "CUT_TOGGLE": {
+      const cur = state.offseasonData.cutDowns.decisions[action.payload.playerId];
+      const next = cur?.keep === false ? { keep: true } : { keep: false };
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          cutDowns: { decisions: { ...state.offseasonData.cutDowns.decisions, [action.payload.playerId]: next } },
+        },
+      };
     }
     case "AUTO_ADVANCE_STAGE_IF_READY": {
       const step = state.offseason.stepId;
@@ -458,6 +575,18 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
         stepsComplete: {},
       } as OffseasonState),
+    offseasonData:
+      oldState.offseasonData ??
+      ({
+        resigning: { decisions: {} },
+        combine: { results: [], generated: false },
+        tampering: { offers: [] },
+        freeAgency: { offers: [], signings: [] },
+        preDraft: { board: [], visits: {} },
+        draft: { board: [], picks: [], completed: false },
+        camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
+        cutDowns: { decisions: {} },
+      } as OffseasonData),
     scheme: oldState.scheme ?? { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {
@@ -494,6 +623,18 @@ function loadState(): GameState {
         ...migrated.offseason,
         completed: { ...initial.offseason.completed, ...migrated.offseason?.completed },
         stepsComplete: { ...initial.offseason.stepsComplete, ...migrated.offseason?.stepsComplete },
+      },
+      offseasonData: {
+        ...initial.offseasonData,
+        ...migrated.offseasonData,
+        resigning: { ...initial.offseasonData.resigning, ...migrated.offseasonData?.resigning },
+        combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
+        tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
+        freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
+        preDraft: { ...initial.offseasonData.preDraft, ...migrated.offseasonData?.preDraft },
+        draft: { ...initial.offseasonData.draft, ...migrated.offseasonData?.draft },
+        camp: { ...initial.offseasonData.camp, ...migrated.offseasonData?.camp },
+        cutDowns: { ...initial.offseasonData.cutDowns, ...migrated.offseasonData?.cutDowns },
       },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
