@@ -16,16 +16,21 @@ type DominantTrait =
 const TRAIT_PRIORITY = [
   "impatient",
   "short-term results driven",
+  "short term results",
   "volatile",
   "media",
   "media-sensitive",
+  "media sensitive",
   "disciplined",
+  "discipline",
   "loyal",
   "prideful",
   "aggressive",
+  "aggressive-growth",
   "conservative",
   "risk-averse",
   "risk averse",
+  "measured-risk",
   "hands-on",
   "controlling",
 ] as const;
@@ -33,23 +38,30 @@ const TRAIT_PRIORITY = [
 const TRAIT_BUCKETS: Record<(typeof TRAIT_PRIORITY)[number], DominantTrait> = {
   impatient: "impatient",
   "short-term results driven": "impatient",
+  "short term results": "impatient",
   volatile: "volatile",
   media: "media_sensitive",
   "media-sensitive": "media_sensitive",
+  "media sensitive": "media_sensitive",
   disciplined: "disciplined",
+  discipline: "disciplined",
   loyal: "loyal",
   prideful: "prideful",
   aggressive: "aggressive",
+  "aggressive-growth": "aggressive",
   conservative: "risk_averse",
   "risk-averse": "risk_averse",
   "risk averse": "risk_averse",
+  "measured-risk": "risk_averse",
   "hands-on": "controlling",
   controlling: "controlling",
 };
 
 function getDominantTrait(ownerTags: string[]): DominantTrait {
-  const normalizedTags = ownerTags.map((tag) => tag.toLowerCase());
-  const match = TRAIT_PRIORITY.find((tag) => normalizedTags.includes(tag));
+  const normalizedTags = ownerTags.map((tag) => tag.toLowerCase().trim());
+  const match = TRAIT_PRIORITY.find((tag) =>
+    normalizedTags.some((ownerTag) => ownerTag === tag || ownerTag.includes(tag) || tag.includes(ownerTag))
+  );
   return match ? TRAIT_BUCKETS[match] : "neutral";
 }
 
