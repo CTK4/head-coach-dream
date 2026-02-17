@@ -19,6 +19,7 @@ export type InterviewQuestion = {
 };
 
 const allItems = (questionsJson as any).items as InterviewQuestion[];
+const MAX_INTERVIEW_QUESTIONS = 5;
 
 export type AxisTotals = Record<string, number>;
 
@@ -43,9 +44,8 @@ function resolveProfile(teamId: string): TeamInterviewProfile {
   return interviewProfiles[teamId] ?? interviewProfiles.MILWAUKEE_NORTHSHORE;
 }
 
-function resolveQuestionCount(teamId: string, saveSeed: number): number {
-  const rng = mulberry32(createPhaseSeed(saveSeed, teamId, "INTERVIEW_COUNT"));
-  return 5 + Math.floor(rng() * 6);
+function resolveQuestionCount(_teamId: string, _saveSeed: number): number {
+  return MAX_INTERVIEW_QUESTIONS;
 }
 
 export function selectInterviewQuestions(teamId: string, saveSeed: number, count?: number): InterviewQuestion[] {
@@ -57,7 +57,8 @@ export function selectInterviewQuestions(teamId: string, saveSeed: number, count
 
   const rng = mulberry32(createPhaseSeed(saveSeed, teamId, "INTERVIEW"));
   const ranked = [...shuffleDeterministic(preferred, rng), ...shuffleDeterministic(secondary, rng)];
-  return ranked.slice(0, count ?? resolveQuestionCount(teamId, saveSeed));
+  const selectedCount = Math.min(count ?? resolveQuestionCount(teamId, saveSeed), MAX_INTERVIEW_QUESTIONS);
+  return ranked.slice(0, selectedCount);
 }
 
 function weightedScore(axisTotals: AxisTotals, weights: Record<string, number> = {}): number {
