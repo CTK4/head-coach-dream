@@ -1,15 +1,15 @@
 import { useMemo } from "react";
 import { useGame } from "@/context/GameContext";
-import { genCombine } from "@/engine/offseasonGen";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function Combine() {
   const { state, dispatch } = useGame();
-  const seed = state.saveSeed ^ 0x22222222;
-
-  const results = useMemo(() => (state.offseasonData.combine.generated ? genCombine(seed, 40) : []), [state.offseasonData.combine.generated, seed]);
+  const results = useMemo(
+    () => (state.offseasonData.combine.generated ? state.offseasonData.combine.results : []),
+    [state.offseasonData.combine.generated, state.offseasonData.combine.results]
+  );
 
   const generate = () => dispatch({ type: "COMBINE_GENERATE" });
   const completeStep = () => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "COMBINE" } });

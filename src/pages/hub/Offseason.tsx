@@ -24,7 +24,7 @@ export default function Offseason() {
   const step = state.offseason.stepId;
   const stepMeta = OFFSEASON_STEPS.find((s) => s.id === step)!;
   const goCurrent = () => navigate(stepRoute[step]);
-  const ready = useMemo(() => !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId, [state.orgRoles.ocCoachId, state.orgRoles.dcCoachId]);
+  const ready = useMemo(() => !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId && !!state.orgRoles.stcCoachId, [state.orgRoles.ocCoachId, state.orgRoles.dcCoachId, state.orgRoles.stcCoachId]);
 
   return (
     <div className="p-4 md:p-8 space-y-4">

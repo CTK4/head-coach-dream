@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
+import draftClassJson from "@/data/draftClass.json";
 import { getTeams } from "@/data/leagueDb";
 import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
+import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import type {
   CampSettings,
@@ -46,8 +48,16 @@ export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
   combine: { results: ScoutingCombineResult[]; generated: boolean };
   tampering: { offers: FreeAgentOffer[] };
-  freeAgency: { offers: FreeAgentOffer[]; signings: string[] };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean> };
+  freeAgency: {
+    offers: FreeAgentOffer[];
+    signings: string[];
+    rejected: Record<string, boolean>;
+    withdrawn: Record<string, boolean>;
+    capTotal: number;
+    capUsed: number;
+    capHitsByPlayerId: Record<string, number>;
+  };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean> };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
@@ -57,6 +67,7 @@ export type OrgRoles = {
   hcCoachId?: string;
   ocCoachId?: string;
   dcCoachId?: string;
+  stcCoachId?: string;
   ahcCoachId?: string;
 };
 
@@ -95,6 +106,39 @@ export type MemoryEvent = { type: string; season: number; week?: number; payload
 
 const CURRENT_SAVE_VERSION = 2;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
+type DraftRow = Record<string, any>;
+const DRAFT_ROWS = draftClassJson as DraftRow[];
+
+const num = (v: any, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const str = (v: any, d = "") => (v == null ? d : String(v));
+
+function toProspect(r: DraftRow, idx: number): Prospect {
+  const id = str(r["Player ID"], `DC_${String(idx + 1).padStart(4, "0")}`);
+  const name = str(r["Name"], "Unknown");
+  const pos = str(r["POS"], "UNK").toUpperCase();
+  const grade = Math.round(num(r["Grade"], num(r["Overall"], 70)));
+  const ras = Math.round(num(r["RAS"], 50));
+  const interview = Math.round(num(r["Interview"], 50));
+  const archetype = str(r["Archetype"], str(r["Style"], "Prospect"));
+  return { id, name, pos, archetype, grade, ras, interview };
+}
+
+function draftBoard(): Prospect[] {
+  const rows = DRAFT_ROWS.slice();
+  rows.sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999));
+  return rows.map(toProspect);
+}
+
+function mergeOffers(a: FreeAgentOffer[], b: FreeAgentOffer[]): FreeAgentOffer[] {
+  const out: FreeAgentOffer[] = [];
+  const seen = new Set<string>();
+  for (const o of [...a, ...b]) {
+    if (seen.has(o.playerId)) continue;
+    seen.add(o.playerId);
+    out.push(o);
+  }
+  return out;
+}
 
 export type AssistantStaff = {
   assistantHcId?: string;
@@ -173,8 +217,12 @@ export type GameAction =
   | { type: "RESIGN_SET_DECISION"; payload: { playerId: string; decision: ResignDecision } }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
+  | { type: "FA_INIT_OFFERS" }
+  | { type: "FA_REJECT"; payload: { playerId: string } }
+  | { type: "FA_WITHDRAW"; payload: { offerId: string } }
   | { type: "FA_SIGN"; payload: { offerId: string } }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
+  | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
@@ -207,8 +255,16 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       combine: { results: [], generated: false },
       tampering: { offers: [] },
-      freeAgency: { offers: [], signings: [] },
-      preDraft: { board: [], visits: {} },
+      freeAgency: {
+        offers: [],
+        signings: [],
+        rejected: {},
+        withdrawn: {},
+        capTotal: 82_000_000,
+        capUsed: 54_000_000,
+        capHitsByPlayerId: {},
+      },
+      preDraft: { board: [], visits: {}, workouts: {} },
       draft: { board: [], picks: [], completed: false },
       camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
       cutDowns: { decisions: {} },
@@ -326,7 +382,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       if (id === "STAFF") {
-        const ok = !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId;
+        const ok = !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId && !!state.orgRoles.stcCoachId;
         if (!ok) return state;
         return state;
       }
@@ -337,8 +393,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const stepsComplete = { ...state.offseason.stepsComplete, [action.payload.stepId]: true };
       return { ...state, offseason: { ...state.offseason, stepsComplete } };
     }
-    case "OFFSEASON_SET_STEP":
-      return { ...state, offseason: { ...state.offseason, stepId: action.payload.stepId } };
+    case "OFFSEASON_SET_STEP": {
+      const stepId = action.payload.stepId;
+      if (stepId === "PRE_DRAFT" && !state.offseasonData.preDraft.board.length) {
+        return {
+          ...state,
+          offseason: { ...state.offseason, stepId },
+          offseasonData: { ...state.offseasonData, preDraft: { ...state.offseasonData.preDraft, board: draftBoard() } },
+        };
+      }
+      if (stepId === "DRAFT" && !state.offseasonData.draft.board.length) {
+        return {
+          ...state,
+          offseason: { ...state.offseason, stepId },
+          offseasonData: { ...state.offseasonData, draft: { ...state.offseasonData.draft, board: draftBoard() } },
+        };
+      }
+      return { ...state, offseason: { ...state.offseason, stepId } };
+    }
     case "OFFSEASON_ADVANCE_STEP": {
       const cur = state.offseason.stepId;
       if (!state.offseason.stepsComplete[cur]) return state;
@@ -362,11 +434,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           resigning: { decisions: { ...state.offseasonData.resigning.decisions, [action.payload.playerId]: action.payload.decision } },
         },
       };
-    case "COMBINE_GENERATE":
-      return {
-        ...state,
-        offseasonData: { ...state.offseasonData, combine: { ...state.offseasonData.combine, generated: true } },
-      };
+    case "COMBINE_GENERATE": {
+      const results = draftBoard()
+        .slice(0, 80)
+        .map((p, i) => ({
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          forty: num(DRAFT_ROWS[i]?.["40"], 4.75),
+          shuttle: num(DRAFT_ROWS[i]?.["Shuttle"], 4.35),
+          threeCone: num(DRAFT_ROWS[i]?.["ThreeCone"], 7.15),
+          grade: p.ras,
+        }));
+      return { ...state, offseasonData: { ...state.offseasonData, combine: { results, generated: true } } };
+    }
     case "TAMPERING_ADD_OFFER":
       return {
         ...state,
@@ -375,15 +456,62 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           tampering: { offers: [action.payload.offer, ...state.offseasonData.tampering.offers].slice(0, 30) },
         },
       };
-    case "FA_SIGN": {
-      const offer = state.offseasonData.freeAgency.offers.find((o) => o.id === action.payload.offerId);
-      if (!offer) return state;
-      if (state.offseasonData.freeAgency.signings.includes(offer.playerId)) return state;
+    case "FA_INIT_OFFERS": {
+      if (state.offseason.stepId !== "FREE_AGENCY") return state;
+      if (state.offseasonData.freeAgency.offers.length) return state;
+
+      const seed = state.saveSeed ^ 0x44444444;
+      const pool = genFreeAgents(seed, 25);
+      const carry = state.offseasonData.tampering.offers.slice(0, 10);
+      const offers = mergeOffers(carry, pool);
+
+      return {
+        ...state,
+        offseasonData: { ...state.offseasonData, freeAgency: { ...state.offseasonData.freeAgency, offers } },
+      };
+    }
+    case "FA_REJECT":
       return {
         ...state,
         offseasonData: {
           ...state.offseasonData,
-          freeAgency: { ...state.offseasonData.freeAgency, signings: [...state.offseasonData.freeAgency.signings, offer.playerId] },
+          freeAgency: {
+            ...state.offseasonData.freeAgency,
+            rejected: { ...state.offseasonData.freeAgency.rejected, [action.payload.playerId]: true },
+          },
+        },
+      };
+    case "FA_WITHDRAW":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: {
+            ...state.offseasonData.freeAgency,
+            withdrawn: { ...state.offseasonData.freeAgency.withdrawn, [action.payload.offerId]: true },
+          },
+        },
+      };
+    case "FA_SIGN": {
+      const fa = state.offseasonData.freeAgency;
+      const offer = fa.offers.find((o) => o.id === action.payload.offerId);
+      if (!offer) return state;
+      if (fa.signings.includes(offer.playerId)) return state;
+      if (fa.rejected[offer.playerId]) return state;
+      if (fa.withdrawn[offer.id]) return state;
+      const remaining = fa.capTotal - fa.capUsed;
+      if (remaining < offer.apy) return state;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: {
+            ...fa,
+            signings: [...fa.signings, offer.playerId],
+            capUsed: fa.capUsed + offer.apy,
+            capHitsByPlayerId: { ...fa.capHitsByPlayerId, [offer.playerId]: offer.apy },
+            withdrawn: { ...fa.withdrawn, [offer.id]: true },
+          },
         },
       };
     }
@@ -394,6 +522,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         offseasonData: {
           ...state.offseasonData,
           preDraft: { ...state.offseasonData.preDraft, visits: { ...state.offseasonData.preDraft.visits, [action.payload.prospectId]: !cur } },
+        },
+      };
+    }
+    case "PREDRAFT_TOGGLE_WORKOUT": {
+      const cur = !!state.offseasonData.preDraft.workouts[action.payload.prospectId];
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: {
+            ...state.offseasonData.preDraft,
+            workouts: { ...state.offseasonData.preDraft.workouts, [action.payload.prospectId]: !cur },
+          },
         },
       };
     }
@@ -581,8 +722,16 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         combine: { results: [], generated: false },
         tampering: { offers: [] },
-        freeAgency: { offers: [], signings: [] },
-        preDraft: { board: [], visits: {} },
+        freeAgency: {
+          offers: [],
+          signings: [],
+          rejected: {},
+          withdrawn: {},
+          capTotal: 82_000_000,
+          capUsed: 54_000_000,
+          capHitsByPlayerId: {},
+        },
+        preDraft: { board: [], visits: {}, workouts: {} },
         draft: { board: [], picks: [], completed: false },
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },
