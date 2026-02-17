@@ -35,6 +35,20 @@ const Playcall = () => {
     dispatch({ type: "RESOLVE_PLAY", payload: { playType } });
   };
 
+  const endGame = () => {
+    const type = state.game.weekType;
+    dispatch({ type: "FINISH_GAME" });
+    setStarted(false);
+
+    if (type === "PRESEASON") {
+      navigate("/hub/preseason");
+    } else if (type === "REGULAR_SEASON") {
+      navigate("/hub/regular-season");
+    } else {
+      navigate("/hub");
+    }
+  };
+
   if (!started) {
     return (
       <div className="min-h-screen p-4 md:p-8">
@@ -123,6 +137,11 @@ const Playcall = () => {
         {/* New Game */}
         <Button variant="secondary" className="w-full" onClick={handleStart}>
           New Game
+        </Button>
+
+        {/* End Game */}
+        <Button variant="secondary" className="w-full" onClick={endGame}>
+          End Game
         </Button>
       </div>
     </div>

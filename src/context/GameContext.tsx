@@ -183,8 +183,9 @@ export type GameAction =
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
-  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType: GameType; weekNumber: number } }
+  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number } }
   | { type: "RESOLVE_PLAY"; payload: { playType: string } }
+  | { type: "FINISH_GAME" }
   | { type: "RESET" };
 
 function mulberry32(seed: number): () => number {
@@ -367,6 +368,31 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         game: { ...g, ballOn, down, distance, homeScore, lastResult, seed: g.seed + 1 },
+      };
+    }
+
+    case "FINISH_GAME": {
+      let hub = { ...state.hub };
+
+      if (state.game.weekType === "PRESEASON") {
+        hub = { ...hub, preseasonWeek: hub.preseasonWeek + 1 };
+      } else if (state.game.weekType === "REGULAR_SEASON") {
+        hub = { ...hub, regularSeasonWeek: hub.regularSeasonWeek + 1 };
+      }
+
+      return {
+        ...state,
+        hub,
+        game: {
+          opponentTeamId: undefined,
+          homeScore: 0,
+          awayScore: 0,
+          quarter: 1,
+          down: 1,
+          distance: 10,
+          ballOn: 25,
+          seed: state.game.seed + 1,
+        },
       };
     }
 
