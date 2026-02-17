@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import draftClassJson from "@/data/draftClass.json";
 import {
+  clearPersonnelTeam,
   cutPlayerToFreeAgent,
+  expireContract,
   getPersonnelById,
+  getPersonnelContract,
   getPlayersByTeam,
   getTeamRosterPlayers,
   getTeams,
@@ -17,6 +20,7 @@ import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/
 import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import type {
   CampSettings,
   CutDecision,
@@ -162,6 +166,10 @@ export type AssistantStaff = {
   wrCoachId?: string;
 };
 
+export type BuyoutLedger = { bySeason: Record<number, number> };
+export type DepthChart = { startersByPos: Record<string, string | undefined> };
+export type PreseasonRotation = { byPlayerId: Record<string, number> };
+
 export type GameState = {
   coach: {
     name: string;
@@ -192,10 +200,13 @@ export type GameState = {
   week?: number;
   saveVersion: number;
   memoryLog: MemoryEvent[];
-  teamFinances: { cash: number };
-  owner: { approval: number; budgetBreaches: number };
+  teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
+  owner: { approval: number; budgetBreaches: number; financialRating: number; jobSecurity: number };
   staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
   rosterMgmt: { active: Record<string, true>; cuts: Record<string, true>; finalized: boolean };
+  buyouts: BuyoutLedger;
+  depthChart: DepthChart;
+  preseason: { rotation: PreseasonRotation; appliedWeeks: Record<number, true> };
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
@@ -270,6 +281,13 @@ export type GameAction =
   | { type: "TOGGLE_ACTIVE"; payload: { playerId: string } }
   | { type: "FINALIZE_CUTS" }
   | { type: "OWNER_PENALTY"; payload: { reason: string; amount: number } }
+  | { type: "FIRE_STAFF"; payload: { personId: string; roleLabel: string; spreadSeasons: 1 | 2 } }
+  | { type: "CHARGE_BUYOUTS_FOR_SEASON"; payload: { season: number } }
+  | { type: "SET_STARTER"; payload: { slot: string; playerId: string } }
+  | { type: "RECALC_OWNER_FINANCIAL"; payload?: { season?: number } }
+  | { type: "INIT_PRESEASON_ROTATION" }
+  | { type: "SET_PLAYER_SNAP"; payload: { playerId: string; pct: number } }
+  | { type: "APPLY_PRESEASON_DEV"; payload: { week: number } }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
@@ -319,10 +337,13 @@ function createInitialState(): GameState {
     week: 1,
     saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
-    teamFinances: { cash: 60_000_000 },
-    owner: { approval: 65, budgetBreaches: 0 },
+    teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
+    owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
     staffBudget: { total: 18_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
+    buyouts: { bySeason: {} },
+    depthChart: { startersByPos: {} },
+    preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
     staff: {},
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
@@ -429,18 +450,19 @@ function addMemoryEvent(state: GameState, type: string, payload: unknown): Memor
 }
 
 function applyOwnerPenalty(state: GameState, amount: number, reason: string): GameState {
-  return {
+  const approval = clamp100(state.owner.approval - amount);
+  const budgetBreaches = state.owner.budgetBreaches + 1;
+  const season = state.season;
+  const tmp: GameState = {
     ...state,
-    owner: {
-      ...state.owner,
-      approval: clamp100(state.owner.approval - amount),
-      budgetBreaches: state.owner.budgetBreaches + 1,
-    },
+    owner: { ...state.owner, approval, budgetBreaches },
     memoryLog: addMemoryEvent(state, "OWNER_PENALTY", { reason, amount }),
   };
+  const financialRating = computeFinancialRating(tmp, season);
+  return { ...tmp, owner: { ...tmp.owner, financialRating, jobSecurity: computeJobSecurity(approval, financialRating) } };
 }
 
-function canAffordStaffBudget(state: GameState, salary: number) {
+function canAffordStaff(state: GameState, salary: number) {
   return state.staffBudget.used + salary <= state.staffBudget.total;
 }
 
@@ -448,7 +470,7 @@ function addStaffSalaryAndCash(state: GameState, personId: string, salary: numbe
   const nextCash = state.teamFinances.cash - salary;
   const base: GameState = {
     ...state,
-    teamFinances: { cash: nextCash },
+    teamFinances: { ...state.teamFinances, cash: nextCash },
     staffBudget: {
       ...state.staffBudget,
       used: state.staffBudget.used + salary,
@@ -457,6 +479,176 @@ function addStaffSalaryAndCash(state: GameState, personId: string, salary: numbe
   };
   if (nextCash >= 0) return base;
   return applyOwnerPenalty(base, 6, "Staff payroll exceeded available cash");
+}
+
+function computeFinancialRating(state: GameState, season: number) {
+  const dm = state.teamFinances.deadMoneyBySeason[season] ?? 0;
+  const cash = state.teamFinances.cash;
+  const dmHit = Math.min(30, (dm / 5_000_000) * 4);
+  const cashHit = cash < 0 ? Math.min(25, (-cash / 5_000_000) * 5) : 0;
+  const breachHit = Math.min(20, state.owner.budgetBreaches * 4);
+  return clamp100(78 - dmHit - cashHit - breachHit);
+}
+
+function computeJobSecurity(approval: number, financialRating: number) {
+  return clamp100(approval * 0.62 + financialRating * 0.38);
+}
+
+function addBuyoutToSeason(state: GameState, season: number, amount: number): GameState {
+  if (amount <= 0) return state;
+  const bySeason = { ...state.buyouts.bySeason, [season]: (state.buyouts.bySeason[season] ?? 0) + amount };
+  return { ...state, buyouts: { bySeason } };
+}
+
+function addDeadMoney(state: GameState, season: number, amount: number): GameState {
+  if (amount <= 0) return state;
+  return {
+    ...state,
+    teamFinances: {
+      ...state.teamFinances,
+      deadMoneyBySeason: { ...state.teamFinances.deadMoneyBySeason, [season]: (state.teamFinances.deadMoneyBySeason[season] ?? 0) + amount },
+    },
+  };
+}
+
+function refundStaffBudget(state: GameState, personId: string): GameState {
+  const cur = state.staffBudget.byPersonId[personId] ?? 0;
+  if (!cur) return state;
+  const byPersonId = { ...state.staffBudget.byPersonId };
+  delete byPersonId[personId];
+  return { ...state, staffBudget: { ...state.staffBudget, used: Math.max(0, state.staffBudget.used - cur), byPersonId } };
+}
+
+function chargeBuyouts(state: GameState, season: number): GameState {
+  const due = state.buyouts.bySeason[season] ?? 0;
+  if (!due) return state;
+  const bySeason = { ...state.buyouts.bySeason };
+  delete bySeason[season];
+  let next: GameState = {
+    ...state,
+    buyouts: { bySeason },
+    teamFinances: {
+      ...state.teamFinances,
+      cash: state.teamFinances.cash - due,
+      deadMoneyBySeason: { ...state.teamFinances.deadMoneyBySeason, [season]: due },
+    },
+    memoryLog: addMemoryEvent(state, "BUYOUT_CHARGED", { season, amount: due }),
+  };
+  const financialRating = computeFinancialRating(next, season);
+  next = { ...next, owner: { ...next.owner, financialRating, jobSecurity: computeJobSecurity(next.owner.approval, financialRating) } };
+  if (next.teamFinances.cash < 0) next = applyOwnerPenalty(next, 4, "Cash went negative paying buyouts");
+  return next;
+}
+
+function isActive53(state: GameState) {
+  return state.rosterMgmt.finalized && Object.keys(state.rosterMgmt.active).length === 53;
+}
+
+function normalizePosKey(pos: string) {
+  const p = pos.toUpperCase();
+  if (["QB"].includes(p)) return "QB";
+  if (["RB"].includes(p)) return "RB";
+  if (["WR"].includes(p)) return "WR";
+  if (["TE"].includes(p)) return "TE";
+  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
+  if (["EDGE", "DE", "DT", "DL"].includes(p)) return "DL";
+  if (["LB"].includes(p)) return "LB";
+  if (["CB", "S", "DB"].includes(p)) return "DB";
+  return "OTHER";
+}
+
+function normalizeSlotToGroup(slot: string) {
+  const s = slot.toUpperCase();
+  if (s.startsWith("QB")) return "QB";
+  if (s.startsWith("RB")) return "RB";
+  if (s.startsWith("WR")) return "WR";
+  if (s.startsWith("TE")) return "TE";
+  if (["LT", "LG", "C", "RG", "RT", "OL"].includes(s)) return "OL";
+  if (["EDGE", "DE", "DT", "DL"].includes(s)) return "DL";
+  if (s.startsWith("LB")) return "LB";
+  if (["CB1", "CB2", "FS", "SS", "DB"].includes(s) || s.startsWith("CB") || s.startsWith("S")) return "DB";
+  return "OTHER";
+}
+
+function initRotationFromDepthChart(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId || !isActive53(state)) return state;
+  const activeIds = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeIds.has(String((p as any).playerId)))
+    .map((p) => ({ id: String((p as any).playerId), grp: normalizePosKey(String((p as any).pos ?? "OTHER")), ovr: Number((p as any).overall ?? 0) }));
+
+  const byGroup: Record<string, Array<{ id: string; ovr: number }>> = {};
+  for (const p of roster) (byGroup[p.grp] ??= []).push({ id: p.id, ovr: p.ovr });
+  for (const k of Object.keys(byGroup)) byGroup[k].sort((a, b) => b.ovr - a.ovr);
+
+  const starterByGroup: Record<string, string | undefined> = {};
+  for (const [slot, playerId] of Object.entries(state.depthChart.startersByPos)) {
+    if (!playerId) continue;
+    const g = normalizeSlotToGroup(slot);
+    if (g !== "OTHER" && activeIds.has(String(playerId)) && !starterByGroup[g]) starterByGroup[g] = String(playerId);
+  }
+
+  const byPlayerId: Record<string, number> = {};
+  const applyGroup = (g: string, starterPct: number, backupPct: number, depthPct: number) => {
+    const list = byGroup[g] ?? [];
+    if (!list.length) return;
+    const starterId = starterByGroup[g] ?? list[0].id;
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i].id;
+      if (id === starterId) byPlayerId[id] = starterPct;
+      else if (i === 1 || (i === 0 && starterId !== list[0].id)) byPlayerId[id] = backupPct;
+      else if (i < 5) byPlayerId[id] = depthPct;
+      else byPlayerId[id] = 0;
+    }
+  };
+
+  applyGroup("QB", 65, 55, 15);
+  applyGroup("RB", 55, 45, 20);
+  applyGroup("WR", 55, 45, 25);
+  applyGroup("TE", 55, 45, 20);
+  applyGroup("OL", 45, 35, 15);
+  applyGroup("DL", 45, 35, 15);
+  applyGroup("LB", 45, 35, 15);
+  applyGroup("DB", 45, 35, 15);
+
+  return { ...state, preseason: { ...state.preseason, rotation: { byPlayerId } } };
+}
+
+function preseasonDevFromRotation(state: GameState): { devById: Record<string, number>; riskById: Record<string, number> } {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId || !isActive53(state)) return { devById: {}, riskById: {} };
+
+  const activeIds = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeIds.has(String((p as any).playerId)))
+    .map((p) => ({ id: String((p as any).playerId), age: Number((p as any).age ?? 0) }));
+
+  const devById: Record<string, number> = {};
+  const riskById: Record<string, number> = {};
+
+  for (const p of roster) {
+    const pct = clamp100(state.preseason.rotation.byPlayerId[p.id] ?? 0);
+    if (pct <= 0) continue;
+    const share = pct / 100;
+    const dev = Math.max(0, Math.round(1 + share * 3));
+    const risk = Math.round(2 + share * 8 + Math.max(0, (p.age - 28) * 0.5));
+    devById[p.id] = (devById[p.id] ?? 0) + dev;
+    riskById[p.id] = Math.max(riskById[p.id] ?? 0, risk);
+  }
+
+  return { devById, riskById };
+}
+
+function applyPreseasonDevToRookies(state: GameState, devById: Record<string, number>): GameState {
+  if (!Object.keys(devById).length) return state;
+  const rookies = state.rookies.map((r) => {
+    const t = devById[r.playerId] ?? 0;
+    if (!t) return r;
+    const bump = t >= 4 ? 2 : t >= 3 ? 1 : 0;
+    return bump ? { ...r, ovr: Math.min(99, r.ovr + bump), dev: Math.min(90, r.dev + t) } : { ...r, dev: Math.min(90, r.dev + t) };
+  });
+  return { ...state, rookies };
 }
 
 function getUserTeamRosterIds(teamId: string) {
@@ -490,8 +682,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, phase: action.payload };
     case "SET_CAREER_STAGE":
       return { ...state, careerStage: action.payload };
-    case "ADVANCE_CAREER_STAGE":
-      return { ...state, careerStage: nextCareerStage(state.careerStage) };
+    case "ADVANCE_CAREER_STAGE": {
+      let next: GameState = { ...state, careerStage: nextCareerStage(state.careerStage) };
+      if (next.season !== state.season) {
+        next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
+        next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
+      }
+      return next;
+    }
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
     case "COMPLETE_INTERVIEW": {
@@ -557,7 +755,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
 
-      if (!canAffordStaffBudget(state, action.payload.salary)) {
+      if (!canAffordStaff(state, action.payload.salary)) {
         return applyOwnerPenalty(state, 4, "Exceeded staff budget");
       }
 
@@ -632,7 +830,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
 
-      if (!canAffordStaffBudget(state, action.payload.salary)) {
+      if (!canAffordStaff(state, action.payload.salary)) {
         return applyOwnerPenalty(state, 2, "Exceeded staff budget");
       }
 
@@ -961,6 +1159,94 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         memoryLog: addMemoryEvent(state, "FINAL_CUTS", { cutCount: cuts.length }),
       };
     }
+    case "FIRE_STAFF": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const salary = state.staffBudget.byPersonId[action.payload.personId] ?? 0;
+      const c = getPersonnelContract(action.payload.personId);
+      const endSeason = state.season;
+      const remainingYears = c?.endSeason != null ? Math.max(0, Number(c.endSeason) - endSeason) + 1 : 1;
+
+      const total = buyoutTotal(salary, remainingYears, 0.6);
+      const chunks = splitBuyout(total, action.payload.spreadSeasons);
+      const seasons = [state.season, state.season + 1];
+
+      expireContract(String(c?.contractId ?? ""), endSeason);
+      clearPersonnelTeam(action.payload.personId);
+
+      let next: GameState = refundStaffBudget(state, action.payload.personId);
+      next = {
+        ...next,
+        owner: { ...next.owner, approval: clamp100(next.owner.approval - 8) },
+        memoryLog: addMemoryEvent(state, "STAFF_FIRED", {
+          ...action.payload,
+          salary,
+          remainingYears,
+          buyoutTotal: total,
+          spread: chunks,
+        }),
+      };
+
+      for (let i = 0; i < chunks.length; i++) {
+        const season = seasons[i] ?? state.season;
+        next = addBuyoutToSeason(next, season, chunks[i] ?? 0);
+        next = addDeadMoney(next, season, chunks[i] ?? 0);
+      }
+
+      next = chargeBuyouts(next, state.season);
+      return next;
+    }
+    case "CHARGE_BUYOUTS_FOR_SEASON": {
+      return chargeBuyouts(state, action.payload.season);
+    }
+    case "SET_STARTER": {
+      return {
+        ...state,
+        depthChart: { startersByPos: { ...state.depthChart.startersByPos, [action.payload.slot]: action.payload.playerId } },
+      };
+    }
+    case "RECALC_OWNER_FINANCIAL": {
+      const season = action.payload?.season ?? state.season;
+      const financialRating = computeFinancialRating(state, season);
+      return {
+        ...state,
+        owner: { ...state.owner, financialRating, jobSecurity: computeJobSecurity(state.owner.approval, financialRating) },
+      };
+    }
+    case "INIT_PRESEASON_ROTATION": {
+      if (!isActive53(state)) return state;
+      if (Object.keys(state.preseason.rotation.byPlayerId).length) return state;
+      return initRotationFromDepthChart(state);
+    }
+    case "SET_PLAYER_SNAP": {
+      if (!isActive53(state)) return state;
+      const pid = action.payload.playerId;
+      if (!state.rosterMgmt.active[pid]) return state;
+      return {
+        ...state,
+        preseason: {
+          ...state.preseason,
+          rotation: { byPlayerId: { ...state.preseason.rotation.byPlayerId, [pid]: clamp100(action.payload.pct) } },
+        },
+      };
+    }
+    case "APPLY_PRESEASON_DEV": {
+      if (state.preseason.appliedWeeks[action.payload.week]) return state;
+      if (!isActive53(state)) return state;
+
+      const { devById, riskById } = preseasonDevFromRotation(state);
+      let next = applyPreseasonDevToRookies(state, devById);
+
+      const highRisk = Object.values(riskById).filter((r) => r >= 10).length;
+      if (highRisk) next = { ...next, owner: { ...next.owner, approval: clamp100(next.owner.approval - 1) } };
+
+      return {
+        ...next,
+        preseason: { ...next.preseason, appliedWeeks: { ...next.preseason.appliedWeeks, [action.payload.week]: true } },
+        memoryLog: addMemoryEvent(next, "PRESEASON_DEV", { week: action.payload.week, devCount: Object.keys(devById).length, highRisk }),
+      };
+    }
     case "OWNER_PENALTY": {
       return applyOwnerPenalty(state, action.payload.amount, action.payload.reason);
     }
@@ -972,18 +1258,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return state;
     }
     case "START_GAME": {
-      if ((action.payload.gameType ?? action.payload.weekType) === "PRESEASON" && !state.rosterMgmt.finalized) {
-        return applyOwnerPenalty(state, 1, "Attempted to start preseason without finalizing cutdowns");
+      const gameType = action.payload.gameType ?? action.payload.weekType;
+      let base = state;
+      if (gameType === "PRESEASON") {
+        if (!isActive53(state)) return applyOwnerPenalty(state, 1, "Attempted to start preseason without finalizing cutdowns");
+        const seeded = gameReducer(state, { type: "INIT_PRESEASON_ROTATION" });
+        base = gameReducer(seeded, { type: "APPLY_PRESEASON_DEV", payload: { week: action.payload.week ?? state.hub.preseasonWeek } });
       }
-      const teamId = state.acceptedOffer?.teamId;
-      if (!teamId) return state;
+      const teamId = base.acceptedOffer?.teamId;
+      if (!teamId) return base;
       return {
-        ...state,
+        ...base,
         game: initGameSim({
           homeTeamId: teamId,
           awayTeamId: action.payload.opponentTeamId,
-          seed: state.saveSeed + (state.hub.preseasonWeek + state.hub.regularSeasonWeek) * 1009,
-          weekType: action.payload.weekType ?? action.payload.gameType,
+          seed: base.saveSeed + (base.hub.preseasonWeek + base.hub.regularSeasonWeek) * 1009,
+          weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
         }),
       };
@@ -1171,6 +1461,20 @@ function loadState(): GameState {
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
+      owner: { ...initial.owner, ...migrated.owner },
+      teamFinances: {
+        ...initial.teamFinances,
+        ...migrated.teamFinances,
+        deadMoneyBySeason: { ...initial.teamFinances.deadMoneyBySeason, ...(migrated.teamFinances?.deadMoneyBySeason ?? {}) },
+      },
+      buyouts: { ...initial.buyouts, ...migrated.buyouts, bySeason: { ...initial.buyouts.bySeason, ...(migrated.buyouts?.bySeason ?? {}) } },
+      depthChart: { ...initial.depthChart, ...migrated.depthChart, startersByPos: { ...initial.depthChart.startersByPos, ...(migrated.depthChart?.startersByPos ?? {}) } },
+      preseason: {
+        ...initial.preseason,
+        ...migrated.preseason,
+        rotation: { ...initial.preseason.rotation, ...(migrated.preseason?.rotation ?? {}), byPlayerId: { ...initial.preseason.rotation.byPlayerId, ...(migrated.preseason?.rotation?.byPlayerId ?? {}) } },
+        appliedWeeks: { ...initial.preseason.appliedWeeks, ...(migrated.preseason?.appliedWeeks ?? {}) },
+      },
       offseason: {
         ...initial.offseason,
         ...migrated.offseason,

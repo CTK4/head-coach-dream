@@ -243,6 +243,31 @@ export function setPersonnelTeamAndContract(args: {
   return { contractId };
 }
 
+
+export function expireContract(contractId: string, endSeason?: number): boolean {
+  const c = contractsById.get(contractId);
+  if (!c) return false;
+  c.isExpired = true;
+  if (endSeason != null) c.endSeason = endSeason;
+  contractsById.set(contractId, c);
+  return true;
+}
+
+export function clearPersonnelTeam(personId: string): boolean {
+  const p = personnelById.get(personId);
+  if (!p) return false;
+  p.teamId = "FREE_AGENT";
+  p.status = "FREE_AGENT";
+  personnelById.set(p.personId, p);
+  return true;
+}
+
+export function getPersonnelContract(personId: string): ContractRow | undefined {
+  const p = personnelById.get(personId);
+  const cid = p?.contractId ? String(p.contractId) : "";
+  return cid ? contractsById.get(cid) : undefined;
+}
+
 export function cutPlayerToFreeAgent(playerId: string): boolean {
   const p = getPlayerById(playerId);
   if (!p) return false;

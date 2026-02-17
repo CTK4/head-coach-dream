@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import PreseasonSnaps from "@/pages/hub/PreseasonSnaps";
 
 export default function PreseasonWeek() {
   const { state, dispatch } = useGame();
@@ -54,10 +55,12 @@ export default function PreseasonWeek() {
     return all.filter((p) => !!activeIds[p.id]).sort((a, b) => b.ovr - a.ovr);
   }, [teamId, activeIds]);
 
+  const week = state.hub.preseasonWeek ?? 1;
+
   const startGame = () =>
     dispatch({
       type: "START_GAME",
-      payload: { opponentTeamId: "TBD", week: state.hub.preseasonWeek ?? 1, gameType: "PRESEASON" },
+      payload: { opponentTeamId: "TBD", week, gameType: "PRESEASON" },
     });
 
   return (
@@ -74,6 +77,8 @@ export default function PreseasonWeek() {
           <Button onClick={startGame}>Start Preseason Game</Button>
         </CardContent>
       </Card>
+
+      <PreseasonSnaps />
 
       <Card>
         <CardHeader>
