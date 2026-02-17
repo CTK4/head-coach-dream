@@ -45,5 +45,14 @@ describe("getFlavorLine", () => {
       }
     }
   });
-});
 
+  it("matches owner traits when tags are descriptive phrases", () => {
+    const line = getFlavorLine({
+      ownerTags: ["legacy-focused", "discipline", "measured-risk"],
+      theme: "TIMELINE",
+      phase: "DURING",
+    });
+
+    expect(line.toLowerCase()).toContain("disciplined timeline");
+  });
+});
