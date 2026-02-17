@@ -1,126 +1,103 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getCoordinatorFreeAgents, type PersonnelRow } from "@/data/leagueDb";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { computeStaffAcceptance } from "@/engine/assistantHiring";
+import { getCoordinatorFreeAgents, getPersonnelById, type PersonnelRow } from "@/data/leagueDb";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
-type CoordRole = "OC" | "DC" | "STC";
+function normScheme(s?: unknown): string {
+  return String(s ?? "").trim().toLowerCase();
+}
+function clamp100(n: number) {
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
 
-const ROLE_LABELS: Record<CoordRole, string> = {
-  OC: "Offensive Coordinator",
-  DC: "Defensive Coordinator",
-  STC: "Special Teams Coordinator",
-};
-
-const CoordinatorHiring = () => {
+export default function CoordinatorHiring() {
   const { state, dispatch } = useGame();
-  const navigate = useNavigate();
-  const [activeRole, setActiveRole] = useState<CoordRole>("OC");
+  const [role, setRole] = useState<"OC" | "DC" | "STC">("OC");
 
-  const roles: CoordRole[] = ["OC", "DC", "STC"];
-  const candidates = getCoordinatorFreeAgents(activeRole);
+  const rep = state.coach.reputation;
+  const teamOutlook = clamp100(45 + (state.acceptedOffer ? 30 : 0));
+  const offerQuality = 70;
 
-  const isHired = (role: CoordRole) => {
-    if (role === "OC") return !!state.staff.ocId;
-    if (role === "DC") return !!state.staff.dcId;
-    return !!state.staff.stcId;
-  };
+  const hiredSet = useMemo(
+    () => new Set([state.staff.ocId, state.staff.dcId, state.staff.stcId, ...Object.values(state.assistantStaff).filter(Boolean)].filter(Boolean) as string[]),
+    [state.staff, state.assistantStaff]
+  );
 
-  const getHiredId = (role: CoordRole) => {
-    if (role === "OC") return state.staff.ocId;
-    if (role === "DC") return state.staff.dcId;
-    return state.staff.stcId;
-  };
+  const ocScheme = state.staff.ocId ? normScheme(getPersonnelById(state.staff.ocId)?.scheme) : "";
+  const dcScheme = state.staff.dcId ? normScheme(getPersonnelById(state.staff.dcId)?.scheme) : "";
+  const preferredSchemes = new Set([ocScheme, dcScheme].filter(Boolean));
 
-  const allHired = roles.every(isHired);
+  const focus = role === "OC" ? "OFF" : role === "DC" ? "DEF" : "ST";
 
-  const handleHire = (person: PersonnelRow) => {
-    dispatch({ type: "HIRE_STAFF", payload: { role: activeRole, personId: person.personId } });
-    if (activeRole === "OC") dispatch({ type: "SET_ORG_ROLE", payload: { role: "ocCoachId", coachId: person.personId } });
-    if (activeRole === "DC") dispatch({ type: "SET_ORG_ROLE", payload: { role: "dcCoachId", coachId: person.personId } });
-  };
+  const candidates = useMemo(() => {
+    const raw = getCoordinatorFreeAgents(role).filter((p: PersonnelRow) => !hiredSet.has(p.personId));
+    return raw
+      .map((p: PersonnelRow) => {
+        const scheme = normScheme(p.scheme);
+        const schemeCompat = preferredSchemes.size ? (Array.from(preferredSchemes).some((x) => scheme.includes(x) || x.includes(scheme)) ? 80 : 55) : 60;
+        const acc = computeStaffAcceptance({
+          saveSeed: state.saveSeed,
+          rep,
+          staffRep: Number(p.reputation ?? 0),
+          personId: p.personId,
+          schemeCompat,
+          offerQuality,
+          teamOutlook,
+          roleFocus: focus,
+          kind: "COORDINATOR",
+        });
 
-  if (allHired) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-6 text-center">
-            <div className="text-5xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold mb-2">Staff Complete!</h2>
-            <p className="text-muted-foreground mb-6">Your coaching staff is assembled. Time to get to work.</p>
-            <Button onClick={() => navigate("/hub")} className="w-full">Enter Hub</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+        return { p, acc };
+      })
+      .filter((x) => x.acc.accept)
+      .sort((a, b) => Number(b.p.reputation ?? 0) - Number(a.p.reputation ?? 0))
+      .slice(0, 18);
+  }, [role, hiredSet, preferredSchemes, state.saveSeed, rep, teamOutlook, focus]);
+
+  const hire = (personId: string) => dispatch({ type: "COORD_ATTEMPT_HIRE", payload: { role, personId } });
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-2">Hire Your Coordinators</h1>
-        <p className="text-muted-foreground text-center mb-6">Fill all three coordinator roles</p>
+    <div className="p-4 md:p-8 space-y-4">
+      <Card>
+        <CardContent className="p-6 flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-2xl font-bold">Coordinator Hiring</div>
+            <div className="text-sm text-muted-foreground">Only interested candidates appear (reputation + tier gating).</div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant={role === "OC" ? "default" : "secondary"} onClick={() => setRole("OC")}>OC</Button>
+            <Button size="sm" variant={role === "DC" ? "default" : "secondary"} onClick={() => setRole("DC")}>DC</Button>
+            <Button size="sm" variant={role === "STC" ? "default" : "secondary"} onClick={() => setRole("STC")}>STC</Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="flex gap-2 mb-6 justify-center flex-wrap">
-          {roles.map((role) => (
-            <Button
-              key={role}
-              variant={activeRole === role ? "default" : "secondary"}
-              onClick={() => setActiveRole(role)}
-              className="relative"
-            >
-              {ROLE_LABELS[role]}
-              {isHired(role) && (
-                <Badge className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs px-1.5">✓</Badge>
-              )}
-            </Button>
-          ))}
-        </div>
-
-        {isHired(activeRole) ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <Badge className="bg-primary text-primary-foreground mb-2">Hired</Badge>
-              <p className="text-muted-foreground">
-                {ROLE_LABELS[activeRole]} position filled. Select another role.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <ScrollArea className="h-[60vh]">
-            <div className="grid gap-3 pr-4">
-              {candidates.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No free agent candidates available for this role.</p>
-              ) : (
-                candidates.map((person) => (
-                  <Card key={person.personId} className="hover:border-primary transition-all">
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div>
-                        <h3 className="font-semibold">{person.fullName}</h3>
-                        <div className="flex gap-2 mt-1">
-                          {person.scheme && (
-                            <Badge variant="outline" className="text-xs">{person.scheme}</Badge>
-                          )}
-                          <Badge variant="secondary" className="text-xs">
-                            Rep: {person.reputation ?? "?"}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">Age {person.age}</span>
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={() => handleHire(person)}>Hire</Button>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-        )}
-      </div>
+      <Card>
+        <CardContent className="p-4 space-y-2">
+          {candidates.length ? (
+            candidates.map(({ p, acc }) => (
+              <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">
+                    {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Rep {Number(p.reputation ?? 0)}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge title={`Tier ${acc.tier} · Score ${acc.score} · Threshold ${acc.threshold}`} variant="outline">Tier {acc.tier}</Badge>
+                  <Badge title={`Score ${acc.score} / ${acc.threshold}`} variant="secondary">AS {acc.score}</Badge>
+                  <Button size="sm" variant="outline" onClick={() => hire(p.personId)}>Offer</Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-sm text-muted-foreground">No interested candidates for this role right now.</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
-};
-
-export default CoordinatorHiring;
+}
