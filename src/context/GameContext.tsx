@@ -23,6 +23,8 @@ export type CareerStage =
   | "PRESEASON"
   | "REGULAR_SEASON";
 
+export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
+
 const CAREER_STAGE_ORDER: CareerStage[] = [
   "OFFSEASON_HUB",
   "ASSISTANT_HIRING",
@@ -43,6 +45,10 @@ export type InterviewResult = {
   autonomyDelta: number;
   leashDelta: number;
   axisTotals: Record<string, number>;
+  canonicalAxisTotals: Record<string, number>;
+  interviewScore: number;
+  offerTier: OfferTier;
+  premiumGatesPassed: boolean;
 };
 
 export type InterviewItem = {
