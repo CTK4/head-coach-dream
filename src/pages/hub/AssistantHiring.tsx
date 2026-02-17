@@ -44,7 +44,7 @@ const AssistantHiring = () => {
   const dcScheme = state.staff.dcId ? normScheme(getPersonnelById(state.staff.dcId)?.scheme) : "";
   const preferredSchemes = new Set([ocScheme, dcScheme].filter(Boolean));
 
-  const blockedIds = new Set([state.orgRoles.ocCoachId, state.orgRoles.dcCoachId, state.orgRoles.ahcCoachId].filter(Boolean) as string[]);
+  const blockedIds = new Set([state.orgRoles.ocCoachId, state.orgRoles.dcCoachId, state.orgRoles.stcCoachId, state.orgRoles.ahcCoachId].filter(Boolean) as string[]);
 
   const getCandidates = (roleKey: keyof AssistantStaff): PersonnelRow[] => {
     const role = ROLE_ORDER.find((item) => item.key === roleKey)?.role;
