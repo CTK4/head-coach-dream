@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useGame, REGULAR_SEASON_WEEKS } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,8 @@ function StandingsPanel({ myTeamId }: { myTeamId: string }) {
 const RegularSeason = () => {
   const { state, dispatch, getCurrentTeamMatchup } = useGame();
   const navigate = useNavigate();
+
+  if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub/offseason" replace />;
 
   const current = getCurrentTeamMatchup("REGULAR_SEASON");
   const matchup = current?.matchup;

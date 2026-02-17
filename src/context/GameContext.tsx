@@ -3,6 +3,7 @@ import { getTeams } from "@/data/leagueDb";
 import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
+import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import {
   PRESEASON_WEEKS,
   REGULAR_SEASON_WEEKS,
@@ -21,8 +22,24 @@ export type CareerStage =
   | "COMBINE"
   | "FREE_AGENCY"
   | "DRAFT"
+  | "TRAINING_CAMP"
   | "PRESEASON"
   | "REGULAR_SEASON";
+
+export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
+
+export type OffseasonState = {
+  stepId: OffseasonStepId;
+  completed: Record<OffseasonTaskId, boolean>;
+  stepsComplete: Partial<Record<OffseasonStepId, boolean>>;
+};
+
+export type OrgRoles = {
+  hcCoachId?: string;
+  ocCoachId?: string;
+  dcCoachId?: string;
+  ahcCoachId?: string;
+};
 
 export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
 
@@ -34,6 +51,7 @@ const CAREER_STAGE_ORDER: CareerStage[] = [
   "COMBINE",
   "FREE_AGENCY",
   "DRAFT",
+  "TRAINING_CAMP",
   "PRESEASON",
   "REGULAR_SEASON",
 ];
@@ -88,6 +106,7 @@ export type GameState = {
   };
   phase: GamePhase;
   careerStage: CareerStage;
+  offseason: OffseasonState;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
@@ -98,7 +117,13 @@ export type GameState = {
   saveVersion: number;
   memoryLog: MemoryEvent[];
   staff: { ocId?: string; dcId?: string; stcId?: string };
+  orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
+  scheme?: {
+    offense?: { style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY"; tempo: "SLOW" | "NORMAL" | "FAST" };
+    defense?: { style: "MAN" | "ZONE" | "MIXED"; aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE" };
+  };
+  scouting?: { boardSeed: number; combineRun?: boolean };
   hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
   league: LeagueState;
   saveSeed: number;
@@ -113,12 +138,19 @@ export type GameAction =
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
+  | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType: GameType; weekNumber: number } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType } }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
+  | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
+  | { type: "OFFSEASON_APPLY_TASK_EFFECT"; payload: { taskId: OffseasonTaskId } }
+  | { type: "OFFSEASON_COMPLETE_STEP"; payload: { stepId: OffseasonStepId } }
+  | { type: "OFFSEASON_ADVANCE_STEP" }
+  | { type: "OFFSEASON_SET_STEP"; payload: { stepId: OffseasonStepId } }
+  | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
 function createSchedule(seed: number): LeagueSchedule {
@@ -138,6 +170,11 @@ function createInitialState(): GameState {
     coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "" },
     phase: "CREATE",
     careerStage: "OFFSEASON_HUB",
+    offseason: {
+      stepId: OFFSEASON_STEPS[0].id,
+      completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
+      stepsComplete: {},
+    },
     interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
     offers: [],
     season: 2026,
@@ -145,7 +182,10 @@ function createInitialState(): GameState {
     saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
     staff: {},
+    orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
+    scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
     league: initLeagueState(teams),
     saveSeed,
@@ -186,6 +226,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, careerStage: action.payload };
     case "ADVANCE_CAREER_STAGE":
       return { ...state, careerStage: nextCareerStage(state.careerStage) };
+    case "SET_ORG_ROLE":
+      return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item
@@ -212,6 +254,66 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "HIRE_ASSISTANT": {
       const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
       return { ...state, assistantStaff, careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage };
+    }
+    case "OFFSEASON_SET_TASK": {
+      const completed = { ...state.offseason.completed, [action.payload.taskId]: action.payload.completed };
+      return { ...state, offseason: { ...state.offseason, completed } };
+    }
+    case "OFFSEASON_APPLY_TASK_EFFECT": {
+      const id = action.payload.taskId;
+      if (!state.offseason.completed[id]) return state;
+
+      if (id === "INSTALL") {
+        return {
+          ...state,
+          scheme: {
+            offense: { style: "BALANCED", tempo: state.coach?.repBaseline && state.coach.repBaseline > 55 ? "FAST" : "NORMAL" },
+            defense: { style: "MIXED", aggression: "NORMAL" },
+          },
+        };
+      }
+
+      if (id === "MEDIA") {
+        return {
+          ...state,
+          coach: { ...state.coach, repBaseline: 55, mediaExpectation: 50, autonomy: state.coach.autonomy ?? 60 },
+        };
+      }
+
+      if (id === "SCOUTING") {
+        return {
+          ...state,
+          scouting: { ...(state.scouting ?? { boardSeed: state.saveSeed }), combineRun: true },
+        };
+      }
+
+      if (id === "STAFF") {
+        const ok = !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId;
+        if (!ok) return state;
+        return state;
+      }
+
+      return state;
+    }
+    case "OFFSEASON_COMPLETE_STEP": {
+      const stepsComplete = { ...state.offseason.stepsComplete, [action.payload.stepId]: true };
+      return { ...state, offseason: { ...state.offseason, stepsComplete } };
+    }
+    case "OFFSEASON_SET_STEP":
+      return { ...state, offseason: { ...state.offseason, stepId: action.payload.stepId } };
+    case "OFFSEASON_ADVANCE_STEP": {
+      const cur = state.offseason.stepId;
+      if (!state.offseason.stepsComplete[cur]) return state;
+      const next = nextOffseasonStepId(cur);
+      if (!next) return state;
+      return { ...state, offseason: { ...state.offseason, stepId: next } };
+    }
+    case "AUTO_ADVANCE_STAGE_IF_READY": {
+      const step = state.offseason.stepId;
+      if (step === "TRAINING_CAMP") return { ...state, careerStage: "TRAINING_CAMP" };
+      if (step === "PRESEASON") return { ...state, careerStage: "PRESEASON" };
+      if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
+      return state;
     }
     case "START_GAME": {
       const teamId = state.acceptedOffer?.teamId;
@@ -251,6 +353,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         state.game.weekType === "PRESEASON"
           ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+
+      if (state.game.weekType === "PRESEASON") {
+        const nextPre = Math.min(PRESEASON_WEEKS, hub.preseasonWeek);
+        const finishedPreseason = nextPre >= PRESEASON_WEEKS;
+        if (finishedPreseason) {
+          return {
+            ...next,
+            league,
+            hub: { ...hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+            offseason: {
+              ...next.offseason,
+              stepId: "CUT_DOWNS",
+              stepsComplete: { ...next.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
+            },
+            careerStage: "REGULAR_SEASON",
+            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777 }),
+          };
+        }
+      }
 
       return {
         ...next,
@@ -328,6 +449,17 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   return {
     ...oldState,
     saveSeed,
+    careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
+    orgRoles: oldState.orgRoles ?? {},
+    offseason:
+      oldState.offseason ??
+      ({
+        stepId: OFFSEASON_STEPS[0].id,
+        completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
+        stepsComplete: {},
+      } as OffseasonState),
+    scheme: oldState.scheme ?? { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {
       ...(oldState.hub ?? { news: [] }),
       schedule,
@@ -355,7 +487,14 @@ function loadState(): GameState {
       interviews: { ...initial.interviews, ...migrated.interviews },
       hub: { ...initial.hub, ...migrated.hub },
       staff: { ...initial.staff, ...migrated.staff },
+      orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
+      offseason: {
+        ...initial.offseason,
+        ...migrated.offseason,
+        completed: { ...initial.offseason.completed, ...migrated.offseason?.completed },
+        stepsComplete: { ...initial.offseason.stepsComplete, ...migrated.offseason?.stepsComplete },
+      },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
       saveVersion: CURRENT_SAVE_VERSION,

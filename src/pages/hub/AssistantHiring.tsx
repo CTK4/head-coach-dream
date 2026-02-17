@@ -44,6 +44,8 @@ const AssistantHiring = () => {
   const dcScheme = state.staff.dcId ? normScheme(getPersonnelById(state.staff.dcId)?.scheme) : "";
   const preferredSchemes = new Set([ocScheme, dcScheme].filter(Boolean));
 
+  const blockedIds = new Set([state.orgRoles.ocCoachId, state.orgRoles.dcCoachId, state.orgRoles.ahcCoachId].filter(Boolean) as string[]);
+
   const getCandidates = (roleKey: keyof AssistantStaff): PersonnelRow[] => {
     const role = ROLE_ORDER.find((item) => item.key === roleKey)?.role;
     if (!role) return getAssistantHeadCoachCandidates();
@@ -52,13 +54,14 @@ const AssistantHiring = () => {
 
   const hiredSet = new Set(Object.values(state.assistantStaff).filter(Boolean));
   const candidates = getCandidates(activeRole)
-    .filter((p) => !hiredSet.has(p.personId))
+    .filter((p) => !hiredSet.has(p.personId) && !blockedIds.has(p.personId))
     .sort((a, b) => computeCoachScore(b, preferredSchemes) - computeCoachScore(a, preferredSchemes));
 
   const allFilled = ROLE_ORDER.every((role) => Boolean(state.assistantStaff[role.key]));
 
   const handleHire = (personId: string) => {
     dispatch({ type: "HIRE_ASSISTANT", payload: { role: activeRole, personId } });
+    if (activeRole === "assistantHcId") dispatch({ type: "SET_ORG_ROLE", payload: { role: "ahcCoachId", coachId: personId } });
   };
 
   const handleContinue = () => {
@@ -71,6 +74,7 @@ const AssistantHiring = () => {
       <div>
         <h2 className="text-2xl font-bold">Assistant Hiring</h2>
         <p className="text-sm text-muted-foreground">Fill all required assistant roles before moving on.</p>
+        <p className="text-xs text-muted-foreground">Coaches already hired as coordinators won't appear in this pool.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">

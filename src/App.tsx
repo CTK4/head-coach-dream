@@ -10,6 +10,7 @@ import Interviews from "./pages/Interviews";
 import Offers from "./pages/Offers";
 import CoordinatorHiring from "./pages/CoordinatorHiring";
 import Hub from "./pages/Hub";
+import Offseason from "./pages/hub/Offseason";
 import Roster from "./pages/Roster";
 import Draft from "./pages/Draft";
 import Playcall from "./pages/Playcall";
@@ -67,7 +68,9 @@ const App = () => (
             <Route path="/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
 
             <Route path="/hub" element={<HubGate><HubLayout /></HubGate>}>
-              <Route index element={<Hub />} />
+              <Route index element={<Navigate to="/hub/offseason" replace />} />
+              <Route path="offseason" element={<Offseason />} />
+              <Route path="home" element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />
               <Route path="draft" element={<Draft />} />

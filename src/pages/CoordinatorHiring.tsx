@@ -39,6 +39,8 @@ const CoordinatorHiring = () => {
 
   const handleHire = (person: PersonnelRow) => {
     dispatch({ type: "HIRE_STAFF", payload: { role: activeRole, personId: person.personId } });
+    if (activeRole === "OC") dispatch({ type: "SET_ORG_ROLE", payload: { role: "ocCoachId", coachId: person.personId } });
+    if (activeRole === "DC") dispatch({ type: "SET_ORG_ROLE", payload: { role: "dcCoachId", coachId: person.personId } });
   };
 
   if (allHired) {
