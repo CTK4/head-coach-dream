@@ -4,7 +4,7 @@ import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import SafeScrollArea from "@/components/SafeScrollArea";
 
 type SlotGroup = { title: string; slots: Array<{ slot: string; label: string; pos: string[] }> };
 
@@ -100,7 +100,7 @@ export default function DepthChart() {
 
       <Card>
         <CardContent className="p-4">
-          <ScrollArea className="h-[700px] pr-2">
+          <SafeScrollArea className="pr-2" offset={360}>
             <div className="space-y-4">
               {group.slots.map((s) => {
                 const chosen = state.depthChart.startersByPos[s.slot];
@@ -129,7 +129,7 @@ export default function DepthChart() {
                 );
               })}
             </div>
-          </ScrollArea>
+          </SafeScrollArea>
         </CardContent>
       </Card>
     </div>

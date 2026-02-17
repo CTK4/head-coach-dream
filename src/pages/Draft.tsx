@@ -4,7 +4,7 @@ import { useGame, getDraftClass } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import SafeScrollArea from "@/components/SafeScrollArea";
 
 type Row = Record<string, unknown>;
 
@@ -71,7 +71,7 @@ const Draft = () => {
         <Card>
           <CardHeader><CardTitle>Board</CardTitle></CardHeader>
           <CardContent>
-            <ScrollArea className="h-[620px] pr-2">
+            <SafeScrollArea className="pr-2" offset={300}>
               <div className="space-y-2">
                 {board.map((r) => {
                   const id = String(r["Player ID"]);
@@ -94,7 +94,7 @@ const Draft = () => {
                   );
                 })}
               </div>
-            </ScrollArea>
+            </SafeScrollArea>
           </CardContent>
         </Card>
 

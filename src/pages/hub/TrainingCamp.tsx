@@ -4,7 +4,7 @@ import { getTeamRosterPlayers, type PlayerRow } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import SafeScrollArea from "@/components/SafeScrollArea";
 
 function groupPos(pos?: string) {
   const p = String(pos ?? "").toUpperCase();
@@ -79,7 +79,7 @@ export default function TrainingCamp() {
           <CardTitle>Roster (toggle active; must be exactly 53)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[680px] pr-2">
+          <SafeScrollArea className="pr-2" offset={320}>
             <div className="space-y-4">
               {Object.entries(grouped).map(([pos, list]) => (
                 <div key={pos} className="border rounded-md p-3 space-y-2">
@@ -114,7 +114,7 @@ export default function TrainingCamp() {
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          </SafeScrollArea>
         </CardContent>
       </Card>
     </div>

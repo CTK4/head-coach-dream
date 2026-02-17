@@ -32,6 +32,9 @@ import CutDowns from "@/pages/hub/offseason/CutDowns";
 import Finance from "@/pages/hub/Finance";
 import DepthChart from "@/pages/hub/DepthChart";
 import StaffManagement from "@/pages/hub/StaffManagement";
+import AppShell from "@/components/AppShell";
+import PhoneFrameToggle from "@/components/PhoneFrameToggle";
+import DensityToggle from "@/components/DensityToggle";
 
 const queryClient = new QueryClient();
 
@@ -72,8 +75,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <GameProvider>
-        <BrowserRouter>
-          <Routes>
+        <AppShell>
+          <PhoneFrameToggle />
+          <DensityToggle />
+          <BrowserRouter>
+            <Routes>
             <Route path="/" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
             <Route path="/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
             <Route path="/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
@@ -106,8 +112,9 @@ const App = () => (
             </Route>
 
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+            </Routes>
+          </BrowserRouter>
+        </AppShell>
       </GameProvider>
     </TooltipProvider>
   </QueryClientProvider>

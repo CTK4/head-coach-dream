@@ -54,3 +54,47 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 }
+
+
+@layer base {
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --bottom-bar: 0px;
+
+    --density-pad: 16px;
+    --density-gap: 16px;
+    --density-card-pad: 16px;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}
+
+[data-density="compact"] {
+  --density-pad: 12px;
+  --density-gap: 12px;
+  --density-card-pad: 12px;
+}
+
+.density-pad {
+  padding: var(--density-pad);
+}
+
+.density-gap {
+  gap: var(--density-gap);
+}
+
+.density-card-pad {
+  padding: var(--density-card-pad);
+}
+
+.tap-target {
+  min-height: 44px;
+  min-width: 44px;
+}

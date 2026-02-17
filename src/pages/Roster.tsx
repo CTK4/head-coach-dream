@@ -5,7 +5,7 @@ import { getPlayersByTeam, type PlayerRow } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import SafeScrollArea from "@/components/SafeScrollArea";
 
 const POS_GROUPS: Record<string, string[]> = {
   Offense: ["QB", "RB", "WR", "TE", "OT", "OG", "C", "OL", "FB", "HB"],
@@ -57,7 +57,7 @@ const Roster = () => {
           ))}
         </div>
 
-        <ScrollArea className="h-[70vh]">
+        <SafeScrollArea offset={300}>
           <div className="space-y-2 pr-4">
             {sorted.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No players in this group</p>
@@ -86,7 +86,7 @@ const Roster = () => {
               ))
             )}
           </div>
-        </ScrollArea>
+        </SafeScrollArea>
       </div>
     </div>
   );

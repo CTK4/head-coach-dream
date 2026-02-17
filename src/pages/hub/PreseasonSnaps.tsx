@@ -4,7 +4,7 @@ import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import SafeScrollArea from "@/components/SafeScrollArea";
 import { Button } from "@/components/ui/button";
 
 function groupPos(pos?: string) {
@@ -109,7 +109,7 @@ export default function PreseasonSnaps() {
           ))}
         </div>
 
-        <ScrollArea className="h-[420px] pr-2">
+        <SafeScrollArea className="pr-2" offset={420}>
           <div className="space-y-3">
             {list.map((p) => {
               const pct = clamp100(state.preseason.rotation.byPlayerId[p.id] ?? 0);
@@ -135,7 +135,7 @@ export default function PreseasonSnaps() {
               );
             })}
           </div>
-        </ScrollArea>
+        </SafeScrollArea>
       </CardContent>
     </Card>
   );
