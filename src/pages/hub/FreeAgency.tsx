@@ -21,14 +21,6 @@ function tabMatch(tab: PosTab, pos: string) {
   return normalizePos(pos) === tab;
 }
 
-function capBlock(capSpace: number) {
-  return (
-    <div className="mt-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-200">
-      Cap Illegal: {moneyShort(capSpace)}. You must get under the cap to submit/accept offers.
-    </div>
-  );
-}
-
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
@@ -39,7 +31,7 @@ export default function FreeAgency() {
   const [aav, setAav] = useState(8_000_000);
 
   const teamId = state.acceptedOffer?.teamId;
-  const week = state.hub.regularSeasonWeek ?? 1;
+  if (!teamId) return null;
 
   const ui = state.freeAgency.ui;
   const activePlayerId = ui.mode === "PLAYER" ? ui.playerId : "";
@@ -73,23 +65,19 @@ export default function FreeAgency() {
       .slice(0, 140);
   }, [state, tab, q]);
 
-  if (!teamId) return null;
-
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/30">
       <div className="sticky top-0 z-20 bg-background/70 backdrop-blur border-b border-white/10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Button size="icon" variant="ghost" className="rounded-2xl">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </Button>
-
           <div className="text-lg font-extrabold tracking-widest">FREE AGENCY</div>
-
-          <Button variant="secondary" className="rounded-2xl px-4" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>
-            My Offers
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="rounded-2xl px-4" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>
+              My Offers
+            </Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+              Continue
+            </Button>
+          </div>
         </div>
 
         <div className="max-w-3xl mx-auto px-4 pb-2">
@@ -99,9 +87,7 @@ export default function FreeAgency() {
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`relative pb-2 whitespace-nowrap transition ${
-                    tab === t ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`relative pb-2 whitespace-nowrap transition ${tab === t ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {t}
                   {tab === t ? <span className="absolute left-0 right-0 -bottom-[1px] h-[2px] bg-emerald-400 rounded-full" /> : null}
@@ -109,10 +95,7 @@ export default function FreeAgency() {
               ))}
             </div>
 
-            <button
-              onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}
-              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2"
-            >
+            <button onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2">
               <span>Total Offers: {totalOffers}</span>
               <span className="opacity-70">›</span>
             </button>
@@ -120,37 +103,17 @@ export default function FreeAgency() {
 
           <div className="mt-2 flex gap-2">
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M21 21l-4.3-4.3m1.8-5.2a7 7 0 11-14 0 7 7 0 0114 0z"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search players..."
-                className="pl-10 rounded-2xl bg-white/5 border-white/10"
-              />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players..." className="rounded-2xl bg-white/5 border-white/10" />
             </div>
-            <Button
-              variant="secondary"
-              className="rounded-2xl"
-              onClick={() => dispatch({ type: "FA_RESOLVE_WEEK", payload: { week } })}
-            >
+            <Button variant="secondary" className="rounded-2xl" onClick={() => dispatch({ type: "FA_RESOLVE_WEEK", payload: { week: state.week } })}>
               Advance
             </Button>
           </div>
 
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
             <div>Cap Space: {moneyShort(state.finances.capSpace)} · Cash: {moneyShort(state.finances.cash)}</div>
-            <div>Week {week}</div>
+            {capIllegal ? <div className="text-red-300">Cap Illegal</div> : <div>OK</div>}
           </div>
-          {state.finances.capSpace < 0 ? capBlock(state.finances.capSpace) : null}
         </div>
       </div>
 
@@ -165,18 +128,11 @@ export default function FreeAgency() {
               const totalUser = userOffers.reduce((a, o) => a + o.aav, 0);
 
               return (
-                <Card
-                  key={p.id}
-                  className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
-                >
+                <Card key={p.id} className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
                   <CardContent className="p-3">
                     <div className="flex items-center gap-3">
                       <div className="h-14 w-14 rounded-xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center">
-                        {p.portraitUrl ? (
-                          <img src={p.portraitUrl} alt={p.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="text-xs text-muted-foreground">IMG</div>
-                        )}
+                        {p.portraitUrl ? <img src={p.portraitUrl} alt={p.name} className="h-full w-full object-cover" /> : <div className="text-xs text-muted-foreground">IMG</div>}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -241,6 +197,7 @@ export default function FreeAgency() {
             <div className="flex flex-wrap gap-2 text-sm">
               {accepted ? <Badge variant="secondary">Signed</Badge> : null}
               {anyPending ? <Badge variant="outline">Pending</Badge> : null}
+              {capIllegal ? <Badge variant="destructive">Cap Illegal</Badge> : null}
             </div>
 
             {!accepted ? (
@@ -259,18 +216,14 @@ export default function FreeAgency() {
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      className="rounded-xl flex-1 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
                       disabled={capIllegal}
+                      className="rounded-xl flex-1 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
                       onClick={() => activePlayerId && dispatch({ type: "FA_SUBMIT_OFFER", payload: { playerId: activePlayerId, years, aav } })}
                     >
                       Submit Offer
                     </Button>
                     {pendingUser ? (
-                      <Button
-                        variant="secondary"
-                        className="rounded-xl"
-                        onClick={() => dispatch({ type: "FA_WITHDRAW_OFFER", payload: { playerId: pendingUser.playerId, offerId: pendingUser.offerId } })}
-                      >
+                      <Button variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_WITHDRAW_OFFER", payload: { playerId: pendingUser.playerId, offerId: pendingUser.offerId } })}>
                         Withdraw
                       </Button>
                     ) : null}
@@ -301,18 +254,13 @@ export default function FreeAgency() {
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
                                 disabled={capIllegal}
+                                className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
                                 onClick={() => dispatch({ type: "FA_ACCEPT_OFFER", payload: { playerId: o.playerId, offerId: o.offerId } })}
                               >
                                 Accept
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="rounded-xl"
-                                onClick={() => dispatch({ type: "FA_REJECT_OFFER", payload: { playerId: o.playerId, offerId: o.offerId } })}
-                              >
+                              <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_REJECT_OFFER", payload: { playerId: o.playerId, offerId: o.offerId } })}>
                                 Reject
                               </Button>
                             </div>

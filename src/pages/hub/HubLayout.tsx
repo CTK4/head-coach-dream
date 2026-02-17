@@ -1,92 +1,52 @@
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { Button } from "@/components/ui/button";
 
-const baseLinkClass = "block rounded px-3 py-2 hover:bg-secondary";
+const links = [
+  { to: "/hub", label: "Hub" },
+  { to: "/hub/assistant-hiring", label: "Staff" },
+  { to: "/hub/roster", label: "Roster" },
+  { to: "/hub/resign", label: "Re-sign" },
+  { to: "/hub/combine", label: "Combine" },
+  { to: "/hub/tampering", label: "Tampering" },
+  { to: "/hub/free-agency", label: "Free Agency" },
+  { to: "/hub/pre-draft", label: "Pre-Draft" },
+  { to: "/hub/draft", label: "Draft" },
+  { to: "/hub/training-camp", label: "Camp" },
+  { to: "/hub/preseason", label: "Preseason" },
+  { to: "/hub/cutdowns", label: "Cutdowns" },
+  { to: "/hub/regular-season", label: "Regular Season" },
+  { to: "/hub/finances", label: "Finances" },
+];
 
 const HubLayout = () => {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (state.careerStage === "OFFSEASON_HUB") {
-      const ok =
-        location.pathname.startsWith("/hub/offseason") ||
-        location.pathname.startsWith("/hub/staff") ||
-        location.pathname.startsWith("/hub/depth-chart") ||
-        location.pathname.startsWith("/hub/finance") ||
-        location.pathname.startsWith("/hub/finances") ||
-        location.pathname.startsWith("/hub/firing-meter") ||
-        location.pathname.startsWith("/hub/assistant-hiring") ||
-        location.pathname.startsWith("/hub/coord-hiring") ||
-        location.pathname.startsWith("/hub/coordinators") ||
-        location.pathname.startsWith("/hub/free-agency") ||
-        location.pathname.startsWith("/hub/player/");
-      if (!ok) navigate("/hub/offseason", { replace: true });
-    }
-  }, [state.careerStage, location.pathname, navigate]);
-
-  const preseasonLocked = state.careerStage === "OFFSEASON_HUB" || state.careerStage === "TRAINING_CAMP";
-  const regularLocked = state.careerStage !== "REGULAR_SEASON";
 
   return (
-    <div className="min-h-screen">
-      <div className="flex">
-        <aside className="w-64 border-r p-4 space-y-2">
-          <NavLink className={baseLinkClass} to="/hub/offseason">
-            Offseason
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/assistant-hiring">
-            Assistant Hiring
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/roster">
-            Roster
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/draft">
-            Draft
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/training-camp">
-            Training Camp
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/depth-chart">
-            Depth Chart
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/staff">
-            Staff
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/finances">
-            Finances
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/free-agency">
-            Free Agency
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/firing-meter">
-            Job Security
-          </NavLink>
-          <NavLink
-            className={`${baseLinkClass} ${preseasonLocked ? "opacity-50 pointer-events-none" : ""}`}
-            to="/hub/preseason"
-          >
-            Preseason
-          </NavLink>
-          <NavLink
-            className={`${baseLinkClass} ${regularLocked ? "opacity-50 pointer-events-none" : ""}`}
-            to="/hub/regular-season"
-          >
-            Regular Season
-          </NavLink>
-          <NavLink className={baseLinkClass} to="/hub/playcall">
-            Game
-          </NavLink>
-        </aside>
-        <main className="flex-1 p-4 md:p-8">
-          <div className="space-y-2 mb-4">
-            <h1 className="text-3xl font-bold">Franchise Hub</h1>
-            <p className="text-sm text-muted-foreground">Career stage: {state.careerStage.replaceAll("_", " ")}</p>
-          </div>
-          <Outlet />
-        </main>
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-3xl font-bold">Franchise Hub</h1>
+          <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+            Advance Stage
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {links.map((l) => {
+            const active = location.pathname === l.to;
+            return (
+              <Link key={l.to} to={l.to}>
+                <Button variant={active ? "default" : "secondary"} size="sm">
+                  {l.label}
+                </Button>
+              </Link>
+            );
+          })}
+        </div>
+
+        <Outlet />
       </div>
     </div>
   );

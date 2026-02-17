@@ -43,13 +43,17 @@ export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COO
 export type CareerStage =
   | "OFFSEASON_HUB"
   | "ASSISTANT_HIRING"
+  | "STAFF_CONSTRUCTION"
   | "ROSTER_REVIEW"
   | "RESIGN"
   | "COMBINE"
+  | "TAMPERING"
   | "FREE_AGENCY"
+  | "PRE_DRAFT"
   | "DRAFT"
   | "TRAINING_CAMP"
   | "PRESEASON"
+  | "CUTDOWNS"
   | "REGULAR_SEASON";
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
@@ -91,14 +95,17 @@ export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
 
 const CAREER_STAGE_ORDER: CareerStage[] = [
   "OFFSEASON_HUB",
-  "ASSISTANT_HIRING",
+  "STAFF_CONSTRUCTION",
   "ROSTER_REVIEW",
   "RESIGN",
   "COMBINE",
+  "TAMPERING",
   "FREE_AGENCY",
+  "PRE_DRAFT",
   "DRAFT",
   "TRAINING_CAMP",
   "PRESEASON",
+  "CUTDOWNS",
   "REGULAR_SEASON",
 ];
 
