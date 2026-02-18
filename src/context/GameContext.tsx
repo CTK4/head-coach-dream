@@ -21,6 +21,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
+import { getRestructureEligibility } from "@/engine/contractMath";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
@@ -184,6 +185,7 @@ export type TeamFinances = {
   capCommitted: number;
   capSpace: number;
   cash: number;
+  postJune1Sim?: boolean;
 };
 
 export type PlayerContractOverride = {
@@ -191,6 +193,7 @@ export type PlayerContractOverride = {
   endSeason: number;
   salaries: number[];
   signingBonus: number;
+  prorationBySeason?: Record<number, number>;
 };
 
 export type BuyoutLedger = { bySeason: Record<number, number> };
@@ -335,6 +338,7 @@ export type GameAction =
   | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
   | { type: "TAG_APPLY"; payload: TagApplied }
   | { type: "TAG_REMOVE" }
+  | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "FA_INIT_OFFERS" }
@@ -373,6 +377,7 @@ export type GameAction =
   | { type: "AUTOFILL_DEPTH_CHART" }
   | { type: "RECALC_FIRING_METER"; payload: { week: number; winPct?: number; goalsDelta?: number } }
   | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
+  | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "RESET" };
 
@@ -437,7 +442,7 @@ function createInitialState(): GameState {
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
-    finances: { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000 },
+    finances: { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000, postJune1Sim: false },
     league: initLeagueState(teams),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
@@ -494,15 +499,16 @@ function makeEscalatingSalaries(totalCash: number, years: number, annualGrowth =
   return weights.map((w) => Math.round((base * w) / 50_000) * 50_000);
 }
 
-function proration(o: PlayerContractOverride): number {
-  const years = Math.max(1, o.salaries.length);
-  return Math.round((o.signingBonus / years) / 50_000) * 50_000;
+function proration(o: PlayerContractOverride, season: number): number {
+  if (o.prorationBySeason?.[season] != null) return moneyRound(o.prorationBySeason[season] ?? 0);
+  const years = Math.max(1, o.endSeason - o.startSeason + 1);
+  return moneyRound(o.signingBonus / years);
 }
 
 function capHitForOverride(o: PlayerContractOverride, season: number): number {
   const idx = season - o.startSeason;
   const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
-  return salary + proration(o);
+  return moneyRound(salary + proration(o, season));
 }
 
 function computeUserCapCommitted(state: GameState): number {
@@ -1326,6 +1332,44 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         playerContractOverrides: pco,
       });
     }
+    case "CONTRACT_RESTRUCTURE_APPLY": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const { playerId } = action.payload;
+      const gate = getRestructureEligibility(state, playerId);
+      if (!gate.eligible) return pushNews(state, `Restructure blocked: ${gate.reasons[0]}`);
+
+      const amount = moneyRound(Math.max(0, action.payload.amount));
+      const o = state.playerContractOverrides[playerId];
+      if (!o) return state;
+
+      const idx = Math.max(0, Math.min(o.salaries.length - 1, state.season - o.startSeason));
+      const curSalary = Number(o.salaries[idx] ?? 0);
+      const x = moneyRound(Math.min(amount, curSalary));
+      if (x <= 0) return state;
+
+      const yearsRemaining = Math.max(1, o.endSeason - state.season + 1);
+      const addedProration = moneyRound(x / yearsRemaining);
+
+      const nextO: PlayerContractOverride = {
+        ...o,
+        salaries: o.salaries.map((s, i) => (i === idx ? moneyRound(Number(s ?? 0) - x) : moneyRound(Number(s ?? 0)))),
+        signingBonus: moneyRound(Number(o.signingBonus ?? 0) + x),
+        prorationBySeason: { ...(o.prorationBySeason ?? {}) },
+      };
+
+      for (let y = state.season; y <= o.endSeason; y++) {
+        nextO.prorationBySeason![y] = moneyRound((nextO.prorationBySeason![y] ?? 0) + addedProration);
+      }
+
+      const next = applyFinances({
+        ...state,
+        playerContractOverrides: { ...state.playerContractOverrides, [playerId]: nextO },
+      });
+
+      return pushNews(next, `Restructure applied: ${Math.round(x / 1_000_000)}M converted to bonus.`);
+    }
     case "COMBINE_GENERATE": {
       const results = draftBoard()
         .slice(0, 80)
@@ -1861,6 +1905,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "OWNER_PENALTY": {
       return applyOwnerPenalty(state, action.payload.amount, action.payload.reason);
     }
+    case "FINANCES_PATCH": {
+      return applyFinances({ ...state, finances: { ...state.finances, ...action.payload } });
+    }
     case "AUTO_ADVANCE_STAGE_IF_READY": {
       const step = state.offseason.stepId;
       if (step === "TRAINING_CAMP") return { ...state, careerStage: "TRAINING_CAMP" };
@@ -2061,7 +2108,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
     },
-    finances: (oldState as any).finances ?? { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000 },
+    finances: (oldState as any).finances ?? { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000, postJune1Sim: false },
     league,
     game,
     draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },

@@ -47,6 +47,11 @@ export default function Finances() {
           </div>
         </CardTitle>
         {state.finances.capSpace < 0 ? <div className="text-sm text-destructive">Cap Illegal. Cut/Trade players to get under the cap.</div> : null}
+        {state.offseasonData.tagCenter.applied ? (
+          <div className="text-xs text-muted-foreground">
+            Tag reserved: {moneyShort(state.offseasonData.tagCenter.applied.cost)} (included in Top 51)
+          </div>
+        ) : null}
       </CardHeader>
 
       <CardContent className="p-0">
