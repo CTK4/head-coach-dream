@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getPhaseLabel } from "@/components/franchise-hub/offseasonLabel";
 
 function stageToRoute(stage: CareerStage): string {
   switch (stage) {
@@ -55,7 +56,7 @@ const Hub = () => {
   const team = teamId ? getTeamById(teamId) : null;
   const summary = teamId ? getTeamSummary(teamId) : null;
 
-  const stageLabel = state.careerStage.replaceAll("_", " ");
+  const stageLabel = getPhaseLabel(state);
 
   const drivers = useMemo(() => {
     const last = state.memoryLog.slice(-8).reverse();
@@ -68,26 +69,13 @@ const Hub = () => {
     });
   }, [state.memoryLog]);
 
-  if (!teamId || !team) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p>No team assigned. Please complete the hiring process.</p>
-          <Button onClick={() => navigate("/")} className="mt-4">
-            Start Over
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold">{team.name}</div>
+              <div className="text-2xl font-bold">{team?.name ?? "No team assigned"}</div>
               <Badge variant="secondary">Season {state.season}</Badge>
             </div>
             <Badge variant="outline">Stage: {stageLabel}</Badge>
@@ -98,6 +86,9 @@ const Hub = () => {
             {summary ? `OVR ${summary.overall} · Off ${summary.offense} · Def ${summary.defense}` : "—"}
           </div>
           <div className="flex gap-2">
+            {!teamId || !team ? (
+              <Button onClick={() => navigate("/")}>Start Over</Button>
+            ) : null}
             <Button variant="secondary" onClick={() => navigate(stageToRoute(state.careerStage))}>
               Go to Stage
             </Button>
