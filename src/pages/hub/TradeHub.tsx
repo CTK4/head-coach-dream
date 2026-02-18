@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
+import { tradeCapDelta, useGame } from "@/context/GameContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ export default function TradeHub() {
   const [tab, setTab] = useState<PosTab>("ALL");
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [incomingOpen, setIncomingOpen] = useState(false);
 
   const list = useMemo(() => {
     return getEffectivePlayersByTeam(state, teamId)
@@ -59,12 +60,32 @@ export default function TradeHub() {
     return out;
   }, [focus, state.saveSeed]);
 
+  const incoming = useMemo(() => {
+    const roster = getEffectivePlayersByTeam(state, teamId)
+      .map((p: any) => ({ id: String(p.playerId), name: String(p.fullName), pos: String(p.pos ?? "UNK"), ovr: Number(p.overall ?? 0) }))
+      .sort((a, b) => b.ovr - a.ovr)
+      .slice(0, 8);
+
+    return roster.map((p, i) => {
+      const tiers = ["1st–2nd", "2nd–3rd", "3rd–4th", "4th–5th", "6th–7th"];
+      const tier = tiers[Math.min(tiers.length - 1, Math.floor(i / 2))];
+      const aiTeamId = `AI_TEAM_${String(((state.saveSeed + i * 71) % 30) + 1).padStart(2, "0")}`;
+      return { ...p, aiTeamId, tier, note: "Inbound inquiry" };
+    });
+  }, [state, teamId]);
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/30">
       <div className="sticky top-0 z-20 bg-background/70 backdrop-blur border-b border-white/10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="text-lg font-extrabold tracking-widest">TRADES</div>
           <div className="flex gap-2">
+            <Button variant="secondary" className="rounded-2xl px-4" onClick={() => setIncomingOpen(true)}>
+              Incoming
+              <Badge variant="outline" className="ml-2 rounded-xl border-white/15 bg-white/5">
+                {incoming.length}
+              </Badge>
+            </Button>
             <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
               Continue
             </Button>
@@ -146,24 +167,38 @@ export default function TradeHub() {
 
               <div className="space-y-2">
                 {offers.map((o) => (
-                  <div key={o.teamId} className="rounded-xl border p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold truncate">{o.teamId}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Return: {o.pick} · {o.note}
+                  (() => {
+                    const delta = tradeCapDelta(state, teamId, focus.id, o.teamId);
+                    const after = state.finances.capSpace + delta;
+                    const capBad = after < 0;
+
+                    return (
+                      <div key={o.teamId} className="rounded-xl border p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">{o.teamId}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Return: {o.pick} · {o.note}
+                          </div>
+                          <div className={`text-xs mt-1 ${capBad ? "text-red-300" : "text-muted-foreground"}`}>
+                            Cap Δ {delta >= 0 ? "+" : ""}
+                            {Math.round((delta / 1_000_000) * 10) / 10}M · After {Math.round((after / 1_000_000) * 10) / 10}M
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
+                          disabled={capBad}
+                          onClick={() => {
+                            dispatch({ type: "TRADE_ACCEPT", payload: { playerId: focus.id, toTeamId: o.teamId, valueTier: o.pick } });
+                            setOpenId(null);
+                          }}
+                          title={capBad ? "Trade would make cap illegal" : ""}
+                        >
+                          Accept
+                        </Button>
                       </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                      onClick={() => {
-                        dispatch({ type: "TRADE_ACCEPT", payload: { playerId: focus.id, toTeamId: o.teamId, valueTier: o.pick } });
-                        setOpenId(null);
-                      }}
-                    >
-                      Accept
-                    </Button>
-                  </div>
+                    );
+                  })()
                 ))}
               </div>
 
@@ -172,6 +207,33 @@ export default function TradeHub() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={incomingOpen} onOpenChange={(v) => !v && setIncomingOpen(false)}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Incoming Trade Offers</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {incoming.map((o) => (
+              <div key={o.id} className="rounded-xl border p-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{o.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {normalizePos(o.pos)} · OVR {o.ovr} · Offer: {o.aiTeamId} → {o.tier}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => { setIncomingOpen(false); setOpenId(o.id); }}>
+                    View
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-muted-foreground">Incoming offers are refreshed deterministically each visit for now.</div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
