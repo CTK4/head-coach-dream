@@ -1,58 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useGame } from "@/context/GameContext";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
+import { eligibleRosterForSlot, usedPlayerIds } from "@/engine/depthChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type SlotGroup = { title: string; slots: Array<{ slot: string; label: string; pos: string[] }> };
+type Section = { title: string; slots: string[] };
 
-const GROUPS: SlotGroup[] = [
-  {
-    title: "Offense",
-    slots: [
-      { slot: "QB1", label: "QB1", pos: ["QB"] },
-      { slot: "RB1", label: "RB1", pos: ["RB"] },
-      { slot: "WR1", label: "WR1", pos: ["WR"] },
-      { slot: "WR2", label: "WR2", pos: ["WR"] },
-      { slot: "TE1", label: "TE1", pos: ["TE"] },
-      { slot: "LT", label: "LT", pos: ["OT", "OL"] },
-      { slot: "LG", label: "LG", pos: ["OG", "OL"] },
-      { slot: "C", label: "C", pos: ["C", "OL"] },
-      { slot: "RG", label: "RG", pos: ["OG", "OL"] },
-      { slot: "RT", label: "RT", pos: ["OT", "OL"] },
-    ],
-  },
-  {
-    title: "Defense",
-    slots: [
-      { slot: "EDGE1", label: "EDGE1", pos: ["EDGE", "DE", "DL"] },
-      { slot: "DT1", label: "DT1", pos: ["DT", "DL"] },
-      { slot: "DT2", label: "DT2", pos: ["DT", "DL"] },
-      { slot: "EDGE2", label: "EDGE2", pos: ["EDGE", "DE", "DL"] },
-      { slot: "LB1", label: "LB1", pos: ["LB"] },
-      { slot: "LB2", label: "LB2", pos: ["LB"] },
-      { slot: "CB1", label: "CB1", pos: ["CB", "DB"] },
-      { slot: "CB2", label: "CB2", pos: ["CB", "DB"] },
-      { slot: "FS", label: "FS", pos: ["S", "DB"] },
-      { slot: "SS", label: "SS", pos: ["S", "DB"] },
-    ],
-  },
-  {
-    title: "Special Teams",
-    slots: [
-      { slot: "K", label: "K", pos: ["K"] },
-      { slot: "P", label: "P", pos: ["P"] },
-    ],
-  },
+const SECTIONS: Section[] = [
+  { title: "Offense", slots: ["QB1", "QB2", "QB3", "RB1", "RB2", "RB3", "WR1", "WR2", "WR3", "WR4", "WR5", "TE1", "TE2", "TE3", "LT", "LG", "C", "RG", "RT", "OL6", "OL7"] },
+  { title: "Defense", slots: ["DT1", "DT2", "DL3", "DL4", "EDGE1", "EDGE2", "EDGE3", "LB1", "LB2", "LB3", "CB1", "CB2", "CB3", "CB4", "FS", "SS", "S3"] },
+  { title: "Special Teams", slots: ["K", "P"] },
 ];
 
 export default function DepthChart() {
   const { state, dispatch } = useGame();
   const teamId = state.acceptedOffer?.teamId;
-  const [activeGroup, setActiveGroup] = useState(GROUPS[0].title);
   if (!teamId) return null;
 
   const activeIds = state.rosterMgmt.active;
@@ -69,98 +35,101 @@ export default function DepthChart() {
       .sort((a, b) => b.ovr - a.ovr);
   }, [teamId, activeIds]);
 
-  const getCandidates = (posList: string[]) => {
-    const set = new Set(posList.map((x) => x.toUpperCase()));
-    return roster.filter((p) => set.has(p.pos)).slice(0, 25);
-  };
+  const dupes = (() => {
+    const counts = new Map<string, number>();
+    for (const v of Object.values(state.depthChart.startersByPos)) {
+      if (!v) continue;
+      counts.set(String(v), (counts.get(String(v)) ?? 0) + 1);
+    }
+    return [...counts.values()].filter((c) => c > 1).length;
+  })();
 
-  const group = GROUPS.find((g) => g.title === activeGroup) ?? GROUPS[0];
+  const chosenName = (pid?: string) => roster.find((r) => r.id === String(pid))?.name;
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <CardTitle>Depth Chart</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant="outline">Active {Object.keys(state.rosterMgmt.active).length}/53</Badge>
-            <Badge variant="secondary">Preseason seeds from this</Badge>
-          </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => dispatch({ type: "AUTOFILL_DEPTH_CHART" })}>
               Auto-Fill Empty
             </Button>
             <Button onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>Reset to Best</Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4 flex flex-wrap gap-2">
-          {GROUPS.map((g) => (
-            <Button
-              key={g.title}
-              size="sm"
-              variant={activeGroup === g.title ? "default" : "secondary"}
-              onClick={() => setActiveGroup(g.title)}
-            >
-              {g.title}
-            </Button>
-          ))}
-        </CardContent>
+        </CardHeader>
       </Card>
 
       <Card>
         <CardContent className="p-4">
-          <ScrollArea className="h-[700px] pr-2">
+          <ScrollArea className="h-[70vh] pr-2">
             <div className="space-y-4">
-              {group.slots.map((s) => {
-                const chosen = state.depthChart.startersByPos[s.slot];
-                const locked = !!state.depthChart.lockedBySlot?.[s.slot];
-                const chosenName = chosen ? roster.find((p) => p.id === chosen)?.name : undefined;
-                const candidates = getCandidates(s.pos);
+              {dupes ? <div className="text-xs text-destructive">Warning: duplicate players assigned to multiple slots.</div> : null}
+
+              {SECTIONS.map((sec) => {
+                const filled = sec.slots.reduce((n, slot) => n + (state.depthChart.startersByPos[slot] ? 1 : 0), 0);
+                const total = sec.slots.length;
 
                 return (
-                  <div key={s.slot} className="border rounded-md p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold">{s.label}</div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{chosenName ?? "Auto (top OVR)"}</Badge>
-                        <Button
-                          size="sm"
-                          variant={locked ? "default" : "secondary"}
-                          onClick={() => dispatch({ type: "TOGGLE_DEPTH_SLOT_LOCK", payload: { slot: s.slot } })}
-                          disabled={!chosen}
-                          title={!chosen ? "Select a starter before locking." : undefined}
-                        >
-                          {locked ? "Locked" : "Lock"}
-                        </Button>
+                  <div key={sec.title} className="space-y-2">
+                    <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold">{sec.title}</div>
+                        <Badge variant="outline">{filled}/{total} set</Badge>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={chosen ?? "AUTO"}
-                        onValueChange={(v) => dispatch({ type: "SET_STARTER", payload: { slot: s.slot, playerId: v as string | "AUTO" } })}
-                        disabled={locked}
-                      >
-                        <SelectTrigger className="w-[320px]">
-                          <SelectValue placeholder="Choose starter" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="AUTO">Auto (top OVR)</SelectItem>
-                          {candidates.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name} ({p.ovr})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {sec.slots.map((slot) => {
+                      const pid = state.depthChart.startersByPos[slot];
+                      const isAuto = !pid;
+                      const locked = !!state.depthChart.lockedBySlot?.[slot];
 
-                      {!candidates.length ? <div className="text-sm text-muted-foreground">No active candidates.</div> : null}
-                      {locked ? <div className="text-xs text-muted-foreground">Unlock to change.</div> : null}
-                    </div>
+                      const used = usedPlayerIds(state.depthChart);
+                      used.delete(String(pid ?? ""));
+                      const options = eligibleRosterForSlot(slot, roster, pid, used);
+
+                      return (
+                        <div key={slot} className="rounded-xl border p-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold">{slot}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {chosenName(pid) ?? "Auto (top OVR)"} {locked ? "• Locked" : ""}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant={locked ? "default" : "secondary"}
+                              disabled={isAuto}
+                              title={isAuto ? "Lock requires a manual selection" : ""}
+                              onClick={() => dispatch({ type: "TOGGLE_DEPTH_SLOT_LOCK", payload: { slot } })}
+                            >
+                              {locked ? "Locked" : "Lock"}
+                            </Button>
+
+                            <Select
+                              value={pid ?? "AUTO"}
+                              onValueChange={(v) => dispatch({ type: "SET_STARTER", payload: { slot, playerId: v as string | "AUTO" } })}
+                            >
+                              <SelectTrigger className="w-[320px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="AUTO">Auto (top OVR)</SelectItem>
+                                {options.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name} ({p.pos} {p.ovr})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            <Badge variant="outline">{pid ? "Manual" : "Auto"}</Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

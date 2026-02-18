@@ -1,6 +1,10 @@
 import type { GameState } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 
+export type DepthSlotsLike = {
+  startersByPos: Record<string, string | undefined>;
+};
+
 const GROUP_ORDER = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"] as const;
 
 const SLOT_TEMPLATES: Record<string, string[]> = {
@@ -29,6 +33,41 @@ function slotGroup(slot: string): string | null {
     if (slots.includes(slot)) return g;
   }
   return null;
+}
+
+export function eligiblePositionsForSlot(slot: string): string[] {
+  const group = slotGroup(slot);
+  if (!group) return [];
+
+  if (group === "OL") return ["OT", "OG", "C", "OL"];
+  if (group === "DL") return ["DT", "DE", "DL"];
+  if (group === "S") return ["S", "FS", "SS", "DB"];
+  return [group];
+}
+
+export function eligibleRosterForSlot<T extends { id: string; pos: string }>(
+  slot: string,
+  roster: T[],
+  includeId?: string,
+  usedIds?: Set<string>,
+) {
+  const eligible = new Set(eligiblePositionsForSlot(slot));
+  return roster.filter((p) => {
+    const pid = String(p.id);
+    const okPos = eligible.has(normalizePos(p.pos)) || (includeId && pid === String(includeId));
+    if (!okPos) return false;
+    if (!usedIds) return true;
+    if (includeId && pid === String(includeId)) return true;
+    return !usedIds.has(pid);
+  });
+}
+
+export function usedPlayerIds(depth: DepthSlotsLike): Set<string> {
+  const used = new Set<string>();
+  for (const v of Object.values(depth.startersByPos)) {
+    if (v) used.add(String(v));
+  }
+  return used;
 }
 
 function isEligible(posGroup: string, playerPos: string): boolean {

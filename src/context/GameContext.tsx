@@ -1961,8 +1961,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "SET_STARTER": {
       const { slot, playerId } = action.payload;
-      if (state.depthChart.lockedBySlot?.[slot]) return state;
-
       const starters = { ...state.depthChart.startersByPos };
       const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
 
@@ -1972,7 +1970,29 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
       }
 
-      starters[slot] = playerId;
+      if (lockedBySlot[slot]) return state;
+
+      const currentHere = starters[slot];
+      const otherSlot = Object.entries(starters).find(([s, pid]) => s !== slot && String(pid) === String(playerId))?.[0];
+      if (otherSlot) {
+        if (lockedBySlot[otherSlot]) return state;
+
+        if (currentHere) starters[otherSlot] = String(currentHere);
+        else delete starters[otherSlot];
+
+        starters[slot] = String(playerId);
+
+        const a = !!lockedBySlot[slot];
+        const b = !!lockedBySlot[otherSlot];
+        if (a) lockedBySlot[otherSlot] = true;
+        else delete lockedBySlot[otherSlot];
+        if (b) lockedBySlot[slot] = true;
+        else delete lockedBySlot[slot];
+
+        return { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+      }
+
+      starters[slot] = String(playerId);
       return { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
     }
     case "TOGGLE_DEPTH_SLOT_LOCK": {

@@ -29,6 +29,7 @@ import Finances from "./pages/hub/Finances";
 import PlayerProfile from "./pages/hub/PlayerProfile";
 import TagCenter from "./pages/hub/TagCenter";
 import RosterAudit from "./pages/hub/RosterAudit";
+import DepthChart from "./pages/hub/DepthChart";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const App = () => (
               <Route index element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />
+              <Route path="depth-chart" element={<DepthChart />} />
               <Route path="roster-audit" element={<RosterAudit />} />
               <Route path="resign" element={<ResignPlayers />} />
               <Route path="tag-center" element={<TagCenter />} />
