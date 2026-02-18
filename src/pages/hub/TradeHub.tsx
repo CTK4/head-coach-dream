@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { tradeCapDelta, useGame } from "@/context/GameContext";
+import { qbTradeOfferAllowed, tradeCapDelta, useGame } from "@/context/GameContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +57,7 @@ export default function TradeHub() {
       { teamId: mk(2), pick: tiers[idx], note: "Market offer" },
       { teamId: mk(3), pick: tiers[Math.min(tiers.length - 1, idx + 1)], note: "Lowball" },
     ];
-    return out;
+    return out.filter((o) => qbTradeOfferAllowed(state, o.teamId, focus.pos));
   }, [focus, state.saveSeed]);
 
   const incoming = useMemo(() => {
@@ -70,8 +70,9 @@ export default function TradeHub() {
       const tiers = ["1st–2nd", "2nd–3rd", "3rd–4th", "4th–5th", "6th–7th"];
       const tier = tiers[Math.min(tiers.length - 1, Math.floor(i / 2))];
       const aiTeamId = `AI_TEAM_${String(((state.saveSeed + i * 71) % 30) + 1).padStart(2, "0")}`;
+      if (!qbTradeOfferAllowed(state, aiTeamId, p.pos)) return null;
       return { ...p, aiTeamId, tier, note: "Inbound inquiry" };
-    });
+    }).filter(Boolean) as Array<{ id: string; name: string; pos: string; ovr: number; aiTeamId: string; tier: string; note: string }>;
   }, [state, teamId]);
 
   return (
