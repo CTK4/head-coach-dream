@@ -23,7 +23,7 @@ function getGroup(pos: string): string {
 }
 
 const Roster = () => {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [tab, setTab] = useState("Offense");
 
@@ -42,7 +42,16 @@ const Roster = () => {
             <h1 className="text-3xl font-bold">Roster</h1>
             <p className="text-sm text-muted-foreground">{allPlayers.length} players</p>
           </div>
-          <Button variant="ghost" onClick={() => navigate("/hub")}>← Hub</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              disabled={!teamId}
+              onClick={() => dispatch({ type: "DEPTHCHART_RESET_TO_BEST" })}
+            >
+              Reset to Best
+            </Button>
+            <Button variant="ghost" onClick={() => navigate("/hub")}>← Hub</Button>
+          </div>
         </div>
 
         <div className="flex gap-2 mb-4">

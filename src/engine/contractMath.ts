@@ -1,5 +1,6 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
 import { getContracts, getPlayers } from "@/data/leagueDb";
+import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 
 export type CapYearRow = { season: number; salary: number; bonus: number; capHit: number };
 export type CapTable = { rows: CapYearRow[]; total5y: number };
@@ -96,6 +97,24 @@ export function maxRestructureAmount(state: GameState, playerId: string) {
   if (!o) return 0;
   const idx = clamp(state.season - o.startSeason, 0, o.salaries.length - 1);
   return round50k(Number(o.salaries[idx] ?? 0));
+}
+
+
+
+export type CutProjection = {
+  deadThisYear: number;
+  deadNextYear: number;
+  savingsThisYear: number;
+};
+
+export function computeCutProjection(state: GameState, playerId: string, postJune1 = false): CutProjection {
+  const summary = getContractSummaryForPlayer(state, playerId);
+  const capHitNow = round50k(summary?.capHitBySeason?.[state.season] ?? 0);
+  const deadTotal = round50k(summary?.deadCapIfCutNow ?? 0);
+  const deadThisYear = postJune1 ? round50k(deadTotal * 0.5) : deadTotal;
+  const deadNextYear = postJune1 ? Math.max(0, round50k(deadTotal - deadThisYear)) : 0;
+  const savingsThisYear = round50k(capHitNow - deadThisYear);
+  return { deadThisYear, deadNextYear, savingsThisYear };
 }
 
 export function getRestructureEligibility(state: GameState, playerId: string): RestructureEligibility {

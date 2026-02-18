@@ -22,6 +22,8 @@ import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
+import { autoFillDepthChartGaps } from "@/engine/depthChart";
+import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
@@ -68,6 +70,7 @@ export type OffseasonState = {
 export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
   tagCenter: { applied?: TagApplied };
+  rosterAudit: { cutDesignations: Record<string, "NONE" | "POST_JUNE_1"> };
   combine: { results: ScoutingCombineResult[]; generated: boolean };
   tampering: { offers: FreeAgentOffer[] };
   freeAgency: {
@@ -181,6 +184,10 @@ export type AssistantStaff = {
 
 export type TeamFinances = {
   cap: number;
+  carryover?: number;
+  incentiveTrueUps?: number;
+  deadCapThisYear?: number;
+  deadCapNextYear?: number;
   baseCommitted: number;
   capCommitted: number;
   capSpace: number;
@@ -338,6 +345,7 @@ export type GameAction =
   | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
   | { type: "TAG_APPLY"; payload: TagApplied }
   | { type: "TAG_REMOVE" }
+  | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
@@ -353,6 +361,7 @@ export type GameAction =
   | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
   | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
   | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "CUT_APPLY"; payload: { playerId: string } }
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_PLAYER"; payload: { playerId: string } }
   | { type: "ADVANCE_SEASON" }
@@ -374,6 +383,7 @@ export type GameAction =
   | { type: "SET_PLAYER_SNAP"; payload: { playerId: string; pct: number } }
   | { type: "APPLY_PRESEASON_DEV"; payload: { week: number } }
   | { type: "RESET_DEPTH_CHART_BEST" }
+  | { type: "DEPTHCHART_RESET_TO_BEST" }
   | { type: "AUTOFILL_DEPTH_CHART" }
   | { type: "RECALC_FIRING_METER"; payload: { week: number; winPct?: number; goalsDelta?: number } }
   | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
@@ -406,6 +416,7 @@ function createInitialState(): GameState {
     offseasonData: {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
+      rosterAudit: { cutDesignations: {} },
       combine: { results: [], generated: false },
       tampering: { offers: [] },
       freeAgency: {
@@ -442,7 +453,18 @@ function createInitialState(): GameState {
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
-    finances: { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000, postJune1Sim: false },
+    finances: {
+      cap: 250_000_000,
+      carryover: 0,
+      incentiveTrueUps: 0,
+      deadCapThisYear: 0,
+      deadCapNextYear: 0,
+      baseCommitted: 0,
+      capCommitted: 0,
+      capSpace: 250_000_000,
+      cash: 150_000_000,
+      postJune1Sim: false,
+    },
     league: initLeagueState(teams),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
@@ -1298,6 +1320,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       delete next[action.payload.playerId];
       return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions: next } } };
     }
+    case "ROSTERAUDIT_SET_CUT_DESIGNATION": {
+      const { playerId, designation } = action.payload;
+      const cutDesignations = { ...state.offseasonData.rosterAudit.cutDesignations };
+      if (designation === "NONE") delete cutDesignations[playerId];
+      else cutDesignations[playerId] = designation;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          rosterAudit: { cutDesignations },
+        },
+      };
+    }
     case "TAG_REMOVE": {
       const applied = state.offseasonData.tagCenter.applied;
       if (!applied) return state;
@@ -1627,6 +1662,62 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
     }
 
+    case "CUT_APPLY": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const playerId = action.payload.playerId;
+
+      if (state.offseasonData.tagCenter.applied?.playerId === playerId) {
+        return pushNews(state, "Cut blocked: tagged player. Remove tag first.");
+      }
+      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") {
+        return pushNews(state, "Cut blocked: extension offer pending. Clear offer first.");
+      }
+
+      const designation = state.offseasonData.rosterAudit.cutDesignations[playerId] ?? "NONE";
+      const summary = getContractSummaryForPlayer(state, playerId);
+      const deadTotal = Math.round((summary?.deadCapIfCutNow ?? 0) / 50_000) * 50_000;
+
+      const deadThisYear = designation === "POST_JUNE_1" ? Math.round((deadTotal * 0.5) / 50_000) * 50_000 : deadTotal;
+      const deadNextYear = designation === "POST_JUNE_1" ? Math.max(0, deadTotal - deadThisYear) : 0;
+
+      const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" };
+      const playerContractOverrides = { ...state.playerContractOverrides };
+      delete playerContractOverrides[playerId];
+
+      const cutDesignations = { ...state.offseasonData.rosterAudit.cutDesignations };
+      delete cutDesignations[playerId];
+
+      const patched = applyFinances({
+        ...state,
+        playerTeamOverrides,
+        playerContractOverrides,
+        offseasonData: {
+          ...state.offseasonData,
+          rosterAudit: { cutDesignations },
+        },
+        finances: {
+          ...state.finances,
+          deadCapThisYear: (state.finances.deadCapThisYear ?? 0) + deadThisYear,
+          deadCapNextYear: (state.finances.deadCapNextYear ?? 0) + deadNextYear,
+        },
+      });
+
+      const filled = {
+        ...patched,
+        depthChart: { startersByPos: autoFillDepthChartGaps(patched, teamId) },
+      };
+      const next = applyFinances(filled);
+
+      return pushNews(
+        next,
+        designation === "POST_JUNE_1"
+          ? `Cut applied (Post–June 1): Dead ${Math.round(deadThisYear / 1_000_000)}M now, ${Math.round(deadNextYear / 1_000_000)}M next year. Depth chart auto-filled.`
+          : `Cut applied: Dead ${Math.round(deadThisYear / 1_000_000)}M. Depth chart auto-filled.`,
+      );
+    }
+
     case "CUT_PLAYER": {
       const pid = action.payload.playerId;
       const o = state.playerContractOverrides[pid];
@@ -1833,6 +1924,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "RESET_DEPTH_CHART_BEST": {
       return fillDepthChart(state, "RESET");
+    }
+    case "DEPTHCHART_RESET_TO_BEST": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const next = {
+        ...state,
+        depthChart: { startersByPos: autoFillDepthChartGaps(state, teamId) },
+      };
+      return applyFinances(next);
     }
     case "AUTOFILL_DEPTH_CHART": {
       return fillDepthChart(state, "AUTOFILL");
@@ -2084,6 +2184,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       ({
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
+        rosterAudit: { cutDesignations: {} },
         combine: { results: [], generated: false },
         tampering: { offers: [] },
         freeAgency: {
@@ -2108,7 +2209,20 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
     },
-    finances: (oldState as any).finances ?? { cap: 250_000_000, baseCommitted: 0, capCommitted: 0, capSpace: 250_000_000, cash: 150_000_000, postJune1Sim: false },
+    finances:
+      (oldState as any).finances ??
+      {
+        cap: 250_000_000,
+        carryover: 0,
+        incentiveTrueUps: 0,
+        deadCapThisYear: 0,
+        deadCapNextYear: 0,
+        baseCommitted: 0,
+        capCommitted: 0,
+        capSpace: 250_000_000,
+        cash: 150_000_000,
+        postJune1Sim: false,
+      },
     league,
     game,
     draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
@@ -2163,6 +2277,7 @@ function loadState(): GameState {
         ...migrated.offseasonData,
         resigning: { ...initial.offseasonData.resigning, ...migrated.offseasonData?.resigning },
         tagCenter: { ...initial.offseasonData.tagCenter, ...migrated.offseasonData?.tagCenter },
+        rosterAudit: { ...initial.offseasonData.rosterAudit, ...migrated.offseasonData?.rosterAudit, cutDesignations: { ...initial.offseasonData.rosterAudit.cutDesignations, ...(migrated.offseasonData?.rosterAudit?.cutDesignations ?? {}) } },
         combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
         tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
         freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
