@@ -26,6 +26,7 @@ import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
+import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
@@ -683,6 +684,189 @@ function faPush(state: GameState, text: string, playerId?: string): GameState {
   const ts = Date.now();
   const activity = [{ ts, text, playerId }, ...state.freeAgency.activity].slice(0, 80);
   return { ...state, freeAgency: { ...state.freeAgency, activity } };
+}
+
+function countPendingUserOffers(state: GameState) {
+  let n = 0;
+  for (const offers of Object.values(state.freeAgency.offersByPlayerId)) {
+    for (const o of offers) if (o.isUser && o.status === "PENDING") n++;
+  }
+  return n;
+}
+
+function getAllTeamIds(): string[] {
+  try {
+    const t: any[] = getTeams() as any[];
+    return t.map((x) => String(x.teamId));
+  } catch {
+    return [];
+  }
+}
+
+function teamNeedsScore(state: GameState, teamId: string, posRaw: string) {
+  const pos = normalizePos(posRaw);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const count = roster.filter((p: any) => normalizePos(String(p.pos ?? "")) === pos).length;
+
+  const target: Record<string, number> = { QB: 3, RB: 3, WR: 5, TE: 3, OL: 7, DL: 4, EDGE: 3, LB: 3, CB: 4, S: 3, K: 1, P: 1 };
+  const t = target[pos] ?? 3;
+  const short = Math.max(0, t - count);
+  return clamp01(short / t);
+}
+
+function cpuOfferParams(state: GameState, teamId: string, p: any) {
+  const pid = String(p.playerId);
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+  const market = projectedMarketApy(pos, ovr, age);
+
+  const need = teamNeedsScore(state, teamId, pos);
+  const noise = detRand(state.saveSeed, `CPU_FA|S${state.season}|T${teamId}|P${pid}`);
+
+  const mult = 0.88 + need * 0.2 + noise * 0.14;
+  const yearsBase = pos === "QB" ? 3 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 3 : 2;
+  const years = Math.max(1, Math.min(5, yearsBase + (noise > 0.75 ? 1 : 0)));
+
+  const aav = Math.max(750_000, Math.round((market * mult) / 50_000) * 50_000);
+  return { years, aav };
+}
+
+function cpuGenerateOffers(state: GameState, offerLimitPerResolve = 40): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+
+  const teamIds = getAllTeamIds();
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const cpuTeams = teamIds.filter((t) => t && t !== userTeamId);
+
+  const fa = getEffectiveFreeAgents(state)
+    .map((p: any) => ({ p, id: String(p.playerId), pos: normalizePos(String(p.pos ?? "UNK")), ovr: Number(p.overall ?? 0), age: Number(p.age ?? 26) }))
+    .filter((x) => !state.freeAgency.signingsByPlayerId[x.id])
+    .sort((a, b) => b.ovr - a.ovr);
+
+  let next = state;
+  let created = 0;
+
+  const offerCounts: Record<string, number> = {};
+  for (const [pid, offers] of Object.entries(state.freeAgency.offersByPlayerId)) offerCounts[pid] = offers.filter((o) => o.status === "PENDING").length;
+
+  const orderedFa = fa
+    .slice(0, 140)
+    .sort((a, b) => (offerCounts[b.id] ?? 0) - (offerCounts[a.id] ?? 0) || b.ovr - a.ovr);
+
+  for (const teamId of cpuTeams) {
+    if (created >= offerLimitPerResolve) break;
+
+    const needs = ["QB", "RB", "WR", "TE", "DL", "EDGE", "LB", "CB", "S", "K", "P"]
+      .map((pos) => ({ pos, s: teamNeedsScore(state, teamId, pos) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 3);
+
+    const targets = orderedFa.filter((x) => needs.some((n) => n.s > 0.15 && n.pos === x.pos)).slice(0, 4);
+    const pick = targets.length
+      ? targets[Math.floor(detRand(state.saveSeed, `CPU_PICK|${teamId}|${state.freeAgency.resolvesUsedThisPhase}`) * targets.length)]
+      : orderedFa[0];
+    if (!pick) continue;
+
+    const pid = pick.id;
+    const existing = next.freeAgency.offersByPlayerId[pid] ?? [];
+    const alreadyHasPendingFromTeam = existing.some((o) => !o.isUser && o.teamId === teamId && o.status === "PENDING");
+    if (alreadyHasPendingFromTeam) continue;
+
+    const { years, aav } = cpuOfferParams(next, teamId, pick.p);
+
+    const offerId = makeOfferId(next);
+    const cpuOffer: FreeAgencyOffer = {
+      offerId,
+      playerId: pid,
+      teamId,
+      isUser: false,
+      years,
+      aav,
+      createdWeek: next.hub.regularSeasonWeek ?? 1,
+      status: "PENDING",
+    };
+
+    next = {
+      ...next,
+      freeAgency: upsertOffers({ ...next, freeAgency: { ...next.freeAgency, nextOfferSeq: next.freeAgency.nextOfferSeq + 1 } }, pid, [...existing, cpuOffer]),
+    };
+    created++;
+  }
+
+  const extraTeams = cpuTeams.slice(0, 10);
+  for (const teamId of extraTeams) {
+    if (created >= offerLimitPerResolve) break;
+    const candidates = orderedFa.slice(0, 30);
+    const idx = Math.floor(detRand(state.saveSeed, `CPU_SPRINKLE|${teamId}|R${state.freeAgency.resolvesUsedThisPhase}`) * candidates.length);
+    const pick = candidates[idx];
+    if (!pick) continue;
+
+    const pid = pick.id;
+    const existing = next.freeAgency.offersByPlayerId[pid] ?? [];
+    if (existing.some((o) => !o.isUser && o.teamId === teamId && o.status === "PENDING")) continue;
+
+    const { years, aav } = cpuOfferParams(next, teamId, pick.p);
+    const offerId = makeOfferId(next);
+    const cpuOffer: FreeAgencyOffer = { offerId, playerId: pid, teamId, isUser: false, years, aav, createdWeek: next.hub.regularSeasonWeek ?? 1, status: "PENDING" };
+
+    next = {
+      ...next,
+      freeAgency: upsertOffers({ ...next, freeAgency: { ...next.freeAgency, nextOfferSeq: next.freeAgency.nextOfferSeq + 1 } }, pid, [...existing, cpuOffer]),
+    };
+    created++;
+  }
+
+  return next;
+}
+
+function capSpaceForTeam(state: GameState, teamId: string) {
+  try {
+    return computeCapLedger(state, teamId).capSpace;
+  } catch {
+    return state.finances.capSpace;
+  }
+}
+
+export function tradeCapDelta(state: GameState, fromTeamId: string, playerId: string, toTeamId: string) {
+  const before = capSpaceForTeam(state, fromTeamId);
+  const sim = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [String(playerId)]: String(toTeamId) } };
+  const after = capSpaceForTeam(sim, fromTeamId);
+  return after - before;
+}
+
+function cpuWithdrawOffers(state: GameState): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const teamIds = getAllTeamIds().filter((t) => t && t !== userTeamId);
+  const playerIndex: Record<string, any> = {};
+  for (const p of getPlayers() as any[]) playerIndex[String(p.playerId)] = p;
+
+  const offersByPlayerId: Record<string, FreeAgencyOffer[]> = { ...state.freeAgency.offersByPlayerId };
+  let changed = false;
+
+  for (const [playerId, offers] of Object.entries(offersByPlayerId)) {
+    const pos = normalizePos(String(playerIndex[String(playerId)]?.pos ?? "UNK"));
+    let nextOffers = offers;
+
+    for (const teamId of teamIds) {
+      const need = teamNeedsScore(state, teamId, pos);
+      const cap = capSpaceForTeam(state, teamId);
+      const shouldWithdraw = need <= 0.1 || cap < 0;
+      if (!shouldWithdraw) continue;
+
+      const had = nextOffers.some((o) => !o.isUser && o.teamId === teamId && o.status === "PENDING");
+      if (!had) continue;
+
+      nextOffers = nextOffers.map((o) => (!o.isUser && o.teamId === teamId && o.status === "PENDING" ? { ...o, status: "REJECTED" as const } : o));
+      changed = true;
+    }
+
+    if (nextOffers !== offers) offersByPlayerId[playerId] = nextOffers;
+  }
+
+  return changed ? { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } } : state;
 }
 
 function needsBoostForPos(state: GameState, posRaw: string) {
@@ -2082,7 +2266,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "FA_SUBMIT_OFFER": {
       if (state.careerStage !== "FREE_AGENCY") return state;
-      const pid = String(action.payload.playerId);
+      const { playerId } = action.payload as { playerId: string };
+      const pid = String(playerId);
       if (state.freeAgency.signingsByPlayerId[pid]) return state;
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
@@ -2090,7 +2275,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!draft) return state;
 
       const existing = state.freeAgency.offersByPlayerId[pid] ?? [];
-      if (existing.some((o) => o.isUser && o.status === "PENDING")) return state;
+      const hasPendingUser = existing.some((o) => o.isUser && o.status === "PENDING");
+      if (hasPendingUser) return state;
+
+      const isLastResolve = state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase - 1;
+      if (!isLastResolve) {
+        const pendingUser = countPendingUserOffers(state);
+        if (pendingUser >= 5) return faPush(state, "Pending-offer limit reached (5). Resolve a batch to free slots.");
+      }
 
       const offerId = makeOfferId(state);
       const userOffer: FreeAgencyOffer = {
@@ -2104,12 +2296,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         status: "PENDING",
       };
 
-      const next = {
-        ...state,
-        freeAgency: {
-          ...upsertOffers({ ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } }, pid, [...existing, userOffer]),
-        },
-      };
+      const next = { ...state, freeAgency: upsertOffers({ ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } }, pid, [...existing, userOffer]) };
       return faPush(next, `Offer submitted: ${draft.years} yrs @ $${Math.round(draft.aav / 1_000_000)}M/yr.`, pid);
     }
 
@@ -2123,19 +2310,39 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "FA_RESOLVE_BATCH": {
       if (state.careerStage !== "FREE_AGENCY") return state;
       if (state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase) return state;
-      const teamId = state.acceptedOffer?.teamId;
-      if (!teamId) return state;
+      let seeded = cpuGenerateOffers(state, 40);
+      const teamId = seeded.acceptedOffer?.teamId;
+      if (!teamId) return seeded;
 
-      const offersByPlayerId = { ...state.freeAgency.offersByPlayerId };
-      const signingsByPlayerId = { ...state.freeAgency.signingsByPlayerId };
-      const pendingPlayerIds = Object.entries(offersByPlayerId)
+      const offersByPlayerId = { ...seeded.freeAgency.offersByPlayerId };
+      const signingsByPlayerId = { ...seeded.freeAgency.signingsByPlayerId };
+      const playerIndex: Record<string, any> = {};
+      for (const p of getPlayers() as any[]) playerIndex[String(p.playerId)] = p;
+
+      const candidates = Object.entries(offersByPlayerId)
         .filter(([pid]) => !signingsByPlayerId[pid])
-        .filter(([, offers]) => offers.some((o) => o.status === "PENDING"))
-        .map(([pid]) => pid)
-        .sort((a, b) => a.localeCompare(b));
+        .map(([pid, offers]) => {
+          const pending = offers.filter((o) => o.status === "PENDING");
+          if (!pending.length) return null;
+          const p = playerIndex[pid];
+          const ovr = Number(p?.overall ?? 0);
+          const pendingCount = pending.length;
+          const maxAav = pending.reduce((m, o) => Math.max(m, Number(o.aav ?? 0)), 0);
+          return { pid, ovr, pendingCount, maxAav };
+        })
+        .filter(Boolean) as Array<{ pid: string; ovr: number; pendingCount: number; maxAav: number }>;
 
-      const toResolve = pendingPlayerIds.slice(0, 5);
-      let next: GameState = { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId, resolvesUsedThisPhase: state.freeAgency.resolvesUsedThisPhase + 1 } };
+      candidates.sort((a, b) => b.ovr - a.ovr || b.pendingCount - a.pendingCount || b.maxAav - a.maxAav || a.pid.localeCompare(b.pid));
+      const toResolve = candidates.slice(0, 5).map((c) => c.pid);
+      let next: GameState = {
+        ...seeded,
+        freeAgency: {
+          ...seeded.freeAgency,
+          offersByPlayerId,
+          signingsByPlayerId,
+          resolvesUsedThisPhase: seeded.freeAgency.resolvesUsedThisPhase + 1,
+        },
+      };
 
       for (const playerId of toResolve) {
         if (next.freeAgency.signingsByPlayerId[playerId]) continue;
@@ -2183,6 +2390,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           next = faPush(next, `${String(p?.fullName ?? "Player")} signed elsewhere.`, playerId);
         }
       }
+      next = cpuWithdrawOffers(next);
       return next;
     }
 
@@ -2230,6 +2438,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) return pushNews(state, "Trade blocked: tagged player. Remove tag first.");
       if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+
+      const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
+      if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
 
       const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: toTeamId } };
       const next = applyFinances(nextState);

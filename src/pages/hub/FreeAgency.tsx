@@ -34,6 +34,10 @@ export default function FreeAgency() {
   const [tab, setTab] = useState<PosTab>("ALL");
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [biddingWarsFirst, setBiddingWarsFirst] = useState(true);
+  const [myTeamOnly, setMyTeamOnly] = useState(true);
+
+  const myTeamId = String(state.acceptedOffer?.teamId ?? "");
 
   useEffect(() => {
     dispatch({ type: "FA_BOOTSTRAP_FROM_TAMPERING" });
@@ -50,7 +54,8 @@ export default function FreeAgency() {
         const interest = state.tampering.interestByPlayerId[id] ?? 0;
         const market = projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 0), Number(p.age ?? 26));
         const offers = state.freeAgency.offersByPlayerId[id] ?? [];
-        const pendingUser = offers.some((o) => o.isUser && o.status === "PENDING");
+        const pendingOffers = offers.filter((o) => o.status === "PENDING");
+        const pendingUser = pendingOffers.some((o) => o.isUser);
         const signed = !!state.freeAgency.signingsByPlayerId[id];
         return {
           id,
@@ -63,15 +68,50 @@ export default function FreeAgency() {
           market,
           pendingUser,
           signed,
+          offersCount: pendingOffers.length,
         };
       })
       .filter((p) => tabMatch(tab, p.pos))
       .filter((p) => (q.trim() ? p.name.toLowerCase().includes(q.trim().toLowerCase()) : true))
-      .filter((p) => showAll || p.interest >= 0.45)
-      .sort((a, b) => Number(b.pendingUser) - Number(a.pendingUser) || b.ovr - a.ovr);
+      .filter((p) => showAll || p.interest >= 0.45);
+
+    all.sort((a, b) => {
+      if (biddingWarsFirst) return b.offersCount - a.offersCount || b.ovr - a.ovr || Number(b.pendingUser) - Number(a.pendingUser);
+      return b.ovr - a.ovr || b.offersCount - a.offersCount || Number(b.pendingUser) - Number(a.pendingUser);
+    });
 
     return all.slice(0, 180);
-  }, [state, tab, q, showAll]);
+  }, [state, tab, q, showAll, biddingWarsFirst]);
+
+  const myOffersCount = useMemo(() => {
+    let pending = 0;
+    let accepted = 0;
+    for (const offers of Object.values(state.freeAgency.offersByPlayerId)) {
+      for (const o of offers) {
+        if (!o.isUser) continue;
+        if (o.status === "PENDING") pending++;
+        if (o.status === "ACCEPTED") accepted++;
+      }
+    }
+    for (const s of Object.values(state.freeAgency.signingsByPlayerId)) {
+      if (String(s.teamId) === myTeamId) accepted++;
+    }
+    return { pending, accepted, total: pending + accepted };
+  }, [state.freeAgency.offersByPlayerId, state.freeAgency.signingsByPlayerId, myTeamId]);
+
+  const filteredActivity = useMemo(() => {
+    const a = state.freeAgency.activity ?? [];
+    if (!myTeamOnly) return a;
+
+    return a.filter((x) => {
+      if (!x.playerId) return false;
+      const pid = String(x.playerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const hadUserOffer = offers.some((o) => o.isUser);
+      const signedToUser = String(state.freeAgency.signingsByPlayerId[pid]?.teamId ?? "") === myTeamId;
+      return hadUserOffer || signedToUser;
+    });
+  }, [state.freeAgency.activity, state.freeAgency.offersByPlayerId, state.freeAgency.signingsByPlayerId, myTeamOnly, myTeamId]);
 
   const resolvesLeft = Math.max(0, state.freeAgency.maxResolvesPerPhase - state.freeAgency.resolvesUsedThisPhase);
 
@@ -91,6 +131,11 @@ export default function FreeAgency() {
             </Link>
             <Button variant="secondary" className="rounded-2xl px-4" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>
               My Offers
+              {myOffersCount.total ? (
+                <Badge variant="outline" className="ml-2 rounded-xl border-white/15 bg-white/5">
+                  {myOffersCount.pending}/{myOffersCount.accepted}
+                </Badge>
+              ) : null}
             </Button>
             <Button
               className="rounded-2xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
@@ -129,6 +174,10 @@ export default function FreeAgency() {
             <div className="flex items-center gap-2 px-3 rounded-2xl border border-white/10 bg-white/5">
               <span className="text-xs text-muted-foreground">Hide uninterested</span>
               <Switch checked={!showAll} onCheckedChange={(v) => setShowAll(!v)} />
+            </div>
+            <div className="flex items-center gap-2 px-3 rounded-2xl border border-white/10 bg-white/5">
+              <span className="text-xs text-muted-foreground">Bidding wars first</span>
+              <Switch checked={biddingWarsFirst} onCheckedChange={(v) => setBiddingWarsFirst(!!v)} />
             </div>
           </div>
 
@@ -177,6 +226,11 @@ export default function FreeAgency() {
                             <Badge variant="outline" className={`rounded-xl border ${badge}`}>
                               Interest {pct(p.interest)}
                             </Badge>
+                            {p.offersCount > 0 ? (
+                              <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
+                                Offers {p.offersCount}
+                              </Badge>
+                            ) : null}
                             <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
                               {p.ovr}
                             </Badge>
@@ -283,13 +337,21 @@ export default function FreeAgency() {
             <DialogTitle>My Offers</DialogTitle>
           </DialogHeader>
 
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">Filter</div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">My team only</span>
+              <Switch checked={myTeamOnly} onCheckedChange={(v) => setMyTeamOnly(!!v)} />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            {state.freeAgency.activity.length ? (
+            {filteredActivity.length ? (
               <>
                 <div className="text-xs text-muted-foreground">Latest results</div>
                 <Separator />
                 <div className="space-y-2">
-                  {state.freeAgency.activity.slice(0, 18).map((a) => (
+                  {filteredActivity.slice(0, 18).map((a) => (
                     <div key={a.ts} className="text-sm">
                       {a.playerId ? (
                         <button className="hover:underline" onClick={() => navigate(`/hub/player/${a.playerId}`)}>
