@@ -28,38 +28,120 @@ const SLOT_TEMPLATES: Record<string, string[]> = {
   P: ["P"],
 };
 
-function proration(o: PlayerContractOverride): number {
-  const years = Math.max(1, o.salaries.length);
-  return Math.round((o.signingBonus / years) / 50_000) * 50_000;
+function round50k(v: number): number {
+  return Math.round(v / 50_000) * 50_000;
+}
+
+function sumObj(vals: Record<number, number> | undefined, from: number, to: number) {
+  if (!vals) return 0;
+  let s = 0;
+  for (let y = from; y <= to; y++) s += Number(vals[y] ?? 0);
+  return s;
+}
+
+function buildCapHitBySeason(
+  startSeason: number,
+  endSeason: number,
+  salaries: number[],
+  prorationBySeason?: Record<number, number>,
+  fallbackProrationPerYear?: number,
+): Record<number, number> {
+  const out: Record<number, number> = {};
+  const years = Math.max(1, endSeason - startSeason + 1);
+  for (let i = 0; i < years; i++) {
+    const y = startSeason + i;
+    const sal = salaries[Math.max(0, Math.min(salaries.length - 1, i))] ?? 0;
+    const bonus = prorationBySeason?.[y] ?? (fallbackProrationPerYear ?? 0);
+    out[y] = round50k(Number(sal ?? 0) + Number(bonus ?? 0));
+  }
+  return out;
 }
 
 export function capHitForOverride(o: PlayerContractOverride, season: number): number {
+  const years = Math.max(1, o.endSeason - o.startSeason + 1);
   const idx = season - o.startSeason;
   const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
-  return salary + proration(o);
+  const bonus = o.prorationBySeason?.[season] ?? (o.signingBonus > 0 ? round50k(o.signingBonus / years) : 0);
+  return round50k(Number(salary ?? 0) + Number(bonus ?? 0));
 }
 
 export function getContractSummaryForPlayer(state: GameState, playerId: string) {
+  const depthSlotLabel = getDepthSlotLabel(state, playerId);
   const o = state.playerContractOverrides[playerId];
   if (o) {
-    const years = Math.max(1, o.salaries.length);
-    const idx = state.season - o.startSeason;
-    const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
-    const pro = proration(o);
-    const capHit = salary + pro;
-    const total = o.salaries.reduce((a, b) => a + b, 0) + o.signingBonus;
-    const yearsRemaining = Math.max(0, o.endSeason - state.season + 1);
-    return { years, yearsRemaining, salary, proration: pro, capHit, total, signingBonus: o.signingBonus, isOverride: true };
+    const startSeason = o.startSeason;
+    const endSeason = o.endSeason;
+    const years = Math.max(1, endSeason - startSeason + 1);
+    const idx = Math.max(0, Math.min(o.salaries.length - 1, state.season - startSeason));
+    const salary = Number(o.salaries[idx] ?? 0);
+
+    const fallbackProrationPerYear = o.signingBonus > 0 ? round50k(o.signingBonus / years) : 0;
+    const capHitBySeason = buildCapHitBySeason(startSeason, endSeason, o.salaries, o.prorationBySeason, fallbackProrationPerYear);
+    const capHit = round50k(capHitBySeason[state.season] ?? 0);
+
+    const yearsRemaining = Math.max(0, endSeason - state.season + 1);
+    const totalValue = o.salaries.reduce((a, b) => a + (Number(b) || 0), 0) + Number(o.signingBonus ?? 0);
+
+    const bonusRemaining = o.prorationBySeason
+      ? sumObj(o.prorationBySeason, state.season, endSeason)
+      : Math.max(0, Number(o.signingBonus ?? 0) - fallbackProrationPerYear * Math.max(0, state.season - startSeason));
+
+    const deadCapIfCutNow = round50k(bonusRemaining);
+    const prorationPerYear = o.prorationBySeason
+      ? round50k(sumObj(o.prorationBySeason, state.season, endSeason) / Math.max(1, yearsRemaining))
+      : fallbackProrationPerYear;
+
+    return {
+      startSeason,
+      endSeason,
+      years,
+      yearsRemaining,
+      salary,
+      proration: prorationPerYear,
+      capHit,
+      capHitBySeason,
+      signingBonus: Number(o.signingBonus ?? 0),
+      prorationPerYear,
+      total: totalValue,
+      totalValue,
+      deadCapIfCutNow,
+      isOverride: true,
+      depthSlotLabel,
+    };
   }
 
   const p = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
   if (!p?.contractId) return null;
   const c = getContracts().find((x: any) => x.contractId === p.contractId);
   if (!c) return null;
-  const years = c.startSeason && c.endSeason ? Math.max(1, c.endSeason - c.startSeason + 1) : 1;
-  const yearsRemaining = c.endSeason ? Math.max(0, c.endSeason - state.season + 1) : 0;
-  const salary = Number(c.salaryY1 ?? 0);
-  return { years, yearsRemaining, salary, proration: 0, capHit: salary, total: salary * years, signingBonus: 0, isOverride: false };
+
+  const startSeason = Number(c.startSeason ?? state.season);
+  const endSeason = Number(c.endSeason ?? startSeason);
+  const years = Math.max(1, endSeason - startSeason + 1);
+  const idx = Math.max(0, Math.min(3, state.season - startSeason));
+  const salByIdx = [Number(c.salaryY1 ?? 0), Number(c.salaryY2 ?? 0), Number(c.salaryY3 ?? 0), Number(c.salaryY4 ?? 0)];
+  const salary = Number(salByIdx[idx] ?? 0);
+  const capHitBySeason: Record<number, number> = {};
+  for (let i = 0; i < years; i++) capHitBySeason[startSeason + i] = round50k(salByIdx[Math.min(i, salByIdx.length - 1)] ?? 0);
+  const yearsRemaining = Math.max(0, endSeason - state.season + 1);
+
+  return {
+    startSeason,
+    endSeason,
+    years,
+    yearsRemaining,
+    salary,
+    proration: 0,
+    capHit: round50k(salary),
+    capHitBySeason,
+    total: round50k(salByIdx.reduce((a, b) => a + Number(b || 0), 0)),
+    totalValue: round50k(salByIdx.reduce((a, b) => a + Number(b || 0), 0)),
+    signingBonus: 0,
+    prorationPerYear: 0,
+    deadCapIfCutNow: 0,
+    isOverride: false,
+    depthSlotLabel,
+  };
 }
 
 export function getEffectivePlayers(state: GameState): any[] {

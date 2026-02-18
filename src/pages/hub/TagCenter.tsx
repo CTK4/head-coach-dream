@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useGame, type TagType } from "@/context/GameContext";
 import { getContracts, getPlayers } from "@/data/leagueDb";
 import { normalizePos } from "@/engine/rosterOverlay";
+import { computeCapLedger } from "@/engine/capLedger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(1)}M`;
+}
+
+function capAfter(available: number, cost: number) {
+  return Math.round((available - cost) / 50_000) * 50_000;
 }
 
 function projectedApy(pos: string, ovr: number, age: number) {
@@ -39,6 +44,7 @@ export default function TagCenter() {
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
+  const cap = useMemo(() => computeCapLedger(state, teamId), [state, teamId]);
   const decisions = state.offseasonData.resigning.decisions;
   const applied = state.offseasonData.tagCenter.applied;
 
@@ -73,10 +79,10 @@ export default function TagCenter() {
 
   const focus = eligible.find((e) => e.id === (selected ?? eligible[0]?.id)) ?? null;
 
-  const canApply = (playerId: string) => {
-    if (!focus) return false;
+  const canApply = (playerId: string, cost: number) => {
     if (applied && applied.playerId !== playerId) return false;
     if (decisions[playerId]?.action === "RESIGN") return false;
+    if (capAfter(cap.availableCap, cost) < 0) return false;
     return true;
   };
 
@@ -160,9 +166,16 @@ export default function TagCenter() {
                       <span className="text-muted-foreground">Cost</span>
                       <span className="font-semibold">{money(focus.non)}/yr</span>
                     </div>
-                    <Button className="w-full" disabled={!canApply(focus.id)} onClick={() => apply(focus.id, "FRANCHISE_NON_EX", focus.non)}>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Cap after tag</span>
+                      <span className={`tabular-nums ${capAfter(cap.availableCap, focus.non) < 0 ? "text-destructive" : ""}`}>
+                        {money(capAfter(cap.availableCap, focus.non))}
+                      </span>
+                    </div>
+                    <Button className="w-full" disabled={!canApply(focus.id, focus.non)} onClick={() => apply(focus.id, "FRANCHISE_NON_EX", focus.non)}>
                       Apply Franchise Tag
                     </Button>
+                    {capAfter(cap.availableCap, focus.non) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
 
                   <TabsContent value="ex" className="space-y-2">
@@ -170,9 +183,16 @@ export default function TagCenter() {
                       <span className="text-muted-foreground">Cost</span>
                       <span className="font-semibold">{money(focus.ex)}/yr</span>
                     </div>
-                    <Button className="w-full" disabled={!canApply(focus.id)} onClick={() => apply(focus.id, "FRANCHISE_EX", focus.ex)}>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Cap after tag</span>
+                      <span className={`tabular-nums ${capAfter(cap.availableCap, focus.ex) < 0 ? "text-destructive" : ""}`}>
+                        {money(capAfter(cap.availableCap, focus.ex))}
+                      </span>
+                    </div>
+                    <Button className="w-full" disabled={!canApply(focus.id, focus.ex)} onClick={() => apply(focus.id, "FRANCHISE_EX", focus.ex)}>
                       Apply Exclusive Tag
                     </Button>
+                    {capAfter(cap.availableCap, focus.ex) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
 
                   <TabsContent value="trans" className="space-y-2">
@@ -180,9 +200,16 @@ export default function TagCenter() {
                       <span className="text-muted-foreground">Cost</span>
                       <span className="font-semibold">{money(focus.trans)}/yr</span>
                     </div>
-                    <Button className="w-full" variant="secondary" disabled={!canApply(focus.id)} onClick={() => apply(focus.id, "TRANSITION", focus.trans)}>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Cap after tag</span>
+                      <span className={`tabular-nums ${capAfter(cap.availableCap, focus.trans) < 0 ? "text-destructive" : ""}`}>
+                        {money(capAfter(cap.availableCap, focus.trans))}
+                      </span>
+                    </div>
+                    <Button className="w-full" variant="secondary" disabled={!canApply(focus.id, focus.trans)} onClick={() => apply(focus.id, "TRANSITION", focus.trans)}>
                       Apply Transition Tag
                     </Button>
+                    {capAfter(cap.availableCap, focus.trans) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
                 </Tabs>
               </>
