@@ -38,6 +38,11 @@ function stageToRoute(stage: CareerStage): string {
   }
 }
 
+function nextStageForNavigate(stage: CareerStage): CareerStage {
+  if (stage === "OFFSEASON_HUB") return "STAFF_CONSTRUCTION";
+  return stage;
+}
+
 const Hub = () => {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
@@ -95,8 +100,9 @@ const Hub = () => {
             <Button
               className="bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
               onClick={() => {
+                const targetStage = nextStageForNavigate(state.careerStage);
                 dispatch({ type: "ADVANCE_CAREER_STAGE" });
-                navigate(stageToRoute(state.careerStage === "OFFSEASON_HUB" ? "STAFF_CONSTRUCTION" : (undefined as any)));
+                navigate(stageToRoute(targetStage));
               }}
             >
               Continue
