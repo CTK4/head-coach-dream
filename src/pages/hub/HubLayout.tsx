@@ -6,6 +6,7 @@ const links = [
   { to: "/hub", label: "Hub" },
   { to: "/hub/assistant-hiring", label: "Staff" },
   { to: "/hub/roster", label: "Roster" },
+  { to: "/hub/depth-chart", label: "Depth Chart" },
   { to: "/hub/roster-audit", label: "Audit" },
   { to: "/hub/resign", label: "Re-sign" },
   { to: "/hub/tag-center", label: "Tags" },

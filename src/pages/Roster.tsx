@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { type PlayerRow } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam, getDepthSlotLabel } from "@/engine/rosterOverlay";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,7 +45,7 @@ const Roster = () => {
             <Button
               variant="secondary"
               disabled={!teamId}
-              onClick={() => dispatch({ type: "DEPTHCHART_RESET_TO_BEST" })}
+              onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}
             >
               Reset to Best
             </Button>
@@ -72,33 +71,39 @@ const Roster = () => {
             {sorted.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No players in this group</p>
             ) : (
-              sorted.map((player) => (
-                <Card key={player.playerId}>
-                  <CardContent className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="w-10 justify-center text-xs font-mono">
-                        {player.pos}
-                      </Badge>
-                      {getDepthSlotLabel(state, String(player.playerId)) ? (
-                        <Badge variant="outline" className="text-xs">
-                          {getDepthSlotLabel(state, String(player.playerId))}
+              sorted.map((player) => {
+                const depthSlot = getDepthSlotLabel(state, String(player.playerId));
+                const locked = depthSlot ? !!state.depthChart.lockedBySlot[depthSlot] : false;
+
+                return (
+                  <Card key={player.playerId}>
+                    <CardContent className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="w-10 justify-center text-xs font-mono">
+                          {player.pos}
                         </Badge>
-                      ) : null}
-                      <div>
-                        <p className="font-medium text-sm">{player.fullName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Age {player.age ?? "?"} • {player.college ?? "Unknown"}
-                        </p>
+                        {depthSlot ? (
+                          <Badge variant="outline" className="text-xs">
+                            {depthSlot}
+                          </Badge>
+                        ) : null}
+                        <div>
+                          <p className="font-medium text-sm">{player.fullName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Age {player.age ?? "?"} • {player.college ?? "Unknown"}
+                            {depthSlot ? ` • ${depthSlot}${locked ? " • Locked" : ""}` : ""}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={`text-xs ${(player.overall ?? 0) >= 80 ? "bg-primary" : (player.overall ?? 0) >= 70 ? "bg-accent" : "bg-secondary"} text-primary-foreground`}>
-                        {player.overall ?? "?"}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-xs ${(player.overall ?? 0) >= 80 ? "bg-primary" : (player.overall ?? 0) >= 70 ? "bg-accent" : "bg-secondary"} text-primary-foreground`}>
+                          {player.overall ?? "?"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         </ScrollArea>
