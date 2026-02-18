@@ -66,6 +66,7 @@ export type OffseasonState = {
 
 export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
+  tagCenter: { applied?: TagApplied };
   combine: { results: ScoutingCombineResult[]; generated: boolean };
   tampering: { offers: FreeAgentOffer[] };
   freeAgency: {
@@ -82,6 +83,9 @@ export type OffseasonData = {
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
 };
+
+export type TagType = "FRANCHISE_NON_EX" | "FRANCHISE_EX" | "TRANSITION";
+export type TagApplied = { playerId: string; type: TagType; cost: number };
 
 export type OrgRoles = {
   hcCoachId?: string;
@@ -328,6 +332,9 @@ export type GameAction =
   | { type: "OFFSEASON_ADVANCE_STEP" }
   | { type: "OFFSEASON_SET_STEP"; payload: { stepId: OffseasonStepId } }
   | { type: "RESIGN_SET_DECISION"; payload: { playerId: string; decision: ResignDecision } }
+  | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
+  | { type: "TAG_APPLY"; payload: TagApplied }
+  | { type: "TAG_REMOVE" }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "FA_INIT_OFFERS" }
@@ -393,6 +400,7 @@ function createInitialState(): GameState {
     },
     offseasonData: {
       resigning: { decisions: {} },
+      tagCenter: { applied: undefined },
       combine: { results: [], generated: false },
       tampering: { offers: [] },
       freeAgency: {
@@ -1279,6 +1287,45 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           resigning: { decisions: { ...state.offseasonData.resigning.decisions, [action.payload.playerId]: action.payload.decision } },
         },
       };
+    case "RESIGN_CLEAR_DECISION": {
+      const next = { ...state.offseasonData.resigning.decisions };
+      delete next[action.payload.playerId];
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions: next } } };
+    }
+    case "TAG_REMOVE": {
+      const applied = state.offseasonData.tagCenter.applied;
+      if (!applied) return state;
+
+      const pco = { ...state.playerContractOverrides };
+      const o = pco[applied.playerId];
+      if (o?.startSeason === state.season && o?.endSeason === state.season && o?.signingBonus === 0 && o?.salaries?.length === 1) {
+        delete pco[applied.playerId];
+      }
+
+      return applyFinances({
+        ...state,
+        offseasonData: { ...state.offseasonData, tagCenter: { applied: undefined } },
+        playerContractOverrides: pco,
+      });
+    }
+    case "TAG_APPLY": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const current = state.offseasonData.tagCenter.applied;
+      if (current && current.playerId !== action.payload.playerId) return state;
+
+      const cost = Math.max(0, Math.round(action.payload.cost / 50_000) * 50_000);
+
+      const pco = { ...state.playerContractOverrides };
+      pco[action.payload.playerId] = { startSeason: state.season, endSeason: state.season, salaries: [cost], signingBonus: 0 };
+
+      return applyFinances({
+        ...state,
+        offseasonData: { ...state.offseasonData, tagCenter: { applied: { ...action.payload, cost } } },
+        playerContractOverrides: pco,
+      });
+    }
     case "COMBINE_GENERATE": {
       const results = draftBoard()
         .slice(0, 80)
@@ -1989,6 +2036,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       oldState.offseasonData ??
       ({
         resigning: { decisions: {} },
+        tagCenter: { applied: undefined },
         combine: { results: [], generated: false },
         tampering: { offers: [] },
         freeAgency: {
@@ -2067,6 +2115,7 @@ function loadState(): GameState {
         ...initial.offseasonData,
         ...migrated.offseasonData,
         resigning: { ...initial.offseasonData.resigning, ...migrated.offseasonData?.resigning },
+        tagCenter: { ...initial.offseasonData.tagCenter, ...migrated.offseasonData?.tagCenter },
         combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
         tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
         freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
