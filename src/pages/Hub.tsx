@@ -69,7 +69,7 @@ const Hub = () => {
         <FranchiseHubHeader season={state.season} logoSrc={`/icons/${team.logoKey}.png`} logoAlt={logoAlt} />
 
         <div className="mt-3 space-y-4">
-          <FranchiseHubInfoRow capRoomLabel={capRoomLabel} pickNumber={overallPick} />
+          <FranchiseHubInfoRow state={state} capRoomLabel={capRoomLabel} pickNumber={overallPick} />
           <FranchiseHubTabs tabs={stageTabs} />
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
