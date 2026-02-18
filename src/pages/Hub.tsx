@@ -1,148 +1,131 @@
-import { useMemo } from "react";
+import {
+  Briefcase,
+  CalendarClock,
+  ClipboardList,
+  Globe,
+  HandCoins,
+  UserRound,
+  UserRoundPlus,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useGame, type CareerStage } from "@/context/GameContext";
-import { getTeamById, getTeamSummary } from "@/data/leagueDb";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useGame } from "@/context/GameContext";
+import { getTeamById } from "@/data/leagueDb";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import HeaderBar from "@/components/hub/HeaderBar";
+import StatusStrip from "@/components/hub/StatusStrip";
+import ActivityStepper, { type ActivityStep } from "@/components/hub/ActivityStepper";
+import DashboardCard from "@/components/hub/DashboardCard";
+import BottomNav from "@/components/hub/BottomNav";
 
-function stageToRoute(stage: CareerStage): string {
-  switch (stage) {
-    case "STAFF_CONSTRUCTION":
-      return "/hub/assistant-hiring";
-    case "ROSTER_REVIEW":
-      return "/hub/roster";
-    case "RESIGN":
-      return "/hub/resign";
-    case "COMBINE":
-      return "/hub/combine";
-    case "TAMPERING":
-      return "/hub/tampering";
-    case "FREE_AGENCY":
-      return "/hub/free-agency";
-    case "PRE_DRAFT":
-      return "/hub/pre-draft";
-    case "DRAFT":
-      return "/hub/draft";
-    case "TRAINING_CAMP":
-      return "/hub/training-camp";
-    case "PRESEASON":
-      return "/hub/preseason";
-    case "CUTDOWNS":
-      return "/hub/cutdowns";
-    case "REGULAR_SEASON":
-      return "/hub/regular-season";
-    default:
-      return "/hub";
-  }
-}
+const activitySteps: ActivityStep[] = [
+  { id: "rookie-draft", label: "Rookie Draft", icon: UserRoundPlus },
+  { id: "rookie-signings", label: "Rookie Signings", icon: ClipboardList },
+  { id: "free-agency", label: "Free Agency", icon: HandCoins },
+  { id: "training-camp", label: "Training Camp", icon: Briefcase },
+  { id: "preseason", label: "Preseason", icon: Globe },
+  { id: "season-start", label: "Season Start", icon: CalendarClock },
+];
 
-function nextStageForNavigate(stage: CareerStage): CareerStage {
-  if (stage === "OFFSEASON_HUB") return "STAFF_CONSTRUCTION";
-  return stage;
-}
+const dashboardCards = [
+  {
+    eyebrow: "Team",
+    title: "New Head Coach",
+    subtitle: "Choose a new leader for your organization.",
+    meta: [
+      { label: "Status", value: "Decision Needed" },
+      { label: "Priority", value: "Critical" },
+    ],
+    cta: "Decision Needed",
+    backgroundClass: "bg-[url('/Cover.jpeg')]",
+    featured: true,
+  },
+  {
+    eyebrow: "Rookie Draft",
+    title: "Rookie Draft",
+    subtitle: "Finalize your board and lock in top targets.",
+    meta: [
+      { label: "Rounds", value: "1-7" },
+      { label: "Begins In", value: "7 Hours" },
+      { label: "Pick", value: "#23" },
+      { label: "War Room", value: "Ready" },
+    ],
+    cta: "Begin Draft",
+    backgroundClass: "bg-[url('/badges/Champion.jpeg')]",
+  },
+  {
+    eyebrow: "Roster Management",
+    title: "Depth Chart",
+    subtitle: "Roster move recommendations are ready to review.",
+    meta: [
+      { label: "Roster Holes", value: "2 Positions" },
+      { label: "Urgency", value: "Medium" },
+    ],
+    cta: "Explore",
+    backgroundClass: "bg-[url('/badges/various.jpeg')]",
+  },
+  {
+    eyebrow: "Market Intel",
+    title: "Free Agency Preview",
+    subtitle: "Scout top available free agents before the bidding starts.",
+    meta: [
+      { label: "Top 1", value: "C. Wallace • WR" },
+      { label: "Top 2", value: "A. Ramsey • CB" },
+      { label: "Top 3", value: "M. Jordan • HB" },
+      { label: "Class Grade", value: "A" },
+    ],
+    cta: "Early Look",
+    backgroundClass: "bg-[url('/badges/All_Pro.jpeg')]",
+  },
+];
+
+const bottomNavItems = [
+  { id: "home", label: "Home", icon: "home" as const },
+  { id: "my-team", label: "My Team", icon: "team" as const, badge: 2 },
+  { id: "stats", label: "Stats", icon: "stats" as const, badge: 3 },
+  { id: "finances", label: "Finances", icon: "finances" as const },
+];
 
 const Hub = () => {
-  const { state, dispatch } = useGame();
+  const { state } = useGame();
   const navigate = useNavigate();
 
   const teamId = state.acceptedOffer?.teamId;
   const team = teamId ? getTeamById(teamId) : null;
-  const summary = teamId ? getTeamSummary(teamId) : null;
-
-  const stageLabel = state.careerStage.replaceAll("_", " ");
-
-  const drivers = useMemo(() => {
-    const last = state.memoryLog.slice(-8).reverse();
-    return last.map((e) => {
-      if (e.type === "FA_SIGNED") return "Signed free agent";
-      if (e.type === "PLAYER_CUT") return "Roster cut";
-      if (e.type === "STAGE_ADVANCED") return "Advanced offseason stage";
-      if (e.type === "SEASON_ADVANCED") return "New season";
-      return e.type;
-    });
-  }, [state.memoryLog]);
 
   if (!teamId || !team) {
     return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p>No team assigned. Please complete the hiring process.</p>
-          <Button onClick={() => navigate("/")} className="mt-4">
-            Start Over
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-slate-900/80 p-8 text-center shadow-xl">
+        <p className="text-slate-200">No team assigned. Please complete the hiring process.</p>
+        <Button onClick={() => navigate("/")} className="mt-4">
+          Start Over
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="text-2xl font-bold">{team.name}</div>
-              <Badge variant="secondary">Season {state.season}</Badge>
-            </div>
-            <Badge variant="outline">Stage: {stageLabel}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">
-            {summary ? `OVR ${summary.overall} · Off ${summary.offense} · Def ${summary.defense}` : "—"}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => navigate(stageToRoute(state.careerStage))}>
-              Go to Stage
-            </Button>
-            <Button
-              className="bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-              onClick={() => {
-                const targetStage = nextStageForNavigate(state.careerStage);
-                dispatch({ type: "ADVANCE_CAREER_STAGE" });
-                navigate(stageToRoute(targetStage));
-              }}
-            >
-              Continue
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#0e2246_0%,#081124_38%,#04070f_100%)] pb-24">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_25%,rgba(2,6,23,0.55)_100%)]" />
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-4 px-3 pb-6 pt-4 sm:px-4 md:pt-6">
+        <HeaderBar title="Franchise Hub" season={2026} teamLogo={team.logoKey ? `/icons/${team.logoKey}.png` : undefined} />
+        <StatusStrip
+          items={[
+            { label: "Record", value: "10-7" },
+            { label: "Phase", value: "Offseason" },
+            { label: "Cap Room", value: "$17.6M" },
+            { label: "Draft Pick", value: "#23" },
+          ]}
+        />
+        <ActivityStepper steps={activitySteps} activeStep="rookie-draft" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>News</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[320px] pr-3">
-              <div className="space-y-2">
-                {state.hub.news.map((n, i) => (
-                  <div key={i} className="text-sm border-b border-border/50 pb-2 last:border-0">
-                    {n}
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Drivers</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {drivers.length === 0 ? <div className="text-sm text-muted-foreground">No events yet.</div> : null}
-            {drivers.slice(0, 6).map((d, i) => (
-              <div key={i} className="text-sm text-muted-foreground">
-                • {d}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {dashboardCards.map((card) => (
+            <DashboardCard key={card.title} {...card} />
+          ))}
+        </section>
       </div>
+
+      <BottomNav items={bottomNavItems} activeItem="home" />
     </div>
   );
 };
