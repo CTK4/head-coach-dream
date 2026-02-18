@@ -6,6 +6,7 @@ import {
   expireContract,
   getPersonnelById,
   getPersonnelContract,
+  getPlayers,
   getPlayersByTeam,
   getTeamRosterPlayers,
   getTeams,
@@ -23,7 +24,7 @@ import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/en
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
-import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getContractSummaryForPlayer, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
@@ -244,6 +245,14 @@ export type FiringMeter = {
   firedAt?: { season: number; week?: number; checkpoint: "WEEKLY" | "SEASON_END" };
 };
 
+export type PlayerAccolades = {
+  formerMvp?: boolean;
+  formerAllPro?: boolean;
+  formerOPOY?: boolean;
+  formerDPOY?: boolean;
+  proBowls?: number;
+};
+
 export type GameState = {
   coach: {
     name: string;
@@ -282,6 +291,8 @@ export type GameState = {
   rosterMgmt: { active: Record<string, true>; cuts: Record<string, true>; finalized: boolean };
   buyouts: BuyoutLedger;
   depthChart: DepthChart;
+  leagueDepthCharts: Record<string, DepthChart>;
+  playerAccolades: Record<string, PlayerAccolades>;
   preseason: { rotation: PreseasonRotation; appliedWeeks: Record<number, true> };
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
@@ -408,7 +419,7 @@ function createInitialState(): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   const saveSeed = Date.now();
 
-  return {
+  const base: GameState = {
     coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1 },
     phase: "CREATE",
     careerStage: "OFFSEASON_HUB",
@@ -450,6 +461,8 @@ function createInitialState(): GameState {
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
     buyouts: { bySeason: {} },
     depthChart: { startersByPos: {}, lockedBySlot: {} },
+    leagueDepthCharts: {},
+    playerAccolades: {},
     preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
     staff: {},
     orgRoles: {},
@@ -479,6 +492,8 @@ function createInitialState(): GameState {
     playerContractOverrides: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
   };
+
+  return ensureAccolades(bootstrapAccolades(base));
 }
 
 function hashStr(s: string): number {
@@ -564,6 +579,210 @@ function defaultNews(season: number): string[] {
     "Front offices prepare for free agency",
     "Draft prospects begin pro day circuit",
   ];
+}
+
+function pushNews(state: GameState, line: string): GameState {
+  const news = [line, ...(state.hub.news ?? [])].slice(0, 50);
+  return { ...state, hub: { ...state.hub, news } };
+}
+
+function ensureAccolades(state: GameState): GameState {
+  return { ...state, playerAccolades: state.playerAccolades ?? {} };
+}
+
+function bootstrapAccolades(state: GameState): GameState {
+  if (state.playerAccolades && Object.keys(state.playerAccolades).length) return state;
+
+  const ps: any[] = getPlayers();
+  const byOvr = [...ps].sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const qbs = byOvr.filter((p) => normalizePos(String(p.pos ?? "UNK")) === "QB");
+  const topQB = qbs[0];
+
+  const map: Record<string, PlayerAccolades> = {};
+  if (topQB) map[String(topQB.playerId)] = { ...(map[String(topQB.playerId)] ?? {}), formerMvp: true };
+
+  for (const p of byOvr.slice(0, 12)) {
+    const id = String(p.playerId);
+    map[id] = { ...(map[id] ?? {}), formerAllPro: true, proBowls: 1 };
+  }
+
+  const topO = byOvr.find((p) => normalizePos(String(p.pos ?? "UNK")) !== "QB");
+  if (topO) map[String(topO.playerId)] = { ...(map[String(topO.playerId)] ?? {}), formerOPOY: true };
+
+  const def = byOvr.find((p) => ["CB", "S", "LB", "EDGE", "DL"].includes(normalizePos(String(p.pos ?? "UNK"))));
+  if (def) map[String(def.playerId)] = { ...(map[String(def.playerId)] ?? {}), formerDPOY: true };
+
+  return { ...state, playerAccolades: map };
+}
+
+function accoladesFor(playerId: string): PlayerAccolades {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const fromData: PlayerAccolades =
+    (p?.accolades as PlayerAccolades) ??
+    ({
+      formerMvp: p?.formerMvp,
+      formerAllPro: p?.formerAllPro,
+      formerOPOY: p?.formerOPOY,
+      formerDPOY: p?.formerDPOY,
+      proBowls: p?.proBowls,
+    } as any);
+  return fromData ?? {};
+}
+
+const STARTER_SLOTS = new Set(["QB1", "RB1", "WR1", "TE1", "DL1", "EDGE1", "LB1", "CB1", "S1"]);
+const ALLOWED_NEWS_POS = new Set(["QB", "RB", "WR", "TE", "EDGE", "DL", "LB", "CB", "S"]);
+
+function accoladesMerged(state: GameState, playerId: string): PlayerAccolades {
+  return { ...(state.playerAccolades?.[String(playerId)] ?? {}), ...accoladesFor(playerId) };
+}
+
+function isLegendForNews(state: GameState, playerId: string): boolean {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return false;
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  if (!ALLOWED_NEWS_POS.has(pos)) return false;
+
+  const a = accoladesMerged(state, playerId);
+  const pb = Number(a.proBowls ?? 0);
+  if (a.formerMvp) return true;
+  if (a.formerOPOY || a.formerDPOY) return true;
+  if (a.formerAllPro && pb >= 2) return true;
+  if (pb >= 5) return true;
+  return false;
+}
+
+function playerNamePos(playerId: string) {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  return { name: String(p?.fullName ?? "Unknown"), pos: normalizePos(String(p?.pos ?? "UNK")) };
+}
+
+function teamLabel(teamId: string) {
+  const t: any = getTeams()?.find((x: any) => String(x.teamId) === String(teamId));
+  return String(t?.name ?? t?.city ?? t?.abbr ?? teamId);
+}
+
+function slotIndex(slot: string) {
+  const m = slot.match(/(\d+)$/);
+  return m ? Number(m[1]) : 1;
+}
+
+function isQBChangeNewsworthy(state: GameState, prevQB1: string | null, nextQB1: string | null): boolean {
+  if (!prevQB1 || !nextQB1 || prevQB1 === nextQB1) return false;
+  return isLegendForNews(state, prevQB1) || isLegendForNews(state, nextQB1);
+}
+
+function pushMajorDepthNews(
+  state: GameState,
+  teamId: string,
+  prevSlots: Record<string, string | undefined>,
+  nextSlots: Record<string, string | undefined>,
+): GameState {
+  const prevByPlayer = new Map<string, string>();
+  const nextByPlayer = new Map<string, string>();
+  for (const [s, pid] of Object.entries(prevSlots)) if (pid) prevByPlayer.set(String(pid), s);
+  for (const [s, pid] of Object.entries(nextSlots)) if (pid) nextByPlayer.set(String(pid), s);
+
+  const lines: string[] = [];
+  const prevQB1 = prevSlots["QB1"] ? String(prevSlots["QB1"]) : null;
+  const nextQB1 = nextSlots["QB1"] ? String(nextSlots["QB1"]) : null;
+
+  if (isQBChangeNewsworthy(state, prevQB1, nextQB1)) {
+    const a = playerNamePos(prevQB1!);
+    const b = playerNamePos(nextQB1!);
+    lines.push(`${teamLabel(teamId)}: QB change — ${a.name} → ${b.name}`);
+  }
+
+  for (const [pid, prevSlot] of prevByPlayer.entries()) {
+    if (!STARTER_SLOTS.has(prevSlot)) continue;
+    if (!isLegendForNews(state, pid)) continue;
+
+    const nextSlot = nextByPlayer.get(pid) ?? null;
+    const benched =
+      !nextSlot ||
+      (!STARTER_SLOTS.has(nextSlot) && slotIndex(nextSlot) > 1) ||
+      (STARTER_SLOTS.has(prevSlot) && STARTER_SLOTS.has(nextSlot) && prevSlot !== nextSlot && slotIndex(nextSlot) > slotIndex(prevSlot));
+
+    if (!benched) continue;
+    if (prevSlot === "QB1" && prevQB1 && nextQB1 && prevQB1 !== nextQB1) continue;
+
+    const p = playerNamePos(pid);
+    lines.push(`${teamLabel(teamId)}: ${p.pos} ${p.name} benched (${prevSlot} → ${nextSlot ?? "BENCH"})`);
+  }
+
+  if (!lines.length) return state;
+  return pushNews(state, `Lineup shocker: ${lines[0]}`);
+}
+
+function bestDepthForTeam(state: GameState, teamId: string, prev?: DepthChart): DepthChart {
+  const roster = getEffectivePlayersByTeam(state, teamId) as any[];
+  const sorted = [...roster].sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const used = new Set<string>();
+  const slots: Record<string, string | undefined> = {};
+
+  const pick = (slot: string, posList: string[]) => {
+    const p = sorted.find((r) => posList.includes(normalizePos(String(r.pos ?? "UNK"))) && !used.has(String(r.playerId)));
+    if (!p) return;
+    slots[slot] = String(p.playerId);
+    used.add(String(p.playerId));
+  };
+
+  pick("QB1", ["QB"]);
+  pick("RB1", ["RB"]);
+  pick("WR1", ["WR"]);
+  pick("TE1", ["TE"]);
+  pick("DL1", ["DL"]);
+  pick("EDGE1", ["EDGE"]);
+  pick("LB1", ["LB"]);
+  pick("CB1", ["CB"]);
+  pick("S1", ["S"]);
+
+  return { startersByPos: { ...(prev?.startersByPos ?? {}), ...slots }, lockedBySlot: {} };
+}
+
+function recomputeLeagueDepthAndNews(state: GameState): GameState {
+  const teams = getTeams() ?? [];
+  const userTeamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+
+  let next = state;
+  const leagueDepthCharts = { ...(state.leagueDepthCharts ?? {}) };
+
+  for (const t of teams) {
+    const teamId = String((t as any).teamId);
+    if (userTeamId && teamId === userTeamId) continue;
+
+    const prev = leagueDepthCharts[teamId] ?? { startersByPos: {}, lockedBySlot: {} };
+    const computed = bestDepthForTeam(state, teamId, prev);
+
+    leagueDepthCharts[teamId] = computed;
+    next = pushMajorDepthNews(next, teamId, prev.startersByPos, computed.startersByPos);
+  }
+
+  return { ...next, leagueDepthCharts };
+}
+
+function seedDepthForTeam(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+  if (!teamId) return state;
+
+  const prevSlots = state.depthChart.startersByPos;
+  const cleared = { ...state.depthChart, lockedBySlot: {} };
+  const filled = { ...cleared, startersByPos: autoFillDepthChartGaps({ ...state, depthChart: cleared }, teamId) };
+
+  let next = { ...state, depthChart: filled };
+  next = pushMajorDepthNews(next, teamId, prevSlots, filled.startersByPos);
+  next = recomputeLeagueDepthAndNews(next);
+  return next;
+}
+
+function shouldRecomputeDepthOnTransition(prev: CareerStage, next: CareerStage) {
+  if (prev === "FREE_AGENCY" && next === "PRE_DRAFT") return true;
+  if (prev === "DRAFT" && next === "TRAINING_CAMP") return true;
+  if (prev !== "PRESEASON" && next === "PRESEASON") return true;
+  return false;
+}
+
+function shouldRecomputeDepthOnWeekly(_state: GameState) {
+  return false;
 }
 
 function seasonRollover(state: GameState): GameState {
@@ -1096,6 +1315,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const nextStage = nextCareerStage(state.careerStage);
       let next: GameState = { ...state, careerStage: nextStage };
       next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
+      if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
+      if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -1330,18 +1551,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "OFFSEASON_ADVANCE_STEP": {
       const cur = state.offseason.stepId;
       if (!state.offseason.stepsComplete[cur]) return state;
-      const next = nextOffseasonStepId(cur);
-      if (!next) return state;
+      const nextStep = nextOffseasonStepId(cur);
+      if (!nextStep) return state;
+
+      const prevStage = state.careerStage;
       const stage: CareerStage =
-        next === "TRAINING_CAMP"
+        nextStep === "TRAINING_CAMP"
           ? "TRAINING_CAMP"
-          : next === "PRESEASON"
+          : nextStep === "PRESEASON"
             ? "PRESEASON"
-            : next === "CUT_DOWNS"
+            : nextStep === "CUT_DOWNS"
               ? "OFFSEASON_HUB"
               : state.careerStage;
-      const nextState = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: next } };
-      return clearDepthLocksIfEnteringPreseason(state.careerStage, stage, nextState);
+
+      let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
+      if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
+      if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
+      return next;
     }
     case "RESIGN_SET_DECISION":
       return {
@@ -1965,9 +2192,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
 
       if (playerId === "AUTO") {
+        const prevSlots = state.depthChart.startersByPos;
         delete starters[slot];
         delete lockedBySlot[slot];
-        return { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+        return teamId ? pushMajorDepthNews(next0, teamId, prevSlots, starters) : next0;
       }
 
       if (lockedBySlot[slot]) return state;
@@ -1989,11 +2219,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         if (b) lockedBySlot[slot] = true;
         else delete lockedBySlot[slot];
 
-        return { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+        return teamId ? pushMajorDepthNews(next0, teamId, state.depthChart.startersByPos, starters) : next0;
       }
 
+      const prevSlots = state.depthChart.startersByPos;
       starters[slot] = String(playerId);
-      return { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+      const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+      const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+      return teamId ? pushMajorDepthNews(next0, teamId, prevSlots, starters) : next0;
     }
     case "TOGGLE_DEPTH_SLOT_LOCK": {
       const slot = action.payload.slot;
@@ -2012,10 +2247,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "DEPTHCHART_RESET_TO_BEST": {
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
-      const next = {
-        ...state,
-        depthChart: { ...state.depthChart, startersByPos: autoFillDepthChartGaps(state, teamId) },
-      };
+      const prevSlots = state.depthChart.startersByPos;
+      const startersByPos = autoFillDepthChartGaps(state, teamId);
+      const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos } };
+      const next = pushMajorDepthNews(next0, String(teamId), prevSlots, startersByPos);
       return applyFinances(next);
     }
     case "AUTOFILL_DEPTH_CHART": {
@@ -2216,14 +2451,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
 
-      let nextState = { ...state, league, hub };
+      let out = { ...state, league, hub };
       if (gameType === "REGULAR_SEASON") {
-        nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
+        out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
         if (week >= REGULAR_SEASON_WEEKS) {
-          nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
+          out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
         }
       }
-      return nextState;
+      if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
+      return out;
     }
     case "RESET":
       return createInitialState();
@@ -2259,7 +2495,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     lockedBySlot: { ...((oldState as any).depthChart?.lockedBySlot ?? {}) },
   };
 
-  return {
+  let s: Partial<GameState> = {
     ...oldState,
     saveSeed,
     careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
@@ -2322,7 +2558,11 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     rookieContracts: oldState.rookieContracts ?? {},
     firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     depthChart: nextDepthChart,
+    leagueDepthCharts: (oldState as any).leagueDepthCharts ?? {},
+    playerAccolades: (oldState as any).playerAccolades ?? {},
   };
+  s = ensureAccolades(bootstrapAccolades(s as GameState));
+  return s;
 }
 
 function loadState(): GameState {
@@ -2334,7 +2574,7 @@ function loadState(): GameState {
     const parsed = JSON.parse(saved) as Partial<GameState>;
     const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
-    return {
+    let out: GameState = {
       ...initial,
       ...migrated,
       coach: { ...initial.coach, ...migrated.coach },
@@ -2406,7 +2646,11 @@ function loadState(): GameState {
       ) as Record<string, PlayerContractOverride>,
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
+      leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
+      playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
     };
+    out = ensureAccolades(bootstrapAccolades(out));
+    return out;
   } catch {
     return initial;
   }
