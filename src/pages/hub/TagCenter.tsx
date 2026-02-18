@@ -43,7 +43,7 @@ export default function TagCenter() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<"non" | "ex" | "trans">("non");
 
-  const hasAnyResignOffer = Object.values(decisions ?? {}).some((d: any) => d?.action === "RESIGN");
+  const hasOfferFor = (playerId: string) => decisions?.[playerId]?.action === "RESIGN";
 
   const eligible = useMemo(() => {
     const contracts = getContracts();
@@ -108,9 +108,8 @@ export default function TagCenter() {
   const focus = eligible.find((e) => e.id === (selected ?? eligible[0]?.id)) ?? null;
 
   const canApply = (playerId: string, cost: number) => {
-    if (hasAnyResignOffer) return false;
     if (applied) return false;
-    if (decisions[playerId]?.action === "RESIGN") return false;
+    if (hasOfferFor(playerId)) return false;
     if (capAfter(availableCap, cost) < 0) return false;
     return true;
   };
@@ -195,12 +194,6 @@ export default function TagCenter() {
                     {focus.name} <span className="text-muted-foreground">({focus.pos})</span>
                   </div>
 
-                  {hasAnyResignOffer ? (
-                    <div className="text-xs text-destructive">
-                      Tag actions are locked while any re-sign/extension offer exists. Clear offers in Re-sign or Audit.
-                    </div>
-                  ) : null}
-
                   {applied ? <div className="text-xs text-muted-foreground">Tag already used this offseason. Remove it to choose another player.</div> : null}
 
                   <div className="text-xs text-muted-foreground">
@@ -208,13 +201,8 @@ export default function TagCenter() {
                     <span className="mx-2">|</span> Cap space now {money(availableCap)}
                   </div>
 
-                  {decisions[focus.id]?.action === "RESIGN" ? (
-                    <div className="text-xs text-destructive flex items-center justify-between gap-2">
-                      <span>Offer pending. Clear it to tag.</span>
-                      <Button size="sm" variant="outline" onClick={() => dispatch({ type: "RESIGN_CLEAR_DECISION", payload: { playerId: focus.id } })}>
-                        Clear Offer
-                      </Button>
-                    </div>
+                  {hasOfferFor(focus.id) ? (
+                    <div className="text-xs text-destructive">This player has an active re-sign offer. Clear it in Re-sign or Audit to tag.</div>
                   ) : null}
                 </div>
 
