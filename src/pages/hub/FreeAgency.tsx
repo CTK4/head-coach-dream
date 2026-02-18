@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getEffectiveFreeAgents, normalizePos, getEffectivePlayer } from "@/engine/rosterOverlay";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { getEffectiveFreeAgents, normalizePos } from "@/engine/rosterOverlay";
+import { projectedMarketApy } from "@/engine/marketModel";
 
 type PosTab = "ALL" | "QB" | "RB" | "WR" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S" | "K" | "P";
 const TABS: PosTab[] = ["ALL", "QB", "RB", "WR", "TE", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
@@ -20,6 +23,9 @@ function tabMatch(tab: PosTab, pos: string) {
   if (tab === "ALL") return true;
   return normalizePos(pos) === tab;
 }
+function pct(n: number) {
+  return `${Math.round(n * 100)}%`;
+}
 
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
@@ -27,43 +33,50 @@ export default function FreeAgency() {
 
   const [tab, setTab] = useState<PosTab>("ALL");
   const [q, setQ] = useState("");
-  const [years, setYears] = useState(2);
-  const [aav, setAav] = useState(8_000_000);
+  const [showAll, setShowAll] = useState(false);
 
-  const teamId = state.acceptedOffer?.teamId;
-  if (!teamId) return null;
+  useEffect(() => {
+    dispatch({ type: "FA_BOOTSTRAP_FROM_TAMPERING" });
+  }, [dispatch]);
 
   const ui = state.freeAgency.ui;
   const activePlayerId = ui.mode === "PLAYER" ? ui.playerId : "";
-  const offersByPlayerId = state.freeAgency.offersByPlayerId;
-
-  const offers = activePlayerId ? offersByPlayerId[activePlayerId] ?? [] : [];
-  const anyPending = offers.some((o) => o.status === "PENDING");
-  const pendingUser = offers.find((o) => o.isUser && o.status === "PENDING");
-  const accepted = offers.find((o) => o.status === "ACCEPTED");
-  const capIllegal = state.finances.capSpace < 0;
-
-  const totalOffers = useMemo(() => {
-    let n = 0;
-    for (const v of Object.values(offersByPlayerId)) n += v.filter((o) => o.isUser && o.status !== "WITHDRAWN").length;
-    return n;
-  }, [offersByPlayerId]);
+  const activeDraft = activePlayerId ? state.freeAgency.draftByPlayerId[activePlayerId] : null;
 
   const list = useMemo(() => {
-    return getEffectiveFreeAgents(state)
-      .map((p: any) => ({
-        id: String(p.playerId),
-        name: String(p.fullName),
-        pos: String(p.pos ?? "UNK").toUpperCase(),
-        age: Number(p.age ?? 0),
-        ovr: Number(p.overall ?? 0),
-        portraitUrl: String(p.portraitUrl ?? ""),
-      }))
+    const all = getEffectiveFreeAgents(state)
+      .map((p: any) => {
+        const id = String(p.playerId);
+        const interest = state.tampering.interestByPlayerId[id] ?? 0;
+        const market = projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 0), Number(p.age ?? 26));
+        const offers = state.freeAgency.offersByPlayerId[id] ?? [];
+        const pendingUser = offers.some((o) => o.isUser && o.status === "PENDING");
+        const signed = !!state.freeAgency.signingsByPlayerId[id];
+        return {
+          id,
+          name: String(p.fullName),
+          pos: String(p.pos ?? "UNK").toUpperCase(),
+          age: Number(p.age ?? 0),
+          ovr: Number(p.overall ?? 0),
+          portraitUrl: String(p.portraitUrl ?? ""),
+          interest,
+          market,
+          pendingUser,
+          signed,
+        };
+      })
       .filter((p) => tabMatch(tab, p.pos))
       .filter((p) => (q.trim() ? p.name.toLowerCase().includes(q.trim().toLowerCase()) : true))
-      .sort((a, b) => b.ovr - a.ovr)
-      .slice(0, 140);
-  }, [state, tab, q]);
+      .filter((p) => showAll || p.interest >= 0.45)
+      .sort((a, b) => Number(b.pendingUser) - Number(a.pendingUser) || b.ovr - a.ovr);
+
+    return all.slice(0, 180);
+  }, [state, tab, q, showAll]);
+
+  const resolvesLeft = Math.max(0, state.freeAgency.maxResolvesPerPhase - state.freeAgency.resolvesUsedThisPhase);
+
+  const offersForActive = activePlayerId ? state.freeAgency.offersByPlayerId[activePlayerId] ?? [] : [];
+  const pendingUserForActive = offersForActive.some((o) => o.isUser && o.status === "PENDING");
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/30">
@@ -71,8 +84,21 @@ export default function FreeAgency() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="text-lg font-extrabold tracking-widest">FREE AGENCY</div>
           <div className="flex gap-2">
+            <Link to="/hub/trades">
+              <Button variant="secondary" className="rounded-2xl px-4">
+                Trades
+              </Button>
+            </Link>
             <Button variant="secondary" className="rounded-2xl px-4" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>
               My Offers
+            </Button>
+            <Button
+              className="rounded-2xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
+              disabled={resolvesLeft <= 0}
+              onClick={() => dispatch({ type: "FA_RESOLVE_BATCH" })}
+              title={resolvesLeft <= 0 ? "No resolves left this phase" : ""}
+            >
+              Resolve ({resolvesLeft}/5)
             </Button>
             <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
               Continue
@@ -94,38 +120,38 @@ export default function FreeAgency() {
                 </button>
               ))}
             </div>
-
-            <button onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })} className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2">
-              <span>Total Offers: {totalOffers}</span>
-              <span className="opacity-70">›</span>
-            </button>
           </div>
 
           <div className="mt-2 flex gap-2">
             <div className="relative flex-1">
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players..." className="rounded-2xl bg-white/5 border-white/10" />
             </div>
-            <Button variant="secondary" className="rounded-2xl" onClick={() => dispatch({ type: "FA_RESOLVE_WEEK", payload: { week: state.week } })}>
-              Advance
-            </Button>
+            <div className="flex items-center gap-2 px-3 rounded-2xl border border-white/10 bg-white/5">
+              <span className="text-xs text-muted-foreground">Hide uninterested</span>
+              <Switch checked={!showAll} onCheckedChange={(v) => setShowAll(!v)} />
+            </div>
           </div>
 
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
             <div>Cap Space: {moneyShort(state.finances.capSpace)} · Cash: {moneyShort(state.finances.cash)}</div>
-            {capIllegal ? <div className="text-red-300">Cap Illegal</div> : <div>OK</div>}
+            <div>Resolves left: {resolvesLeft}/5</div>
           </div>
         </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-3">
-        <ScrollArea className="h-[calc(100vh-250px)] pr-2">
+        <ScrollArea className="h-[calc(100vh-260px)] pr-2">
           <div className="space-y-3">
             {list.map((p) => {
-              const rowOffers = offersByPlayerId[p.id] ?? [];
-              const userOffers = rowOffers.filter((o) => o.isUser && o.status !== "WITHDRAWN");
-              const has = userOffers.length > 0;
-              const pending = rowOffers.some((o) => o.status === "PENDING");
-              const totalUser = userOffers.reduce((a, o) => a + o.aav, 0);
+              const tier = p.interest >= 0.8 ? "High" : p.interest >= 0.6 ? "Med" : p.interest >= 0.45 ? "Low" : "None";
+              const badge =
+                tier === "High"
+                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"
+                  : tier === "Med"
+                    ? "bg-sky-500/15 text-sky-300 border-sky-500/25"
+                    : tier === "Low"
+                      ? "bg-amber-500/15 text-amber-300 border-amber-500/25"
+                      : "bg-white/5 text-muted-foreground border-white/10";
 
               return (
                 <Card key={p.id} className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
@@ -144,34 +170,34 @@ export default function FreeAgency() {
                               </button>
                             </div>
                             <div className="mt-0.5 text-xs text-muted-foreground">
-                              {p.age} | {normalizePos(p.pos)}
+                              {p.age} | {normalizePos(p.pos)} · Market {moneyShort(p.market)}/yr
                             </div>
                           </div>
-                          <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
-                            {p.ovr}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={`rounded-xl border ${badge}`}>
+                              Interest {pct(p.interest)}
+                            </Badge>
+                            <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
+                              {p.ovr}
+                            </Badge>
+                          </div>
                         </div>
 
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-xs text-muted-foreground">
-                              {has ? `${userOffers.length} Offer${userOffers.length === 1 ? "" : "s"}` : "No Offer"}
-                              <span className="mx-2 opacity-50">|</span>
-                              {has ? moneyShort(totalUser) : "—"}
-                            </div>
-                            {pending ? (
-                              <Badge className="rounded-xl bg-orange-500/20 text-orange-300 border border-orange-500/30" variant="outline">
-                                Pending
-                              </Badge>
-                            ) : null}
+                            {p.pendingUser ? <Badge className="rounded-xl" variant="secondary">Offer Pending</Badge> : null}
+                            {p.signed ? <Badge className="rounded-xl" variant="outline">Signed</Badge> : null}
                           </div>
 
-                          <Button
-                            onClick={() => dispatch({ type: "FA_OPEN_PLAYER", payload: { playerId: p.id } })}
-                            className="rounded-xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                          >
-                            {has ? "View Offers" : "Make Offer"}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              className="rounded-xl"
+                              onClick={() => dispatch({ type: "FA_OPEN_PLAYER", payload: { playerId: p.id } })}
+                            >
+                              {p.pendingUser ? "Edit" : "Offer"}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -183,137 +209,102 @@ export default function FreeAgency() {
         </ScrollArea>
       </div>
 
-      <Dialog open={ui.mode === "PLAYER"} onOpenChange={(open) => !open && dispatch({ type: "FA_CLOSE_MODAL" })}>
+      <Dialog open={ui.mode === "PLAYER"} onOpenChange={(o) => !o && dispatch({ type: "FA_CLOSE_MODAL" })}>
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle>
               <button className="hover:underline" onClick={() => activePlayerId && navigate(`/hub/player/${activePlayerId}`)}>
-                Player Offers
+                Offer
               </button>
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2 text-sm">
-              {accepted ? <Badge variant="secondary">Signed</Badge> : null}
-              {anyPending ? <Badge variant="outline">Pending</Badge> : null}
-              {capIllegal ? <Badge variant="destructive">Cap Illegal</Badge> : null}
+              <Badge variant="outline">Cap Space {moneyShort(state.finances.capSpace)}</Badge>
+              {pendingUserForActive ? <Badge variant="secondary">Pending</Badge> : <Badge variant="outline">New</Badge>}
             </div>
 
-            {!accepted ? (
-              <Card className="rounded-2xl">
-                <CardContent className="p-4 space-y-3">
-                  <div className="font-semibold">Make Offer</div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <div className="text-xs text-muted-foreground mb-1">Years</div>
-                      <Input type="number" min={1} max={5} value={years} onChange={(e) => setYears(Number(e.target.value))} className="rounded-xl" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-xs text-muted-foreground mb-1">AAV</div>
-                      <Input type="number" step={50000} min={750000} value={aav} onChange={(e) => setAav(Number(e.target.value))} className="rounded-xl" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      disabled={capIllegal}
-                      className="rounded-xl flex-1 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                      onClick={() => activePlayerId && dispatch({ type: "FA_SUBMIT_OFFER", payload: { playerId: activePlayerId, years, aav } })}
-                    >
-                      Submit Offer
-                    </Button>
-                    {pendingUser ? (
-                      <Button variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_WITHDRAW_OFFER", payload: { playerId: pendingUser.playerId, offerId: pendingUser.offerId } })}>
-                        Withdraw
-                      </Button>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
-
             <Card className="rounded-2xl">
-              <CardContent className="p-4 space-y-2">
-                <div className="font-semibold">Offer List</div>
-                <div className="space-y-2">
-                  {offers.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No offers yet.</div>
-                  ) : (
-                    offers
-                      .slice()
-                      .sort((a, b) => b.aav - a.aav)
-                      .map((o) => (
-                        <div key={o.offerId} className="border rounded-xl p-3 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium truncate">{o.isUser ? "Your Offer" : o.teamId}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {o.years}y · {moneyShort(o.aav)} · {o.status}
-                            </div>
-                          </div>
-                          {o.status === "PENDING" && !accepted ? (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                disabled={capIllegal}
-                                className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                                onClick={() => dispatch({ type: "FA_ACCEPT_OFFER", payload: { playerId: o.playerId, offerId: o.offerId } })}
-                              >
-                                Accept
-                              </Button>
-                              <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_REJECT_OFFER", payload: { playerId: o.playerId, offerId: o.offerId } })}>
-                                Reject
-                              </Button>
-                            </div>
-                          ) : null}
-                        </div>
-                      ))
-                  )}
+              <CardContent className="p-4 space-y-3">
+                <div className="font-semibold">Terms</div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground mb-1">Years</div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={activeDraft?.years ?? 2}
+                      onChange={(e) => dispatch({ type: "FA_SET_DRAFT", payload: { playerId: activePlayerId, years: Number(e.target.value), aav: activeDraft?.aav ?? 8_000_000 } })}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground mb-1">AAV</div>
+                    <Input
+                      type="number"
+                      step={50000}
+                      min={750000}
+                      value={activeDraft?.aav ?? 8_000_000}
+                      onChange={(e) => dispatch({ type: "FA_SET_DRAFT", payload: { playerId: activePlayerId, years: activeDraft?.years ?? 2, aav: Number(e.target.value) } })}
+                      className="rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    className="rounded-xl flex-1 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
+                    onClick={() => activePlayerId && dispatch({ type: "FA_SUBMIT_OFFER", payload: { playerId: activePlayerId } })}
+                  >
+                    Submit Offer
+                  </Button>
+                  {pendingUserForActive ? (
+                    <Button variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_CLEAR_USER_OFFER", payload: { playerId: activePlayerId } })}>
+                      Withdraw
+                    </Button>
+                  ) : null}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  Press Resolve to process a batch (up to 5 players). You can resolve up to 5 times this phase.
                 </div>
               </CardContent>
             </Card>
-
-            <div className="flex justify-end">
-              <Button variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_CLOSE_MODAL" })}>
-                Close
-              </Button>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={ui.mode === "MY_OFFERS"} onOpenChange={(open) => !open && dispatch({ type: "FA_CLOSE_MODAL" })}>
+      <Dialog open={ui.mode === "MY_OFFERS"} onOpenChange={(o) => !o && dispatch({ type: "FA_CLOSE_MODAL" })}>
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle>My Offers</DialogTitle>
           </DialogHeader>
+
           <div className="space-y-2">
-            {Object.entries(offersByPlayerId)
-              .flatMap(([playerId, os]) => os.filter((o) => o.isUser && o.status !== "WITHDRAWN").map((o) => ({ ...o, playerId })))
-              .sort((a, b) => b.aav - a.aav)
-              .map((o) => {
-                const pl: any = getEffectivePlayer(state, o.playerId);
-                const nm = String(pl?.fullName ?? o.playerId);
-                const pos = normalizePos(String(pl?.pos ?? "UNK"));
-                const ovr = Number(pl?.overall ?? 0);
-                return (
-                  <div key={o.offerId} className="border rounded-xl p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        <button className="hover:underline text-left" onClick={() => navigate(`/hub/player/${o.playerId}`)}>
-                          {nm}
-                        </button>{" "}
-                        <span className="text-muted-foreground">({pos} · {ovr})</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {o.years}y · {moneyShort(o.aav)} · {o.status}
-                      </div>
+            {state.freeAgency.activity.length ? (
+              <>
+                <div className="text-xs text-muted-foreground">Latest results</div>
+                <Separator />
+                <div className="space-y-2">
+                  {state.freeAgency.activity.slice(0, 18).map((a) => (
+                    <div key={a.ts} className="text-sm">
+                      {a.playerId ? (
+                        <button className="hover:underline" onClick={() => navigate(`/hub/player/${a.playerId}`)}>
+                          {a.text}
+                        </button>
+                      ) : (
+                        a.text
+                      )}
                     </div>
-                    <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "FA_OPEN_PLAYER", payload: { playerId: o.playerId } })}>
-                      View
-                    </Button>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">No activity yet. Submit offers, then Resolve.</div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

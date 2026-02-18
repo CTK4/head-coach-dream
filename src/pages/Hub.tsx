@@ -129,6 +129,16 @@ const Hub = () => {
             <div className="text-sm text-muted-foreground">
               Phase 2 tools: finalize cap baseline, audit contracts, and decide tags before the market opens.
             </div>
+            {state.careerStage === "FREE_AGENCY" ? (
+              <div className="flex flex-wrap gap-2">
+                <Link to="/hub/free-agency">
+                  <Button size="sm" variant="secondary">Free Agency</Button>
+                </Link>
+                <Link to="/hub/trades">
+                  <Button size="sm" variant="secondary">Trades</Button>
+                </Link>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <Link to="/hub/cap-baseline">
                 <Button variant="secondary">Cap Baseline</Button>

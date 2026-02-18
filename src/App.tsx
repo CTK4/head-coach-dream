@@ -31,6 +31,7 @@ import TagCenter from "./pages/hub/TagCenter";
 import RosterAudit from "./pages/hub/RosterAudit";
 import DepthChart from "./pages/hub/DepthChart";
 import CapBaseline from "@/pages/hub/CapBaseline";
+import TradeHub from "./pages/hub/TradeHub";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const App = () => (
               <Route path="combine" element={<Combine />} />
               <Route path="tampering" element={<Tampering />} />
               <Route path="free-agency" element={<FreeAgency />} />
+              <Route path="trades" element={<TradeHub />} />
               <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
               <Route path="training-camp" element={<TrainingCamp />} />
