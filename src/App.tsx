@@ -32,6 +32,8 @@ import RosterAudit from "./pages/hub/RosterAudit";
 import DepthChart from "./pages/hub/DepthChart";
 import CapBaseline from "@/pages/hub/CapBaseline";
 import TradeHub from "./pages/hub/TradeHub";
+import StaffManagement from "./pages/hub/StaffManagement";
+import LeagueNews from "./pages/hub/LeagueNews";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +94,8 @@ const App = () => (
               <Route path="tampering" element={<Tampering />} />
               <Route path="free-agency" element={<FreeAgency />} />
               <Route path="trades" element={<TradeHub />} />
+              <Route path="staff-management" element={<StaffManagement />} />
+              <Route path="league-news" element={<LeagueNews />} />
               <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
               <Route path="training-camp" element={<TrainingCamp />} />
