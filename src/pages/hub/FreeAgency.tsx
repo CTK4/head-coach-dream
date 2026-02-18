@@ -38,6 +38,7 @@ export default function FreeAgency() {
   const [biddingWarsFirst, setBiddingWarsFirst] = useState(true);
   const [hideSigned, setHideSigned] = useState(true);
   const [myTeamOnly, setMyTeamOnly] = useState(true);
+  const [closeMyOffersOnResolveNonce, setCloseMyOffersOnResolveNonce] = useState(0);
 
   const myTeamId = String(state.acceptedOffer?.teamId ?? "");
 
@@ -48,7 +49,12 @@ export default function FreeAgency() {
 
   const ui = state.freeAgency.ui;
   const activePlayerId = ui.mode === "PLAYER" ? ui.playerId : "";
+  const signedActive = !!(activePlayerId && state.freeAgency.signingsByPlayerId[activePlayerId]);
   const activeDraft = activePlayerId ? state.freeAgency.draftByPlayerId[activePlayerId] : null;
+
+  useEffect(() => {
+    if (ui.mode === "PLAYER" && activePlayerId && signedActive) dispatch({ type: "FA_CLOSE_MODAL" });
+  }, [ui.mode, activePlayerId, signedActive, dispatch]);
 
   const list = useMemo(() => {
     const all = getEffectiveFreeAgents(state)
@@ -133,6 +139,7 @@ export default function FreeAgency() {
   const offersForActive = activePlayerId ? state.freeAgency.offersByPlayerId[activePlayerId] ?? [] : [];
   const pending = offersForActive.filter((o) => o.status === "PENDING");
   const counters = offersForActive.filter((o) => o.status === "COUNTERED");
+  const activeOffersCount = pending.length + counters.length;
   const pendingUserOffer = offersForActive.find((o) => o.isUser && o.status === "PENDING") ?? null;
   const userTeamId = String(state.acceptedOffer?.teamId ?? "");
   const counterToUser = offersForActive.find((o) => o.status === "COUNTERED" && String(o.teamId) === userTeamId) ?? null;
@@ -166,7 +173,18 @@ export default function FreeAgency() {
           <div className="flex gap-2">
             <Link to="/hub/trades"><Button variant="secondary" className="rounded-2xl px-4">Trades</Button></Link>
             <Button variant="secondary" className="rounded-2xl px-4" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>My Offers{myOffersCount.total ? <Badge variant="outline" className="ml-2 rounded-xl border-white/15 bg-white/5">{myOffersCount.pending}/{myOffersCount.accepted}</Badge> : null}</Button>
-            <Button className="rounded-2xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold" disabled={resolvesLeft <= 0} onClick={() => dispatch({ type: "FA_RESOLVE" })}>Resolve ({resolvesLeft}/5)</Button>
+            <Button
+              className="rounded-2xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
+              disabled={resolvesLeft <= 0}
+              onClick={() => {
+                if (ui.mode === "MY_OFFERS") dispatch({ type: "FA_CLOSE_MODAL" });
+                setCloseMyOffersOnResolveNonce((n) => n + 1);
+                dispatch({ type: "FA_RESOLVE" });
+              }}
+              title={resolvesLeft <= 0 ? "No resolves left this phase" : ""}
+            >
+              Resolve ({resolvesLeft}/5)
+            </Button>
             <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>Continue</Button>
           </div>
         </div>
@@ -194,6 +212,11 @@ export default function FreeAgency() {
         <DialogContent className="max-w-lg rounded-2xl"><DialogHeader><DialogTitle><button className="hover:underline" onClick={() => activePlayerId && navigate(`/hub/player/${activePlayerId}`)}>Offer</button></DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="outline">Market {moneyShort(activeMarket)}/yr</Badge><Badge variant="outline">Top {moneyShort(topPendingAav)}/yr</Badge><Badge variant="outline">Yours {moneyShort(yourAav)}/yr</Badge></div>
+            {activeOffersCount ? (
+              <div className="text-xs text-muted-foreground">Active offers: {activeOffersCount} (Finalists: {finalists.length})</div>
+            ) : (
+              <div className="text-xs text-muted-foreground">No active offers.</div>
+            )}
             {counterToUser ? <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3"><div className="text-sm font-semibold text-amber-200">Awaiting your response</div><div className="text-xs text-muted-foreground mt-1">Player countered: {counterToUser.years}y · {moneyShort(counterToUser.aav)}/yr</div></div> : null}
             {finalists.length ? <div className="rounded-xl border p-3"><div className="text-sm font-semibold">Finalists</div><div className="mt-2 space-y-2">{finalists.map((o) => <div key={o.offerId} className="flex items-center justify-between gap-2 text-sm"><div className="min-w-0 truncate">{o.teamId}{o.isUser ? " (You)" : ""}</div><div className="text-muted-foreground">{o.years}y · {moneyShort(o.aav)}/yr</div></div>)}</div></div> : null}
             {counters.length ? <div className="rounded-xl border p-3"><div className="text-sm font-semibold">Counters Issued</div><div className="mt-2 space-y-2">{counters.sort((a, b) => Number(b.aav) - Number(a.aav) || Number(b.years) - Number(a.years)).slice(0, 5).map((o) => <div key={o.offerId} className="flex items-center justify-between gap-2 text-sm"><div className="min-w-0 truncate">{o.teamId}{o.isUser ? " (You)" : ""}</div><div className="text-muted-foreground">{o.years}y · {moneyShort(o.aav)}/yr</div></div>)}</div></div> : null}
