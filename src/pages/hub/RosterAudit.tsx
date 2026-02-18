@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
-import { buildCapTable, maxRestructureAmount, simulateRestructure, getRestructureEligibility } from "@/engine/contractMath";
+import {
+  buildCapTable,
+  computeCutProjection,
+  maxRestructureAmount,
+  simulateRestructure,
+  getRestructureEligibility,
+} from "@/engine/contractMath";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +98,8 @@ export default function RosterAudit() {
 
   const baseTable = focus ? buildCapTable(state, focus.id, 5) : null;
   const simTable = focus ? simulateRestructure(state, focus.id, gate?.eligible ? restruct : 0, 5) : null;
+  const designation = focus ? state.offseasonData.rosterAudit.cutDesignations[focus.id] ?? "NONE" : "NONE";
+  const cutProj = focus ? computeCutProjection(state, focus.id, designation === "POST_JUNE_1") : null;
 
   return (
     <div className="p-4 md:p-8 space-y-4">
@@ -185,6 +193,45 @@ export default function RosterAudit() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Savings Now: Pre {money(focus.savingsPre)} · Post {money(focus.savingsPost)}
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">Cut Designation</div>
+                  <Select
+                    value={designation}
+                    onValueChange={(v) =>
+                      dispatch({
+                        type: "ROSTERAUDIT_SET_CUT_DESIGNATION",
+                        payload: { playerId: focus.id, designation: v as "NONE" | "POST_JUNE_1" },
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Standard Cut</SelectItem>
+                      <SelectItem value="POST_JUNE_1">Post–June 1</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {cutProj ? (
+                  <div className="text-xs text-muted-foreground">
+                    Save now {money(cutProj.savingsThisYear)} · Dead now {money(cutProj.deadThisYear)} · Dead next {money(cutProj.deadNextYear)}
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      dispatch({ type: "CUT_APPLY", payload: { playerId: focus.id } });
+                      setOpenId(null);
+                    }}
+                  >
+                    Apply Cut
+                  </Button>
                 </div>
               </div>
 
