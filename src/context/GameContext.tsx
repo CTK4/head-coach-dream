@@ -2651,7 +2651,8 @@ function loadState(): GameState {
     };
     out = ensureAccolades(bootstrapAccolades(out));
     return out;
-  } catch {
+  } catch (error) {
+    console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
     return initial;
   }
 }
@@ -2668,7 +2669,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, undefined, loadState);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error("[state-save] Failed to persist save data", error);
+    }
   }, [state]);
 
   const getCurrentTeamMatchup: GameContextType["getCurrentTeamMatchup"] = (gameType) => {
