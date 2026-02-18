@@ -623,6 +623,23 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
   };
 }
 
+function isNewsworthyRecommit(p: any) {
+  return Number(p?.overall ?? 0) >= 90;
+}
+
+function clearResignOffers(state: GameState): GameState {
+  const decisions = { ...(state.offseasonData?.resigning?.decisions ?? {}) };
+  const hadAny = Object.keys(decisions).length > 0;
+  if (!hadAny) return state;
+  return {
+    ...state,
+    offseasonData: {
+      ...state.offseasonData,
+      resigning: { ...state.offseasonData.resigning, decisions: {} },
+    },
+  };
+}
+
 function makeEscalatingSalaries(totalCash: number, years: number, annualGrowth = 0.06): number[] {
   const y = Math.max(1, years);
   const g = Math.max(0, annualGrowth);
@@ -1409,6 +1426,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
       if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
+      if (nextStage === "FREE_AGENCY") next = clearResignOffers(next);
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -1648,7 +1666,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       const prevStage = state.careerStage;
       const stage: CareerStage =
-        nextStep === "TRAINING_CAMP"
+        nextStep === "FREE_AGENCY"
+          ? "FREE_AGENCY"
+          : nextStep === "TRAINING_CAMP"
           ? "TRAINING_CAMP"
           : nextStep === "PRESEASON"
             ? "PRESEASON"
@@ -1660,6 +1680,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
+      if (stage === "FREE_AGENCY") next = clearResignOffers(next);
       return next;
     }
     case "RESIGN_SET_DECISION":
@@ -1712,14 +1733,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const decisions = { ...state.offseasonData.resigning.decisions } as any;
       delete decisions[String(playerId)];
 
-      const next = applyFinances({ ...state, playerContractOverrides, offseasonData: { ...state.offseasonData, resigning: { decisions } } });
+      const morale = { ...(state.playerMorale ?? {}) };
+      const curMorale = Number(morale[String(playerId)] ?? 60);
+      morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
 
-      return pushNews(
-        next,
-        `Extension agreed: ${getPlayers().find((p: any) => String(p.playerId) === String(playerId))?.fullName ?? "Player"} — ${offer.years} yrs @ $${Math.round(
-          offer.apy / 1_000_000,
-        )}M/yr.`,
-      );
+      let next = applyFinances({
+        ...state,
+        playerContractOverrides,
+        playerMorale: morale,
+        offseasonData: { ...state.offseasonData, resigning: { decisions } },
+      });
+
+      const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+      if (isNewsworthyRecommit(p)) {
+        next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+      }
+
+      return next;
     }
     case "RESIGN_CLEAR_DECISION": {
       const next = { ...state.offseasonData.resigning.decisions };
