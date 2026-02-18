@@ -5,40 +5,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type SlotGroup = { title: string; slots: Array<{ slot: string; label: string; pos: string[] }> };
 
 const GROUPS: SlotGroup[] = [
-  { title: "Offense", slots: [
-    { slot: "QB1", label: "QB1", pos: ["QB"] },
-    { slot: "RB1", label: "RB1", pos: ["RB"] },
-    { slot: "WR1", label: "WR1", pos: ["WR"] },
-    { slot: "WR2", label: "WR2", pos: ["WR"] },
-    { slot: "TE1", label: "TE1", pos: ["TE"] },
-    { slot: "LT", label: "LT", pos: ["OT", "OL"] },
-    { slot: "LG", label: "LG", pos: ["OG", "OL"] },
-    { slot: "C", label: "C", pos: ["C", "OL"] },
-    { slot: "RG", label: "RG", pos: ["OG", "OL"] },
-    { slot: "RT", label: "RT", pos: ["OT", "OL"] },
-  ]},
-  { title: "Defense", slots: [
-    { slot: "EDGE1", label: "EDGE1", pos: ["EDGE", "DE", "DL"] },
-    { slot: "DT1", label: "DT1", pos: ["DT", "DL"] },
-    { slot: "DT2", label: "DT2", pos: ["DT", "DL"] },
-    { slot: "EDGE2", label: "EDGE2", pos: ["EDGE", "DE", "DL"] },
-    { slot: "LB1", label: "LB1", pos: ["LB"] },
-    { slot: "LB2", label: "LB2", pos: ["LB"] },
-    { slot: "CB1", label: "CB1", pos: ["CB", "DB"] },
-    { slot: "CB2", label: "CB2", pos: ["CB", "DB"] },
-    { slot: "FS", label: "FS", pos: ["S", "DB"] },
-    { slot: "SS", label: "SS", pos: ["S", "DB"] },
-  ]},
-  { title: "Special Teams", slots: [
-    { slot: "K", label: "K", pos: ["K"] },
-    { slot: "P", label: "P", pos: ["P"] },
-  ]},
+  {
+    title: "Offense",
+    slots: [
+      { slot: "QB1", label: "QB1", pos: ["QB"] },
+      { slot: "RB1", label: "RB1", pos: ["RB"] },
+      { slot: "WR1", label: "WR1", pos: ["WR"] },
+      { slot: "WR2", label: "WR2", pos: ["WR"] },
+      { slot: "TE1", label: "TE1", pos: ["TE"] },
+      { slot: "LT", label: "LT", pos: ["OT", "OL"] },
+      { slot: "LG", label: "LG", pos: ["OG", "OL"] },
+      { slot: "C", label: "C", pos: ["C", "OL"] },
+      { slot: "RG", label: "RG", pos: ["OG", "OL"] },
+      { slot: "RT", label: "RT", pos: ["OT", "OL"] },
+    ],
+  },
+  {
+    title: "Defense",
+    slots: [
+      { slot: "EDGE1", label: "EDGE1", pos: ["EDGE", "DE", "DL"] },
+      { slot: "DT1", label: "DT1", pos: ["DT", "DL"] },
+      { slot: "DT2", label: "DT2", pos: ["DT", "DL"] },
+      { slot: "EDGE2", label: "EDGE2", pos: ["EDGE", "DE", "DL"] },
+      { slot: "LB1", label: "LB1", pos: ["LB"] },
+      { slot: "LB2", label: "LB2", pos: ["LB"] },
+      { slot: "CB1", label: "CB1", pos: ["CB", "DB"] },
+      { slot: "CB2", label: "CB2", pos: ["CB", "DB"] },
+      { slot: "FS", label: "FS", pos: ["S", "DB"] },
+      { slot: "SS", label: "SS", pos: ["S", "DB"] },
+    ],
+  },
+  {
+    title: "Special Teams",
+    slots: [
+      { slot: "K", label: "K", pos: ["K"] },
+      { slot: "P", label: "P", pos: ["P"] },
+    ],
+  },
 ];
-
 
 export default function DepthChart() {
   const { state, dispatch } = useGame();
@@ -62,7 +71,7 @@ export default function DepthChart() {
 
   const getCandidates = (posList: string[]) => {
     const set = new Set(posList.map((x) => x.toUpperCase()));
-    return roster.filter((p) => set.has(p.pos)).slice(0, 12);
+    return roster.filter((p) => set.has(p.pos)).slice(0, 25);
   };
 
   const group = GROUPS.find((g) => g.title === activeGroup) ?? GROUPS[0];
@@ -70,7 +79,9 @@ export default function DepthChart() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Depth Chart</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Depth Chart</CardTitle>
+        </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2 text-sm">
             <Badge variant="outline">Active {Object.keys(state.rosterMgmt.active).length}/53</Badge>
@@ -88,7 +99,12 @@ export default function DepthChart() {
       <Card>
         <CardContent className="p-4 flex flex-wrap gap-2">
           {GROUPS.map((g) => (
-            <Button key={g.title} size="sm" variant={activeGroup === g.title ? "default" : "secondary"} onClick={() => setActiveGroup(g.title)}>
+            <Button
+              key={g.title}
+              size="sm"
+              variant={activeGroup === g.title ? "default" : "secondary"}
+              onClick={() => setActiveGroup(g.title)}
+            >
               {g.title}
             </Button>
           ))}
@@ -101,26 +117,49 @@ export default function DepthChart() {
             <div className="space-y-4">
               {group.slots.map((s) => {
                 const chosen = state.depthChart.startersByPos[s.slot];
+                const locked = !!state.depthChart.lockedBySlot?.[s.slot];
                 const chosenName = chosen ? roster.find((p) => p.id === chosen)?.name : undefined;
                 const candidates = getCandidates(s.pos);
+
                 return (
                   <div key={s.slot} className="border rounded-md p-3 space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="font-semibold">{s.label}</div>
-                      <Badge variant="outline">{chosenName ?? "Auto (top OVR)"}</Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {candidates.map((p) => (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{chosenName ?? "Auto (top OVR)"}</Badge>
                         <Button
-                          key={p.id}
                           size="sm"
-                          variant={p.id === chosen ? "default" : "outline"}
-                          onClick={() => dispatch({ type: "SET_STARTER", payload: { slot: s.slot, playerId: p.id } })}
+                          variant={locked ? "default" : "secondary"}
+                          onClick={() => dispatch({ type: "TOGGLE_DEPTH_SLOT_LOCK", payload: { slot: s.slot } })}
+                          disabled={!chosen}
+                          title={!chosen ? "Select a starter before locking." : undefined}
                         >
-                          {p.name} ({p.ovr})
+                          {locked ? "Locked" : "Lock"}
                         </Button>
-                      ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select
+                        value={chosen ?? "AUTO"}
+                        onValueChange={(v) => dispatch({ type: "SET_STARTER", payload: { slot: s.slot, playerId: v as string | "AUTO" } })}
+                        disabled={locked}
+                      >
+                        <SelectTrigger className="w-[320px]">
+                          <SelectValue placeholder="Choose starter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="AUTO">Auto (top OVR)</SelectItem>
+                          {candidates.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name} ({p.ovr})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
                       {!candidates.length ? <div className="text-sm text-muted-foreground">No active candidates.</div> : null}
+                      {locked ? <div className="text-xs text-muted-foreground">Unlock to change.</div> : null}
                     </div>
                   </div>
                 );

@@ -15,7 +15,7 @@ export default function Roster() {
         <Button
           variant="secondary"
           disabled={!canReset}
-          onClick={() => dispatch({ type: "DEPTHCHART_RESET_TO_BEST" })}
+          onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}
         >
           Reset to Best
         </Button>

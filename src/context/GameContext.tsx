@@ -204,7 +204,10 @@ export type PlayerContractOverride = {
 };
 
 export type BuyoutLedger = { bySeason: Record<number, number> };
-export type DepthChart = { startersByPos: Record<string, string | undefined> };
+export type DepthChart = {
+  startersByPos: Record<string, string | undefined>;
+  lockedBySlot: Record<string, true | undefined>;
+};
 export type PreseasonRotation = { byPlayerId: Record<string, number> };
 export type FreeAgencyOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
 
@@ -377,7 +380,8 @@ export type GameAction =
   | { type: "OWNER_PENALTY"; payload: { reason: string; amount: number } }
   | { type: "FIRE_STAFF"; payload: { personId: string; roleLabel: string; spreadSeasons: 1 | 2 } }
   | { type: "CHARGE_BUYOUTS_FOR_SEASON"; payload: { season: number } }
-  | { type: "SET_STARTER"; payload: { slot: string; playerId: string } }
+  | { type: "SET_STARTER"; payload: { slot: string; playerId: string | "AUTO" } }
+  | { type: "TOGGLE_DEPTH_SLOT_LOCK"; payload: { slot: string } }
   | { type: "RECALC_OWNER_FINANCIAL"; payload?: { season?: number } }
   | { type: "INIT_PRESEASON_ROTATION" }
   | { type: "SET_PLAYER_SNAP"; payload: { playerId: string; pct: number } }
@@ -445,7 +449,7 @@ function createInitialState(): GameState {
     staffBudget: { total: 18_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
     buyouts: { bySeason: {} },
-    depthChart: { startersByPos: {} },
+    depthChart: { startersByPos: {}, lockedBySlot: {} },
     preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
     staff: {},
     orgRoles: {},
@@ -978,14 +982,27 @@ function fillDepthChart(state: GameState, mode: "RESET" | "AUTOFILL"): GameState
     .map((p) => ({ id: String(p.playerId), pos: String(p.pos ?? "UNK").toUpperCase(), ovr: Number(p.overall ?? 0) }))
     .sort((a, b) => b.ovr - a.ovr);
 
-  const starters = mode === "RESET" ? {} : { ...state.depthChart.startersByPos };
+  const locked = state.depthChart.lockedBySlot ?? {};
+  const starters: Record<string, string | undefined> = {};
   const used = new Set<string>();
-  if (mode !== "RESET") {
-    for (const v of Object.values(starters)) if (v) used.add(String(v));
+
+  for (const rule of SLOT_RULES) {
+    const cur = state.depthChart.startersByPos[rule.slot];
+    if (cur && activeSet.has(String(cur)) && locked[rule.slot]) {
+      starters[rule.slot] = cur;
+      used.add(String(cur));
+    } else if (mode !== "RESET") {
+      if (cur && activeSet.has(String(cur)) && !locked[rule.slot]) {
+        starters[rule.slot] = cur;
+        used.add(String(cur));
+      }
+    }
   }
 
   for (const rule of SLOT_RULES) {
+    if (locked[rule.slot]) continue;
     if (mode === "AUTOFILL" && starters[rule.slot]) continue;
+
     const eligible = roster.filter((p) => rule.pos.includes(p.pos));
     const pick = eligible.find((p) => !used.has(p.id)) ?? eligible[0];
     if (!pick) continue;
@@ -993,7 +1010,18 @@ function fillDepthChart(state: GameState, mode: "RESET" | "AUTOFILL"): GameState
     used.add(pick.id);
   }
 
-  return { ...state, depthChart: { startersByPos: starters } };
+  return { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+}
+
+function isPreseasonStage(stage: CareerStage | undefined) {
+  return stage === "PRESEASON";
+}
+
+function clearDepthLocksIfEnteringPreseason(prevStage: CareerStage | undefined, nextStage: CareerStage | undefined, state: GameState) {
+  if (!isPreseasonStage(prevStage) && isPreseasonStage(nextStage)) {
+    return { ...state, depthChart: { ...state.depthChart, lockedBySlot: {} } };
+  }
+  return state;
 }
 
 function computeAndStoreFiringMeter(state: GameState, week: number, winPct?: number, goalsDelta?: number): GameState {
@@ -1057,10 +1085,17 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, coach: { ...state.coach, ...action.payload } };
     case "SET_PHASE":
       return { ...state, phase: action.payload };
-    case "SET_CAREER_STAGE":
-      return { ...state, careerStage: action.payload };
+    case "SET_CAREER_STAGE": {
+      const prevStage = state.careerStage;
+      const nextStage = action.payload;
+      const next = { ...state, careerStage: nextStage };
+      return clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
+    }
     case "ADVANCE_CAREER_STAGE": {
-      let next: GameState = { ...state, careerStage: nextCareerStage(state.careerStage) };
+      const prevStage = state.careerStage;
+      const nextStage = nextCareerStage(state.careerStage);
+      let next: GameState = { ...state, careerStage: nextStage };
+      next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -1305,7 +1340,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             : next === "CUT_DOWNS"
               ? "OFFSEASON_HUB"
               : state.careerStage;
-      return { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: next } };
+      const nextState = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: next } };
+      return clearDepthLocksIfEnteringPreseason(state.careerStage, stage, nextState);
     }
     case "RESIGN_SET_DECISION":
       return {
@@ -1704,9 +1740,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       });
 
+      const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
+      const nextStarters = autoFillDepthChartGaps(patched, teamId);
+      for (const [slot, starterId] of Object.entries(nextStarters)) {
+        if (String(starterId) !== playerId) continue;
+        delete nextLockedBySlot[slot];
+      }
+
       const filled = {
         ...patched,
-        depthChart: { startersByPos: autoFillDepthChartGaps(patched, teamId) },
+        depthChart: { ...patched.depthChart, startersByPos: nextStarters, lockedBySlot: nextLockedBySlot },
       };
       const next = applyFinances(filled);
 
@@ -1917,10 +1960,31 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return chargeBuyouts(state, action.payload.season);
     }
     case "SET_STARTER": {
-      return {
-        ...state,
-        depthChart: { startersByPos: { ...state.depthChart.startersByPos, [action.payload.slot]: action.payload.playerId } },
-      };
+      const { slot, playerId } = action.payload;
+      if (state.depthChart.lockedBySlot?.[slot]) return state;
+
+      const starters = { ...state.depthChart.startersByPos };
+      const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
+
+      if (playerId === "AUTO") {
+        delete starters[slot];
+        delete lockedBySlot[slot];
+        return { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+      }
+
+      starters[slot] = playerId;
+      return { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+    }
+    case "TOGGLE_DEPTH_SLOT_LOCK": {
+      const slot = action.payload.slot;
+      const starters = state.depthChart.startersByPos;
+      if (!starters[slot]) return state;
+
+      const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
+      if (lockedBySlot[slot]) delete lockedBySlot[slot];
+      else lockedBySlot[slot] = true;
+
+      return { ...state, depthChart: { ...state.depthChart, lockedBySlot } };
     }
     case "RESET_DEPTH_CHART_BEST": {
       return fillDepthChart(state, "RESET");
@@ -1930,7 +1994,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!teamId) return state;
       const next = {
         ...state,
-        depthChart: { startersByPos: autoFillDepthChartGaps(state, teamId) },
+        depthChart: { ...state.depthChart, startersByPos: autoFillDepthChartGaps(state, teamId) },
       };
       return applyFinances(next);
     }
@@ -2011,7 +2075,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "AUTO_ADVANCE_STAGE_IF_READY": {
       const step = state.offseason.stepId;
       if (step === "TRAINING_CAMP") return { ...state, careerStage: "TRAINING_CAMP" };
-      if (step === "PRESEASON") return { ...state, careerStage: "PRESEASON" };
+      if (step === "PRESEASON") {
+        const next = { ...state, careerStage: "PRESEASON" as CareerStage };
+        return clearDepthLocksIfEnteringPreseason(state.careerStage, "PRESEASON", next);
+      }
       if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
       return state;
     }
@@ -2167,6 +2234,11 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           seed: saveSeed,
         });
 
+  const nextDepthChart = {
+    startersByPos: { ...((oldState as any).depthChart?.startersByPos ?? {}) },
+    lockedBySlot: { ...((oldState as any).depthChart?.lockedBySlot ?? {}) },
+  };
+
   return {
     ...oldState,
     saveSeed,
@@ -2229,6 +2301,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
     firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
+    depthChart: nextDepthChart,
   };
 }
 
@@ -2259,7 +2332,12 @@ function loadState(): GameState {
         deadMoneyBySeason: { ...initial.teamFinances.deadMoneyBySeason, ...(migrated.teamFinances?.deadMoneyBySeason ?? {}) },
       },
       buyouts: { ...initial.buyouts, ...migrated.buyouts, bySeason: { ...initial.buyouts.bySeason, ...(migrated.buyouts?.bySeason ?? {}) } },
-      depthChart: { ...initial.depthChart, ...migrated.depthChart, startersByPos: { ...initial.depthChart.startersByPos, ...(migrated.depthChart?.startersByPos ?? {}) } },
+      depthChart: {
+        ...initial.depthChart,
+        ...migrated.depthChart,
+        startersByPos: { ...initial.depthChart.startersByPos, ...(migrated.depthChart?.startersByPos ?? {}) },
+        lockedBySlot: { ...initial.depthChart.lockedBySlot, ...(migrated.depthChart?.lockedBySlot ?? {}) },
+      },
       preseason: {
         ...initial.preseason,
         ...migrated.preseason,
