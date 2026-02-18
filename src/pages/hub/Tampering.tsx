@@ -130,11 +130,8 @@ export default function Tampering() {
             <div className="flex items-center gap-2">
               <span>Hide uninterested</span>
               <Switch checked={!showAll} onCheckedChange={(v) => setShowAll(!v)} />
+              {capIllegal ? <span className="text-red-300">Cap Illegal</span> : <span>OK</span>}
             </div>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-            <div>{capIllegal ? <div className="text-red-300">Cap Illegal</div> : <div>OK</div>}</div>
           </div>
         </div>
       </div>

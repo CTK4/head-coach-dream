@@ -130,7 +130,7 @@ const Hub = () => {
               Phase 2 tools: finalize cap baseline, audit contracts, and decide tags before the market opens.
             </div>
             {state.careerStage === "FREE_AGENCY" ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                 <Link to="/hub/free-agency">
                   <Button size="sm" variant="secondary">Free Agency</Button>
                 </Link>
