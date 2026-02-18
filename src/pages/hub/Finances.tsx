@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer, normalizePos } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,15 @@ function setCapModeQuery(mode: "standard" | "postjune1") {
 
 export default function Finances() {
   const { state, dispatch } = useGame();
+  const loc = useLocation();
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
+
+  const phase2Links = [
+    { to: "/hub/cap-baseline", label: "Cap Baseline" },
+    { to: "/hub/roster-audit", label: "Roster Audit" },
+    { to: "/hub/tag-center", label: "Tag Center" },
+  ];
 
   const rows = useMemo(() => {
     const ps = getEffectivePlayersByTeam(state, teamId);
@@ -64,15 +71,18 @@ export default function Finances() {
             <Badge variant="outline">Cash: {moneyShort(state.finances.cash)}</Badge>
           </div>
         </CardTitle>
-        <div className="flex flex-wrap gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">Phase 2</Badge>
+          {phase2Links.map((l) => (
+            <Link key={l.to} to={l.to}>
+              <Button size="sm" variant={loc.pathname === l.to ? "default" : "secondary"}>
+                {l.label}
+              </Button>
+            </Link>
+          ))}
           <Link to="/hub/cap-baseline">
-            <Button size="sm" variant="secondary">Open Cap Baseline Ledger</Button>
-          </Link>
-          <Link to="/hub/roster-audit">
-            <Button size="sm" variant="secondary">Open Roster Audit</Button>
-          </Link>
-          <Link to="/hub/tag-center">
-            <Button size="sm" variant="secondary">Open Tag Center</Button>
+            <Button size="sm" variant="ghost">Open Ledger</Button>
           </Link>
         </div>
 

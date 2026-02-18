@@ -25,6 +25,7 @@ import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { projectedMarketApy } from "@/engine/marketModel";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
   CampSettings,
@@ -356,6 +357,10 @@ export type GameAction =
   | { type: "OFFSEASON_ADVANCE_STEP" }
   | { type: "OFFSEASON_SET_STEP"; payload: { stepId: OffseasonStepId } }
   | { type: "RESIGN_SET_DECISION"; payload: { playerId: string; decision: ResignDecision } }
+  | { type: "RESIGN_MAKE_OFFER"; payload: { playerId: string; createdFrom: "AUDIT" | "RESIGN_SCREEN" } }
+  | { type: "RESIGN_DRAFT_FROM_AUDIT"; payload: { playerId: string } }
+  | { type: "RESIGN_REJECT_OFFER"; payload: { playerId: string } }
+  | { type: "RESIGN_ACCEPT_OFFER"; payload: { playerId: string } }
   | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
   | { type: "TAG_APPLY"; payload: TagApplied }
   | { type: "TAG_REMOVE" }
@@ -529,6 +534,93 @@ function upsertOffers(state: GameState, playerId: string, nextOffers: FreeAgency
 
 function moneyRound(n: number) {
   return Math.round(n / 50_000) * 50_000;
+}
+
+type ResignOffer = {
+  years: number;
+  apy: number;
+  guaranteesPct: number;
+  discountPct: number;
+  createdFrom?: "AUDIT" | "RESIGN_SCREEN";
+  rejectedCount?: number;
+};
+
+function hashSeed(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function seededFloat01(seed: number) {
+  let x = seed >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return ((x >>> 0) % 1_000_000) / 1_000_000;
+}
+
+function discountPctForOffer(state: GameState, playerId: string) {
+  const s = hashSeed(`${state.saveSeed}|DISC|${playerId}`);
+  const r = seededFloat01(s);
+  const pct = 0.05 + r * 0.07;
+  return Math.round(pct * 1000) / 1000;
+}
+
+function buildResignOffer(state: GameState, playerId: string, createdFrom: ResignOffer["createdFrom"]) {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return null;
+
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+
+  const market = projectedMarketApy(pos, ovr, age);
+
+  const existing = state.offseasonData.resigning.decisions?.[playerId] as any;
+  const rejectedCount = Number(existing?.offer?.rejectedCount ?? 0);
+
+  const baseDisc = discountPctForOffer(state, String(playerId));
+  const disc = Math.max(0, baseDisc - rejectedCount * 0.02);
+  const bump = 1 + rejectedCount * 0.03;
+
+  const apy = Math.round((market * bump * (1 - disc)) / 50_000) * 50_000;
+  const years = pos === "QB" ? 4 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 3 : 2;
+  const guaranteesPct = pos === "QB" ? 0.62 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 0.55 : 0.48;
+
+  return {
+    years,
+    apy,
+    guaranteesPct,
+    discountPct: disc,
+    createdFrom,
+    rejectedCount,
+  } satisfies ResignOffer;
+}
+
+function contractOverrideFromOffer(state: GameState, offer: ResignOffer): PlayerContractOverride {
+  const years = Math.max(2, Math.min(5, offer.years));
+  const totalCash = offer.apy * years;
+
+  const signingBonus = Math.round((totalCash * offer.guaranteesPct * 0.40) / 50_000) * 50_000;
+  const remaining = Math.max(0, totalCash - signingBonus);
+
+  const salaries: number[] = [];
+  for (let i = 0; i < years; i++) {
+    const step = 1 + i * 0.03;
+    salaries.push(Math.round(((remaining / years) * step) / 50_000) * 50_000);
+  }
+  const sum = salaries.reduce((a, b) => a + b, 0);
+  const drift = remaining - sum;
+  salaries[salaries.length - 1] = Math.round((salaries[salaries.length - 1] + drift) / 50_000) * 50_000;
+
+  return {
+    startSeason: state.season + 1,
+    endSeason: state.season + years,
+    salaries,
+    signingBonus,
+  };
 }
 
 function makeEscalatingSalaries(totalCash: number, years: number, annualGrowth = 0.06): number[] {
@@ -1578,6 +1670,57 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           resigning: { decisions: { ...state.offseasonData.resigning.decisions, [action.payload.playerId]: action.payload.decision } },
         },
       };
+    case "RESIGN_DRAFT_FROM_AUDIT": {
+      const { playerId } = action.payload;
+      const offer = buildResignOffer(state, String(playerId), "AUDIT");
+      if (!offer) return state;
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      decisions[String(playerId)] = { action: "RESIGN", offer };
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "RESIGN_MAKE_OFFER": {
+      const { playerId, createdFrom } = action.payload;
+      const offer = buildResignOffer(state, String(playerId), createdFrom);
+      if (!offer) return state;
+
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      decisions[String(playerId)] = { action: "RESIGN", offer };
+
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "RESIGN_REJECT_OFFER": {
+      const { playerId } = action.payload;
+      const cur: any = state.offseasonData.resigning.decisions?.[String(playerId)];
+      if (!cur?.offer) return state;
+
+      const offer = { ...(cur.offer as ResignOffer), rejectedCount: Number(cur.offer.rejectedCount ?? 0) + 1 };
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      decisions[String(playerId)] = { action: "RESIGN", offer };
+
+      return pushNews({ ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } }, `Offer rejected. Agent requests improved terms.`);
+    }
+    case "RESIGN_ACCEPT_OFFER": {
+      const { playerId } = action.payload;
+      const cur: any = state.offseasonData.resigning.decisions?.[String(playerId)];
+      if (!cur?.offer) return state;
+
+      const offer = cur.offer as ResignOffer;
+
+      const ovr = contractOverrideFromOffer(state, offer);
+      const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      delete decisions[String(playerId)];
+
+      const next = applyFinances({ ...state, playerContractOverrides, offseasonData: { ...state.offseasonData, resigning: { decisions } } });
+
+      return pushNews(
+        next,
+        `Extension agreed: ${getPlayers().find((p: any) => String(p.playerId) === String(playerId))?.fullName ?? "Player"} — ${offer.years} yrs @ $${Math.round(
+          offer.apy / 1_000_000,
+        )}M/yr.`,
+      );
+    }
     case "RESIGN_CLEAR_DECISION": {
       const next = { ...state.offseasonData.resigning.decisions };
       delete next[action.payload.playerId];
