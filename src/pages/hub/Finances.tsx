@@ -1,16 +1,25 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer, normalizePos } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 
 function moneyShort(n: number) {
   const m = n / 1_000_000;
   const abs = Math.abs(m);
   const s = abs >= 10 ? `${Math.round(m)}M` : `${Math.round(m * 10) / 10}M`;
   return `$${s}`;
+}
+
+function setCapModeQuery(mode: "standard" | "postjune1") {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("capMode", mode);
+  window.history.replaceState({}, "", url.toString());
 }
 
 export default function Finances() {
@@ -42,10 +51,31 @@ export default function Finances() {
         <CardTitle className="flex items-center justify-between gap-3">
           <span>Finances</span>
           <div className="flex items-center gap-2">
+            <Badge variant="outline">Cap Mode: {state.finances.postJune1Sim ? "Post–June 1" : "Standard"}</Badge>
+            <Switch
+              checked={!!state.finances.postJune1Sim}
+              onCheckedChange={() => {
+                const next = !state.finances.postJune1Sim;
+                dispatch({ type: "FINANCES_PATCH", payload: { postJune1Sim: next } });
+                setCapModeQuery(next ? "postjune1" : "standard");
+              }}
+            />
             <Badge variant={state.finances.capSpace < 0 ? "destructive" : "secondary"}>Cap Space: {moneyShort(state.finances.capSpace)}</Badge>
             <Badge variant="outline">Cash: {moneyShort(state.finances.cash)}</Badge>
           </div>
         </CardTitle>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/hub/cap-baseline">
+            <Button size="sm" variant="secondary">Open Cap Baseline Ledger</Button>
+          </Link>
+          <Link to="/hub/roster-audit">
+            <Button size="sm" variant="secondary">Open Roster Audit</Button>
+          </Link>
+          <Link to="/hub/tag-center">
+            <Button size="sm" variant="secondary">Open Tag Center</Button>
+          </Link>
+        </div>
+
         {state.finances.capSpace < 0 ? <div className="text-sm text-destructive">Cap Illegal. Cut/Trade players to get under the cap.</div> : null}
         {state.offseasonData.tagCenter.applied ? (
           <div className="text-xs text-muted-foreground">

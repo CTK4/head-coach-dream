@@ -30,6 +30,7 @@ import PlayerProfile from "./pages/hub/PlayerProfile";
 import TagCenter from "./pages/hub/TagCenter";
 import RosterAudit from "./pages/hub/RosterAudit";
 import DepthChart from "./pages/hub/DepthChart";
+import CapBaseline from "@/pages/hub/CapBaseline";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,7 @@ const App = () => (
               <Route path="cutdowns" element={<Cutdowns />} />
               <Route path="regular-season" element={<RegularSeason />} />
               <Route path="finances" element={<Finances />} />
+              <Route path="cap-baseline" element={<CapBaseline />} />
               <Route path="player/:playerId" element={<PlayerProfile />} />
               <Route path="playcall" element={<Playcall />} />
             </Route>
