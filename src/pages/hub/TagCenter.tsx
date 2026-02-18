@@ -1,41 +1,34 @@
 import { useMemo, useState } from "react";
 import { useGame, type TagType } from "@/context/GameContext";
 import { getContracts, getPlayers } from "@/data/leagueDb";
-import { normalizePos } from "@/engine/rosterOverlay";
+import { normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { projectedMarketApy } from "@/engine/marketModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(1)}M`;
 }
-
-function capAfter(available: number, cost: number) {
-  return Math.round((available - cost) / 50_000) * 50_000;
+function round50k(v: number) {
+  return Math.round(v / 50_000) * 50_000;
 }
-
-function projectedApy(pos: string, ovr: number, age: number) {
+function capAfter(available: number, cost: number) {
+  return round50k(available - cost);
+}
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
+}
+function leverageMeter(ovr: number, pos: string, age: number) {
   const p = normalizePos(pos);
-  const posMult: Record<string, number> = {
-    QB: 1.7,
-    WR: 1.2,
-    EDGE: 1.25,
-    CB: 1.2,
-    OL: 1.15,
-    DL: 1.05,
-    RB: 0.8,
-    TE: 0.85,
-    LB: 0.9,
-    S: 0.9,
-    K: 0.25,
-    P: 0.22,
-  };
-  const base = 900_000;
-  const peak = 28;
-  const ageAdj = 1 - Math.max(0, age - peak) * 0.03;
-  const ovrAdj = Math.max(0.1, Math.min(1.25, (ovr - 55) / 40));
-  return Math.round((base + 18_000_000 * ovrAdj * (posMult[p] ?? 1) * ageAdj) / 50_000) * 50_000;
+  const premium = new Set(["QB", "EDGE", "WR", "CB"]);
+  const o = clamp01((ovr - 70) / 22);
+  const a = clamp01((30 - age) / 8);
+  const b = premium.has(p) ? 0.12 : 0;
+  return Math.round(clamp01(0.18 + o * 0.55 + a * 0.25 + b) * 100);
 }
 
 export default function TagCenter() {
@@ -50,9 +43,13 @@ export default function TagCenter() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<"non" | "ex" | "trans">("non");
 
+  const hasAnyResignOffer = Object.values(decisions ?? {}).some((d: any) => d?.action === "RESIGN");
+
   const eligible = useMemo(() => {
     const contracts = getContracts();
-    return getPlayers()
+    const ps = getPlayers();
+
+    return ps
       .filter((p: any) => String(state.playerTeamOverrides[String(p.playerId)] ?? p.teamId) === String(teamId))
       .map((p: any) => {
         const c = contracts.find((x: any) => x.contractId === p.contractId);
@@ -61,25 +58,58 @@ export default function TagCenter() {
       })
       .filter((r) => r.end <= state.season)
       .map(({ p }) => {
+        const id = String(p.playerId);
         const ovr = Number(p.overall ?? 0);
         const age = Number(p.age ?? 26);
         const pos = normalizePos(String(p.pos ?? "UNK"));
-        const marketApy = projectedApy(pos, ovr, age);
-        const prior = 0;
-        const min120 = Math.round((prior * 1.2) / 50_000) * 50_000;
-        const non = Math.max(Math.round((marketApy * 1.15) / 50_000) * 50_000, min120);
-        const ex = Math.max(Math.round((marketApy * 1.35) / 50_000) * 50_000, min120);
-        const trans = Math.max(Math.round((marketApy * 1.05) / 50_000) * 50_000, min120);
-        const pendingExt = decisions[String(p.playerId)]?.action === "RESIGN";
-        return { id: String(p.playerId), name: String(p.fullName), pos, age, ovr, marketApy, non, ex, trans, pendingExt };
+        const marketApy = projectedMarketApy(pos, ovr, age);
+
+        const s = getContractSummaryForPlayer(state, id);
+        const priorSeason = state.season - 1;
+        const priorSalary = round50k(Number(s?.capHitBySeason?.[priorSeason] ?? 0));
+        const min120 = priorSalary > 0 ? round50k(priorSalary * 1.2) : 0;
+
+        const non = Math.max(round50k(marketApy * 1.15), min120 || 0);
+        const ex = Math.max(round50k(marketApy * 1.35), min120 || 0);
+        const trans = Math.max(round50k(marketApy * 1.05), min120 || 0);
+
+        const pendingExt = decisions[id]?.action === "RESIGN";
+        const leverage = leverageMeter(ovr, pos, age);
+
+        const capAfterNon = capAfter(availableCap, non);
+        const capAfterEx = capAfter(availableCap, ex);
+        const capAfterTrans = capAfter(availableCap, trans);
+
+        const compPickRisk = ovr >= 84 ? "High" : ovr >= 78 ? "Med" : "Low";
+
+        return {
+          id,
+          name: String(p.fullName),
+          pos,
+          age,
+          ovr,
+          marketApy,
+          priorSalary,
+          min120,
+          non,
+          ex,
+          trans,
+          pendingExt,
+          leverage,
+          capAfterNon,
+          capAfterEx,
+          capAfterTrans,
+          compPickRisk,
+        };
       })
       .sort((a, b) => b.ovr - a.ovr);
-  }, [state, teamId, decisions]);
+  }, [state, teamId, decisions, availableCap]);
 
   const focus = eligible.find((e) => e.id === (selected ?? eligible[0]?.id)) ?? null;
 
   const canApply = (playerId: string, cost: number) => {
-    if (applied && applied.playerId !== playerId) return false;
+    if (hasAnyResignOffer) return false;
+    if (applied) return false;
     if (decisions[playerId]?.action === "RESIGN") return false;
     if (capAfter(availableCap, cost) < 0) return false;
     return true;
@@ -87,13 +117,26 @@ export default function TagCenter() {
 
   const apply = (playerId: string, type: TagType, cost: number) => dispatch({ type: "TAG_APPLY", payload: { playerId, type, cost } });
 
+  const timeline = useMemo(() => {
+    const hasTag = !!applied;
+    const ext = hasTag ? "Extension talks open" : "—";
+    const deadline = hasTag ? `Deadline: Week 8 (sim)` : "—";
+    return { hasTag, ext, deadline };
+  }, [applied]);
+
   return (
     <div className="p-4 md:p-8 space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle>Franchise Tag Center</CardTitle>
           <div className="flex items-center gap-2">
-            {applied ? <Badge variant="secondary">Tagged {applied.type} · {money(applied.cost)}</Badge> : <Badge variant="outline">No tag applied</Badge>}
+            {applied ? (
+              <Badge variant="secondary">
+                Tagged {applied.type} · {money(applied.cost)}
+              </Badge>
+            ) : (
+              <Badge variant="outline">No tag applied</Badge>
+            )}
             {applied ? (
               <Button size="sm" variant="secondary" onClick={() => dispatch({ type: "TAG_REMOVE" })}>
                 Remove
@@ -103,7 +146,7 @@ export default function TagCenter() {
         </CardHeader>
       </Card>
 
-      <div className="grid lg:grid-cols-[1fr_420px] gap-4">
+      <div className="grid lg:grid-cols-[1fr_440px] gap-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Eligible Players</CardTitle>
@@ -120,18 +163,27 @@ export default function TagCenter() {
                     <div className="font-semibold truncate">
                       {e.name} <span className="text-muted-foreground">({e.pos})</span>
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">Age {e.age} · OVR {e.ovr} · Market {money(e.marketApy)}/yr</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      Age {e.age} · OVR {e.ovr} · Market {money(e.marketApy)}/yr · Comp Pick Risk {e.compPickRisk}
+                    </div>
                   </div>
-                  {applied?.playerId === e.id ? <Badge>Tagged</Badge> : e.pendingExt ? <Badge variant="outline">Extension Pending</Badge> : <Badge variant="outline">Eligible</Badge>}
+                  {applied?.playerId === e.id ? (
+                    <Badge>Tagged</Badge>
+                  ) : e.pendingExt ? (
+                    <Badge variant="outline">Offer Pending</Badge>
+                  ) : (
+                    <Badge variant="outline">Eligible</Badge>
+                  )}
                 </div>
               </button>
             ))}
+            {eligible.length === 0 ? <div className="text-sm text-muted-foreground">No expiring players eligible.</div> : null}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Decision</CardTitle>
+            <CardTitle className="text-base">Tag Decision Drawer</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {!focus ? (
@@ -142,18 +194,48 @@ export default function TagCenter() {
                   <div className="font-semibold">
                     {focus.name} <span className="text-muted-foreground">({focus.pos})</span>
                   </div>
+
+                  {hasAnyResignOffer ? (
+                    <div className="text-xs text-destructive">
+                      Tag actions are locked while any re-sign/extension offer exists. Clear offers in Re-sign or Audit.
+                    </div>
+                  ) : null}
+
+                  {applied ? <div className="text-xs text-muted-foreground">Tag already used this offseason. Remove it to choose another player.</div> : null}
+
+                  <div className="text-xs text-muted-foreground">
+                    120% rule: {focus.priorSalary > 0 ? `${money(focus.min120)} min (120% of ${money(focus.priorSalary)})` : "N/A (no prior salary)"}{" "}
+                    <span className="mx-2">|</span> Cap space now {money(availableCap)}
+                  </div>
+
                   {decisions[focus.id]?.action === "RESIGN" ? (
                     <div className="text-xs text-destructive flex items-center justify-between gap-2">
-                      <span>Extension offer pending. Clear it to tag.</span>
+                      <span>Offer pending. Clear it to tag.</span>
                       <Button size="sm" variant="outline" onClick={() => dispatch({ type: "RESIGN_CLEAR_DECISION", payload: { playerId: focus.id } })}>
                         Clear Offer
                       </Button>
                     </div>
                   ) : null}
-                  {applied && applied.playerId !== focus.id ? <div className="text-xs text-destructive">Only one tag allowed. Remove existing tag first.</div> : null}
                 </div>
 
-                <Tabs value={tab} onValueChange={(v) => setTab(v as "non" | "ex" | "trans")}>
+                <div className="rounded-xl border p-3 space-y-2">
+                  <div className="text-sm font-semibold">Negotiation Leverage</div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Low</span>
+                    <span>High</span>
+                  </div>
+                  <Progress value={focus.leverage} />
+                  <div className="text-xs text-muted-foreground">Leverage {focus.leverage}/100</div>
+                </div>
+
+                <div className="rounded-xl border p-3 space-y-2">
+                  <div className="text-sm font-semibold">Timeline</div>
+                  <div className="text-xs text-muted-foreground">Tag applied: {timeline.hasTag ? "Yes" : "No"}</div>
+                  <div className="text-xs text-muted-foreground">Extension status: {timeline.ext}</div>
+                  <div className="text-xs text-muted-foreground">Negotiation deadline: {timeline.deadline}</div>
+                </div>
+
+                <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
                   <TabsList className="grid grid-cols-3">
                     <TabsTrigger value="non">Non-Ex</TabsTrigger>
                     <TabsTrigger value="ex">Ex</TabsTrigger>
@@ -167,14 +249,14 @@ export default function TagCenter() {
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Cap after tag</span>
-                      <span className={`tabular-nums ${capAfter(availableCap, focus.non) < 0 ? "text-destructive" : ""}`}>
-                        {money(capAfter(availableCap, focus.non))}
-                      </span>
+                      <span className={`tabular-nums ${focus.capAfterNon < 0 ? "text-destructive" : ""}`}>{money(focus.capAfterNon)}</span>
                     </div>
+                    <Separator />
+                    <div className="text-xs text-muted-foreground">Cap reservation preview: {money(focus.non)} (counts in Top 51)</div>
                     <Button className="w-full" disabled={!canApply(focus.id, focus.non)} onClick={() => apply(focus.id, "FRANCHISE_NON_EX", focus.non)}>
                       Apply Franchise Tag
                     </Button>
-                    {capAfter(availableCap, focus.non) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
+                    {focus.capAfterNon < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
 
                   <TabsContent value="ex" className="space-y-2">
@@ -184,14 +266,14 @@ export default function TagCenter() {
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Cap after tag</span>
-                      <span className={`tabular-nums ${capAfter(availableCap, focus.ex) < 0 ? "text-destructive" : ""}`}>
-                        {money(capAfter(availableCap, focus.ex))}
-                      </span>
+                      <span className={`tabular-nums ${focus.capAfterEx < 0 ? "text-destructive" : ""}`}>{money(focus.capAfterEx)}</span>
                     </div>
+                    <Separator />
+                    <div className="text-xs text-muted-foreground">Cap reservation preview: {money(focus.ex)} (counts in Top 51)</div>
                     <Button className="w-full" disabled={!canApply(focus.id, focus.ex)} onClick={() => apply(focus.id, "FRANCHISE_EX", focus.ex)}>
                       Apply Exclusive Tag
                     </Button>
-                    {capAfter(availableCap, focus.ex) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
+                    {focus.capAfterEx < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
 
                   <TabsContent value="trans" className="space-y-2">
@@ -201,14 +283,19 @@ export default function TagCenter() {
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Cap after tag</span>
-                      <span className={`tabular-nums ${capAfter(availableCap, focus.trans) < 0 ? "text-destructive" : ""}`}>
-                        {money(capAfter(availableCap, focus.trans))}
-                      </span>
+                      <span className={`tabular-nums ${focus.capAfterTrans < 0 ? "text-destructive" : ""}`}>{money(focus.capAfterTrans)}</span>
                     </div>
-                    <Button className="w-full" variant="secondary" disabled={!canApply(focus.id, focus.trans)} onClick={() => apply(focus.id, "TRANSITION", focus.trans)}>
+                    <Separator />
+                    <div className="text-xs text-muted-foreground">Cap reservation preview: {money(focus.trans)} (counts in Top 51)</div>
+                    <Button
+                      className="w-full"
+                      variant="secondary"
+                      disabled={!canApply(focus.id, focus.trans)}
+                      onClick={() => apply(focus.id, "TRANSITION", focus.trans)}
+                    >
                       Apply Transition Tag
                     </Button>
-                    {capAfter(availableCap, focus.trans) < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
+                    {focus.capAfterTrans < 0 ? <div className="text-xs text-destructive">Blocked: would put you over the cap.</div> : null}
                   </TabsContent>
                 </Tabs>
               </>

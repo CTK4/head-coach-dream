@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useGame, type CareerStage } from "@/context/GameContext";
 import { getTeamById, getTeamSummary } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +12,7 @@ function stageToRoute(stage: CareerStage): string {
     case "STAFF_CONSTRUCTION":
       return "/hub/assistant-hiring";
     case "ROSTER_REVIEW":
-      return "/hub/roster";
+      return "/hub/roster-audit";
     case "RESIGN":
       return "/hub/resign";
     case "COMBINE":
@@ -41,6 +41,10 @@ function stageToRoute(stage: CareerStage): string {
 function nextStageForNavigate(stage: CareerStage): CareerStage {
   if (stage === "OFFSEASON_HUB") return "STAFF_CONSTRUCTION";
   return stage;
+}
+
+function showPhase2CTA(stage: CareerStage) {
+  return ["ROSTER_REVIEW", "RESIGN", "TAMPERING", "FREE_AGENCY"].includes(stage);
 }
 
 const Hub = () => {
@@ -110,6 +114,36 @@ const Hub = () => {
           </div>
         </CardContent>
       </Card>
+
+      {showPhase2CTA(state.careerStage) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between gap-3">
+              <span>Decision Needed</span>
+              <Badge variant={state.finances.capSpace < 0 ? "destructive" : "outline"}>
+                Cap Space {state.finances.capSpace < 0 ? "Negative" : "OK"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Phase 2 tools: finalize cap baseline, audit contracts, and decide tags before the market opens.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/hub/cap-baseline">
+                <Button variant="secondary">Cap Baseline</Button>
+              </Link>
+              <Link to="/hub/roster-audit">
+                <Button variant="secondary">Roster Audit</Button>
+              </Link>
+              <Link to="/hub/tag-center">
+                <Button variant="secondary">Tag Center</Button>
+              </Link>
+            </div>
+            {state.finances.capSpace < 0 ? <div className="text-sm text-destructive">You are cap-illegal. Open Audit to fix.</div> : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
