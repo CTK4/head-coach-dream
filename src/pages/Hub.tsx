@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { FranchiseHubHeader } from "@/components/franchise-hub/FranchiseHubHeader";
@@ -7,7 +7,7 @@ import { FranchiseHubInfoRow } from "@/components/franchise-hub/FranchiseHubInfo
 import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
 import { HubTile } from "@/components/franchise-hub/HubTile";
 import { AdvancePhaseBar } from "@/components/franchise-hub/AdvancePhaseBar";
-import { computeOverallPickNumber } from "@/components/franchise-hub/draftOrder";
+import { computeFirstRoundPickNumber } from "@/components/franchise-hub/draftOrder";
 import { hubTheme } from "@/components/franchise-hub/theme";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
 
@@ -32,8 +32,7 @@ const Hub = () => {
   }, [state.finances.capSpace]);
 
   const overallPick = useMemo(() => {
-    if (!teamId) return null;
-    return computeOverallPickNumber(state.league, teamId);
+    return computeFirstRoundPickNumber({ league: state.league, userTeamId: state.acceptedOffer?.teamId ?? "" });
   }, [state.league, teamId]);
 
   if (!teamId || !team) {
@@ -77,6 +76,15 @@ const Hub = () => {
               <HubTile key={tile.title} {...tile} />
             ))}
           </div>
+
+
+          {import.meta.env.DEV ? (
+            <div className="text-right text-xs">
+              <Link to="/hub/draft-order-debug" className="text-slate-300 underline hover:text-slate-100">
+                Draft Debug
+              </Link>
+            </div>
+          ) : null}
 
           <AdvancePhaseBar
             nextLabel={stageLabel(nextStage)}
