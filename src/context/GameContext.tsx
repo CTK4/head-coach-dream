@@ -24,7 +24,7 @@ import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/en
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
-import { getContractSummaryForPlayer, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import type {
@@ -211,6 +211,7 @@ export type DepthChart = {
   lockedBySlot: Record<string, true | undefined>;
 };
 export type PreseasonRotation = { byPlayerId: Record<string, number> };
+type TamperingSoftOffer = { years: number; aav: number };
 export type FreeAgencyOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "WITHDRAWN";
 
 export type FreeAgencyOffer = {
@@ -222,6 +223,7 @@ export type FreeAgencyOffer = {
   aav: number;
   createdWeek: number;
   status: FreeAgencyOfferStatus;
+  fromTampering?: boolean;
 };
 
 export type FreeAgencyUI =
@@ -234,6 +236,11 @@ export type FreeAgencyState = {
   offersByPlayerId: Record<string, FreeAgencyOffer[]>;
   signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
   nextOfferSeq: number;
+  bootstrappedFromTampering: boolean;
+  resolvesUsedThisPhase: number;
+  maxResolvesPerPhase: number;
+  activity: Array<{ ts: number; text: string; playerId?: string }>;
+  draftByPlayerId: Record<string, { years: number; aav: number }>;
 };
 
 export type FiringMeter = {
@@ -276,6 +283,13 @@ export type GameState = {
   careerStage: CareerStage;
   offseason: OffseasonState;
   offseasonData: OffseasonData;
+  tampering: {
+    interestByPlayerId: Record<string, number>;
+    nameByPlayerId: Record<string, string>;
+    shortlistPlayerIds: string[];
+    softOffersByPlayerId: Record<string, TamperingSoftOffer>;
+    ui: { mode: "NONE" | "PLAYER" | "SHORTLIST"; playerId?: string };
+  };
   freeAgency: FreeAgencyState;
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
@@ -368,6 +382,15 @@ export type GameAction =
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
+  | { type: "TAMPERING_INIT" }
+  | { type: "TAMPERING_OPEN_PLAYER"; payload: { playerId: string } }
+  | { type: "TAMPERING_OPEN_SHORTLIST" }
+  | { type: "TAMPERING_CLOSE_MODAL" }
+  | { type: "TAMPERING_ADD_SHORTLIST"; payload: { playerId: string } }
+  | { type: "TAMPERING_REMOVE_SHORTLIST"; payload: { playerId: string } }
+  | { type: "TAMPERING_AUTO_SHORTLIST"; payload: { tab: string } }
+  | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
   | { type: "FA_INIT_OFFERS" }
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
@@ -375,7 +398,11 @@ export type GameAction =
   | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
   | { type: "FA_OPEN_MY_OFFERS" }
   | { type: "FA_CLOSE_MODAL" }
-  | { type: "FA_SUBMIT_OFFER"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "FA_BOOTSTRAP_FROM_TAMPERING" }
+  | { type: "FA_SET_DRAFT"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "FA_SUBMIT_OFFER"; payload: { playerId: string } }
+  | { type: "FA_CLEAR_USER_OFFER"; payload: { playerId: string } }
+  | { type: "FA_RESOLVE_BATCH" }
   | { type: "FA_WITHDRAW_OFFER"; payload: { offerId: string; playerId: string } }
   | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
   | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
@@ -383,6 +410,7 @@ export type GameAction =
   | { type: "CUT_APPLY"; payload: { playerId: string } }
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_PLAYER"; payload: { playerId: string } }
+  | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
   | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
@@ -454,7 +482,18 @@ function createInitialState(): GameState {
       cutDowns: { decisions: {} },
     },
     interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
-    freeAgency: { ui: { mode: "NONE" }, offersByPlayerId: {}, signingsByPlayerId: {}, nextOfferSeq: 1 },
+    tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
+    freeAgency: {
+      ui: { mode: "NONE" },
+      offersByPlayerId: {},
+      signingsByPlayerId: {},
+      nextOfferSeq: 1,
+      bootstrappedFromTampering: false,
+      resolvesUsedThisPhase: 0,
+      maxResolvesPerPhase: 5,
+      activity: [],
+      draftByPlayerId: {},
+    },
     offers: [],
     season: 2026,
     week: 1,
@@ -637,6 +676,48 @@ function clearResignOffers(state: GameState): GameState {
       ...state.offseasonData,
       resigning: { ...state.offseasonData.resigning, decisions: {} },
     },
+  };
+}
+
+function faPush(state: GameState, text: string, playerId?: string): GameState {
+  const ts = Date.now();
+  const activity = [{ ts, text, playerId }, ...state.freeAgency.activity].slice(0, 80);
+  return { ...state, freeAgency: { ...state.freeAgency, activity } };
+}
+
+function needsBoostForPos(state: GameState, posRaw: string) {
+  const pos = normalizePos(posRaw);
+  const roster = getEffectivePlayersByTeam(state, state.acceptedOffer?.teamId ?? "");
+  const count = roster.filter((p: any) => normalizePos(String(p.pos ?? "")) === pos).length;
+  const target: Record<string, number> = { QB: 3, RB: 3, WR: 5, TE: 3, OL: 7, DL: 4, EDGE: 3, LB: 3, CB: 4, S: 3, K: 1, P: 1 };
+  const t = target[pos] ?? 3;
+  const short = Math.max(0, t - count);
+  return clamp01(short / t) * 0.18;
+}
+
+function computeFaInterest(state: GameState, p: any) {
+  const rep = state.coach.reputation;
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+
+  let base = 0.35 + clamp01((ovr - 70) / 35) * 0.35 + clamp01((30 - age) / 10) * 0.10;
+  if (rep) {
+    const off = ["QB", "RB", "WR", "TE", "OL"].includes(pos) ? clamp01((rep.offCred - 50) / 700) : 0;
+    const def = ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? clamp01((rep.defCred - 50) / 650) : 0;
+    base += off + def;
+    base += clamp01((rep.playerRespect - 55) / 400) * 0.08;
+    base += clamp01((rep.mediaRep - 55) / 450) * 0.05;
+  }
+  base += needsBoostForPos(state, pos);
+  base += detRand(state.saveSeed, `FA_INT|S${state.season}|P${p.playerId}`) * 0.10;
+  return clamp01(base);
+}
+
+function resetFaPhase(state: GameState): GameState {
+  return {
+    ...state,
+    freeAgency: { ...state.freeAgency, resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" } },
   };
 }
 
@@ -932,7 +1013,18 @@ function seasonRollover(state: GameState): GameState {
       regularSeasonWeek: 1,
       schedule,
     },
-    freeAgency: { ui: { mode: "NONE" }, offersByPlayerId: {}, signingsByPlayerId: {}, nextOfferSeq: 1 },
+    tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
+    freeAgency: {
+      ui: { mode: "NONE" },
+      offersByPlayerId: {},
+      signingsByPlayerId: {},
+      nextOfferSeq: 1,
+      bootstrappedFromTampering: false,
+      resolvesUsedThisPhase: 0,
+      maxResolvesPerPhase: 5,
+      activity: [],
+      draftByPlayerId: {},
+    },
     playerTeamOverrides,
     playerContractOverrides,
     finances: { ...state.finances, cash },
@@ -1426,7 +1518,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
       if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
-      if (nextStage === "FREE_AGENCY") next = clearResignOffers(next);
+      if (nextStage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -1680,7 +1772,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
-      if (stage === "FREE_AGENCY") next = clearResignOffers(next);
+      if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
       return next;
     }
     case "RESIGN_SET_DECISION":
@@ -1863,75 +1955,73 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           tampering: { offers: [action.payload.offer, ...state.offseasonData.tampering.offers].slice(0, 30) },
         },
       };
-    case "FA_INIT_OFFERS": {
-      if (state.offseason.stepId !== "FREE_AGENCY") return state;
-      if (state.offseasonData.freeAgency.offers.length) return state;
 
-      const seed = state.saveSeed ^ 0x44444444;
-      const pool = genFreeAgents(seed, 25);
-      const carry = state.offseasonData.tampering.offers.slice(0, 10);
-      const offers = mergeOffers(carry, pool).map((o) => {
-        const rep = state.coach.reputation;
-        if (!rep) return o;
-        const p = String(o.pos ?? "").toUpperCase();
-        const boost = ["QB", "RB", "WR", "TE", "OL", "OT", "OG", "C"].includes(p)
-          ? offenseInterestBoost(rep)
-          : ["DL", "EDGE", "DE", "DT", "LB", "DB", "CB", "S"].includes(p)
-            ? defenseInterestBoost(rep)
-            : 0;
-        return { ...o, interest: clamp01(Number(o.interest ?? 0) + boost) };
-      });
+    case "TAMPERING_INIT": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      if (Object.keys(state.tampering.interestByPlayerId).length) return state;
 
-      return {
-        ...state,
-        offseasonData: { ...state.offseasonData, freeAgency: { ...state.offseasonData.freeAgency, offers } },
-      };
+      const fas = getEffectiveFreeAgents(state)
+        .map((p: any) => ({ p, interest: computeFaInterest(state, p) }))
+        .sort((a, b) => b.interest - a.interest)
+        .slice(0, 220);
+
+      const interestByPlayerId: Record<string, number> = {};
+      const nameByPlayerId: Record<string, string> = {};
+      for (const x of fas) {
+        const id = String(x.p.playerId);
+        interestByPlayerId[id] = x.interest;
+        nameByPlayerId[id] = String(x.p.fullName ?? `Player ${id}`);
+      }
+
+      return { ...state, tampering: { ...state.tampering, interestByPlayerId, nameByPlayerId } };
     }
-    case "FA_REJECT":
-      return {
-        ...state,
-        offseasonData: {
-          ...state.offseasonData,
-          freeAgency: {
-            ...state.offseasonData.freeAgency,
-            rejected: { ...state.offseasonData.freeAgency.rejected, [action.payload.playerId]: true },
-          },
-        },
-      };
-    case "FA_WITHDRAW":
-      return {
-        ...state,
-        offseasonData: {
-          ...state.offseasonData,
-          freeAgency: {
-            ...state.offseasonData.freeAgency,
-            withdrawn: { ...state.offseasonData.freeAgency.withdrawn, [action.payload.offerId]: true },
-          },
-        },
-      };
-    case "FA_SIGN": {
-      const fa = state.offseasonData.freeAgency;
-      const offer = fa.offers.find((o) => o.id === action.payload.offerId);
-      if (!offer) return state;
-      if (fa.signings.includes(offer.playerId)) return state;
-      if (fa.rejected[offer.playerId]) return state;
-      if (fa.withdrawn[offer.id]) return state;
-      const remaining = fa.capTotal - fa.capUsed;
-      if (remaining < offer.apy) return state;
-      return {
-        ...state,
-        offseasonData: {
-          ...state.offseasonData,
-          freeAgency: {
-            ...fa,
-            signings: [...fa.signings, offer.playerId],
-            capUsed: fa.capUsed + offer.apy,
-            capHitsByPlayerId: { ...fa.capHitsByPlayerId, [offer.playerId]: offer.apy },
-            withdrawn: { ...fa.withdrawn, [offer.id]: true },
-          },
-        },
-      };
+
+    case "TAMPERING_OPEN_PLAYER":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
+
+    case "TAMPERING_OPEN_SHORTLIST":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "SHORTLIST" } } };
+
+    case "TAMPERING_CLOSE_MODAL":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "NONE" } } };
+
+    case "TAMPERING_ADD_SHORTLIST": {
+      const id = String(action.payload.playerId);
+      if (state.tampering.shortlistPlayerIds.includes(id)) return state;
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: [id, ...state.tampering.shortlistPlayerIds].slice(0, 25) } };
     }
+
+    case "TAMPERING_REMOVE_SHORTLIST": {
+      const id = String(action.payload.playerId);
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: state.tampering.shortlistPlayerIds.filter((x) => x !== id) } };
+    }
+
+    case "TAMPERING_AUTO_SHORTLIST": {
+      const tab = String(action.payload.tab ?? "ALL");
+      const ids = Object.entries(state.tampering.interestByPlayerId)
+        .map(([id, v]) => ({ id, v }))
+        .filter((x) => x.v >= 0.6)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 10)
+        .map((x) => x.id);
+
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: tab === "ALL" ? ids : state.tampering.shortlistPlayerIds } };
+    }
+
+    case "TAMPERING_SET_SOFT_OFFER": {
+      const playerId = String(action.payload.playerId);
+      const softOffersByPlayerId = { ...state.tampering.softOffersByPlayerId, [playerId]: { years: action.payload.years, aav: action.payload.aav } };
+      return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
+    }
+
+    case "TAMPERING_CLEAR_SOFT_OFFER": {
+      const playerId = String(action.payload.playerId);
+      const softOffersByPlayerId = { ...state.tampering.softOffersByPlayerId };
+      delete softOffersByPlayerId[playerId];
+      return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
+    }
+
     case "FA_OPEN_PLAYER":
       return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
 
@@ -1941,112 +2031,159 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "FA_CLOSE_MODAL":
       return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "NONE" } } };
 
-    case "FA_SUBMIT_OFFER": {
+    case "FA_SET_DRAFT": {
+      const { playerId, years, aav } = action.payload;
+      return {
+        ...state,
+        freeAgency: {
+          ...state.freeAgency,
+          draftByPlayerId: {
+            ...state.freeAgency.draftByPlayerId,
+            [String(playerId)]: { years: Math.max(1, Math.min(5, Math.round(years))), aav: Math.max(750_000, Math.round(aav / 50_000) * 50_000) },
+          },
+        },
+      };
+    }
+
+    case "FA_BOOTSTRAP_FROM_TAMPERING": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.bootstrappedFromTampering) return state;
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
 
-      const week = state.hub.regularSeasonWeek ?? 1;
-      const playerId = action.payload.playerId;
-      const offers = state.freeAgency.offersByPlayerId[playerId] ?? [];
-      const cleaned = offers.map((o) => (o.isUser && o.status === "PENDING" ? { ...o, status: "WITHDRAWN" as const } : o));
+      let next: GameState = { ...state, freeAgency: { ...state.freeAgency, bootstrappedFromTampering: true } };
+
+      for (const [playerId, o] of Object.entries(state.tampering.softOffersByPlayerId)) {
+        const offers = next.freeAgency.offersByPlayerId[playerId] ?? [];
+        if (offers.some((x) => x.isUser && x.status === "PENDING")) continue;
+
+        const offerId = makeOfferId(next);
+        const userOffer: FreeAgencyOffer = {
+          offerId,
+          playerId,
+          teamId,
+          isUser: true,
+          years: Math.max(1, Math.min(5, Math.round(o.years))),
+          aav: Math.max(750_000, Math.round(o.aav / 50_000) * 50_000),
+          createdWeek: next.hub.regularSeasonWeek ?? 1,
+          status: "PENDING",
+          fromTampering: true,
+        };
+
+        next = {
+          ...next,
+          freeAgency: {
+            ...upsertOffers({ ...next, freeAgency: { ...next.freeAgency, nextOfferSeq: next.freeAgency.nextOfferSeq + 1 } }, playerId, [...offers, userOffer]),
+          },
+        };
+      }
+      return next;
+    }
+
+    case "FA_SUBMIT_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const pid = String(action.payload.playerId);
+      if (state.freeAgency.signingsByPlayerId[pid]) return state;
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const draft = state.freeAgency.draftByPlayerId[pid];
+      if (!draft) return state;
+
+      const existing = state.freeAgency.offersByPlayerId[pid] ?? [];
+      if (existing.some((o) => o.isUser && o.status === "PENDING")) return state;
 
       const offerId = makeOfferId(state);
       const userOffer: FreeAgencyOffer = {
         offerId,
-        playerId,
-        teamId,
+        playerId: pid,
+        teamId: String(teamId),
         isUser: true,
-        years: Math.max(1, Math.min(5, Math.round(action.payload.years))),
-        aav: Math.max(750_000, Math.round(action.payload.aav / 50_000) * 50_000),
-        createdWeek: week,
+        years: draft.years,
+        aav: draft.aav,
+        createdWeek: state.hub.regularSeasonWeek ?? 1,
         status: "PENDING",
       };
 
-      const r = detRand(state.saveSeed, `FA_AI_COUNT|S${state.season}|W${week}|P${playerId}|${userOffer.aav}`);
-      const aiCount = r < 0.35 ? 0 : r < 0.75 ? 1 : 2;
-
-      const aiOffers: FreeAgencyOffer[] = [];
-      for (let i = 0; i < aiCount; i++) {
-        const rr = detRand(state.saveSeed, `FA_AI_OFFER|S${state.season}|W${week}|P${playerId}|I${i}`);
-        const bump = 0.92 + rr * 0.18;
-        aiOffers.push({
-          offerId: `FA_AI_${state.season}_${week}_${playerId}_${i}`,
-          playerId,
-          teamId: `AI_TEAM_${(Math.floor(rr * 30) + 1).toString().padStart(2, "0")}`,
-          isUser: false,
-          years: userOffer.years,
-          aav: Math.round((userOffer.aav * bump) / 50_000) * 50_000,
-          createdWeek: week,
-          status: "PENDING",
-        });
-      }
-
-      const nextOffers = [...cleaned, userOffer, ...aiOffers];
-
-      return {
+      const next = {
         ...state,
-        freeAgency: upsertOffers(
-          { ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } },
-          playerId,
-          nextOffers,
-        ),
-      };
-    }
-
-    case "FA_WITHDRAW_OFFER": {
-      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
-      const nextOffers = offers.map((o) => (o.offerId === action.payload.offerId ? { ...o, status: "WITHDRAWN" as const } : o));
-      return { ...state, freeAgency: upsertOffers(state, action.payload.playerId, nextOffers) };
-    }
-
-    case "FA_ACCEPT_OFFER": {
-      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
-      const winner = offers.find((o) => o.offerId === action.payload.offerId);
-      if (!winner) return state;
-
-      const nextOffers = offers.map((o) =>
-        o.offerId === winner.offerId
-          ? { ...o, status: "ACCEPTED" as const }
-          : o.status === "PENDING"
-            ? { ...o, status: "REJECTED" as const }
-            : o,
-      );
-
-      const years = Math.max(1, winner.years);
-      const totalCash = winner.aav * years;
-      const signingBonus = Math.round((totalCash * 0.22) / 50_000) * 50_000;
-      const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
-
-      const ovr: PlayerContractOverride = {
-        startSeason: state.season,
-        endSeason: state.season + years - 1,
-        salaries,
-        signingBonus,
-      };
-
-      const cashY1 = (salaries[0] ?? 0) + signingBonus;
-      const nextState = {
-        ...state,
-        playerTeamOverrides: { ...state.playerTeamOverrides, [winner.playerId]: winner.teamId },
-        playerContractOverrides: { ...state.playerContractOverrides, [winner.playerId]: ovr },
-        finances: { ...state.finances, cash: state.finances.cash - cashY1 },
         freeAgency: {
-          ...state.freeAgency,
-          offersByPlayerId: { ...state.freeAgency.offersByPlayerId, [winner.playerId]: nextOffers },
-          signingsByPlayerId: {
-            ...state.freeAgency.signingsByPlayerId,
-            [winner.playerId]: { teamId: winner.teamId, years, aav: winner.aav, signingBonus },
-          },
+          ...upsertOffers({ ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } }, pid, [...existing, userOffer]),
         },
       };
-
-      return applyFinances(nextState);
+      return faPush(next, `Offer submitted: ${draft.years} yrs @ $${Math.round(draft.aav / 1_000_000)}M/yr.`, pid);
     }
 
-    case "FA_REJECT_OFFER": {
-      const offers = state.freeAgency.offersByPlayerId[action.payload.playerId] ?? [];
-      const nextOffers = offers.map((o) => (o.offerId === action.payload.offerId ? { ...o, status: "REJECTED" as const } : o));
-      return { ...state, freeAgency: upsertOffers(state, action.payload.playerId, nextOffers) };
+    case "FA_CLEAR_USER_OFFER": {
+      const pid = String(action.payload.playerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const nextOffers = offers.filter((o) => !(o.isUser && o.status === "PENDING"));
+      return { ...state, freeAgency: upsertOffers(state, pid, nextOffers) };
+    }
+
+    case "FA_RESOLVE_BATCH": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase) return state;
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const offersByPlayerId = { ...state.freeAgency.offersByPlayerId };
+      const signingsByPlayerId = { ...state.freeAgency.signingsByPlayerId };
+      const pendingPlayerIds = Object.entries(offersByPlayerId)
+        .filter(([pid]) => !signingsByPlayerId[pid])
+        .filter(([, offers]) => offers.some((o) => o.status === "PENDING"))
+        .map(([pid]) => pid)
+        .sort((a, b) => a.localeCompare(b));
+
+      const toResolve = pendingPlayerIds.slice(0, 5);
+      let next: GameState = { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId, resolvesUsedThisPhase: state.freeAgency.resolvesUsedThisPhase + 1 } };
+
+      for (const playerId of toResolve) {
+        if (next.freeAgency.signingsByPlayerId[playerId]) continue;
+        const offers = next.freeAgency.offersByPlayerId[playerId] ?? [];
+        const pending = offers.filter((o) => o.status === "PENDING");
+        if (!pending.length) continue;
+
+        const interest = next.tampering.interestByPlayerId[playerId] ?? 0;
+        const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+        const market = projectedMarketApy(String(p?.pos ?? "UNK"), Number(p?.overall ?? 0), Number(p?.age ?? 26));
+        const score = (o: FreeAgencyOffer) => {
+          const moneyScore = clamp01((o.aav - market * 0.85) / (market * 0.5)) * 0.55;
+          const termScore = clamp01((o.years - 1) / 4) * 0.10;
+          const intScore = clamp01(interest) * 0.25;
+          const userBoost = o.isUser ? 0.06 : 0;
+          const noise = detRand(next.saveSeed, `FA_RES|S${next.season}|P${playerId}|O${o.offerId}`) * 0.04;
+          return moneyScore + termScore + intScore + userBoost + noise;
+        };
+
+        const best = pending.reduce((a, b) => (score(b) > score(a) ? b : a));
+        const acceptProb = clamp01(score(best));
+        const roll = detRand(next.saveSeed, `FA_ROLL|S${next.season}|P${playerId}|R${next.freeAgency.resolvesUsedThisPhase}`);
+        const accepted = roll < acceptProb;
+
+        if (!accepted) {
+          next.freeAgency.offersByPlayerId[playerId] = offers.map((o) => (o.offerId === best.offerId ? { ...o, status: "REJECTED" } : o));
+          next = faPush(next, `Offer rejected by ${String(p?.fullName ?? "player")}.`, playerId);
+          continue;
+        }
+
+        next.freeAgency.offersByPlayerId[playerId] = offers.map((o) => (o.offerId === best.offerId ? { ...o, status: "ACCEPTED" } : o.status === "PENDING" ? { ...o, status: "REJECTED" } : o));
+        const years = Math.max(1, best.years);
+        const totalCash = best.aav * years;
+        const signingBonus = Math.round((totalCash * 0.22) / 50_000) * 50_000;
+        next.freeAgency.signingsByPlayerId[playerId] = { teamId: best.teamId, years, aav: best.aav, signingBonus };
+
+        if (best.teamId === String(teamId)) {
+          const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
+          const ovr: PlayerContractOverride = { startSeason: next.season, endSeason: next.season + years - 1, salaries, signingBonus };
+          const cashY1 = (salaries[0] ?? 0) + signingBonus;
+          next = applyFinances({ ...next, playerTeamOverrides: { ...next.playerTeamOverrides, [playerId]: String(teamId) }, playerContractOverrides: { ...next.playerContractOverrides, [playerId]: ovr }, finances: { ...next.finances, cash: next.finances.cash - cashY1 } });
+          next = pushNews(next, `Signed: ${String(p?.fullName ?? "Player")} (${String(p?.pos ?? "")}) agrees to terms.`);
+          next = faPush(next, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(best.aav / 1_000_000)}M/yr.`, playerId);
+        } else {
+          next = faPush(next, `${String(p?.fullName ?? "Player")} signed elsewhere.`, playerId);
+        }
+      }
+      return next;
     }
 
     case "FA_RESOLVE_WEEK": {
@@ -2058,14 +2195,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         const pending = offers.filter((o) => o.status === "PENDING");
         if (!pending.length) continue;
 
-        const best = pending.reduce((a, b) => (b.aav > a.aav ? b : a));
-        offersByPlayerId[playerId] = offers.map((o) =>
-          o.offerId === best.offerId
-            ? { ...o, status: "ACCEPTED" as const }
-            : o.status === "PENDING"
-              ? { ...o, status: "REJECTED" as const }
-              : o,
-        );
+        const interest = state.tampering.interestByPlayerId[playerId] ?? 0;
+        const userSoft = state.tampering.softOffersByPlayerId[playerId];
+        const score = (o: FreeAgencyOffer) => {
+          let sc = Number(o.aav ?? 0);
+          if (o.isUser) sc *= userSoft ? 1.05 + clamp01(interest) * 0.03 : 1 + clamp01(interest) * 0.02;
+          return sc;
+        };
+
+        const best = pending.reduce((a, b) => (score(b) > score(a) ? b : a));
+        offersByPlayerId[playerId] = offers.map((o) => (o.offerId === best.offerId ? { ...o, status: "ACCEPTED" as const } : o.status === "PENDING" ? { ...o, status: "REJECTED" as const } : o));
 
         const years = Math.max(1, best.years);
         const totalCash = best.aav * years;
@@ -2074,28 +2213,28 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
         if (best.isUser) {
           const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
-          const ovr: PlayerContractOverride = {
-            startSeason: state.season,
-            endSeason: state.season + years - 1,
-            salaries,
-            signingBonus,
-          };
-
+          const ovr: PlayerContractOverride = { startSeason: state.season, endSeason: state.season + years - 1, salaries, signingBonus };
           const cashY1 = (salaries[0] ?? 0) + signingBonus;
-
-          const nextState = {
-            ...state,
-            playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: best.teamId },
-            playerContractOverrides: { ...state.playerContractOverrides, [playerId]: ovr },
-            finances: { ...state.finances, cash: state.finances.cash - cashY1 },
-            freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId },
-          };
-
+          const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: best.teamId }, playerContractOverrides: { ...state.playerContractOverrides, [playerId]: ovr }, finances: { ...state.finances, cash: state.finances.cash - cashY1 }, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
           return applyFinances(nextState);
         }
       }
-
       return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
+    }
+
+    case "TRADE_ACCEPT": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const playerId = String(action.payload.playerId);
+      const toTeamId = String(action.payload.toTeamId);
+
+      if (state.offseasonData.tagCenter.applied?.playerId === playerId) return pushNews(state, "Trade blocked: tagged player. Remove tag first.");
+      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+
+      const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: toTeamId } };
+      const next = applyFinances(nextState);
+      const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
+      return pushNews(next, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value.`);
     }
 
     case "CUT_APPLY": {
@@ -2799,6 +2938,14 @@ function loadState(): GameState {
         ...migrated.offseason,
         completed: { ...initial.offseason.completed, ...migrated.offseason?.completed },
         stepsComplete: { ...initial.offseason.stepsComplete, ...migrated.offseason?.stepsComplete },
+      },
+      tampering: {
+        ...initial.tampering,
+        ...migrated.tampering,
+        interestByPlayerId: { ...initial.tampering.interestByPlayerId, ...(migrated.tampering?.interestByPlayerId ?? {}) },
+        nameByPlayerId: { ...initial.tampering.nameByPlayerId, ...(migrated.tampering?.nameByPlayerId ?? {}) },
+        softOffersByPlayerId: { ...initial.tampering.softOffersByPlayerId, ...(migrated.tampering?.softOffersByPlayerId ?? {}) },
+        shortlistPlayerIds: migrated.tampering?.shortlistPlayerIds ?? initial.tampering.shortlistPlayerIds,
       },
       offseasonData: {
         ...initial.offseasonData,
