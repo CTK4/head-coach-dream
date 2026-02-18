@@ -27,6 +27,8 @@ import TrainingCamp from "./pages/hub/TrainingCamp";
 import Cutdowns from "./pages/hub/Cutdowns";
 import Finances from "./pages/hub/Finances";
 import PlayerProfile from "./pages/hub/PlayerProfile";
+import TagCenter from "./pages/hub/TagCenter";
+import RosterAudit from "./pages/hub/RosterAudit";
 
 const queryClient = new QueryClient();
 
@@ -79,7 +81,9 @@ const App = () => (
               <Route index element={<Hub />} />
               <Route path="assistant-hiring" element={<AssistantHiring />} />
               <Route path="roster" element={<Roster />} />
+              <Route path="roster-audit" element={<RosterAudit />} />
               <Route path="resign" element={<ResignPlayers />} />
+              <Route path="tag-center" element={<TagCenter />} />
               <Route path="combine" element={<Combine />} />
               <Route path="tampering" element={<Tampering />} />
               <Route path="free-agency" element={<FreeAgency />} />
