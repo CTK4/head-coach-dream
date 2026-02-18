@@ -2565,8 +2565,25 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   return s;
 }
 
+
+function readCapModeFromUrl(): boolean | null {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("capMode");
+  if (!v) return null;
+  if (v.toLowerCase() === "postjune1") return true;
+  if (v.toLowerCase() === "standard") return false;
+  return null;
+}
+
+function applyCapModeQuery(state: GameState): GameState {
+  const fromUrl = readCapModeFromUrl();
+  if (fromUrl == null) return state;
+  if (state.finances.postJune1Sim === fromUrl) return state;
+  return { ...state, finances: { ...state.finances, postJune1Sim: fromUrl } };
+}
+
 function loadState(): GameState {
-  const initial = createInitialState();
+  const initial = applyCapModeQuery(createInitialState());
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return initial;
@@ -2650,6 +2667,7 @@ function loadState(): GameState {
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
     };
     out = ensureAccolades(bootstrapAccolades(out));
+    out = applyCapModeQuery(out);
     return out;
   } catch (error) {
     console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
