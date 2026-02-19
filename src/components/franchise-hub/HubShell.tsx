@@ -7,6 +7,7 @@ import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
 import { computeFirstRoundPickNumber } from "@/components/franchise-hub/draftOrder";
 import { getPhaseLabel } from "@/components/franchise-hub/offseasonLabel";
 import { ContextBar } from "@/components/franchise-hub/ContextBar";
+import { UtilityIcon } from "@/components/franchise-hub/UtilityIcon";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
 
 const warnedLogoKeys = new Set<string>();
@@ -241,6 +242,11 @@ export function HubShell({
                 <IconButton label="Home" onClick={goHome}>
                   <span aria-hidden="true">⌂</span>
                   <span className="hidden sm:inline">HUB</span>
+                </IconButton>
+
+                <IconButton label="Settings" onClick={() => navigate("/hub/settings")}>
+                  <UtilityIcon name="Settings" className="h-4 w-4" />
+                  <span className="hidden sm:inline">SET</span>
                 </IconButton>
               </div>
 
