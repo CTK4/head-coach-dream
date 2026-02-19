@@ -8,9 +8,14 @@ export default function TrainingCamp() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Training Camp</CardTitle>
-        <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
-          Continue
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" className="rounded-xl" onClick={() => dispatch({ type: "DEPTH_RESET_TO_BEST" })}>
+            Reset to Best
+          </Button>
+          <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+            Continue
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground space-y-2">
         <div>Installs, battles, injuries, morale/chemistry hooks will live here.</div>

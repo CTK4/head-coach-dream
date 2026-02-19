@@ -55,7 +55,7 @@ export default function DepthChart() {
             <Button variant="secondary" onClick={() => dispatch({ type: "AUTOFILL_DEPTH_CHART" })}>
               Auto-Fill Empty
             </Button>
-            <Button onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>Reset to Best</Button>
+            <Button onClick={() => dispatch({ type: "DEPTH_RESET_TO_BEST" })}>Reset to Best</Button>
           </div>
         </CardHeader>
       </Card>
