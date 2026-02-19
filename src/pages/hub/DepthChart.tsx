@@ -19,7 +19,7 @@ const SECTIONS: Section[] = [
 export default function DepthChart() {
   const { state, dispatch } = useGame();
   const teamId = state.acceptedOffer?.teamId;
-  if (!teamId) return null;
+  if (!teamId) return <HubEmptyState title="Roster not loaded" description="Assign a team to configure your depth chart." action={{ label: "Back to Hub", to: "/hub" }} />;
 
   const activeIds = state.rosterMgmt.active;
 

@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { tradeReturnEv } from "@/engine/marketModel";
+import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
 type PosTab = "ALL" | "QB" | "RB" | "WR" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S";
 const TABS: PosTab[] = ["ALL", "QB", "RB", "WR", "TE", "DL", "EDGE", "LB", "CB", "S"];
@@ -22,7 +23,7 @@ export default function TradeHub() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const teamId = state.acceptedOffer?.teamId;
-  if (!teamId) return null;
+  if (!teamId) return <HubEmptyState title="No offers yet" description="Take over a team to start trade talks." action={{ label: "Back to Hub", to: "/hub" }} />;
 
   const [tab, setTab] = useState<PosTab>("ALL");
   const [q, setQ] = useState("");
