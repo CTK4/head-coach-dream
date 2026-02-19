@@ -23,6 +23,7 @@ import ResignPlayers from "./pages/hub/ResignPlayers";
 import Combine from "./pages/hub/Combine";
 import Tampering from "./pages/hub/Tampering";
 import PreDraft from "./pages/hub/PreDraft";
+import DraftResults from "@/pages/hub/DraftResults";
 import TrainingCamp from "./pages/hub/TrainingCamp";
 import Cutdowns from "./pages/hub/Cutdowns";
 import Finances from "./pages/hub/Finances";
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="league-news" element={<LeagueNews />} />
               <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
+              <Route path="draft-results" element={<DraftResults />} />
               <Route path="training-camp" element={<TrainingCamp />} />
               <Route path="preseason" element={<PreseasonWeek />} />
               <Route path="cutdowns" element={<Cutdowns />} />

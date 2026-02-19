@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame, getDraftClass } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,79 +16,119 @@ function s(v: unknown) {
   return String(v ?? "");
 }
 function posKey(v: unknown) {
-  return String(v ?? "").toUpperCase();
-}
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
-function confidence(rep: number, visited: boolean, worked: boolean) {
-  const base = clamp(35 + rep * 0.5, 40, 85);
-  return clamp(base + (visited ? 10 : 0) + (worked ? 6 : 0), 0, 99);
+  const p = String(v ?? "").toUpperCase();
+  if (p === "HB") return "RB";
+  if (["OLB", "ILB", "MLB"].includes(p)) return "LB";
+  if (["FS", "SS"].includes(p)) return "S";
+  if (p === "DT") return "DL";
+  if (p === "DE") return "EDGE";
+  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
+  if (p === "DB") return "CB";
+  return p || "UNK";
 }
 
-const Draft = () => {
+export default function Draft() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const board = useMemo(() => {
-    const rows = (getDraftClass() as Row[]).slice();
-    return rows
-      .sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999))
-      .filter((r) => !state.draft.withdrawnBoardIds[String(r["Player ID"])])
-      .slice(0, 120);
-  }, [state.draft.withdrawnBoardIds]);
+  useEffect(() => {
+    dispatch({ type: "DRAFT_INIT" });
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (state.draft.completed) navigate("/hub/draft-results");
+  }, [state.draft.completed, navigate]);
+
+  const rows = useMemo(
+    () => (getDraftClass() as Row[]).slice().sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999)),
+    []
+  );
+
+  const board = useMemo(
+    () => rows.filter((r) => !state.draft.withdrawnBoardIds[String(r["Player ID"])]).slice(0, 140),
+    [rows, state.draft.withdrawnBoardIds]
+  );
 
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    const rows = getDraftClass() as Row[];
     return rows.find((r) => String(r["Player ID"]) === selectedId) ?? null;
-  }, [selectedId]);
+  }, [rows, selectedId]);
 
-  const picks = state.draft.picks;
-  const visits = state.offseasonData.preDraft.visits;
-  const workouts = state.offseasonData.preDraft.workouts;
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const onClock = String(state.draft.onClockTeamId ?? "");
+  const isUserOnClock = !!userTeamId && onClock === userTeamId;
+
+  const teamsCount = state.draft.orderTeamIds.length || 32;
+  const totalPicks = state.draft.totalRounds * teamsCount;
+  const overall = state.draft.currentOverall;
+  const round = Math.floor((overall - 1) / teamsCount) + 1;
+  const pickInRound = ((overall - 1) % teamsCount) + 1;
+
+  const myPicks = state.draft.leaguePicks.filter((p) => p.teamId === userTeamId);
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>Draft Execution</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle>Draft Execution</CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">Pick {overall}/{totalPicks}</Badge>
+            <Badge variant="outline">R{round} · #{pickInRound}</Badge>
+            <Badge variant={isUserOnClock ? "secondary" : "outline"}>{isUserOnClock ? "YOU ON CLOCK" : `On clock: ${onClock || "—"}`}</Badge>
+            <Button variant="outline" onClick={() => navigate("/hub/pre-draft")}>Back</Button>
+            <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })} disabled={!state.draft.completed}>
+              Continue →
+            </Button>
+          </div>
+        </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2 text-sm">
             <Badge variant="secondary">Your Picks</Badge>
-            <Badge variant="outline">{picks.length}/7</Badge>
-            <Badge variant="outline">Visits {Object.keys(visits).length}/30</Badge>
-            <Badge variant="outline">Workouts {Object.keys(workouts).length}</Badge>
+            <Badge variant="outline">{myPicks.length}</Badge>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate("/hub/offseason/pre-draft")}>Back</Button>
-            <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })} disabled={picks.length < 7}>Continue →</Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_NEXT" })} disabled={state.draft.completed || isUserOnClock}>
+              Sim Next
+            </Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_TO_USER" })} disabled={state.draft.completed || isUserOnClock}>
+              Sim To My Pick
+            </Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_ALL" })} disabled={state.draft.completed}>
+              Sim All
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/hub/draft-results")} disabled={!state.draft.leaguePicks.length}>
+              Results
+            </Button>
           </div>
         </CardContent>
       </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle>Board</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Available Board</CardTitle></CardHeader>
           <CardContent>
-            <ScrollArea className="h-[620px] pr-2">
+            <ScrollArea className="h-[650px] pr-2">
               <div className="space-y-2">
                 {board.map((r) => {
                   const id = String(r["Player ID"]);
                   const pos = posKey(r["POS"]);
-                  const rep = num(r["DraftTier"], 60);
-                  const visited = !!visits[id];
-                  const worked = !!workouts[id];
-                  const conf = confidence(rep, visited, worked);
                   return (
-                    <button key={id} className={`w-full text-left border rounded-md px-3 py-2 flex items-center justify-between gap-3 ${selectedId === id ? "bg-secondary/50" : ""}`} onClick={() => setSelectedId(id)}>
+                    <button
+                      key={id}
+                      className={`w-full text-left border rounded-md px-3 py-2 flex items-center justify-between gap-3 ${selectedId === id ? "bg-secondary/50" : ""}`}
+                      onClick={() => setSelectedId(id)}
+                    >
                       <div className="min-w-0">
-                        <div className="font-medium truncate">#{num(r["Rank"])} {s(r["Name"])} <span className="text-muted-foreground">({pos})</span></div>
-                        <div className="text-xs text-muted-foreground">College {s(r["College"])} · 40 {s(r["40"])} · Vert {s(r["Vert"])}</div>
+                        <div className="font-medium truncate">
+                          #{num(r["Rank"])} {s(r["Name"])} <span className="text-muted-foreground">({pos})</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {s(r["College"])} · 40 {s(r["40"])} · Vert {s(r["Vert"])}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant="outline">Conf {conf}</Badge>
-                        <Badge variant="secondary">Tier {rep}</Badge>
+                        <Badge variant="outline">Tier {num(r["DraftTier"], 60)}</Badge>
                       </div>
                     </button>
                   );
@@ -104,18 +144,53 @@ const Draft = () => {
             {selected ? (
               <>
                 <div className="space-y-1">
-                  <div className="text-xl font-bold">{s(selected["Name"])} <span className="text-muted-foreground">({posKey(selected["POS"])})</span></div>
-                  <div className="text-sm text-muted-foreground">Rank #{num(selected["Rank"])} · College {s(selected["College"])}</div>
+                  <div className="text-xl font-bold">
+                    {s(selected["Name"])} <span className="text-muted-foreground">({posKey(selected["POS"])})</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Rank #{num(selected["Rank"])} · {s(selected["College"])}
+                  </div>
                 </div>
-                <Button onClick={() => dispatch({ type: "DRAFT_PICK", payload: { prospectId: String(selected["Player ID"]) } })} disabled={picks.length >= 7 || state.draft.withdrawnBoardIds[String(selected["Player ID"])]}>Draft Player</Button>
-                <Card><CardContent className="p-4 text-sm">Picks: {picks.join(", ") || "None"}</CardContent></Card>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="border rounded-md p-3">
+                    <div className="text-muted-foreground text-xs">IQ / Work</div>
+                    <div className="font-semibold mt-1">{num(selected["Football_IQ"], 60)}/{num(selected["Work_Ethic"], 60)}</div>
+                  </div>
+                  <div className="border rounded-md p-3">
+                    <div className="text-muted-foreground text-xs">Coachability / Volatility</div>
+                    <div className="font-semibold mt-1">{num(selected["Coachability"], 60)}/{num(selected["Volatility"], 60)}</div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => dispatch({ type: "DRAFT_PICK", payload: { prospectId: String(selected["Player ID"]) } })}
+                  disabled={!isUserOnClock || state.draft.withdrawnBoardIds[String(selected["Player ID"])] || state.draft.completed}
+                >
+                  Draft Player
+                </Button>
+
+                <Card>
+                  <CardContent className="p-4 text-sm space-y-2">
+                    <div className="font-semibold">Your Pick Log</div>
+                    <div className="text-muted-foreground">
+                      {myPicks.length
+                        ? myPicks
+                            .slice()
+                            .sort((a, b) => a.overall - b.overall)
+                            .map((p) => `R${p.round}#${p.pickInRound} · ${p.prospectId}`)
+                            .join(" · ")
+                        : "None yet."}
+                    </div>
+                  </CardContent>
+                </Card>
               </>
-            ) : <div className="text-sm text-muted-foreground">Select a prospect from the board.</div>}
+            ) : (
+              <div className="text-sm text-muted-foreground">Select a prospect from the board.</div>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
   );
-};
-
-export default Draft;
+}

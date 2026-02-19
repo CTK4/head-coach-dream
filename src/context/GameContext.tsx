@@ -331,7 +331,7 @@ export type GameState = {
   league: LeagueState;
   saveSeed: number;
   game: GameSim;
-  draft: { picks: string[]; withdrawnBoardIds: Record<string, true> };
+  draft: DraftState;
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
   playerTeamOverrides: Record<string, string>;
@@ -355,6 +355,30 @@ export type RookiePlayer = {
   ovr: number;
   dev: number;
   apy: number;
+  teamId: string;
+  scoutOvr: number;
+  scoutDev: number;
+  scoutConf: number;
+};
+
+export type DraftPick = {
+  overall: number;
+  round: number;
+  pickInRound: number;
+  teamId: string;
+  prospectId: string;
+  rookiePlayerId: string;
+};
+
+export type DraftState = {
+  started: boolean;
+  completed: boolean;
+  totalRounds: number;
+  currentOverall: number;
+  orderTeamIds: string[];
+  leaguePicks: DraftPick[];
+  onClockTeamId?: string;
+  withdrawnBoardIds: Record<string, true>;
 };
 
 export type GameAction =
@@ -427,6 +451,11 @@ export type GameAction =
   | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
+  | { type: "DRAFT_INIT" }
+  | { type: "DRAFT_SIM_NEXT" }
+  | { type: "DRAFT_SIM_TO_USER" }
+  | { type: "DRAFT_SIM_ALL" }
+  | { type: "NAV_TO_DRAFT_RESULTS" }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
@@ -546,7 +575,16 @@ function createInitialState(): GameState {
     league: initLeagueState(teams, 2026),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
-    draft: { picks: [], withdrawnBoardIds: {} },
+    draft: {
+      started: false,
+      completed: false,
+      totalRounds: 7,
+      currentOverall: 1,
+      orderTeamIds: [],
+      leaguePicks: [],
+      onClockTeamId: undefined,
+      withdrawnBoardIds: {},
+    },
     rookies: [],
     rookieContracts: {},
     playerTeamOverrides: {},
@@ -1432,6 +1470,205 @@ function getProspectRow(prospectId: string): Record<string, unknown> | null {
   return DRAFT_ROWS.find((r) => String(r["Player ID"]) === prospectId) ?? null;
 }
 
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function posNormDraft(pos: string) {
+  const p = String(pos ?? "").toUpperCase();
+  if (p === "HB") return "RB";
+  if (["OLB", "ILB", "MLB"].includes(p)) return "LB";
+  if (["FS", "SS"].includes(p)) return "S";
+  if (p === "DT") return "DL";
+  if (p === "DE") return "EDGE";
+  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
+  if (p === "DB") return "CB";
+  return p || "UNK";
+}
+
+function computeDraftOrder(state: GameState): string[] {
+  return getTeams()
+    .filter((t) => t.isActive)
+    .map((t) => String(t.teamId))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function draftRoundPick(overall: number, teamsCount: number) {
+  const round = Math.floor((overall - 1) / teamsCount) + 1;
+  const pickInRound = ((overall - 1) % teamsCount) + 1;
+  return { round, pickInRound };
+}
+
+function coachScoutRep(state: GameState) {
+  return clamp(Number(state.coach.reputation?.leaguePrestige ?? state.coach.repBaseline ?? 60), 0, 100);
+}
+
+function scoutConfidenceForProspect(state: GameState, prospectId: string) {
+  const rep = coachScoutRep(state);
+  const visited = !!state.offseasonData.preDraft.visits[prospectId];
+  const worked = !!state.offseasonData.preDraft.workouts[prospectId];
+  const combine = !!state.offseasonData.combine.generated;
+  const base = clamp(40 + rep * 0.45, 40, 85);
+  return clamp(base + (visited ? 10 : 0) + (worked ? 6 : 0) + (combine ? 5 : 0), 0, 99);
+}
+
+function applyScoutNoise(state: GameState, seedKey: string, conf: number, trueVal: number, rangeAtZeroConf: number, minV: number, maxV: number) {
+  const t = 1 - conf / 100;
+  const range = t * rangeAtZeroConf;
+  const r = detRand(state.saveSeed, seedKey) * 2 - 1;
+  return clamp(Math.round(trueVal + r * range), minV, maxV);
+}
+
+function teamNeedScoreDraft(state: GameState, teamId: string, posRaw: string): number {
+  const pos = posNormDraft(posRaw);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const atPos = roster.filter((pl: any) => posNormDraft(String(pl.pos ?? "")) === pos);
+  const best = atPos.sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
+  const bestOvr = Number(best?.overall ?? 0);
+  const minStarter = ["QB", "OL", "WR", "CB", "EDGE"].includes(pos) ? 72 : 68;
+  const starterGap = clamp((minStarter - bestOvr) / 22, 0, 1);
+  const depthGap = clamp((2 - atPos.length) / 2, 0, 1);
+  const weight =
+    pos === "QB"
+      ? 1.25
+      : pos === "OL"
+        ? 1.1
+        : ["WR", "CB", "EDGE"].includes(pos)
+          ? 1.0
+          : ["RB", "TE", "LB", "S", "DL"].includes(pos)
+            ? 0.85
+            : 0.55;
+  return clamp((starterGap * 0.7 + depthGap * 0.3) * weight, 0, 1);
+}
+
+function cpuDraftPickProspectId(state: GameState, teamId: string): string | null {
+  const used = state.draft.withdrawnBoardIds;
+  const rows = (draftClassJson as Record<string, unknown>[])
+    .slice()
+    .sort((a, b) => Number((a as any)["Rank"] ?? 9999) - Number((b as any)["Rank"] ?? 9999))
+    .filter((r) => !used[String((r as any)["Player ID"])])
+    .slice(0, 110);
+
+  if (!rows.length) return null;
+
+  let bestId = String((rows[0] as any)["Player ID"]);
+  let bestScore = -1e9;
+
+  for (const r of rows) {
+    const pid = String((r as any)["Player ID"]);
+    const rank = Number((r as any)["Rank"] ?? 9999);
+    const pos = posNormDraft(String((r as any)["POS"] ?? "UNK"));
+    const need = teamNeedScoreDraft(state, teamId, pos);
+    const base = (450 - rank) / 450;
+    const jitter = detRand(state.saveSeed, `CPU_DRAFT|${state.season}|${teamId}|${pid}|${state.draft.currentOverall}`) * 0.03;
+    const score = base + need * 0.42 + jitter;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = pid;
+    }
+  }
+
+  return bestId;
+}
+
+function ensureDraftInitialized(state: GameState): GameState {
+  if (state.draft.started && state.draft.orderTeamIds.length) return state;
+
+  const orderTeamIds = computeDraftOrder(state);
+  const onClockTeamId = orderTeamIds[0];
+
+  return {
+    ...state,
+    draft: {
+      ...state.draft,
+      started: true,
+      completed: false,
+      totalRounds: state.draft.totalRounds || 7,
+      currentOverall: 1,
+      orderTeamIds,
+      leaguePicks: [],
+      onClockTeamId,
+      withdrawnBoardIds: {},
+    },
+  };
+}
+
+function applyLeagueDraftPick(state: GameState, teamId: string, prospectId: string): GameState {
+  if (state.draft.withdrawnBoardIds[prospectId]) return state;
+
+  const row = getProspectRow(prospectId);
+  const rank = row ? Number(row["Rank"] ?? 200) : 200;
+
+  const teamsCount = state.draft.orderTeamIds.length || 32;
+  const { round, pickInRound } = draftRoundPick(state.draft.currentOverall, teamsCount);
+
+  const idx = state.rookies.length + 1;
+  const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+
+  const trueOvr = rookieOvrFromRank(rank);
+  const trueDev = rookieDevFromTier(row ?? {});
+  const apy = rookieApyFromRank(rank);
+
+  const conf = scoutConfidenceForProspect(state, prospectId);
+  const scoutOvr = applyScoutNoise(state, `SCOUT_OVR|${state.season}|${prospectId}`, conf, trueOvr, 12, 40, 92);
+  const scoutDev = applyScoutNoise(state, `SCOUT_DEV|${state.season}|${prospectId}`, conf, trueDev, 20, 35, 95);
+
+  const rookie: RookiePlayer = {
+    playerId,
+    prospectId,
+    name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
+    pos: row ? posNormDraft(String(row["POS"] ?? "UNK")) : "UNK",
+    age: row ? Number(row["Age"] ?? 22) : 22,
+    ovr: trueOvr,
+    dev: trueDev,
+    apy,
+    teamId,
+    scoutOvr,
+    scoutDev,
+    scoutConf: conf,
+  };
+
+  const contract = rookieContractFromApy(state.season + 1, rookie.apy);
+
+  const pick: DraftPick = {
+    overall: state.draft.currentOverall,
+    round,
+    pickInRound,
+    teamId,
+    prospectId,
+    rookiePlayerId: rookie.playerId,
+  };
+
+  const drafted0: GameState = {
+    ...state,
+    rookies: [...state.rookies, rookie],
+    rookieContracts: { ...state.rookieContracts, [rookie.playerId]: contract },
+    playerTeamOverrides: { ...state.playerTeamOverrides, [rookie.playerId]: teamId },
+    draft: {
+      ...state.draft,
+      leaguePicks: [...state.draft.leaguePicks, pick],
+      withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [prospectId]: true },
+    },
+  };
+
+  const drafted = noteR1QBDraft(drafted0, teamId, round, rookie.pos);
+
+  const nextOverall = drafted.draft.currentOverall + 1;
+  const totalPicks = drafted.draft.totalRounds * (drafted.draft.orderTeamIds.length || 32);
+  const completed = nextOverall > totalPicks;
+  const nextOnClock = completed ? undefined : drafted.draft.orderTeamIds[(nextOverall - 1) % drafted.draft.orderTeamIds.length];
+
+  return {
+    ...drafted,
+    draft: {
+      ...drafted.draft,
+      currentOverall: nextOverall,
+      completed,
+      onClockTeamId: nextOnClock,
+    },
+  };
+}
+
 function deriveCoordFocus(role: "OC" | "DC" | "STC"): RoleFocus {
   if (role === "OC") return "OFF";
   if (role === "DC") return "DEF";
@@ -1886,6 +2123,17 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
       if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
+      if (nextStage === "PRE_DRAFT") next = next.offseasonData.preDraft.board.length ? next : {
+        ...next,
+        offseasonData: {
+          ...next.offseasonData,
+          preDraft: {
+            ...next.offseasonData.preDraft,
+            board: draftBoard(),
+          },
+        },
+      };
+      if (nextStage === "DRAFT") next = ensureDraftInitialized(next);
       if (nextStage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
@@ -2868,39 +3116,59 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
-    case "DRAFT_PICK": {
-      if (state.draft.picks.length >= 7) return state;
-      if (state.draft.withdrawnBoardIds[action.payload.prospectId]) return state;
-      const row = getProspectRow(action.payload.prospectId);
-      const rank = row ? Number(row["Rank"] ?? 200) : 200;
-      const idx = state.rookies.length + 1;
-      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
-      const rookie: RookiePlayer = {
-        playerId,
-        prospectId: action.payload.prospectId,
-        name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
-        pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : "UNK",
-        age: row ? Number(row["Age"] ?? 22) : 22,
-        ovr: rookieOvrFromRank(rank),
-        dev: rookieDevFromTier(row ?? {}),
-        apy: rookieApyFromRank(rank),
-      };
-      const contract = rookieContractFromApy(state.season + 1, rookie.apy);
+    case "DRAFT_INIT":
+      return ensureDraftInitialized(state);
 
-      const drafted = {
-        ...state,
-        rookies: [...state.rookies, rookie],
-        rookieContracts: { ...state.rookieContracts, [rookie.playerId]: contract },
-        draft: {
-          ...state.draft,
-          picks: [...state.draft.picks, action.payload.prospectId],
-          withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [action.payload.prospectId]: true },
-        },
-      };
-      const teamId = String(state.acceptedOffer?.teamId ?? "");
-      const round = state.draft.picks.length === 0 ? 1 : 2;
-      return teamId ? noteR1QBDraft(drafted, teamId, round, rookie.pos) : drafted;
+    case "DRAFT_SIM_NEXT": {
+      const s = ensureDraftInitialized(state);
+      if (s.draft.completed) return s;
+      const onClock = String(s.draft.onClockTeamId ?? "");
+      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
+      if (!onClock || onClock === userTeamId) return s;
+      const pid = cpuDraftPickProspectId(s, onClock);
+      return pid ? applyLeagueDraftPick(s, onClock, pid) : s;
     }
+
+    case "DRAFT_SIM_TO_USER": {
+      let s = ensureDraftInitialized(state);
+      if (s.draft.completed) return s;
+      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
+      if (!userTeamId) return s;
+      let guard = 0;
+      while (!s.draft.completed && String(s.draft.onClockTeamId ?? "") !== userTeamId && guard < 600) {
+        const onClock = String(s.draft.onClockTeamId ?? "");
+        const pid = cpuDraftPickProspectId(s, onClock);
+        if (!pid) break;
+        s = applyLeagueDraftPick(s, onClock, pid);
+        guard++;
+      }
+      return s;
+    }
+
+    case "DRAFT_SIM_ALL": {
+      let s = ensureDraftInitialized(state);
+      if (s.draft.completed) return s;
+      let guard = 0;
+      while (!s.draft.completed && guard < 4000) {
+        const onClock = String(s.draft.onClockTeamId ?? "");
+        if (!onClock) break;
+        const pid = cpuDraftPickProspectId(s, onClock);
+        if (!pid) break;
+        s = applyLeagueDraftPick(s, onClock, pid);
+        guard++;
+      }
+      return s;
+    }
+
+    case "DRAFT_PICK": {
+      const s = ensureDraftInitialized(state);
+      if (s.draft.completed) return s;
+      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
+      if (!userTeamId) return s;
+      if (String(s.draft.onClockTeamId ?? "") !== userTeamId) return s;
+      return applyLeagueDraftPick(s, userTeamId, action.payload.prospectId);
+    }
+
     case "CAMP_SET":
       return {
         ...state,
@@ -3386,7 +3654,27 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       },
     league: normalizedLeague,
     game,
-    draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
+    draft: oldState.draft
+      ? {
+          started: Boolean((oldState.draft as any).started),
+          completed: Boolean((oldState.draft as any).completed),
+          totalRounds: Number((oldState.draft as any).totalRounds ?? 7),
+          currentOverall: Number((oldState.draft as any).currentOverall ?? 1),
+          orderTeamIds: Array.isArray((oldState.draft as any).orderTeamIds) ? (oldState.draft as any).orderTeamIds : [],
+          leaguePicks: Array.isArray((oldState.draft as any).leaguePicks) ? (oldState.draft as any).leaguePicks : [],
+          onClockTeamId: (oldState.draft as any).onClockTeamId,
+          withdrawnBoardIds: (oldState.draft as any).withdrawnBoardIds ?? {},
+        }
+      : {
+          started: false,
+          completed: false,
+          totalRounds: 7,
+          currentOverall: 1,
+          orderTeamIds: [],
+          leaguePicks: [],
+          onClockTeamId: undefined,
+          withdrawnBoardIds: {},
+        },
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
     firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
