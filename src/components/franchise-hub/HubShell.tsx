@@ -9,6 +9,8 @@ import { getPhaseLabel } from "@/components/franchise-hub/offseasonLabel";
 import { ContextBar } from "@/components/franchise-hub/ContextBar";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
 
+const warnedLogoKeys = new Set<string>();
+
 const stageTabs = [
   { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
   { label: "ROSTER REVIEW", to: "/hub/roster-audit" },
@@ -17,97 +19,127 @@ const stageTabs = [
   { label: "DRAFT", to: "/hub/draft" },
 ];
 
-const warnedLogoKeys = new Set<string>();
-
 function resolveUserTeamId(state: any): string | undefined {
-  return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.coach?.hometownTeamId;
+  return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
 }
 
-function buildLogoSources(key: string): string[] {
-  const variants = ["@3x", "@2x", ""];
-  const extensions = ["avif", "webp", "png"];
-  return extensions.flatMap((ext) => variants.map((variant) => `/icons/${key}${variant}.${ext}`));
-}
+function buildLogoCandidates(logoKey: string): { triedPaths: string[]; expectedFiles: string[] } {
+  const expectedFiles = [
+    `${logoKey}@3x.avif`,
+    `${logoKey}@2x.avif`,
+    `${logoKey}.avif`,
+    `${logoKey}@3x.webp`,
+    `${logoKey}@2x.webp`,
+    `${logoKey}.webp`,
+    `${logoKey}@3x.png`,
+    `${logoKey}@2x.png`,
+    `${logoKey}.png`,
+  ];
 
-function buildExpectedFilenames(logoKey: string): string[] {
-  const variants = ["@3x", "@2x", ""];
-  const extensions = ["avif", "webp", "png"];
-  return extensions.flatMap((ext) => variants.map((variant) => `${logoKey}${variant}.${ext}`));
+  const key = encodeURIComponent(logoKey);
+  const triedPaths = [
+    `/icons/${key}@3x.avif`,
+    `/icons/${key}@2x.avif`,
+    `/icons/${key}.avif`,
+    `/icons/${key}@3x.webp`,
+    `/icons/${key}@2x.webp`,
+    `/icons/${key}.webp`,
+    `/icons/${key}@3x.png`,
+    `/icons/${key}@2x.png`,
+    `/icons/${key}.png`,
+  ];
+
+  return { triedPaths, expectedFiles };
 }
 
 function TeamLogo({
   logoKey,
-  alt,
   teamId,
   teamName,
   pathname,
+  alt,
 }: {
   logoKey?: string;
-  alt: string;
   teamId?: string;
   teamName?: string;
   pathname?: string;
+  alt: string;
 }) {
   const [attemptIndex, setAttemptIndex] = useState(0);
-  const [placeholderBroken, setPlaceholderBroken] = useState(false);
 
-  const encodedKey = useMemo(() => (logoKey ? encodeURIComponent(logoKey) : undefined), [logoKey]);
-  const iconSources = useMemo(() => (encodedKey ? buildLogoSources(encodedKey) : []), [encodedKey]);
-  const sources = useMemo(() => [...iconSources, "/placeholder.svg"], [iconSources]);
-  const expectedFiles = useMemo(() => (logoKey ? buildExpectedFilenames(logoKey) : []), [logoKey]);
+  const { triedPaths, expectedFiles } = useMemo(() => {
+    if (!logoKey) return { triedPaths: [], expectedFiles: [] };
+    return buildLogoCandidates(logoKey);
+  }, [logoKey]);
+
+  const sources = useMemo(() => {
+    const base = [...triedPaths];
+    base.push("/placeholder.svg"); // optional; if missing we still render the final fallback div below
+    return base;
+  }, [triedPaths]);
 
   useEffect(() => {
     setAttemptIndex(0);
-    setPlaceholderBroken(false);
   }, [logoKey]);
 
-  const src = sources[Math.min(attemptIndex, sources.length - 1)] ?? "/placeholder.svg";
-  const atLastSource = attemptIndex >= sources.length - 1;
+  const currentSrc = sources[attemptIndex];
+  const exhausted = Boolean(logoKey) && attemptIndex >= sources.length - 1;
 
-  if (atLastSource && placeholderBroken) {
+  // Final fallback (never broken image icon)
+  if (!logoKey || !currentSrc || (exhausted && currentSrc === "/placeholder.svg")) {
     if (import.meta.env.DEV && logoKey && !warnedLogoKeys.has(logoKey)) {
       warnedLogoKeys.add(logoKey);
+      const tId = teamId ?? "—";
+      const tName = teamName ?? "—";
+      const path = pathname ?? "—";
+      const tried = triedPaths.join(", ");
+      const expected = expectedFiles.map((f) => ` - ${f}`).join("\n");
+      // eslint-disable-next-line no-console
       console.warn(
         `[TeamLogo] Missing icon assets\n` +
-          `route="${pathname ?? "—"}" teamId="${teamId ?? "—"}" team="${teamName ?? "—"}" logoKey="${logoKey}"\n` +
-          `tried: ${iconSources.join(", ")}\n` +
-          `expected files (place in public/icons):\n${expectedFiles.map((file) => ` - ${file}`).join("\n")}`,
+          `route="${path}" teamId="${tId}" team="${tName}" logoKey="${logoKey}"\n` +
+          `tried: ${tried}\n` +
+          `expected files (place in public/icons):\n${expected}`
       );
     }
-  }
 
-  if (placeholderBroken && atLastSource) {
     return <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />;
   }
 
   return (
     <img
-      src={src}
+      src={currentSrc}
       alt={alt}
       className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/20 object-contain"
-      onError={() => {
-        if (atLastSource) {
-          setPlaceholderBroken(true);
-          return;
-        }
-        setAttemptIndex((index) => Math.min(index + 1, sources.length - 1));
-      }}
       loading="eager"
       decoding="async"
+      onError={() => setAttemptIndex((i) => Math.min(i + 1, sources.length - 1))}
     />
   );
 }
 
-export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { title?: string; children: ReactNode; rightActions?: ReactNode }) {
+export function HubShell({
+  title = "FRANCHISE HUB",
+  children,
+  rightActions,
+}: {
+  title?: string;
+  children: ReactNode;
+  rightActions?: ReactNode;
+}) {
   const { state } = useGame();
   const location = useLocation();
 
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
-  const teamName = `${team?.city ?? ""} ${team?.name ?? ""}`.trim() || team?.abbrev;
 
   const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
   const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
+
+  const teamName =
+    team?.abbrev ??
+    [team?.city, team?.name].filter(Boolean).join(" ").trim() ||
+    undefined;
 
   return (
     <section className={`relative p-2 md:p-4 ${HUB_BG} ${HUB_TEXTURE} ${HUB_VIGNETTE}`}>
@@ -116,10 +148,10 @@ export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { 
           <div className="flex items-center justify-between gap-3">
             <TeamLogo
               logoKey={team?.logoKey}
-              alt={`${team?.city ?? ""} ${team?.name ?? "Team"} logo`.trim()}
               teamId={teamId}
               teamName={teamName}
-              pathname={location?.pathname ?? "—"}
+              pathname={location?.pathname}
+              alt={`${teamName ?? "Team"} logo`}
             />
             <h1 className="text-center text-2xl font-black tracking-[0.12em] text-slate-100">{title}</h1>
             <div className={`text-2xl font-bold ${HUB_TEXT_GOLD}`}>{state.season}</div>
@@ -127,12 +159,12 @@ export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { 
 
           <div className={HUB_DIVIDER} />
 
-          <div className="flex items-center justify-between text-sm text-slate-100">
+          <div className="grid grid-cols-3 items-center gap-2 text-sm text-slate-100">
             <span className="truncate">{getPhaseLabel(state)}</span>
-            <span className="truncate">
+            <span className="truncate text-center">
               Cap Room <span className={HUB_TEXT_GOLD}>{cap}</span>
             </span>
-            <span className="truncate">Pick {pick ?? "—"}</span>
+            <span className="truncate text-right">Pick {pick ?? "—"}</span>
           </div>
 
           <div className={HUB_DIVIDER} />

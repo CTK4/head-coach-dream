@@ -17,13 +17,12 @@ function useIsMobile(breakpointPx = 768): boolean {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const media = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
-    const handleChange = () => setIsMobile(media.matches);
+    const mq = window.matchMedia(`(max-width: ${breakpointPx - 1}px)`);
+    const update = () => setIsMobile(mq.matches);
 
-    handleChange();
-    media.addEventListener("change", handleChange);
-
-    return () => media.removeEventListener("change", handleChange);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
   }, [breakpointPx]);
 
   return isMobile;
@@ -31,40 +30,48 @@ function useIsMobile(breakpointPx = 768): boolean {
 
 export function FranchiseHubTabs({ tabs }: FranchiseHubTabsProps) {
   const location = useLocation();
+  const isMobile = useIsMobile(768);
   const navRef = useRef<HTMLElement | null>(null);
   const tabRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const isMobile = useIsMobile(768);
 
-  const activeTab = useMemo(
-    () => tabs.find((tab) => location.pathname === tab.to || location.pathname.startsWith(`${tab.to}/`)) ?? null,
-    [location.pathname, tabs],
-  );
+  const activeTab = useMemo(() => {
+    const path = location.pathname;
+    return tabs.find((t) => path === t.to || path.startsWith(`${t.to}/`)) ?? null;
+  }, [location.pathname, tabs]);
 
   useEffect(() => {
-    if (!isMobile || !activeTab) return;
+    if (!isMobile) return;
+    if (!activeTab) return;
 
-    const navEl = navRef.current;
-    const activeEl = tabRefs.current[activeTab.to];
+    const el = tabRefs.current[activeTab.to];
+    const container = navRef.current;
+    if (!el || !container) return;
 
-    if (!navEl || !activeEl) return;
+    const elRect = el.getBoundingClientRect();
+    const cRect = container.getBoundingClientRect();
 
-    const navRect = navEl.getBoundingClientRect();
-    const activeRect = activeEl.getBoundingClientRect();
-    const outOfView = activeRect.left < navRect.left || activeRect.right > navRect.right;
+    const outLeft = elRect.left < cRect.left;
+    const outRight = elRect.right > cRect.right;
+    if (!outLeft && !outRight) return;
 
-    if (!outOfView) return;
-
-    activeEl.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }, [activeTab, isMobile, location.pathname]);
+    el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [activeTab, isMobile]);
 
   return (
     <>
-      <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+      <style>
+        {`
+          .hide-scrollbar::-webkit-scrollbar { display: none; }
+        `}
+      </style>
+
       <nav
-        ref={navRef}
-        className="hide-scrollbar flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] snap-x snap-mandatory scroll-smooth"
-        aria-label="Franchise hub stages"
+        ref={(n) => {
+          navRef.current = n;
+        }}
+        className="hide-scrollbar flex gap-1 overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
         style={{ WebkitOverflowScrolling: "touch" }}
+        aria-label="Franchise hub stages"
       >
         {tabs.map((tab) => (
           <NavLink
@@ -75,7 +82,9 @@ export function FranchiseHubTabs({ tabs }: FranchiseHubTabsProps) {
               tabRefs.current[tab.to] = el;
             }}
             className={({ isActive }) =>
-              `${hubTheme.tabBase} ${isActive ? hubTheme.tabActive : hubTheme.tabInactive} shrink-0 snap-start min-w-[78px] sm:min-w-[96px]`
+              `${hubTheme.tabBase} shrink-0 snap-start min-w-[78px] sm:min-w-[96px] ${
+                isActive ? hubTheme.tabActive : hubTheme.tabInactive
+              }`
             }
           >
             {tab.label}
