@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame, getDraftClass, predictVisitReveal } from "@/context/GameContext";
+import { useGame, getDraftClass } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,7 @@ export default function PreDraft() {
   const nav = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
+  const pendingVisitWarnRef = useRef<string | null>(null);
 
   const rows = useMemo(
     () => (getDraftClass() as Row[]).slice().sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999)),
@@ -93,18 +94,28 @@ export default function PreDraft() {
 
   const toggleVisit = (id: string) => {
     const isOn = !!state.offseasonData.preDraft.visits[id];
-    if (!isOn) {
-      const nextRev = predictVisitReveal(state, id);
-      if (nextRev.characterLevel === "BLACK") {
-        const ok = window.confirm(
-          "Warning: This prospect is marked REMOVE FROM BOARD (Character BLACK).\n\nKeep this visit (and reveal) anyway?"
-        );
-        if (!ok) return;
-      }
-    }
     dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
+
+    if (!isOn) {
+      pendingVisitWarnRef.current = id;
+    }
   };
   const toggleWorkout = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_WORKOUT", payload: { prospectId: id } });
+
+  useEffect(() => {
+    const id = pendingVisitWarnRef.current;
+    if (!id) return;
+    const rev = state.offseasonData.preDraft.reveals[id];
+    if (!rev) return;
+
+    if (rev.characterLevel === "BLACK") {
+      const ok = window.confirm(
+        "Warning: This prospect is marked REMOVE FROM BOARD (Character BLACK).\n\nKeep this visit (and reveal) anyway?"
+      );
+      if (!ok) dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
+    }
+    pendingVisitWarnRef.current = null;
+  }, [state.offseasonData.preDraft.reveals, dispatch]);
 
   const continueToDraft = () => {
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
