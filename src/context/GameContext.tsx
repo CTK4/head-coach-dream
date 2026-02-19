@@ -774,7 +774,7 @@ function expireUserCounters(state: GameState): GameState {
     for (const c of myCounters) {
       const createdAt = Number(c.counterCreatedAtResolve ?? -1);
       if (createdAt < 0) continue;
-      if (state.freeAgency.resolvesUsedThisPhase > createdAt) {
+      if (state.freeAgency.resolvesUsedThisPhase >= createdAt) {
         offersByPlayerId[pid] = offersByPlayerId[pid].map((o) => (o.offerId === c.offerId ? { ...o, status: "REJECTED" as const } : o));
         changed = true;
       }
@@ -782,6 +782,54 @@ function expireUserCounters(state: GameState): GameState {
   }
 
   return changed ? { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } } : state;
+}
+
+function collectFaInvariantViolations(state: GameState): string[] {
+  const violations: string[] = [];
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const resolveCount = Number(state.freeAgency.resolvesUsedThisPhase ?? 0);
+
+  for (const [pid, offers] of Object.entries(state.freeAgency.offersByPlayerId)) {
+    const signed = !!state.freeAgency.signingsByPlayerId[pid];
+    const accepted = offers.filter((o) => o.status === "ACCEPTED");
+    const active = offers.filter((o) => o.status === "PENDING" || o.status === "COUNTERED");
+
+    if (signed) {
+      if (accepted.length !== 1) violations.push(`[${pid}] signed player must have exactly one ACCEPTED offer (found ${accepted.length}).`);
+      const openOthers = offers.filter((o) => o.status !== "ACCEPTED" && o.status !== "REJECTED" && o.status !== "WITHDRAWN");
+      if (openOthers.length) violations.push(`[${pid}] signed player has non-closed non-winner offers: ${openOthers.map((o) => `${o.offerId}:${o.status}`).join(", ")}.`);
+    } else if (accepted.length) {
+      violations.push(`[${pid}] unsigned player has ACCEPTED offers (${accepted.length}).`);
+    }
+
+    for (const o of offers) {
+      if (o.status !== "COUNTERED") continue;
+      if (typeof o.counterCreatedAtResolve !== "number") {
+        violations.push(`[${pid}] counter ${o.offerId} missing counterCreatedAtResolve.`);
+        continue;
+      }
+      if (o.isUser && userTeamId && String(o.teamId) === userTeamId) {
+        const age = resolveCount - Number(o.counterCreatedAtResolve);
+        if (age > 1) violations.push(`[${pid}] user counter ${o.offerId} is stale (age=${age} resolves).`);
+      }
+    }
+
+    if (signed && active.length) {
+      violations.push(`[${pid}] player is signed but still has active offers (${active.length}).`);
+    }
+  }
+
+  return violations;
+}
+
+function reportFaInvariantViolations(state: GameState, source: "FA_CPU_TICK" | "FA_RESOLVE") {
+  if (!import.meta.env.DEV) return;
+  const violations = collectFaInvariantViolations(state);
+  if (!violations.length) return;
+  console.error(`[FA_INVARIANTS][${source}] ${violations.length} violation(s)`, {
+    resolve: state.freeAgency.resolvesUsedThisPhase,
+    violations,
+  });
 }
 
 function getAllTeamIds(): string[] {
@@ -2430,8 +2478,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
       const next = upsertStateOffers(state, pid, [...existing, userOffer]);
-      const withCpu = cpuOfferTick(next, 70);
-      return faPush(withCpu, `Offer submitted: ${draft.years} yrs @ $${Math.round(draft.aav / 1_000_000)}M/yr.`, pid);
+      return faPush(next, `Offer submitted: ${draft.years} yrs @ $${Math.round(draft.aav / 1_000_000)}M/yr.`, pid);
     }
 
     case "FA_UPDATE_USER_OFFER": {
@@ -2450,8 +2497,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const nextOffers = [...offers];
       nextOffers[idx] = { ...nextOffers[idx], years: Math.max(1, Math.min(5, Math.round(years))), aav: Math.max(750_000, Math.round(aav / 50_000) * 50_000) };
       const next = upsertStateOffers(state, pid, nextOffers);
-      const withCpu = cpuOfferTick(next, 70);
-      return faPush(withCpu, `Offer updated: ${nextOffers[idx].years} yrs @ $${Math.round(nextOffers[idx].aav / 1_000_000)}M/yr.`, pid);
+      return faPush(next, `Offer updated: ${nextOffers[idx].years} yrs @ $${Math.round(nextOffers[idx].aav / 1_000_000)}M/yr.`, pid);
     }
 
     case "FA_CLEAR_USER_OFFER": {
@@ -2491,7 +2537,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "FA_CPU_TICK": {
       if (state.careerStage !== "FREE_AGENCY") return state;
       const next = cpuOfferTick(state, 70);
-      return { ...next, freeAgency: { ...next.freeAgency, cpuTickedOnOpen: true } };
+      const out = { ...next, freeAgency: { ...next.freeAgency, cpuTickedOnOpen: true } };
+      reportFaInvariantViolations(out, "FA_CPU_TICK");
+      return out;
     }
 
     case "FA_RESOLVE_BATCH":
@@ -2577,7 +2625,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
         const allOffers = next.freeAgency.offersByPlayerId[pid] ?? [];
         const pending = allOffers.filter((o) => o.status === "PENDING");
-        if (!pending.length) continue;
+        if (!pending.length) {
+          const stillCountered = allOffers.some((o) => o.status === "COUNTERED");
+          if (stillCountered) {
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+            next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
+          }
+          next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
+          continue;
+        }
 
         const scored = pending.map((o) => ({ o, s: offerScore(next, pid, o, market) })).sort((a, b) => b.s - a.s || b.o.aav - a.o.aav || b.o.years - a.o.years);
         const best = scored[0].o;
@@ -2636,7 +2692,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
       }
 
-      return cpuOfferTick(next, 70);
+      const out = cpuOfferTick(next, 70);
+      reportFaInvariantViolations(out, "FA_RESOLVE");
+      return out;
     }
 
     case "FA_RESOLVE_WEEK": {
@@ -3475,6 +3533,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("[state-save] Failed to persist save data", error);
     }
+  }, [state]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+    const w = window as typeof window & { simulateNResolves?: (n: number) => void };
+    w.simulateNResolves = (n: number) => {
+      const count = Math.max(0, Math.floor(Number.isFinite(n) ? n : 0));
+      let sim = state;
+      let total = 0;
+      for (let i = 0; i < count; i++) {
+        sim = gameReducer(sim, { type: "FA_RESOLVE" });
+        const v = collectFaInvariantViolations(sim);
+        total += v.length;
+        if (v.length) console.error(`[simulateNResolves] resolve ${i + 1}:`, v);
+      }
+      console.log(`[simulateNResolves] completed ${count} resolves with ${total} invariant violation(s).`);
+    };
+    return () => {
+      if (w.simulateNResolves) delete w.simulateNResolves;
+    };
   }, [state]);
 
   const getCurrentTeamMatchup: GameContextType["getCurrentTeamMatchup"] = (gameType) => {
