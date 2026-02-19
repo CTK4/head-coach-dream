@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { getTeamById } from "@/data/leagueDb";
 import { useGame } from "@/context/GameContext";
 import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
@@ -16,24 +17,44 @@ const stageTabs = [
   { label: "DRAFT", to: "/hub/draft" },
 ];
 
+const warnedLogoKeys = new Set<string>();
+
 function resolveUserTeamId(state: any): string | undefined {
   return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.coach?.hometownTeamId;
 }
 
-function buildLogoSources(logoKey?: string): string[] {
-  if (!logoKey) return ["/placeholder.svg"];
-  const key = encodeURIComponent(logoKey);
+function buildLogoSources(key: string): string[] {
   const variants = ["@3x", "@2x", ""];
   const extensions = ["avif", "webp", "png"];
-  const sources = extensions.flatMap((ext) => variants.map((variant) => `/icons/${key}${variant}.${ext}`));
-  return [...sources, "/placeholder.svg"];
+  return extensions.flatMap((ext) => variants.map((variant) => `/icons/${key}${variant}.${ext}`));
 }
 
-function TeamLogo({ logoKey, alt }: { logoKey?: string; alt: string }) {
+function buildExpectedFilenames(logoKey: string): string[] {
+  const variants = ["@3x", "@2x", ""];
+  const extensions = ["avif", "webp", "png"];
+  return extensions.flatMap((ext) => variants.map((variant) => `${logoKey}${variant}.${ext}`));
+}
+
+function TeamLogo({
+  logoKey,
+  alt,
+  teamId,
+  teamName,
+  pathname,
+}: {
+  logoKey?: string;
+  alt: string;
+  teamId?: string;
+  teamName?: string;
+  pathname?: string;
+}) {
   const [attemptIndex, setAttemptIndex] = useState(0);
   const [placeholderBroken, setPlaceholderBroken] = useState(false);
 
-  const sources = useMemo(() => buildLogoSources(logoKey), [logoKey]);
+  const encodedKey = useMemo(() => (logoKey ? encodeURIComponent(logoKey) : undefined), [logoKey]);
+  const iconSources = useMemo(() => (encodedKey ? buildLogoSources(encodedKey) : []), [encodedKey]);
+  const sources = useMemo(() => [...iconSources, "/placeholder.svg"], [iconSources]);
+  const expectedFiles = useMemo(() => (logoKey ? buildExpectedFilenames(logoKey) : []), [logoKey]);
 
   useEffect(() => {
     setAttemptIndex(0);
@@ -42,6 +63,18 @@ function TeamLogo({ logoKey, alt }: { logoKey?: string; alt: string }) {
 
   const src = sources[Math.min(attemptIndex, sources.length - 1)] ?? "/placeholder.svg";
   const atLastSource = attemptIndex >= sources.length - 1;
+
+  if (atLastSource && placeholderBroken) {
+    if (import.meta.env.DEV && logoKey && !warnedLogoKeys.has(logoKey)) {
+      warnedLogoKeys.add(logoKey);
+      console.warn(
+        `[TeamLogo] Missing icon assets\n` +
+          `route="${pathname ?? "—"}" teamId="${teamId ?? "—"}" team="${teamName ?? "—"}" logoKey="${logoKey}"\n` +
+          `tried: ${iconSources.join(", ")}\n` +
+          `expected files (place in public/icons):\n${expectedFiles.map((file) => ` - ${file}`).join("\n")}`,
+      );
+    }
+  }
 
   if (placeholderBroken && atLastSource) {
     return <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />;
@@ -67,9 +100,11 @@ function TeamLogo({ logoKey, alt }: { logoKey?: string; alt: string }) {
 
 export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { title?: string; children: ReactNode; rightActions?: ReactNode }) {
   const { state } = useGame();
+  const location = useLocation();
 
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
+  const teamName = `${team?.city ?? ""} ${team?.name ?? ""}`.trim() || team?.abbrev;
 
   const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
   const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
@@ -79,7 +114,13 @@ export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { 
       <div className={`mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME}`}>
         <header className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <TeamLogo logoKey={team?.logoKey} alt={`${team?.city ?? ""} ${team?.name ?? "Team"} logo`.trim()} />
+            <TeamLogo
+              logoKey={team?.logoKey}
+              alt={`${team?.city ?? ""} ${team?.name ?? "Team"} logo`.trim()}
+              teamId={teamId}
+              teamName={teamName}
+              pathname={location?.pathname ?? "—"}
+            />
             <h1 className="text-center text-2xl font-black tracking-[0.12em] text-slate-100">{title}</h1>
             <div className={`text-2xl font-bold ${HUB_TEXT_GOLD}`}>{state.season}</div>
           </div>
