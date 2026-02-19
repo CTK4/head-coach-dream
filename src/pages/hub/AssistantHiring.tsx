@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useGame, type AssistantStaff } from "@/context/GameContext";
 import {
   getAssistantHeadCoachCandidates,
@@ -14,7 +14,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { HubShell } from "@/components/franchise-hub/HubShell";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -33,164 +32,235 @@ const MIN_REQUIRED = 3;
 
 type Cand = { p: PersonnelRow; exp: number; salary: number; safety: boolean; emergency: boolean };
 
+function resolveUserTeamId(state: any): string | undefined {
+  return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
+}
+
 function money(n: number) {
+  if (!Number.isFinite(n)) return "$0.00M";
   return `$${(n / 1_000_000).toFixed(2)}M`;
+}
+
+function repNumber(p: PersonnelRow): number {
+  const n = Number(p.reputation ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export default function AssistantHiring() {
   const { state, dispatch } = useGame();
-  const [activeRole, setActiveRole] = useState<keyof AssistantStaff>("assistantHcId");
+  const teamId = resolveUserTeamId(state);
+
+  const firstUnfilled = useMemo(
+    () => ROLE_ORDER.find((r) => !state.assistantStaff[r.key])?.key ?? "assistantHcId",
+    [state.assistantStaff]
+  );
+
+  const [activeRole, setActiveRole] = useState<keyof AssistantStaff>(firstUnfilled);
   const [toast, setToast] = useState<string | null>(null);
-  const [levelIndex, setLevelIndex] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [levelIdx, setLevelIdx] = useState(1);
 
-  const remainingBudget = Math.max(0, state.staffBudget.total - state.staffBudget.used);
-  const allFilled = useMemo(() => {
-    const staff = state.staff;
-    const required = ROLE_ORDER.filter((r) => r.key !== "assistantHcId");
-    const filled = required.filter((r) => Boolean(staff[r.key as keyof typeof staff]));
-    return filled.length >= MIN_REQUIRED;
-  }, [state.staff]);
+  useEffect(() => {
+    if (state.assistantStaff[activeRole]) setActiveRole(firstUnfilled);
+  }, [activeRole, firstUnfilled, state.assistantStaff]);
 
-  const roleMeta = useMemo(() => ROLE_ORDER.find((r) => r.key === activeRole)!, [activeRole]);
-  const level = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, levelIndex))];
+  const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
-  const candidates: Cand[] = useMemo(() => {
-    const teamId = state.acceptedOffer?.teamId;
+  const repCap = state.season <= 2026 ? 50 : 999;
 
-    const all =
-      roleMeta.key === "assistantHcId"
-        ? getAssistantHeadCoachCandidatesAll(state, teamId)
-        : getPositionCoachCandidatesAll(state, roleMeta.role, teamId);
+  const getStrictPool = (roleKey: keyof AssistantStaff): PersonnelRow[] => {
+    const role = ROLE_ORDER.find((item) => item.key === roleKey)?.role;
+    const base = !role ? getAssistantHeadCoachCandidates() : getPositionCoachCandidates(role);
+    return base.filter((p) => repNumber(p) <= repCap);
+  };
 
-    const baseList =
-      roleMeta.key === "assistantHcId"
-        ? getAssistantHeadCoachCandidates(state, teamId)
-        : getPositionCoachCandidates(state, roleMeta.role, teamId);
+  const getAllPool = (roleKey: keyof AssistantStaff): PersonnelRow[] => {
+    const role = ROLE_ORDER.find((item) => item.key === roleKey)?.role;
+    const base = !role ? getAssistantHeadCoachCandidatesAll() : getPositionCoachCandidatesAll(role);
+    return base.filter((p) => repNumber(p) <= repCap);
+  };
 
-    const source = baseList.length ? baseList : all;
+  const hiredSet = useMemo(
+    () =>
+      new Set(
+        [
+          ...Object.values(state.assistantStaff).filter(Boolean),
+          state.staff.ocId,
+          state.staff.dcId,
+          state.staff.stcId,
+        ].filter(Boolean) as string[]
+      ),
+    [state.assistantStaff, state.staff.ocId, state.staff.dcId, state.staff.stcId]
+  );
 
-    return source.map((p) => {
-      const exp = expectedSalary(p, roleMeta.focus);
-      const salary = offerSalary(exp, level);
-      return { p, exp, salary, safety: Boolean((p as any).safety), emergency: Boolean((p as any).emergency) };
-    });
-  }, [state, roleMeta, level]);
+  const level = LEVELS[levelIdx];
 
-  function handleContinue() {
-    if (!allFilled) {
-      setToast("Fill at least 3 key position coaches before continuing.");
+  const roleAlreadyFilled = Boolean(state.assistantStaff[activeRole]);
+
+  const candidates = useMemo(() => {
+    if (roleAlreadyFilled) return [];
+
+    const strict: Cand[] = getStrictPool(activeRole)
+      .filter((p) => !hiredSet.has(p.personId))
+      .map((p) => {
+        const rep = repNumber(p);
+        const exp = expectedSalary(activeRole as any, rep);
+        const salary = offerSalary(exp, level);
+        return { p, exp, salary, safety: false, emergency: false };
+      })
+      .filter((x) => Number.isFinite(x.salary) && x.salary <= remainingBudget)
+      .sort((a, b) => repNumber(b.p) - repNumber(a.p));
+
+    if (strict.length >= MIN_REQUIRED) return strict.slice(0, 40);
+
+    const seen = new Set(strict.map((x) => x.p.personId));
+    const need1 = MIN_REQUIRED - strict.length;
+
+    const safetyAffordable: Cand[] = getAllPool(activeRole)
+      .filter((p) => !hiredSet.has(p.personId))
+      .filter((p) => !seen.has(p.personId))
+      .map((p) => {
+        const rep = repNumber(p);
+        const exp = expectedSalary(activeRole as any, rep);
+        const salary = offerSalary(exp, level);
+        return { p, exp, salary, safety: true, emergency: false };
+      })
+      .filter((x) => Number.isFinite(x.salary) && x.salary <= remainingBudget)
+      .sort((a, b) => repNumber(a.p) - repNumber(b.p))
+      .slice(0, need1);
+
+    const base = [...strict, ...safetyAffordable];
+    if (base.length >= MIN_REQUIRED) return base.slice(0, 40);
+
+    const seen2 = new Set(base.map((x) => x.p.personId));
+    const need2 = MIN_REQUIRED - base.length;
+
+    const emergencyAny: Cand[] = getAllPool(activeRole)
+      .filter((p) => !hiredSet.has(p.personId))
+      .filter((p) => !seen2.has(p.personId))
+      .map((p) => {
+        const rep = repNumber(p);
+        const exp = expectedSalary(activeRole as any, rep);
+        const salary = offerSalary(exp, "LOW");
+        return { p, exp, salary, safety: true, emergency: true };
+      })
+      .filter((x) => Number.isFinite(x.salary))
+      .sort((a, b) => repNumber(a.p) - repNumber(b.p))
+      .slice(0, need2);
+
+    return [...base, ...emergencyAny].slice(0, 40);
+  }, [activeRole, hiredSet, level, remainingBudget, roleAlreadyFilled, repCap]);
+
+  const allFilled = ROLE_ORDER.every((role) => Boolean(state.assistantStaff[role.key]));
+
+  const attemptHire = (personId: string, salary: number) => {
+    if (!teamId) {
+      setToast("No team selected yet.");
+      setTimeout(() => setToast(null), 1200);
       return;
     }
+    if (state.assistantStaff[activeRole]) {
+      setToast("That role is already filled.");
+      setTimeout(() => setToast(null), 1200);
+      return;
+    }
+    if (!Number.isFinite(salary)) {
+      setToast("Offer amount invalid.");
+      setTimeout(() => setToast(null), 1200);
+      return;
+    }
+
+    dispatch({ type: "HIRE_ASSISTANT", payload: { role: activeRole, personId, salary } });
+    setToast("Offer sent.");
+    setTimeout(() => setToast(null), 900);
+  };
+
+  const handleContinue = () => {
+    if (!allFilled) return;
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
-    setToast("Staff phase complete.");
-  }
-
-  function handleSelectRole(role: keyof AssistantStaff) {
-    setSelectedId(null);
-    setActiveRole(role);
-  }
-
-  function handleOffer(personId: string) {
-    const c = candidates.find((x) => x.p.personId === personId);
-    if (!c) return;
-
-    if (c.salary > remainingBudget) {
-      setToast("Insufficient staff budget for that offer.");
-      return;
-    }
-
-    dispatch({
-      type: "MAKE_STAFF_OFFER",
-      payload: { roleKey: activeRole, personId, salary: c.salary },
-    });
-    setToast(`Offer submitted: ${c.p.name} (${money(c.salary)})`);
-  }
+  };
 
   return (
-    <HubShell title="HIRE STAFF">
-      <div className="space-y-4">
-        {toast ? (
-          <Card className="border-slate-300/15 bg-slate-950/35">
-            <CardContent className="p-4 text-sm text-slate-100">{toast}</CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-2xl font-bold text-slate-100">Staff Construction</div>
-              <div className="text-sm text-slate-200/70">Pool backfills with safety and emergency options when needed.</div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
-              <Badge variant="outline">Used {money(state.staffBudget.used)}</Badge>
-              <Badge variant="secondary">Remaining {money(remainingBudget)}</Badge>
-              <Badge variant="outline">Cash {money(state.teamFinances.cash)}</Badge>
-              <Button onClick={handleContinue} disabled={!allFilled}>
-                Continue →
-              </Button>
-            </div>
-          </CardContent>
+    <div className="space-y-4">
+      {toast ? (
+        <Card>
+          <CardContent className="p-4 text-sm">{toast}</CardContent>
         </Card>
+      ) : null}
 
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-slate-100">Role</div>
-              <div className="text-xs text-slate-200/70">Select a role to review candidates.</div>
+      <Card>
+        <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-2xl font-bold">Staff Construction</div>
+            <div className="text-sm text-muted-foreground">
+              Initial hiring pool is limited to coaches ≤ {repCap} reputation in {state.season}. Expands after year one.
             </div>
-            <div className="flex flex-wrap gap-2">
-              {ROLE_ORDER.map((r) => (
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
+            <Badge variant="outline">Used {money(state.staffBudget.used)}</Badge>
+            <Badge variant="secondary">Remaining {money(remainingBudget)}</Badge>
+            <Badge variant="outline">Cash {money(state.teamFinances.cash)}</Badge>
+            <Button onClick={handleContinue} disabled={!allFilled}>
+              Continue →
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {ROLE_ORDER.map((r) => {
+              const filled = Boolean(state.assistantStaff[r.key]);
+              return (
                 <Button
-                  key={r.key}
+                  key={String(r.key)}
+                  size="sm"
                   variant={activeRole === r.key ? "default" : "secondary"}
-                  className={activeRole === r.key ? "bg-emerald-700 hover:bg-emerald-700/90" : ""}
-                  onClick={() => handleSelectRole(r.key)}
+                  onClick={() => setActiveRole(r.key)}
+                  disabled={filled}
                 >
-                  {r.label} {Boolean((state.staff as any)[r.key]) ? "✓" : ""}
+                  {r.label} {filled ? "✓" : ""}
                 </Button>
-              ))}
+              );
+            })}
+          </div>
+
+          <div className="min-w-[220px]">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Low</span>
+              <span>Fair</span>
+              <span>High</span>
             </div>
+            <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
+            <div className="mt-1 text-xs text-muted-foreground">Offer Level: {LEVEL_LABEL[level]}</div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {roleAlreadyFilled ? (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            This role is filled. Pick another role to hire.
           </CardContent>
         </Card>
+      ) : null}
 
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-slate-100">Offer Level: {LEVEL_LABEL[level]}</div>
-              <Slider value={[levelIndex]} min={0} max={2} step={1} onValueChange={(v) => setLevelIndex(v[0] ?? 1)} />
-            </div>
-
-            <div className="space-y-2">
-              {candidates.map((c) => (
-                <button
-                  key={c.p.personId}
-                  type="button"
-                  className={`w-full rounded-lg border p-3 text-left transition ${
-                    selectedId === c.p.personId
-                      ? "border-emerald-400/50 bg-emerald-900/20"
-                      : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"
-                  }`}
-                  onClick={() => setSelectedId(c.p.personId)}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="font-semibold text-slate-100">{c.p.name}</div>
-                      <div className="text-xs text-slate-200/70">
-                        Rep {(c.p as any).rep ?? "—"} · Expected {money(c.exp)}
-                      </div>
-                    </div>
-                    <Button onClick={(e) => (e.preventDefault(), handleOffer(c.p.personId))} className="shrink-0">
-                      Offer {money(c.salary)}
-                    </Button>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-3">
+        {candidates.map((c) => (
+          <Card key={c.p.personId}>
+            <CardContent className="p-4 flex items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="font-semibold">{c.p.fullName}</div>
+                <div className="text-sm text-muted-foreground">
+                  Rep {repNumber(c.p)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
+                </div>
+              </div>
+              <Button onClick={() => attemptHire(c.p.personId, c.salary)}>Offer {money(c.salary)}</Button>
+            </CardContent>
+          </Card>
+        ))}
       </div>
-    </HubShell>
+    </div>
   );
 }

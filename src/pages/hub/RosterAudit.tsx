@@ -19,7 +19,7 @@ function money(n: number) {
 
 export default function RosterAudit() {
   const { state } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
 
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [restructureOpen, setRestructureOpen] = useState(false);

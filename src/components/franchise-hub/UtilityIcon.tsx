@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type UtilityIconName =
   | "Calendar"
   | "Cold"
@@ -22,6 +24,27 @@ export function UtilityIcon({
   alt?: string;
   className?: string;
 }) {
-  const src = `/utility/${encodeURIComponent(name)}.png`;
-  return <img src={src} alt={alt ?? name} className={className} loading="eager" decoding="async" />;
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <span
+        aria-label={alt ?? name}
+        className={`${className} inline-block rounded-sm border border-slate-300/20 bg-slate-950/30`}
+      />
+    );
+  }
+
+  const src = `/utility/${name}.png`;
+
+  return (
+    <img
+      src={src}
+      alt={alt ?? name}
+      className={`${className} object-contain`}
+      loading="eager"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
 }

@@ -7,11 +7,14 @@ import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
 import { computeFirstRoundPickNumber } from "@/components/franchise-hub/draftOrder";
 import { getPhaseLabel } from "@/components/franchise-hub/offseasonLabel";
 import { ContextBar } from "@/components/franchise-hub/ContextBar";
-import { UtilityIcon } from "@/components/franchise-hub/UtilityIcon";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
+import { UtilityIcon } from "@/components/franchise-hub/UtilityIcon";
+import { computeCapLedger } from "@/engine/capLedger";
 
 const warnedLogoKeys = new Set<string>();
-const LAST_HUB_ROUTE_KEY = "hcd:lastHubRoute";
+
+const NAV_LAST_ROUTE_KEY = "hcd:lastRoute";
+const NAV_PREV_ROUTE_KEY = "hcd:prevRoute";
 
 const stageTabs = [
   { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
@@ -23,6 +26,13 @@ const stageTabs = [
 
 function resolveUserTeamId(state: any): string | undefined {
   return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
+}
+
+function formatMoneyM(n: number) {
+  const m = n / 1_000_000;
+  const abs = Math.abs(m);
+  const v = abs >= 100 ? m.toFixed(0) : m.toFixed(1);
+  return `$${v}M`;
 }
 
 function buildLogoCandidates(logoKey: string): { triedPaths: string[]; expectedFiles: string[] } {
@@ -80,9 +90,7 @@ function TeamLogo({
     return base;
   }, [triedPaths]);
 
-  useEffect(() => {
-    setAttemptIndex(0);
-  }, [logoKey]);
+  useEffect(() => setAttemptIndex(0), [logoKey]);
 
   const currentSrc = sources[attemptIndex];
   const exhausted = Boolean(logoKey) && attemptIndex >= sources.length - 1;
@@ -103,7 +111,6 @@ function TeamLogo({
           `expected files (place in public/icons):\n${expected}`
       );
     }
-
     return (
       <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />
     );
@@ -146,24 +153,28 @@ function IconButton({
   );
 }
 
-function safeGetLastHubRoute(): string | null {
+function safeGet(key: string): string | null {
   try {
-    const v = sessionStorage.getItem(LAST_HUB_ROUTE_KEY);
-    if (!v) return null;
-    if (!v.startsWith("/hub")) return null;
-    return v;
+    return sessionStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function safeSetLastHubRoute(pathname: string) {
+function safeSet(key: string, value: string) {
   try {
-    if (!pathname.startsWith("/hub")) return;
-    sessionStorage.setItem(LAST_HUB_ROUTE_KEY, pathname);
+    sessionStorage.setItem(key, value);
   } catch {
     // ignore
   }
+}
+
+function useRouteMemory(pathname: string) {
+  useEffect(() => {
+    const last = safeGet(NAV_LAST_ROUTE_KEY);
+    if (last && last !== pathname) safeSet(NAV_PREV_ROUTE_KEY, last);
+    safeSet(NAV_LAST_ROUTE_KEY, pathname);
+  }, [pathname]);
 }
 
 export function HubShell({
@@ -179,15 +190,23 @@ export function HubShell({
   const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    safeSetLastHubRoute(location.pathname);
-  }, [location.pathname]);
+  useRouteMemory(location.pathname);
 
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
 
-  const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
-  const capValue = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
+  const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: String(teamId) }) : null;
+
+  const capRoom = useMemo(() => {
+    if (!teamId) return state.finances?.capSpace ?? 0;
+    try {
+      return computeCapLedger(state as any, String(teamId), state.finances?.postJune1Sim).capSpace;
+    } catch {
+      return state.finances?.capSpace ?? 0;
+    }
+  }, [state, teamId]);
+
+  const capValue = formatMoneyM(capRoom);
   const phase = getPhaseLabel(state);
 
   const fullName = [team?.city, team?.name].filter(Boolean).join(" ").trim();
@@ -195,14 +214,14 @@ export function HubShell({
 
   const showBack = location.pathname !== "/hub";
 
-  function goBack() {
-    if (window.history.length > 1) navigate(-1);
-    else navigate("/hub");
+  function goHome() {
+    navigate("/hub");
   }
 
-  function goHome() {
-    const last = safeGetLastHubRoute();
-    if (last && last !== location.pathname) navigate(last);
+  function goBack() {
+    const prev = safeGet(NAV_PREV_ROUTE_KEY);
+    if (prev && prev !== location.pathname) navigate(prev);
+    else if (window.history.length > 1) navigate(-1);
     else navigate("/hub");
   }
 
@@ -276,7 +295,6 @@ export function HubShell({
             {rightActions ? <div className="flex justify-end">{rightActions}</div> : null}
             {children}
           </main>
-
           <ContextBar state={state} />
         </div>
       </div>
