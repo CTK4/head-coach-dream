@@ -543,7 +543,7 @@ function createInitialState(): GameState {
       cash: 150_000_000,
       postJune1Sim: false,
     },
-    league: initLeagueState(teams),
+    league: initLeagueState(teams, 2026),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
     draft: { picks: [], withdrawnBoardIds: {} },
@@ -3244,7 +3244,7 @@ const STORAGE_KEY = "hc_career_save";
 function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   const saveSeed = oldState.saveSeed ?? Date.now();
-  const league = oldState.league ?? initLeagueState(teams);
+  const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
 
   const game =
@@ -3265,6 +3265,10 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     startersByPos: { ...((oldState as any).depthChart?.startersByPos ?? {}) },
     lockedBySlot: { ...((oldState as any).depthChart?.lockedBySlot ?? {}) },
   };
+
+  const normalizedLeague: LeagueState = league.postseason
+    ? league
+    : { ...league, postseason: { season: Number(oldState.season ?? 2026), resultsByTeamId: {} } };
 
   let s: Partial<GameState> = {
     ...oldState,
@@ -3322,7 +3326,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         cash: 150_000_000,
         postJune1Sim: false,
       },
-    league,
+    league: normalizedLeague,
     game,
     draft: oldState.draft ?? { picks: [], withdrawnBoardIds: {} },
     rookies: oldState.rookies ?? [],

@@ -32,6 +32,7 @@ import RosterAudit from "./pages/hub/RosterAudit";
 import DepthChart from "./pages/hub/DepthChart";
 import CapBaseline from "@/pages/hub/CapBaseline";
 import TradeHub from "./pages/hub/TradeHub";
+import DraftOrderDebug from "./pages/hub/DraftOrderDebug";
 import StaffManagement from "./pages/hub/StaffManagement";
 import LeagueNews from "./pages/hub/LeagueNews";
 
@@ -106,6 +107,7 @@ const App = () => (
               <Route path="cap-baseline" element={<CapBaseline />} />
               <Route path="player/:playerId" element={<PlayerProfile />} />
               <Route path="playcall" element={<Playcall />} />
+              {import.meta.env.DEV ? <Route path="draft-order-debug" element={<DraftOrderDebug />} /> : null}
             </Route>
 
             <Route path="*" element={<NotFound />} />

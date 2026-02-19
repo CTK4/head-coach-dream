@@ -1,5 +1,6 @@
 import { simulateFullGame } from "@/engine/gameSim";
 import type { GameType, LeagueSchedule, Matchup } from "@/engine/schedule";
+import type { PostseasonState } from "@/engine/postseason";
 
 export type TeamStanding = { w: number; l: number; pf: number; pa: number };
 export type WeekResult = {
@@ -14,12 +15,13 @@ export type WeekResult = {
 export type LeagueState = {
   standings: Record<string, TeamStanding>;
   results: WeekResult[];
+  postseason?: PostseasonState;
 };
 
-export function initLeagueState(teamIds: string[]): LeagueState {
+export function initLeagueState(teamIds: string[], season = new Date().getFullYear()): LeagueState {
   const standings: Record<string, TeamStanding> = {};
   for (const id of teamIds) standings[id] = { w: 0, l: 0, pf: 0, pa: 0 };
-  return { standings, results: [] };
+  return { standings, results: [], postseason: { season, resultsByTeamId: {} } };
 }
 
 function applyResult(league: LeagueState, r: WeekResult): LeagueState {
@@ -43,7 +45,7 @@ function applyResult(league: LeagueState, r: WeekResult): LeagueState {
   standings[r.homeTeamId] = home;
   standings[r.awayTeamId] = away;
 
-  return { standings, results: [...league.results, r] };
+  return { standings, results: [...league.results, r], postseason: league.postseason };
 }
 
 function hashMatchup(m: Matchup): number {
