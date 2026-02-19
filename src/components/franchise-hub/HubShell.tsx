@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getTeamById } from "@/data/leagueDb";
 import { useGame } from "@/context/GameContext";
 import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
@@ -10,6 +10,7 @@ import { ContextBar } from "@/components/franchise-hub/ContextBar";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
 
 const warnedLogoKeys = new Set<string>();
+const LAST_HUB_ROUTE_KEY = "hcd:lastHubRoute";
 
 const stageTabs = [
   { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
@@ -102,7 +103,9 @@ function TeamLogo({
       );
     }
 
-    return <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />;
+    return (
+      <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />
+    );
   }
 
   return (
@@ -117,6 +120,51 @@ function TeamLogo({
   );
 }
 
+function IconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={[
+        "inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-300/15",
+        "bg-slate-950/30 px-2 text-xs font-semibold tracking-[0.12em] text-slate-100",
+        "hover:bg-slate-950/45 active:scale-[0.98] transition",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function safeGetLastHubRoute(): string | null {
+  try {
+    const v = sessionStorage.getItem(LAST_HUB_ROUTE_KEY);
+    if (!v) return null;
+    if (!v.startsWith("/hub")) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetLastHubRoute(pathname: string) {
+  try {
+    if (!pathname.startsWith("/hub")) return;
+    sessionStorage.setItem(LAST_HUB_ROUTE_KEY, pathname);
+  } catch {
+    // ignore
+  }
+}
+
 export function HubShell({
   title = "FRANCHISE HUB",
   children,
@@ -128,19 +176,41 @@ export function HubShell({
 }) {
   const { state } = useGame();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    safeSetLastHubRoute(location.pathname);
+  }, [location.pathname]);
 
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
 
   const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
-  const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
+  const capValue = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
+  const phase = getPhaseLabel(state);
 
   const fullName = [team?.city, team?.name].filter(Boolean).join(" ").trim();
   const teamName = team?.abbrev ?? (fullName.length ? fullName : undefined);
 
+  const showBack = location.pathname !== "/hub";
+
+  function goBack() {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/hub");
+  }
+
+  function goHome() {
+    const last = safeGetLastHubRoute();
+    if (last && last !== location.pathname) navigate(last);
+    else navigate("/hub");
+  }
+
   return (
-    <section className={`relative p-2 md:p-4 ${HUB_BG} ${HUB_TEXTURE} ${HUB_VIGNETTE}`}>
-      <div className={`mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME}`}>
+    <section className={`relative p-2 md:p-4 ${HUB_BG}`}>
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
+
+      <div className={`relative z-10 mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME}`}>
         <header className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <TeamLogo
@@ -156,12 +226,38 @@ export function HubShell({
 
           <div className={HUB_DIVIDER} />
 
-          <div className="grid grid-cols-3 items-center gap-2 text-sm text-slate-100">
-            <span className="truncate">{getPhaseLabel(state)}</span>
-            <span className="truncate text-center">
-              Cap Room <span className={HUB_TEXT_GOLD}>{cap}</span>
-            </span>
-            <span className="truncate text-right">Pick {pick ?? "—"}</span>
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                {showBack ? (
+                  <IconButton label="Back" onClick={goBack}>
+                    <span aria-hidden="true">←</span>
+                    <span className="hidden sm:inline">BACK</span>
+                  </IconButton>
+                ) : (
+                  <div className="h-8 w-[1px]" aria-hidden="true" />
+                )}
+
+                <IconButton label="Home" onClick={goHome}>
+                  <span aria-hidden="true">⌂</span>
+                  <span className="hidden sm:inline">HUB</span>
+                </IconButton>
+              </div>
+
+              <span className="text-xs text-slate-100/80 md:text-sm">{phase}</span>
+            </div>
+
+            <div className="text-center leading-tight">
+              <div className="text-xs tracking-[0.12em] text-slate-100/70">Cap Room</div>
+              <div className="text-sm font-bold">
+                <span className={HUB_TEXT_GOLD}>{capValue}</span>
+              </div>
+            </div>
+
+            <div className="text-right leading-tight">
+              <div className="text-xs tracking-[0.12em] text-slate-100/70">Pick</div>
+              <div className="text-sm font-semibold text-slate-100">{pick ?? "—"}</div>
+            </div>
           </div>
 
           <div className={HUB_DIVIDER} />
@@ -174,6 +270,7 @@ export function HubShell({
             {rightActions ? <div className="flex justify-end">{rightActions}</div> : null}
             {children}
           </main>
+
           <ContextBar state={state} />
         </div>
       </div>
