@@ -74,7 +74,7 @@ function TeamLogo({
 
   const sources = useMemo(() => {
     const base = [...triedPaths];
-    base.push("/placeholder.svg"); // optional; if missing we still render the final fallback div below
+    base.push("/placeholder.svg");
     return base;
   }, [triedPaths]);
 
@@ -85,7 +85,6 @@ function TeamLogo({
   const currentSrc = sources[attemptIndex];
   const exhausted = Boolean(logoKey) && attemptIndex >= sources.length - 1;
 
-  // Final fallback (never broken image icon)
   if (!logoKey || !currentSrc || (exhausted && currentSrc === "/placeholder.svg")) {
     if (import.meta.env.DEV && logoKey && !warnedLogoKeys.has(logoKey)) {
       warnedLogoKeys.add(logoKey);
@@ -136,10 +135,8 @@ export function HubShell({
   const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
   const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
 
-  const teamName =
-    team?.abbrev ??
-    [team?.city, team?.name].filter(Boolean).join(" ").trim() ||
-    undefined;
+  const fullName = [team?.city, team?.name].filter(Boolean).join(" ").trim();
+  const teamName = team?.abbrev ?? (fullName.length ? fullName : undefined);
 
   return (
     <section className={`relative p-2 md:p-4 ${HUB_BG} ${HUB_TEXTURE} ${HUB_VIGNETTE}`}>
