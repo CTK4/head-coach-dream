@@ -1,12 +1,13 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGame } from "@/context/GameContext";
+import { HubPanel } from "@/components/franchise-hub/HubPanel";
+import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
 export default function LeagueNews() {
   const { state } = useGame();
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <h2 className="mb-4 text-2xl font-semibold">League News</h2>
+    <HubPanel title="LEAGUE NEWS">
       <ScrollArea className="h-[65vh] pr-3" aria-label="League news list">
         <ul className="space-y-3">
           {state.hub.news.map((news, index) => (
@@ -14,9 +15,13 @@ export default function LeagueNews() {
               {news}
             </li>
           ))}
-          {state.hub.news.length === 0 ? <li className="text-muted-foreground">No headlines yet.</li> : null}
+          {state.hub.news.length === 0 ? (
+            <li>
+              <HubEmptyState title="No headlines yet" description="The wire is quiet this week." action={{ label: "Back to Hub", to: "/hub" }} />
+            </li>
+          ) : null}
         </ul>
       </ScrollArea>
-    </div>
+    </HubPanel>
   );
 }
