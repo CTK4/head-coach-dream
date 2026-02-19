@@ -1680,12 +1680,46 @@ function teamNeedScoreDraft(state: GameState, teamId: string, posRaw: string): n
   return clamp((starterGap * 0.7 + depthGap * 0.3) * weight, 0, 1);
 }
 
-function cpuDraftPickProspectId(state: GameState, teamId: string): string | null {
+
+function medicalLevelEstimateFromRow(row: any): "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK" {
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const d = (stamina + injury) / 2;
+
+  if (d <= 45) return "BLACK";
+  if (d >= 78) return "GREEN";
+  if (d >= 68) return "YELLOW";
+  if (d >= 58) return "ORANGE";
+  return "RED";
+}
+
+function medicalDraftPenalty(level: string) {
+  if (level === "GREEN") return 0.0;
+  if (level === "YELLOW") return 0.01;
+  if (level === "ORANGE") return 0.03;
+  if (level === "RED") return 0.06;
+  return 0.12;
+}
+
+function cpuDraftPickProspectId(
+  state: GameState,
+  teamId: string,
+  opts?: { avoidRevealedBlack?: boolean; userTeamId?: string }
+): string | null {
   const used = state.draft.withdrawnBoardIds;
+  const avoid = !!opts?.avoidRevealedBlack && String(opts?.userTeamId ?? "") === String(teamId);
+  const reveals = state.offseasonData.preDraft.reveals;
   const rows = (draftClassJson as Record<string, unknown>[])
     .slice()
     .sort((a, b) => Number((a as any)["Rank"] ?? 9999) - Number((b as any)["Rank"] ?? 9999))
     .filter((r) => !used[String((r as any)["Player ID"])])
+    .filter((r) => {
+      if (!avoid) return true;
+      const pid = String((r as any)["Player ID"]);
+      const rev = reveals[pid];
+      if (!rev) return true;
+      return rev.characterLevel !== "BLACK" && rev.medicalLevel !== "BLACK";
+    })
     .slice(0, 110);
 
   if (!rows.length) return null;
@@ -1700,7 +1734,9 @@ function cpuDraftPickProspectId(state: GameState, teamId: string): string | null
     const need = teamNeedScoreDraft(state, teamId, pos);
     const base = (450 - rank) / 450;
     const jitter = detRand(state.saveSeed, `CPU_DRAFT|${state.season}|${teamId}|${pid}|${state.draft.currentOverall}`) * 0.03;
-    const score = base + need * 0.42 + jitter;
+    const medLevel = medicalLevelEstimateFromRow(r);
+    const medPenalty = medicalDraftPenalty(medLevel);
+    const score = base + need * 0.42 + jitter - medPenalty;
     if (score > bestScore) {
       bestScore = score;
       bestId = pid;

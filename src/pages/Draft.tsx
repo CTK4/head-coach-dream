@@ -203,6 +203,12 @@ export default function Draft() {
                   onClick={() => {
                     const pid = String(selected["Player ID"]);
                     const rev = reveals[pid];
+                    if (rev?.medicalLevel === "RED") {
+                      const ok = window.confirm(
+                        "Medical Warning: This prospect has a MAJOR red flag (Medical RED).\n\nDraft anyway?"
+                      );
+                      if (!ok) return;
+                    }
                     if (rev?.characterLevel === "BLACK") {
                       const ok = window.confirm(
                         "Warning: This prospect is marked REMOVE FROM BOARD (Character BLACK).\n\nDraft anyway?"
