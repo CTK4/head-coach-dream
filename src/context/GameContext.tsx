@@ -85,10 +85,22 @@ export type OffseasonData = {
     capUsed: number;
     capHitsByPlayerId: Record<string, number>;
   };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean> };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal> };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
+};
+
+export type MedicalFlagLevel = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+export type CharacterFlagLevel = "BLUE" | "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+
+type PreDraftReveal = {
+  flags: string[];
+  hasMedicalRedFlag?: boolean;
+  medicalLevel?: MedicalFlagLevel;
+  characterLevel?: CharacterFlagLevel;
+  footballTags?: string[];
+  symbols?: string[];
 };
 
 export type TagType = "FRANCHISE_NON_EX" | "FRANCHISE_EX" | "TRANSITION";
@@ -474,6 +486,7 @@ export type GameAction =
   | { type: "APPLY_PRESEASON_DEV"; payload: { week: number } }
   | { type: "RESET_DEPTH_CHART_BEST" }
   | { type: "DEPTHCHART_RESET_TO_BEST" }
+  | { type: "DEPTH_RESET_TO_BEST" }
   | { type: "AUTOFILL_DEPTH_CHART" }
   | { type: "RECALC_FIRING_METER"; payload: { week: number; winPct?: number; goalsDelta?: number } }
   | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
@@ -518,7 +531,7 @@ function createInitialState(): GameState {
         capUsed: 54_000_000,
         capHitsByPlayerId: {},
       },
-      preDraft: { board: [], visits: {}, workouts: {} },
+      preDraft: { board: [], visits: {}, workouts: {}, reveals: {} },
       draft: { board: [], picks: [], completed: false },
       camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
       cutDowns: { decisions: {} },
@@ -1370,6 +1383,20 @@ function seedDepthForTeam(state: GameState): GameState {
   return next;
 }
 
+function fillDepthForTrainingCamp(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+  if (!teamId) return state;
+
+  const prevSlots = state.depthChart.startersByPos;
+  const startersByPos = autoFillDepthChartGaps(state, teamId);
+  const nextDepth = { ...state.depthChart, startersByPos };
+
+  let next = { ...state, depthChart: nextDepth };
+  next = pushMajorDepthNews(next, teamId, prevSlots, startersByPos);
+  next = recomputeLeagueDepthAndNews(next);
+  return next;
+}
+
 function shouldRecomputeDepthOnTransition(prev: CareerStage, next: CareerStage) {
   if (prev === "FREE_AGENCY" && next === "PRE_DRAFT") return true;
   if (prev === "DRAFT" && next === "TRAINING_CAMP") return true;
@@ -1466,7 +1493,7 @@ function rookieContractFromApy(startSeason: number, apy: number): RookieContract
   return { startSeason, years: 4, capBySeason, total: y1 + y2 + y3 + y4 };
 }
 
-function getProspectRow(prospectId: string): Record<string, unknown> | null {
+export function getProspectRow(prospectId: string): Record<string, unknown> | null {
   return DRAFT_ROWS.find((r) => String(r["Player ID"]) === prospectId) ?? null;
 }
 
@@ -1474,6 +1501,118 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+
+
+function hasMedicalRedFlag(state: GameState, prospectId: string) {
+  const row = getProspectRow(prospectId);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const d = (injury + stamina) / 2;
+  const p = clamp(0.03 + clamp((58 - d) / 28, 0, 1) * 0.22, 0.03, 0.35);
+  return detRand(state.saveSeed, `MED_RED|${state.season}|${prospectId}`) < p;
+}
+
+function medicalLevelFromDurability(stamina: number, injury: number, redFlag: boolean, blackFlag: boolean): MedicalFlagLevel {
+  if (blackFlag) return "BLACK";
+  if (redFlag) return "RED";
+  const d = (stamina + injury) / 2;
+  if (d >= 78) return "GREEN";
+  if (d >= 68) return "YELLOW";
+  if (d >= 58) return "ORANGE";
+  return "RED";
+}
+
+function characterLevelFromRow(maturity: number, leadership: number, incidents: number, cultureDq: boolean): CharacterFlagLevel {
+  if (cultureDq) return "BLACK";
+  if (incidents >= 2) return "RED";
+  if (incidents === 1) return "ORANGE";
+  const x = maturity * 0.65 + leadership * 0.35;
+  if (leadership >= 85 && maturity >= 78) return "BLUE";
+  if (x >= 72) return "GREEN";
+  if (x >= 62) return "YELLOW";
+  if (x >= 54) return "ORANGE";
+  return "RED";
+}
+
+function footballTagsFromRow(row: Record<string, unknown> | null) {
+  const out: string[] = [];
+  const rank = Number(row?.["Rank"] ?? 9999);
+  const ras = Number(row?.["RAS"] ?? row?.["RAS_Score"] ?? 0);
+  const arm = Number(row?.["Arm_Strength"] ?? 0);
+  const speed = Number(row?.["Speed"] ?? 0);
+  const tier = Number(row?.["DraftTier"] ?? 60);
+
+  if (rank <= 32 || tier >= 80) out.push("Gold: 1st");
+  if (ras >= 90 || arm >= 90 || speed >= 92) out.push("Purple: Elite Trait");
+  return out;
+}
+
+function hasMedicalBlackFlag(state: GameState, prospectId: string) {
+  const row = getProspectRow(prospectId);
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const d = (stamina + injury) / 2;
+  const p = clamp(0.002 + clamp((52 - d) / 25, 0, 1) * 0.03, 0, 0.05);
+  return detRand(state.saveSeed, `MED_BLACK|${state.season}|${prospectId}`) < p;
+}
+
+function incidentCountFromRow(row: Record<string, unknown> | null) {
+  const explicit = Number(row?.["Incidents"] ?? row?.["OffField_Incidents"] ?? NaN);
+  if (Number.isFinite(explicit)) return clamp(explicit, 0, 3);
+
+  const discipline = Number(row?.["Discipline"] ?? 60);
+  const maturity = Number(row?.["Maturity"] ?? 65);
+  const volatility = Number(row?.["Volatility"] ?? 60);
+
+  let n = 0;
+  if (discipline <= 55) n++;
+  if (maturity <= 55) n++;
+  if (volatility >= 82) n++;
+  return clamp(n, 0, 3);
+}
+
+function cultureDqFromRow(state: GameState, prospectId: string, row: Record<string, unknown> | null) {
+  const incidents = incidentCountFromRow(row);
+  if (incidents < 2) return false;
+  const p = incidents === 3 ? 0.35 : 0.18;
+  return detRand(state.saveSeed, `CULTURE_DQ|${state.season}|${prospectId}`) < p;
+}
+
+function genVisitReveal(state: GameState, prospectId: string): PreDraftReveal {
+  const row = getProspectRow(prospectId);
+
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const maturity = Number(row?.["Maturity"] ?? 65);
+  const leadership = Number(row?.["Leadership"] ?? 60);
+
+  const red = hasMedicalRedFlag(state, prospectId);
+  const black = hasMedicalBlackFlag(state, prospectId);
+  const incidents = incidentCountFromRow(row);
+  const cultureDq = cultureDqFromRow(state, prospectId, row);
+
+  const medicalLevel = medicalLevelFromDurability(stamina, injury, red, black);
+  const characterLevel = characterLevelFromRow(maturity, leadership, incidents, cultureDq);
+  const footballTags = footballTagsFromRow(row);
+
+  const symbols: string[] = [];
+  if (leadership >= 85) symbols.push("★");
+  if (characterLevel === "BLUE") symbols.push("C");
+  if (incidents >= 1) symbols.push("X");
+  if (maturity <= 58) symbols.push("△");
+
+  const flags: string[] = [];
+  flags.push(`Medical: ${medicalLevel}`);
+  flags.push(`Character: ${characterLevel}`);
+  if (footballTags.length) flags.push(...footballTags);
+  if (cultureDq) flags.unshift("Character: Remove From Board");
+
+  return { flags, hasMedicalRedFlag: medicalLevel === "RED" || medicalLevel === "BLACK", medicalLevel, characterLevel, footballTags, symbols };
+}
+
+export function predictVisitReveal(state: GameState, prospectId: string): PreDraftReveal {
+  return genVisitReveal(state, prospectId);
+}
 function posNormDraft(pos: string) {
   const p = String(pos ?? "").toUpperCase();
   if (p === "HB") return "RB";
@@ -2122,6 +2261,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       let next: GameState = { ...state, careerStage: nextStage };
       next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
       if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
+      if (nextStage === "TRAINING_CAMP") next = fillDepthForTrainingCamp(next);
       if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
       if (nextStage === "PRE_DRAFT") next = next.offseasonData.preDraft.board.length ? next : {
         ...next,
@@ -3094,12 +3234,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return seasonRollover(state);
 
     case "PREDRAFT_TOGGLE_VISIT": {
-      const cur = !!state.offseasonData.preDraft.visits[action.payload.prospectId];
+      const id = action.payload.prospectId;
+      const cur = !!state.offseasonData.preDraft.visits[id];
+      const nextOn = !cur;
+
+      const nextReveals = { ...state.offseasonData.preDraft.reveals };
+      if (nextOn) nextReveals[id] = genVisitReveal(state, id);
+      else delete nextReveals[id];
+
       return {
         ...state,
         offseasonData: {
           ...state.offseasonData,
-          preDraft: { ...state.offseasonData.preDraft, visits: { ...state.offseasonData.preDraft.visits, [action.payload.prospectId]: !cur } },
+          preDraft: {
+            ...state.offseasonData.preDraft,
+            visits: { ...state.offseasonData.preDraft.visits, [id]: nextOn },
+            reveals: nextReveals,
+          },
         },
       };
     }
@@ -3341,14 +3492,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "RESET_DEPTH_CHART_BEST": {
       return fillDepthChart(state, "RESET");
     }
-    case "DEPTHCHART_RESET_TO_BEST": {
-      const teamId = state.acceptedOffer?.teamId;
+    case "DEPTHCHART_RESET_TO_BEST":
+    case "DEPTH_RESET_TO_BEST": {
+      const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : "";
       if (!teamId) return state;
-      const prevSlots = state.depthChart.startersByPos;
-      const startersByPos = autoFillDepthChartGaps(state, teamId);
-      const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos } };
-      const next = pushMajorDepthNews(next0, String(teamId), prevSlots, startersByPos);
-      return applyFinances(next);
+      const prev = state.depthChart.startersByPos;
+
+      let next = sanitizeDepthChart(state, teamId);
+      const startersByPos = autoFillDepthChartGaps(next, teamId, { resetToBest: true });
+      next = { ...next, depthChart: { ...next.depthChart, startersByPos } };
+
+      next = pushMajorDepthNews(next, teamId, prev, startersByPos);
+      next = recomputeLeagueDepthAndNews(next);
+      return next;
     }
     case "AUTOFILL_DEPTH_CHART": {
       return fillDepthChart(state, "AUTOFILL");
@@ -3625,7 +3781,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           capUsed: 54_000_000,
           capHitsByPlayerId: {},
         },
-        preDraft: { board: [], visits: {}, workouts: {} },
+        preDraft: { board: [], visits: {}, workouts: {}, reveals: {} },
         draft: { board: [], picks: [], completed: false },
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },

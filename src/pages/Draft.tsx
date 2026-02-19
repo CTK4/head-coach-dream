@@ -1,10 +1,11 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame, getDraftClass } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import MedicalIcon from "/badges/Medical.svg";
 
 type Row = Record<string, unknown>;
 
@@ -25,6 +26,24 @@ function posKey(v: unknown) {
   if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
   if (p === "DB") return "CB";
   return p || "UNK";
+}
+function chipColorForMedical(level: string) {
+  if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
+  if (level === "YELLOW") return "bg-yellow-500/20 text-yellow-200 border-yellow-500/25";
+  if (level === "ORANGE") return "bg-orange-500/20 text-orange-200 border-orange-500/25";
+  if (level === "RED") return "bg-red-500/20 text-red-200 border-red-500/25";
+  return "bg-zinc-200/10 text-zinc-200 border-zinc-200/20";
+}
+function chipColorForCharacter(level: string) {
+  if (level === "BLUE") return "bg-blue-500/20 text-blue-200 border-blue-500/25";
+  if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
+  if (level === "YELLOW") return "bg-yellow-500/20 text-yellow-200 border-yellow-500/25";
+  if (level === "ORANGE") return "bg-orange-500/20 text-orange-200 border-orange-500/25";
+  if (level === "RED") return "bg-red-500/20 text-red-200 border-red-500/25";
+  return "bg-zinc-200/10 text-zinc-200 border-zinc-200/20";
+}
+function FlagChip({ className, children }: { className: string; children: ReactNode }) {
+  return <span className={`inline-flex items-center gap-1 border rounded-md px-2 py-0.5 text-[11px] ${className}`}>{children}</span>;
 }
 
 export default function Draft() {
@@ -66,6 +85,7 @@ export default function Draft() {
   const pickInRound = ((overall - 1) % teamsCount) + 1;
 
   const myPicks = state.draft.leaguePicks.filter((p) => p.teamId === userTeamId);
+  const reveals = state.offseasonData.preDraft.reveals;
 
   return (
     <div className="space-y-4">
@@ -88,18 +108,10 @@ export default function Draft() {
             <Badge variant="outline">{myPicks.length}</Badge>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_NEXT" })} disabled={state.draft.completed || isUserOnClock}>
-              Sim Next
-            </Button>
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_TO_USER" })} disabled={state.draft.completed || isUserOnClock}>
-              Sim To My Pick
-            </Button>
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_ALL" })} disabled={state.draft.completed}>
-              Sim All
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/hub/draft-results")} disabled={!state.draft.leaguePicks.length}>
-              Results
-            </Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_NEXT" })} disabled={state.draft.completed || isUserOnClock}>Sim Next</Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_TO_USER" })} disabled={state.draft.completed || isUserOnClock}>Sim To My Pick</Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_ALL" })} disabled={state.draft.completed}>Sim All</Button>
+            <Button variant="outline" onClick={() => navigate("/hub/draft-results")} disabled={!state.draft.leaguePicks.length}>Results</Button>
           </div>
         </CardContent>
       </Card>
@@ -113,6 +125,7 @@ export default function Draft() {
                 {board.map((r) => {
                   const id = String(r["Player ID"]);
                   const pos = posKey(r["POS"]);
+                  const rev = reveals[id];
                   return (
                     <button
                       key={id}
@@ -126,6 +139,15 @@ export default function Draft() {
                         <div className="text-xs text-muted-foreground">
                           {s(r["College"])} · 40 {s(r["40"])} · Vert {s(r["Vert"])}
                         </div>
+                        {rev?.medicalLevel ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <FlagChip className={chipColorForMedical(rev.medicalLevel)}><img src={MedicalIcon} className="h-3 w-3 opacity-90" alt="Medical" />{rev.medicalLevel}</FlagChip>
+                            {rev.characterLevel ? <FlagChip className={chipColorForCharacter(rev.characterLevel)}>CHAR {rev.characterLevel}</FlagChip> : null}
+                            {rev.symbols?.length ? <FlagChip className="bg-white/5 text-zinc-200 border-white/10">{rev.symbols.join(" ")}</FlagChip> : null}
+                            {rev.footballTags?.includes("Gold: 1st") ? <FlagChip className="bg-yellow-500/15 text-yellow-100 border-yellow-500/20">Gold</FlagChip> : null}
+                            {rev.footballTags?.includes("Purple: Elite Trait") ? <FlagChip className="bg-purple-500/15 text-purple-100 border-purple-500/20">Purple</FlagChip> : null}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="outline">Tier {num(r["DraftTier"], 60)}</Badge>
@@ -163,8 +185,32 @@ export default function Draft() {
                   </div>
                 </div>
 
+                {(() => {
+                  const sid = selected ? String(selected["Player ID"]) : "";
+                  const srev = sid ? reveals[sid] : undefined;
+                  return srev?.medicalLevel ? (
+                    <div className="flex flex-wrap gap-1">
+                      <FlagChip className={chipColorForMedical(srev.medicalLevel)}><img src={MedicalIcon} className="h-3 w-3 opacity-90" alt="Medical" />Medical {srev.medicalLevel}</FlagChip>
+                      {srev.characterLevel ? <FlagChip className={chipColorForCharacter(srev.characterLevel)}>Character {srev.characterLevel}</FlagChip> : null}
+                      {srev.symbols?.length ? <FlagChip className="bg-white/5 text-zinc-200 border-white/10">{srev.symbols.join(" ")}</FlagChip> : null}
+                      {srev.footballTags?.includes("Gold: 1st") ? <FlagChip className="bg-yellow-500/15 text-yellow-100 border-yellow-500/20">Gold</FlagChip> : null}
+                      {srev.footballTags?.includes("Purple: Elite Trait") ? <FlagChip className="bg-purple-500/15 text-purple-100 border-purple-500/20">Purple</FlagChip> : null}
+                    </div>
+                  ) : null;
+                })()}
+
                 <Button
-                  onClick={() => dispatch({ type: "DRAFT_PICK", payload: { prospectId: String(selected["Player ID"]) } })}
+                  onClick={() => {
+                    const pid = String(selected["Player ID"]);
+                    const rev = reveals[pid];
+                    if (rev?.characterLevel === "BLACK") {
+                      const ok = window.confirm(
+                        "Warning: This prospect is marked REMOVE FROM BOARD (Character BLACK).\n\nDraft anyway?"
+                      );
+                      if (!ok) return;
+                    }
+                    dispatch({ type: "DRAFT_PICK", payload: { prospectId: pid } });
+                  }}
                   disabled={!isUserOnClock || state.draft.withdrawnBoardIds[String(selected["Player ID"])] || state.draft.completed}
                 >
                   Draft Player
