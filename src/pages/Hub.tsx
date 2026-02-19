@@ -1,102 +1,113 @@
 import { useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
-import { getTeamById } from "@/data/leagueDb";
-import { FranchiseHubHeader } from "@/components/franchise-hub/FranchiseHubHeader";
-import { FranchiseHubInfoRow } from "@/components/franchise-hub/FranchiseHubInfoRow";
-import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
+import { useNavigate } from "react-router-dom";
+import { HubShell } from "@/components/franchise-hub/HubShell";
 import { HubTile } from "@/components/franchise-hub/HubTile";
-import { AdvancePhaseBar } from "@/components/franchise-hub/AdvancePhaseBar";
-import { computeFirstRoundPickNumber } from "@/components/franchise-hub/draftOrder";
-import { hubTheme } from "@/components/franchise-hub/theme";
+import { useGame } from "@/context/GameContext";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
 
-const stageTabs = [
-  { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
-  { label: "ROSTER REVIEW", to: "/hub/roster-audit" },
-  { label: "COMBINE", to: "/hub/combine" },
-  { label: "PRE-DRAFT", to: "/hub/pre-draft" },
-  { label: "DRAFT", to: "/hub/draft" },
-];
+function clampInt(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
-const Hub = () => {
+function formatMoneyM(n: number): string {
+  const m = Math.max(0, n) / 1_000_000;
+  return `$${m.toFixed(1)}M`;
+}
+
+export default function Hub() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
 
-  const teamId = state.acceptedOffer?.teamId;
-  const team = teamId ? getTeamById(teamId) : undefined;
+  const badgeCounts = useMemo(() => {
+    const hub = (state as any).hub;
+    const b = hub?.badges;
+    return {
+      hireStaff: clampInt(b?.hireStaff ?? 1, 0, 99),
+      franchiseStrategy: clampInt(b?.franchiseStrategy ?? 1, 0, 99),
+      scouting: clampInt(b?.scouting ?? 2, 0, 99),
+      roster: clampInt(b?.roster ?? 1, 0, 99),
+      finances: clampInt(b?.finances ?? 1, 0, 99),
+      leagueNews: clampInt(b?.leagueNews ?? 4, 0, 99),
+      leagueNewsUnread: clampInt(b?.leagueNewsUnread ?? 3, 0, 99),
+    };
+  }, [state]);
 
-  const capRoomLabel = useMemo(() => {
-    const capRoom = Math.max(0, state.finances.capSpace);
-    return `$${(capRoom / 1_000_000).toFixed(1)}M`;
-  }, [state.finances.capSpace]);
+  const capRoom = formatMoneyM(state.finances.capSpace);
 
-  const overallPick = useMemo(() => {
-    return computeFirstRoundPickNumber({ league: state.league, userTeamId: state.acceptedOffer?.teamId ?? "" });
-  }, [state.league, teamId]);
+  const nextStage = nextStageForNavigate(state.careerStage);
+  const nextLabel = stageLabel(nextStage);
+  const nextRoute = stageToRoute(nextStage);
 
-  if (!teamId || !team) {
-    return (
-      <div className="rounded-lg border border-slate-200/20 bg-slate-900/80 p-6 text-center text-slate-100">
-        No team assigned. Please complete the hiring process.
-      </div>
-    );
+  function onAdvance() {
+    dispatch({ type: "ADVANCE_CAREER_STAGE" });
+    navigate(nextRoute);
   }
 
-  const logoAlt = `${team.region ?? ""} ${team.name} logo`.trim();
-  const nextStage = nextStageForNavigate(state.careerStage);
-
-  const tiles = [
-    { title: "HIRE STAFF", subtitle: "3 Positions Open", cta: "DECISION NEEDED", to: "/hub/assistant-hiring", badgeCount: 1 },
-    { title: "FRANCHISE STRATEGY", subtitle: "Build the blueprint", cta: "PLAN FUTURE", to: "/hub/staff-management", badgeCount: 1 },
-    { title: "SCOUTING", subtitle: "Update your board", cta: "BEGIN SCOUTING", to: "/hub/pre-draft", badgeCount: 2 },
-    { title: "ROSTER", subtitle: "Depth and roles", cta: "MANAGE TEAM", to: "/hub/roster", badgeCount: 1 },
-    { title: "CONTRACTS & CAP MANAGEMENT", subtitle: "Financial outlook", cta: "VIEW FINANCES", to: "/hub/finances", badgeCount: 1 },
-    {
-      title: "LEAGUE NEWS",
-      subtitle: "Headlines around the league",
-      cta: "VIEW HEADLINES",
-      to: "/hub/league-news",
-      badgeCount: Math.max(1, Math.min(9, state.hub.news.length)),
-      notificationCount: Math.min(9, state.hub.news.length),
-    },
-  ];
-
   return (
-    <section className={`relative p-2 md:p-4 ${hubTheme.pageBackground} ${hubTheme.pageTexture} ${hubTheme.pageVignette}`}>
-      <div className={`mx-auto max-w-5xl p-4 md:p-6 ${hubTheme.frame}`}>
-        <FranchiseHubHeader season={state.season} logoSrc={`/icons/${team.logoKey}.png`} logoAlt={logoAlt} />
-
-        <div className="mt-3 space-y-4">
-          <FranchiseHubInfoRow state={state} capRoomLabel={capRoomLabel} pickNumber={overallPick} />
-          <FranchiseHubTabs tabs={stageTabs} />
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {tiles.map((tile) => (
-              <HubTile key={tile.title} {...tile} />
-            ))}
+    <HubShell title="FRANCHISE HUB">
+      <Card className="border-slate-300/15 bg-slate-950/35">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-slate-100">Head Coach Hub</div>
+            <div className="text-xs text-slate-200/70">Manage staff, roster, scouting, and finances.</div>
           </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant="outline">Cap Room {capRoom}</Badge>
+            <Badge variant="outline">Stage {stageLabel(state.careerStage)}</Badge>
+          </div>
+        </CardContent>
+      </Card>
 
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <HubTile
+          title="HIRE STAFF"
+          subtitle="3 Positions Open"
+          cta="DECISION NEEDED"
+          to="/hub/assistant-hiring"
+          badgeCount={badgeCounts.hireStaff}
+        />
 
-          {import.meta.env.DEV ? (
-            <div className="text-right text-xs">
-              <Link to="/hub/draft-order-debug" className="text-slate-300 underline hover:text-slate-100">
-                Draft Debug
-              </Link>
-            </div>
-          ) : null}
+        <HubTile title="ROSTER" subtitle="MANAGE TEAM" cta="MANAGE TEAM" to="/hub/roster" badgeCount={badgeCounts.roster} />
 
-          <AdvancePhaseBar
-            nextLabel={stageLabel(nextStage)}
-            onAdvance={() => {
-              dispatch({ type: "ADVANCE_CAREER_STAGE" });
-              navigate(stageToRoute(nextStage));
-            }}
-          />
-        </div>
+        <HubTile
+          title="FRANCHISE STRATEGY"
+          cta="PLAN FUTURE"
+          to="/hub/staff-management"
+          badgeCount={badgeCounts.franchiseStrategy}
+        />
+
+        <HubTile
+          title="CONTRACTS & CAP MANAGEMENT"
+          cta="VIEW FINANCES"
+          to="/hub/finances"
+          badgeCount={badgeCounts.finances}
+        />
+
+        <HubTile title="SCOUTING" cta="BEGIN SCOUTING" to="/hub/pre-draft" badgeCount={badgeCounts.scouting} />
+
+        <HubTile
+          title="LEAGUE NEWS"
+          cta="VIEW HEADLINES"
+          to="/hub/league-news"
+          badgeCount={badgeCounts.leagueNews}
+          cornerBubbleCount={badgeCounts.leagueNewsUnread}
+        />
       </div>
-    </section>
-  );
-};
 
-export default Hub;
+      <Card className="border-slate-300/15 bg-slate-950/35">
+        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-slate-100">Advance to next phase</div>
+            <div className="text-xs text-slate-200/70">Next: {nextLabel}</div>
+          </div>
+          <Button onClick={onAdvance} aria-label="Advance to next phase">
+            ADVANCE TO NEXT PHASE →
+          </Button>
+        </CardContent>
+      </Card>
+    </HubShell>
+  );
+}
