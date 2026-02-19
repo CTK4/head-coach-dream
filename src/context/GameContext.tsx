@@ -16,6 +16,7 @@ import type { CoachReputation } from "@/engine/reputation";
 import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost } from "@/engine/reputation";
 import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
 import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
+import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
@@ -2304,35 +2305,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
 
-      const rep = state.coach.reputation;
-      const schemeCompat = schemeCompatForPerson(state, action.payload.personId);
-      const teamOutlook = clamp100(45 + (state.acceptedOffer?.score ?? 0) * 40);
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
 
       const expected = expectedSalary(action.payload.role, Number((person as any).reputation ?? 55));
       const offered = offerSalary(expected, "FAIR");
-      const offerQuality = offerQualityScore(offered, expected);
-
-      const res = computeStaffAcceptance({
-        saveSeed: state.saveSeed,
-        rep,
-        staffRep: Number((person as any).reputation ?? 0),
-        personId: (person as any).personId,
-        schemeCompat,
-        offerQuality,
-        teamOutlook,
-        roleFocus: deriveCoordFocus(action.payload.role),
-        kind: "COORDINATOR",
+      const accepted = isOfferAccepted({
+        season: state.season,
+        teamId: String(teamId),
+        personId: String(action.payload.personId),
+        roleKey: String(action.payload.role),
+        reputation: Number((person as any).reputation ?? 55),
+        expectedSalary: expected,
+        offeredSalary: offered,
+        isCoordinator: true,
       });
 
-      if (!res.accept) {
+      if (!accepted) {
         return {
           ...state,
-          coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
           memoryLog: addMemoryEvent(state, "COORD_REJECTED", {
             ...action.payload,
-            score: res.score,
-            tier: res.tier,
-            threshold: res.threshold,
+            score: 0,
+            tier: "REJECT",
+            threshold: 1,
           }),
         };
       }
@@ -2343,8 +2339,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       });
     }
     case "HIRE_STAFF": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
+
+      // ✅ Role lock: do not allow hiring multiple for same role
+      if (state.assistantStaff[action.payload.role]) return state;
 
       let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
 
@@ -2377,35 +2376,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
 
-      const rep = state.coach.reputation;
-      const schemeCompat = schemeCompatForPerson(state, action.payload.personId);
-      const teamOutlook = clamp100(45 + (state.acceptedOffer?.score ?? 0) * 40);
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
 
       const expected = expectedSalary(action.payload.role as any, Number((person as any).reputation ?? 55));
       const offered = offerSalary(expected, "FAIR");
-      const offerQuality = offerQualityScore(offered, expected);
-
-      const res = computeStaffAcceptance({
-        saveSeed: state.saveSeed,
-        rep,
-        staffRep: Number((person as any).reputation ?? 0),
-        personId: (person as any).personId,
-        schemeCompat,
-        offerQuality,
-        teamOutlook,
-        roleFocus: deriveAssistantFocus(action.payload.role),
-        kind: "ASSISTANT",
+      const accepted = isOfferAccepted({
+        season: state.season,
+        teamId: String(teamId),
+        personId: String(action.payload.personId),
+        roleKey: String(action.payload.role),
+        reputation: Number((person as any).reputation ?? 55),
+        expectedSalary: expected,
+        offeredSalary: offered,
+        isCoordinator: false,
       });
 
-      if (!res.accept) {
+      if (!accepted) {
         return {
           ...state,
-          coach: { ...state.coach, reputation: rep ? applyStaffRejection(rep) : rep },
           memoryLog: addMemoryEvent(state, "ASSISTANT_REJECTED", {
             ...action.payload,
-            score: res.score,
-            tier: res.tier,
-            threshold: res.threshold,
+            score: 0,
+            tier: "REJECT",
+            threshold: 1,
           }),
         };
       }
@@ -2416,8 +2410,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       });
     }
     case "HIRE_ASSISTANT": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
+
+      // ✅ Role lock: do not allow hiring multiple for same role
+      if (state.assistantStaff[action.payload.role]) return state;
 
       let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
 
@@ -2634,7 +2631,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       });
     }
     case "TAG_APPLY": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
 
       const current = state.offseasonData.tagCenter.applied;

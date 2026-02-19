@@ -6,7 +6,7 @@ import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
 export default function Roster() {
   const { state, dispatch } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
 
   const canReset = useMemo(() => !!teamId, [teamId]);
 

@@ -17,6 +17,12 @@ function computeOfferThreshold(profile: TeamInterviewProfile): number {
   ]);
 }
 
+function isPerfectBirmingham(result: InterviewResult) {
+  const axes = [result.ownerAlignScore, result.gmTrustScore, result.schemeFitScore, result.mediaScore];
+  const minAxis = Math.min(...axes);
+  return result.premiumGatesPassed && result.offerTier === "PREMIUM" && minAxis >= 95 && result.interviewScore >= 99;
+}
+
 export function computeTeamScore(
   _teamId: string,
   interviewResult: InterviewResult | undefined,
@@ -83,6 +89,8 @@ export function generateOffers(state: GameState): OfferItem[] {
     if (!result) return [];
 
     if (result.offerTier === "REJECT") return [];
+
+    if (teamId === "BIRMINGHAM_VULCANS" && !isPerfectBirmingham(result)) return [];
 
     const score = computeTeamScore(teamId, result, profile);
     const threshold = computeOfferThreshold(profile);
