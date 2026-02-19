@@ -36,6 +36,7 @@ import TradeHub from "./pages/hub/TradeHub";
 import DraftOrderDebug from "./pages/hub/DraftOrderDebug";
 import StaffManagement from "./pages/hub/StaffManagement";
 import LeagueNews from "./pages/hub/LeagueNews";
+import SettingsPage from "./pages/hub/Settings";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +99,7 @@ const App = () => (
               <Route path="trades" element={<TradeHub />} />
               <Route path="staff-management" element={<StaffManagement />} />
               <Route path="league-news" element={<LeagueNews />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
               <Route path="draft-results" element={<DraftResults />} />

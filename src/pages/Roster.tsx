@@ -1,115 +1,124 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getEffectivePlayersByTeam, getDepthSlotLabel } from "@/engine/rosterOverlay";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { HubShell } from "@/components/franchise-hub/HubShell";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { PlayerStatusIcons, StatusLegend } from "@/components/franchise-hub/PlayerStatusUI";
 
-const POS_GROUPS: Record<string, string[]> = {
-  Offense: ["QB", "RB", "WR", "TE", "OT", "OG", "C", "OL", "FB", "HB"],
-  Defense: ["DE", "DT", "DL", "LB", "OLB", "ILB", "MLB", "CB", "S", "FS", "SS", "DB"],
-  "Special Teams": ["K", "P", "LS", "KR", "PR"],
-};
-
-function getGroup(pos: string): string {
-  const p = (pos ?? "").toUpperCase();
-  for (const [group, positions] of Object.entries(POS_GROUPS)) {
-    if (positions.includes(p)) return group;
-  }
-  return "Offense";
-}
-
-const Roster = () => {
-  const { state, dispatch } = useGame();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState("Offense");
-
+export default function RosterPage() {
+  const { state } = useGame();
   const teamId = state.acceptedOffer?.teamId;
-  if (!teamId) return null;
 
-  const allPlayers = getEffectivePlayersByTeam(state, teamId);
-  const filtered = allPlayers.filter((p) => getGroup(p.pos ?? "") === tab);
-  const sorted = [...filtered].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+  const [playerId, setPlayerId] = useState<string | null>(null);
+
+  const players = useMemo(() => {
+    if (!teamId) return [];
+    return getEffectivePlayersByTeam(state, teamId);
+  }, [state, teamId]);
+
+  const selected = useMemo(() => players.find((p) => p.playerId === playerId) ?? null, [players, playerId]);
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">Roster</h1>
-            <p className="text-sm text-muted-foreground">{allPlayers.length} players</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              disabled={!teamId}
-              onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}
-            >
-              Reset to Best
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/hub")}>← Hub</Button>
-          </div>
-        </div>
+    <HubShell title="ROSTER">
+      <div className="space-y-4">
+        <Card className="border-slate-300/15 bg-slate-950/35">
+          <CardHeader className="space-y-2">
+            <CardTitle className="flex flex-col gap-2 text-slate-100 md:flex-row md:items-center md:justify-between">
+              <span>Manage Team</span>
+              <Badge variant="secondary">{players.length} players</Badge>
+            </CardTitle>
+            <div className="text-sm text-slate-200/70">Tap the Issue icon to see why a player is flagged.</div>
+            <StatusLegend />
+          </CardHeader>
+        </Card>
 
-        <div className="flex gap-2 mb-4">
-          {Object.keys(POS_GROUPS).map((group) => (
-            <Button
-              key={group}
-              variant={tab === group ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setTab(group)}
-            >
-              {group}
-            </Button>
-          ))}
-        </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <Card className="border-slate-300/15 bg-slate-950/35">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-100">Players</div>
+                <Badge variant="outline">{players.length}</Badge>
+              </div>
+              <Separator className="bg-slate-300/15" />
 
-        <ScrollArea className="h-[70vh]">
-          <div className="space-y-2 pr-4">
-            {sorted.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No players in this group</p>
-            ) : (
-              sorted.map((player) => {
-                const depthSlot = getDepthSlotLabel(state, String(player.playerId));
-                const locked = depthSlot ? !!state.depthChart.lockedBySlot[depthSlot] : false;
-
-                return (
-                  <Card key={player.playerId}>
-                    <CardContent className="flex items-center justify-between p-3">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="w-10 justify-center text-xs font-mono">
-                          {player.pos}
-                        </Badge>
-                        {depthSlot ? (
-                          <Badge variant="outline" className="text-xs">
-                            {depthSlot}
-                          </Badge>
-                        ) : null}
-                        <div>
-                          <p className="font-medium text-sm">{player.fullName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Age {player.age ?? "?"} • {player.college ?? "Unknown"}
-                            {depthSlot ? ` • ${depthSlot}${locked ? " • Locked" : ""}` : ""}
-                          </p>
+              <div className="grid gap-2">
+                {players.map((p: any) => (
+                  <button
+                    key={p.playerId}
+                    type="button"
+                    onClick={() => setPlayerId(p.playerId)}
+                    className={`w-full rounded-lg border p-3 text-left transition ${
+                      p.playerId === playerId
+                        ? "border-emerald-400/50 bg-emerald-900/20"
+                        : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-[220px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-semibold text-slate-100">
+                            {p.name} <span className="text-slate-200/70">({normalizePos(p.pos)})</span>
+                          </div>
+                          <PlayerStatusIcons player={p} />
                         </div>
+                        <div className="text-xs text-slate-200/70">OVR {p.ovr ?? "—"} · Age {p.age ?? "—"}</div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={`text-xs ${(player.overall ?? 0) >= 80 ? "bg-primary" : (player.overall ?? 0) >= 70 ? "bg-accent" : "bg-secondary"} text-primary-foreground`}>
-                          {player.overall ?? "?"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    </div>
-  );
-};
+                      <div className="text-xs text-slate-200/70">{p.devTrait ?? ""}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-export default Roster;
+          <Card className="border-slate-300/15 bg-slate-950/35">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-100">Player</div>
+                {selected?.pos ? <Badge variant="outline">{normalizePos(selected.pos)}</Badge> : <Badge variant="outline">—</Badge>}
+              </div>
+              <Separator className="bg-slate-300/15" />
+
+              {selected ? (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-lg font-bold text-slate-100">{selected.name}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">OVR {selected.ovr ?? "—"}</Badge>
+                      <Badge variant="outline">Age {selected.age ?? "—"}</Badge>
+                      {selected.devTrait ? <Badge variant="outline">{String(selected.devTrait)}</Badge> : null}
+                    </div>
+                    <div className="mt-2">
+                      <PlayerStatusIcons player={selected} className="gap-2" />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-300/15 bg-slate-950/20 p-3 text-sm text-slate-200/80">
+                    <div className="font-semibold text-slate-100">Notes</div>
+                    <div className="mt-1 text-xs text-slate-200/70">
+                      This is a lightweight roster detail panel. You can extend it with depth chart, contracts, training, and more.
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" disabled>
+                      Depth Chart (soon)
+                    </Button>
+                    <Button variant="secondary" disabled>
+                      Contracts (soon)
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-200/70">Select a player to view details.</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </HubShell>
+  );
+}
