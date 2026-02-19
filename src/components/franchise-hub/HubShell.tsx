@@ -10,6 +10,7 @@ import { ContextBar } from "@/components/franchise-hub/ContextBar";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
 
 const warnedLogoKeys = new Set<string>();
+const LAST_HUB_ROUTE_KEY = "hcd:lastHubRoute";
 
 const stageTabs = [
   { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
@@ -102,7 +103,9 @@ function TeamLogo({
       );
     }
 
-    return <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />;
+    return (
+      <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />
+    );
   }
 
   return (
@@ -142,6 +145,26 @@ function IconButton({
   );
 }
 
+function safeGetLastHubRoute(): string | null {
+  try {
+    const v = sessionStorage.getItem(LAST_HUB_ROUTE_KEY);
+    if (!v) return null;
+    if (!v.startsWith("/hub")) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+function safeSetLastHubRoute(pathname: string) {
+  try {
+    if (!pathname.startsWith("/hub")) return;
+    sessionStorage.setItem(LAST_HUB_ROUTE_KEY, pathname);
+  } catch {
+    // ignore
+  }
+}
+
 export function HubShell({
   title = "FRANCHISE HUB",
   children,
@@ -155,6 +178,10 @@ export function HubShell({
   const location = useLocation();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    safeSetLastHubRoute(location.pathname);
+  }, [location.pathname]);
+
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
 
@@ -166,11 +193,15 @@ export function HubShell({
   const teamName = team?.abbrev ?? (fullName.length ? fullName : undefined);
 
   const showBack = location.pathname !== "/hub";
-  function goHome() {
-    navigate("/hub");
-  }
+
   function goBack() {
     if (window.history.length > 1) navigate(-1);
+    else navigate("/hub");
+  }
+
+  function goHome() {
+    const last = safeGetLastHubRoute();
+    if (last && last !== location.pathname) navigate(last);
     else navigate("/hub");
   }
 
@@ -196,22 +227,24 @@ export function HubShell({
           <div className={HUB_DIVIDER} />
 
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-            <div className="flex items-center gap-2">
-              {showBack ? (
-                <IconButton label="Back" onClick={goBack}>
-                  <span aria-hidden="true">←</span>
-                  <span className="hidden sm:inline">BACK</span>
+            <div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                {showBack ? (
+                  <IconButton label="Back" onClick={goBack}>
+                    <span aria-hidden="true">←</span>
+                    <span className="hidden sm:inline">BACK</span>
+                  </IconButton>
+                ) : (
+                  <div className="h-8 w-[1px]" aria-hidden="true" />
+                )}
+
+                <IconButton label="Home" onClick={goHome}>
+                  <span aria-hidden="true">⌂</span>
+                  <span className="hidden sm:inline">HUB</span>
                 </IconButton>
-              ) : (
-                <div className="h-8 w-[1px]" aria-hidden="true" />
-              )}
+              </div>
 
-              <IconButton label="Home" onClick={goHome}>
-                <span aria-hidden="true">⌂</span>
-                <span className="hidden sm:inline">HUB</span>
-              </IconButton>
-
-              <span className="ml-1 hidden text-sm text-slate-100/80 md:inline">{phase}</span>
+              <span className="text-xs text-slate-100/80 md:text-sm">{phase}</span>
             </div>
 
             <div className="text-center leading-tight">
