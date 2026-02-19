@@ -145,7 +145,24 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
 }
 
 export function getEffectivePlayers(state: GameState): any[] {
-  return getPlayers().map((p: any) => ({ ...p, teamId: state.playerTeamOverrides[String(p.playerId)] ?? p.teamId }));
+  const base = getPlayers().map((p: any) => ({
+    ...p,
+    teamId: state.playerTeamOverrides[String(p.playerId)] ?? p.teamId,
+  }));
+
+  const rookies = (state.rookies ?? []).map((r: any) => ({
+    playerId: r.playerId,
+    fullName: r.name,
+    name: r.name,
+    pos: String(r.pos ?? "UNK"),
+    overall: Number(r.ovr ?? 60),
+    age: Number(r.age ?? 22),
+    teamId: state.playerTeamOverrides[String(r.playerId)] ?? String(r.teamId ?? ""),
+    status: "ACTIVE",
+    isRookie: true,
+  }));
+
+  return [...base, ...rookies];
 }
 export function getEffectivePlayersByTeam(state: GameState, teamId: string): any[] {
   const t = String(teamId);
