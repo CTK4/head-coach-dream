@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getTeamById } from "@/data/leagueDb";
 import { useGame } from "@/context/GameContext";
 import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
@@ -15,10 +16,61 @@ const stageTabs = [
   { label: "DRAFT", to: "/hub/draft" },
 ];
 
+function resolveUserTeamId(state: any): string | undefined {
+  return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.coach?.hometownTeamId;
+}
+
+function buildLogoSources(logoKey?: string): string[] {
+  if (!logoKey) return ["/placeholder.svg"];
+  const key = encodeURIComponent(logoKey);
+  const variants = ["@3x", "@2x", ""];
+  const extensions = ["avif", "webp", "png"];
+  const sources = extensions.flatMap((ext) => variants.map((variant) => `/icons/${key}${variant}.${ext}`));
+  return [...sources, "/placeholder.svg"];
+}
+
+function TeamLogo({ logoKey, alt }: { logoKey?: string; alt: string }) {
+  const [attemptIndex, setAttemptIndex] = useState(0);
+  const [placeholderBroken, setPlaceholderBroken] = useState(false);
+
+  const sources = useMemo(() => buildLogoSources(logoKey), [logoKey]);
+
+  useEffect(() => {
+    setAttemptIndex(0);
+    setPlaceholderBroken(false);
+  }, [logoKey]);
+
+  const src = sources[Math.min(attemptIndex, sources.length - 1)] ?? "/placeholder.svg";
+  const atLastSource = attemptIndex >= sources.length - 1;
+
+  if (placeholderBroken && atLastSource) {
+    return <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/20 object-contain"
+      onError={() => {
+        if (atLastSource) {
+          setPlaceholderBroken(true);
+          return;
+        }
+        setAttemptIndex((index) => Math.min(index + 1, sources.length - 1));
+      }}
+      loading="eager"
+      decoding="async"
+    />
+  );
+}
+
 export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { title?: string; children: ReactNode; rightActions?: ReactNode }) {
   const { state } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+
+  const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
+
   const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId }) : null;
   const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
 
@@ -27,21 +79,31 @@ export function HubShell({ title = "FRANCHISE HUB", children, rightActions }: { 
       <div className={`mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME}`}>
         <header className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            {team?.logoKey ? <img src={`/icons/${team.logoKey}.png`} alt={`${team.name} logo`} className="h-10 w-10 rounded-sm object-contain" /> : <div className="h-10 w-10" />}
+            <TeamLogo logoKey={team?.logoKey} alt={`${team?.city ?? ""} ${team?.name ?? "Team"} logo`.trim()} />
             <h1 className="text-center text-2xl font-black tracking-[0.12em] text-slate-100">{title}</h1>
             <div className={`text-2xl font-bold ${HUB_TEXT_GOLD}`}>{state.season}</div>
           </div>
+
           <div className={HUB_DIVIDER} />
+
           <div className="flex items-center justify-between text-sm text-slate-100">
-            <span>{getPhaseLabel(state)}</span>
-            <span>Cap Room <span className={HUB_TEXT_GOLD}>{cap}</span></span>
-            <span>Pick {pick ?? "—"}</span>
+            <span className="truncate">{getPhaseLabel(state)}</span>
+            <span className="truncate">
+              Cap Room <span className={HUB_TEXT_GOLD}>{cap}</span>
+            </span>
+            <span className="truncate">Pick {pick ?? "—"}</span>
           </div>
+
           <div className={HUB_DIVIDER} />
+
           <FranchiseHubTabs tabs={stageTabs} />
         </header>
+
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <main className="space-y-4">{rightActions ? <div className="flex justify-end">{rightActions}</div> : null}{children}</main>
+          <main className="space-y-4">
+            {rightActions ? <div className="flex justify-end">{rightActions}</div> : null}
+            {children}
+          </main>
           <ContextBar state={state} />
         </div>
       </div>
