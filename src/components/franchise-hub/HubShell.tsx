@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getTeamById } from "@/data/leagueDb";
 import { useGame } from "@/context/GameContext";
 import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
-import { computeFirstRoundPickNumber } from "@/components/franchise-hub/draftOrder";
+import { computeUserOwnedFirstRoundPicks } from "@/components/franchise-hub/draftOrder";
 import { getPhaseLabel } from "@/components/franchise-hub/offseasonLabel";
 import { ContextBar } from "@/components/franchise-hub/ContextBar";
 import { HUB_BG, HUB_DIVIDER, HUB_FRAME, HUB_TEXT_GOLD, HUB_TEXTURE, HUB_VIGNETTE } from "@/components/franchise-hub/theme";
@@ -226,7 +226,15 @@ export function HubShell({
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
 
-  const pick = teamId ? computeFirstRoundPickNumber({ league: state.league, userTeamId: String(teamId) }) : null;
+  const ownedPicks = teamId
+    ? computeUserOwnedFirstRoundPicks({
+        league: state.league,
+        userTeamId: String(teamId),
+        season: Number(state.season),
+        pickOwnerByKey: (state as any).draftPickOwnerByKey,
+      })
+    : [];
+  const pickDisplay = ownedPicks.length ? ownedPicks.join(", ") : "—";
 
   const capRoom = useMemo(() => {
     if (!teamId) return state.finances?.capSpace ?? 0;
@@ -314,7 +322,7 @@ export function HubShell({
 
             <div className="text-right leading-tight">
               <div className="text-xs tracking-[0.12em] text-slate-100/70">Pick</div>
-              <div className="text-sm font-semibold text-slate-100">{pick ?? "—"}</div>
+              <div className="text-sm font-semibold text-slate-100">{pickDisplay}</div>
             </div>
           </div>
 

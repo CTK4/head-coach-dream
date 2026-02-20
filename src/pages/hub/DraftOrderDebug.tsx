@@ -18,7 +18,11 @@ export default function DraftOrderDebug() {
   const [recomputeTick, setRecomputeTick] = useState(0);
 
   const draftInput: DraftOrderInputs = useMemo(() => {
-    const base: DraftOrderInputs = { league: state.league, userTeamId: state.acceptedOffer?.teamId ?? "" };
+    const base: DraftOrderInputs = {
+      league: state.league,
+      userTeamId: state.acceptedOffer?.teamId ?? "",
+      season: Number(state.season),
+    };
     if (!showPlayoffHook) return base;
 
     const playoffFinishRankByTeamId = Object.fromEntries(
@@ -28,7 +32,7 @@ export default function DraftOrderDebug() {
     );
 
     return { ...base, postseason: { playoffFinishRankByTeamId } };
-  }, [showPlayoffHook, state.acceptedOffer?.teamId, state.league, recomputeTick]);
+  }, [showPlayoffHook, state.acceptedOffer?.teamId, state.league, state.season, recomputeTick]);
 
   const order = useMemo(() => computeFirstRoundOrderTeamIds(draftInput), [draftInput]);
 

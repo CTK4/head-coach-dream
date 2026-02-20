@@ -13,7 +13,7 @@ export function ContextBar({ state }: { state: GameState }) {
   if (!teamId) return null;
   const team = getTeamById(teamId);
   const standing = state.league.standings[teamId];
-  const pick = computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId });
+  const pick = computeFirstRoundPickNumber({ league: state.league, userTeamId: teamId, season: Number(state.season) });
   const cap = `$${(Math.max(0, state.finances.capSpace) / 1_000_000).toFixed(1)}M`;
   const quickLinks = [
     ["Hire Staff", "/hub/assistant-hiring"],
