@@ -488,6 +488,7 @@ export type GameAction =
   | { type: "DRAFT_SHOP" }
   | { type: "DRAFT_ACCEPT_TRADE"; payload: { offerId: string } }
   | { type: "DRAFT_SEND_TRADE_UP_OFFER"; payload: { giveOveralls: number[]; askBackOverall?: number | null } }
+  | { type: "DRAFT_DECLINE_OFFER"; payload: { offerId: string } }
   | { type: "DRAFT_CLEAR_TRADE_OFFERS" }
   | { type: "DRAFT_SIM_NEXT" }
   | { type: "DRAFT_SIM_TO_USER" }
@@ -3453,7 +3454,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "DRAFT_SHOP": {
       const offers = generateTradeOffers({ saveSeed: state.saveSeed, sim: state.draft, count: 3 });
-      return { ...state, draft: { ...state.draft, tradeOffers: offers } };
+      return { ...state, draft: { ...state.draft, tradeOffers: offers, tradeOffersForOverall: state.draft.slots[state.draft.cursor]?.overall ?? null } };
     }
 
     case "DRAFT_ACCEPT_TRADE": {
@@ -3478,6 +3479,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "DRAFT_DECLINE_OFFER": {
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          tradeOffers: state.draft.tradeOffers.filter((o) => o.offerId !== action.payload.offerId),
+        },
+      };
+    }
+
     case "DRAFT_SEND_TRADE_UP_OFFER": {
       const slot = state.draft.slots[state.draft.cursor];
       if (!slot || slot.teamId === state.draft.userTeamId) return state;
@@ -3492,12 +3503,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       const outcome = submitUserTradeUpOffer({ saveSeed: state.saveSeed, sim: state.draft, offer });
       if (outcome.status === "DECLINED") {
-        return { ...state, draft: { ...state.draft, tradeOffers: [offer, ...state.draft.tradeOffers] }, uiToast: outcome.message };
+        return {
+          ...state,
+          draft: { ...state.draft, tradeOffers: [offer, ...state.draft.tradeOffers], tradeOffersForOverall: slot.overall },
+          uiToast: outcome.message,
+        };
       }
       if (outcome.status === "COUNTERED") {
         return {
           ...state,
-          draft: { ...state.draft, tradeOffers: [outcome.counter, offer, ...state.draft.tradeOffers] },
+          draft: { ...state.draft, tradeOffers: [outcome.counter, offer, ...state.draft.tradeOffers], tradeOffersForOverall: slot.overall },
           uiToast: outcome.message,
         };
       }
