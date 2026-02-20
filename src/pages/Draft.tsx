@@ -1,250 +1,174 @@
-import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGame, getDraftClass } from "@/context/GameContext";
+import { useGame } from "@/context/GameContext";
+import { getDraftClass, upcomingUserPickSlots } from "@/engine/draftSim";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import MedicalIcon from "/badges/Medical.svg";
-import { computeTeamOnClock } from "@/components/franchise-hub/draftOrder";
-
-type Row = Record<string, unknown>;
-
-function num(v: unknown, d = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : d;
-}
-function s(v: unknown) {
-  return String(v ?? "");
-}
-function posKey(v: unknown) {
-  const p = String(v ?? "").toUpperCase();
-  if (p === "HB") return "RB";
-  if (["OLB", "ILB", "MLB"].includes(p)) return "LB";
-  if (["FS", "SS"].includes(p)) return "S";
-  if (p === "DT") return "DL";
-  if (p === "DE") return "EDGE";
-  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
-  if (p === "DB") return "CB";
-  return p || "UNK";
-}
-function chipColorForMedical(level: string) {
-  if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
-  if (level === "YELLOW") return "bg-yellow-500/20 text-yellow-200 border-yellow-500/25";
-  if (level === "ORANGE") return "bg-orange-500/20 text-orange-200 border-orange-500/25";
-  if (level === "RED") return "bg-red-500/20 text-red-200 border-red-500/25";
-  return "bg-zinc-200/10 text-zinc-200 border-zinc-200/20";
-}
-function chipColorForCharacter(level: string) {
-  if (level === "BLUE") return "bg-blue-500/20 text-blue-200 border-blue-500/25";
-  if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
-  if (level === "YELLOW") return "bg-yellow-500/20 text-yellow-200 border-yellow-500/25";
-  if (level === "ORANGE") return "bg-orange-500/20 text-orange-200 border-orange-500/25";
-  if (level === "RED") return "bg-red-500/20 text-red-200 border-red-500/25";
-  return "bg-zinc-200/10 text-zinc-200 border-zinc-200/20";
-}
-function FlagChip({ className, children }: { className: string; children: ReactNode }) {
-  return <span className={`inline-flex items-center gap-1 border rounded-md px-2 py-0.5 text-[11px] ${className}`}>{children}</span>;
-}
 
 export default function Draft() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeGive, setComposeGive] = useState<Record<number, boolean>>({});
+  const [composeAskBack, setComposeAskBack] = useState<number | "NONE">("NONE");
+
   useEffect(() => {
     dispatch({ type: "DRAFT_INIT" });
   }, [dispatch]);
 
+  const board = useMemo(() => getDraftClass(), []);
+  const available = useMemo(() => board.filter((p) => !state.draft.takenProspectIds[p.prospectId]), [board, state.draft.takenProspectIds]);
+
+  const slot = state.draft.slots[state.draft.cursor];
+  const isUserOnClock = !!slot && slot.teamId === state.draft.userTeamId;
+
   useEffect(() => {
-    if (state.draft.completed) navigate("/hub/draft-results");
-  }, [state.draft.completed, navigate]);
+    if (!state.draft.complete && slot && !isUserOnClock) dispatch({ type: "DRAFT_CPU_ADVANCE" });
+  }, [dispatch, isUserOnClock, slot, state.draft.complete]);
 
-  const rows = useMemo(
-    () => (getDraftClass() as Row[]).slice().sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999)),
-    []
+  const upcoming = useMemo(() => upcomingUserPickSlots(state.draft, 8), [state.draft]);
+  const recent = useMemo(() => (state.draft.selections ?? []).slice(-10).reverse(), [state.draft.selections]);
+
+  const userFuturePicks = useMemo(
+    () => state.draft.slots.slice(state.draft.cursor).filter((p) => p.teamId === state.draft.userTeamId).slice(0, 12),
+    [state.draft.cursor, state.draft.slots, state.draft.userTeamId],
   );
 
-  const board = useMemo(
-    () => rows.filter((r) => !state.draft.withdrawnBoardIds[String(r["Player ID"])]).slice(0, 140),
-    [rows, state.draft.withdrawnBoardIds]
-  );
+  const cpuFuturePicks = useMemo(() => {
+    if (!slot) return [];
+    return state.draft.slots.slice(state.draft.cursor).filter((p) => p.teamId === slot.teamId && p.overall > slot.overall).slice(0, 8);
+  }, [slot, state.draft.cursor, state.draft.slots]);
 
-  const selected = useMemo(() => {
-    if (!selectedId) return null;
-    return rows.find((r) => String(r["Player ID"]) === selectedId) ?? null;
-  }, [rows, selectedId]);
+  const submitPick = () => {
+    if (!selectedId || !isUserOnClock) return;
+    dispatch({ type: "DRAFT_USER_PICK", payload: { prospectId: selectedId } });
+    setSelectedId(null);
+  };
 
-  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
-  const teamsCount = state.draft.orderTeamIds.length || 32;
-  const totalPicks = state.draft.totalRounds * teamsCount;
-  const overall = state.draft.currentOverall;
-  const round = Math.floor((overall - 1) / teamsCount) + 1;
-  const pickInRound = ((overall - 1) % teamsCount) + 1;
-  const computedOnClockTeamId =
-    computeTeamOnClock({ league: state.league, season: Number(state.season), round, pick: pickInRound }) ??
-    String(state.draft.onClockTeamId ?? "");
-  const onClock = String(computedOnClockTeamId ?? "");
-  const isUserOnClock = !!userTeamId && onClock === userTeamId;
+  const shop = () => dispatch({ type: "DRAFT_SHOP" });
 
-  const myPicks = state.draft.leaguePicks.filter((p) => p.teamId === userTeamId);
-  const reveals = state.offseasonData.preDraft.reveals;
+  const openComposer = () => {
+    setComposeOpen(true);
+    const seed: Record<number, boolean> = {};
+    userFuturePicks.slice(0, 2).forEach((p) => {
+      seed[p.overall] = true;
+    });
+    setComposeGive(seed);
+    setComposeAskBack(cpuFuturePicks[0]?.overall ?? "NONE");
+  };
+
+  const sendOffer = () => {
+    const giveOveralls = Object.entries(composeGive)
+      .filter(([, v]) => v)
+      .map(([k]) => Number(k))
+      .sort((a, b) => a - b);
+    if (!giveOveralls.length || !window.confirm("Send this offer?")) return;
+    dispatch({
+      type: "DRAFT_SEND_TRADE_UP_OFFER",
+      payload: { giveOveralls, askBackOverall: composeAskBack === "NONE" ? null : composeAskBack },
+    });
+    setComposeOpen(false);
+  };
+
+  const acceptTrade = (offerId: string) => {
+    if (!window.confirm("Accept this trade?")) return;
+    dispatch({ type: "DRAFT_ACCEPT_TRADE", payload: { offerId } });
+  };
+
+  const incoming = (state.draft.tradeOffers ?? []).filter((o) => o.source === "INCOMING");
+  const outgoing = (state.draft.tradeOffers ?? []).filter((o) => o.source === "OUTGOING");
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>Draft Execution</CardTitle>
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm text-muted-foreground">UGF Draft · {state.draft.season}</div>
+            <div className="text-2xl font-semibold">
+              {state.draft.complete ? "Draft Complete" : slot ? `Round ${slot.round} · Pick ${slot.pickInRound} (Overall ${slot.overall})` : "Draft"}
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline">Pick {overall}/{totalPicks}</Badge>
-            <Badge variant="outline">R{round} · #{pickInRound}</Badge>
-            <Badge variant={isUserOnClock ? "secondary" : "outline"}>{isUserOnClock ? "YOU ON CLOCK" : `On clock: ${onClock || "—"}`}</Badge>
-            <Button variant="outline" onClick={() => navigate("/hub/pre-draft")}>Back</Button>
-            <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })} disabled={!state.draft.completed}>
-              Continue →
-            </Button>
+            <Badge variant={isUserOnClock ? "default" : "secondary"}>{state.draft.complete ? "DONE" : isUserOnClock ? "YOU’RE ON THE CLOCK" : "CPU PICKING"}</Badge>
+            <Button variant="outline" onClick={() => navigate("/hub")}>Back to Hub</Button>
           </div>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant="secondary">Your Picks</Badge>
-            <Badge variant="outline">{myPicks.length}</Badge>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_NEXT" })} disabled={state.draft.completed || isUserOnClock}>Sim Next</Button>
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_TO_USER" })} disabled={state.draft.completed || isUserOnClock}>Sim To My Pick</Button>
-            <Button variant="secondary" onClick={() => dispatch({ type: "DRAFT_SIM_ALL" })} disabled={state.draft.completed}>Sim All</Button>
-            <Button variant="outline" onClick={() => navigate("/hub/draft-results")} disabled={!state.draft.leaguePicks.length}>Results</Button>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle>Available Board</CardTitle></CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[650px] pr-2">
-              <div className="space-y-2">
-                {board.map((r) => {
-                  const id = String(r["Player ID"]);
-                  const pos = posKey(r["POS"]);
-                  const rev = reveals[id];
-                  return (
-                    <button
-                      key={id}
-                      className={`w-full text-left border rounded-md px-3 py-2 flex items-center justify-between gap-3 ${selectedId === id ? "bg-secondary/50" : ""}`}
-                      onClick={() => setSelectedId(id)}
-                    >
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          #{num(r["Rank"])} {s(r["Name"])} <span className="text-muted-foreground">({pos})</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {s(r["College"])} · 40 {s(r["40"])} · Vert {s(r["Vert"])}
-                        </div>
-                        {rev?.medicalLevel ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            <FlagChip className={chipColorForMedical(rev.medicalLevel)}><img src={MedicalIcon} className="h-3 w-3 opacity-90" alt="Medical" />{rev.medicalLevel}</FlagChip>
-                            {rev.characterLevel ? <FlagChip className={chipColorForCharacter(rev.characterLevel)}>CHAR {rev.characterLevel}</FlagChip> : null}
-                            {rev.symbols?.length ? <FlagChip className="bg-white/5 text-zinc-200 border-white/10">{rev.symbols.join(" ")}</FlagChip> : null}
-                            {rev.footballTags?.includes("Gold: 1st") ? <FlagChip className="bg-yellow-500/15 text-yellow-100 border-yellow-500/20">Gold</FlagChip> : null}
-                            {rev.footballTags?.includes("Purple: Elite Trait") ? <FlagChip className="bg-purple-500/15 text-purple-100 border-purple-500/20">Purple</FlagChip> : null}
+          <CardContent className="py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="text-sm text-muted-foreground">Your upcoming picks</div>
+              <Badge variant="secondary">{upcoming.length}</Badge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {upcoming.map((p) => (
+                <Badge key={p.overall} variant={p.overall === slot?.overall ? "default" : "secondary"}>R{p.round}P{p.pickInRound} · OVR {p.overall}</Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardTitle>Board</CardTitle><Badge variant="secondary">{available.length} available</Badge></div></CardHeader>
+            <CardContent className="pt-0">
+              <ScrollArea className="h-[60vh] pr-3">
+                <div className="space-y-2">
+                  {available.slice(0, 220).map((p) => (
+                    <button key={p.prospectId} className={`w-full text-left rounded-md border px-3 py-2 hover:bg-accent/40 ${selectedId === p.prospectId ? "bg-accent border-accent" : ""}`} onClick={() => setSelectedId(p.prospectId)}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-semibold truncate">{p.name}</span><Badge variant="outline">{p.pos}</Badge><span className="text-xs text-muted-foreground">#{p.rank}</span>{p.tier ? <Badge variant="secondary">{p.tier}</Badge> : null}
                           </div>
-                        ) : null}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant="outline">Tier {num(r["DraftTier"], 60)}</Badge>
+                          <div className="text-xs text-muted-foreground truncate">{p.college}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">ID {p.prospectId}</div>
                       </div>
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+              </ScrollArea>
+
+              <div className="mt-3 flex items-center gap-2">
+                <Button onClick={submitPick} disabled={!isUserOnClock || !selectedId}>Submit Pick</Button>
+                <Button variant="outline" onClick={shop} disabled={!slot || state.draft.complete}>{isUserOnClock ? "Shop Pick" : "Trade Up?"}</Button>
+                {!isUserOnClock && <Button variant="secondary" onClick={openComposer} disabled={!slot || state.draft.complete}>Send Offer</Button>}
+                {!!state.draft.tradeOffers.length && <Button variant="ghost" onClick={() => dispatch({ type: "DRAFT_CLEAR_TRADE_OFFERS" })}>Clear</Button>}
               </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Pick Card</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {selected ? (
-              <>
-                <div className="space-y-1">
-                  <div className="text-xl font-bold">
-                    {s(selected["Name"])} <span className="text-muted-foreground">({posKey(selected["POS"])})</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Rank #{num(selected["Rank"])} · {s(selected["College"])}
-                  </div>
+              {composeOpen && !isUserOnClock && slot && (
+                <div className="mt-4 border rounded-md p-3 space-y-3">
+                  <div className="text-sm font-semibold">Trade Offer Composer</div>
+                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Picks you give</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{userFuturePicks.map((p) => <label key={p.overall} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!composeGive[p.overall]} onChange={(e) => setComposeGive((s) => ({ ...s, [p.overall]: e.target.checked }))} /><span>O{p.overall} (R{p.round}P{p.pickInRound})</span></label>)}</div></div>
+                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Ask for a pick back (optional)</div><select className="w-full border rounded px-2 py-1 text-sm" value={composeAskBack} onChange={(e) => setComposeAskBack(e.target.value === "NONE" ? "NONE" : Number(e.target.value))}><option value="NONE">None</option>{cpuFuturePicks.map((p) => <option key={p.overall} value={p.overall}>O{p.overall} (R{p.round}P{p.pickInRound})</option>)}</select></div>
+                  <div className="flex items-center gap-2"><Button onClick={sendOffer}>Send</Button><Button variant="outline" onClick={() => setComposeOpen(false)}>Cancel</Button></div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="border rounded-md p-3">
-                    <div className="text-muted-foreground text-xs">IQ / Work</div>
-                    <div className="font-semibold mt-1">{num(selected["Football_IQ"], 60)}/{num(selected["Work_Ethic"], 60)}</div>
-                  </div>
-                  <div className="border rounded-md p-3">
-                    <div className="text-muted-foreground text-xs">Coachability / Volatility</div>
-                    <div className="font-semibold mt-1">{num(selected["Coachability"], 60)}/{num(selected["Volatility"], 60)}</div>
-                  </div>
+              {!!incoming.length && (
+                <div className="mt-4 grid gap-2">
+                  {incoming.map((o) => (
+                    <Card key={o.offerId} className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{o.direction === "DOWN" ? "TRADE DOWN" : "TRADE UP"} · {o.note}</div><div className="text-xs text-muted-foreground">Receive: {o.receive.map((p) => `O${p.overall}(R${p.round}P${p.pickInRound})`).join(", ")} · Give: {o.give.map((p) => `O${p.overall}(R${p.round}P${p.pickInRound})`).join(", ")}</div></div><Button onClick={() => acceptTrade(o.offerId)}>Accept</Button></CardContent></Card>
+                  ))}
                 </div>
+              )}
 
-                {(() => {
-                  const sid = selected ? String(selected["Player ID"]) : "";
-                  const srev = sid ? reveals[sid] : undefined;
-                  return srev?.medicalLevel ? (
-                    <div className="flex flex-wrap gap-1">
-                      <FlagChip className={chipColorForMedical(srev.medicalLevel)}><img src={MedicalIcon} className="h-3 w-3 opacity-90" alt="Medical" />Medical {srev.medicalLevel}</FlagChip>
-                      {srev.characterLevel ? <FlagChip className={chipColorForCharacter(srev.characterLevel)}>Character {srev.characterLevel}</FlagChip> : null}
-                      {srev.symbols?.length ? <FlagChip className="bg-white/5 text-zinc-200 border-white/10">{srev.symbols.join(" ")}</FlagChip> : null}
-                      {srev.footballTags?.includes("Gold: 1st") ? <FlagChip className="bg-yellow-500/15 text-yellow-100 border-yellow-500/20">Gold</FlagChip> : null}
-                      {srev.footballTags?.includes("Purple: Elite Trait") ? <FlagChip className="bg-purple-500/15 text-purple-100 border-purple-500/20">Purple</FlagChip> : null}
-                    </div>
-                  ) : null;
-                })()}
+              {!!outgoing.length && (
+                <Card className="mt-4 border-dashed"><CardContent className="py-3"><div className="font-semibold text-sm">Last Sent Offer</div><div className="mt-1 text-xs text-muted-foreground">{outgoing[0].note} · Give: {outgoing[0].give.map((p) => `O${p.overall}`).join(", ")} · Receive: {outgoing[0].receive.map((p) => `O${p.overall}`).join(", ")}</div></CardContent></Card>
+              )}
+            </CardContent>
+          </Card>
 
-                <Button
-                  onClick={() => {
-                    const pid = String(selected["Player ID"]);
-                    const rev = reveals[pid];
-                    if (rev?.medicalLevel === "RED") {
-                      const ok = window.confirm(
-                        "Medical Warning: This prospect has a MAJOR red flag (Medical RED).\n\nDraft anyway?"
-                      );
-                      if (!ok) return;
-                    }
-                    if (rev?.characterLevel === "BLACK") {
-                      const ok = window.confirm(
-                        "Warning: This prospect is marked REMOVE FROM BOARD (Character BLACK).\n\nDraft anyway?"
-                      );
-                      if (!ok) return;
-                    }
-                    dispatch({ type: "DRAFT_PICK", payload: { prospectId: pid } });
-                  }}
-                  disabled={!isUserOnClock || state.draft.withdrawnBoardIds[String(selected["Player ID"])] || state.draft.completed}
-                >
-                  Draft Player
-                </Button>
-
-                <Card>
-                  <CardContent className="p-4 text-sm space-y-2">
-                    <div className="font-semibold">Your Pick Log</div>
-                    <div className="text-muted-foreground">
-                      {myPicks.length
-                        ? myPicks
-                            .slice()
-                            .sort((a, b) => a.overall - b.overall)
-                            .map((p) => `R${p.round}#${p.pickInRound} · ${p.prospectId}`)
-                            .join(" · ")
-                        : "None yet."}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              <div className="text-sm text-muted-foreground">Select a prospect from the board.</div>
-            )}
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardTitle>Recent Picks</CardTitle><Badge variant="secondary">{state.draft.selections.length}/224</Badge></div></CardHeader>
+            <CardContent className="pt-0"><ScrollArea className="h-[60vh] pr-3"><div className="space-y-2">{recent.map((p) => <div key={`${p.overall}-${p.prospectId}`} className="rounded-md border px-3 py-2"><div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">{p.overall}. {p.name}</div><Badge variant="secondary">{p.pos}</Badge></div><div className="text-xs text-muted-foreground">R{p.round}P{p.pickInRound} · {p.teamId} · #{p.rank}</div></div>)}{!recent.length && <div className="text-sm text-muted-foreground">No picks yet.</div>}</div></ScrollArea></CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
