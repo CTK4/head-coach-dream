@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
-import { HubShell } from "@/components/franchise-hub/HubShell";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -183,8 +182,7 @@ export default function AssistantHiring() {
   };
 
   return (
-    <HubShell title="HIRE STAFF">
-      <div className="space-y-4 overflow-x-hidden">
+    <div className="space-y-4 overflow-x-hidden">
       {toast ? (
         <Card>
           <CardContent className="p-4 text-sm">{toast}</CardContent>
@@ -221,6 +219,7 @@ export default function AssistantHiring() {
                   variant={activeRole === r.key ? "default" : "secondary"}
                   onClick={() => setActiveRole(r.key)}
                   disabled={filled}
+                  title={filled ? "Role already filled" : ""}
                 >
                   {r.label} {filled ? "✓" : ""}
                 </Button>
@@ -266,6 +265,5 @@ export default function AssistantHiring() {
         </div>
       </HubPageCard>
     </div>
-    </HubShell>
   );
 }

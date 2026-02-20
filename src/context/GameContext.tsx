@@ -8,6 +8,7 @@ import {
   getPersonnelContract,
   getPlayers,
   getPlayersByTeam,
+  getTeamFinancesRow,
   getTeamRosterPlayers,
   getTeams,
   setPersonnelTeamAndContract,
@@ -604,7 +605,7 @@ function createInitialState(): GameState {
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
-    staffBudget: { total: 18_000_000, used: 0, byPersonId: {} },
+    staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
     buyouts: { bySeason: {} },
     depthChart: { startersByPos: {}, lockedBySlot: {} },
@@ -1267,7 +1268,24 @@ function capHitForOverride(o: PlayerContractOverride, season: number): number {
 function computeUserCapCommitted(state: GameState): number {
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return state.finances.baseCommitted;
-  let sum = state.finances.baseCommitted;
+
+  let sum = 0;
+  try {
+    const roster = getPlayersByTeam(String(teamId));
+    for (const player of roster) {
+      const playerId = String((player as any).playerId ?? "");
+      if (!playerId) continue;
+      const contract = getPersonnelContract(playerId);
+      if (contract && String(contract.teamId) === String(teamId) && String(contract.entityType) === "PLAYER") {
+        sum += Number((contract as any).salaryY1 ?? 0);
+      }
+    }
+  } catch {
+    // Keep defensive fallback to overrides/base only.
+  }
+
+  sum += state.finances.baseCommitted;
+
   for (const [pid, o] of Object.entries(state.playerContractOverrides)) {
     const t = state.playerTeamOverrides[pid];
     if (String(t) !== String(teamId)) continue;
@@ -2453,15 +2471,23 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "GENERATE_OFFERS":
       return { ...state, offers: generateOffers(state), phase: "OFFERS" };
-    case "ACCEPT_OFFER":
-      return {
+    case "ACCEPT_OFFER": {
+      const teamId = action.payload.teamId;
+      const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
+      const next = {
         ...state,
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
         memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
+        teamFinances: {
+          ...state.teamFinances,
+          cash: financeRow?.cash ?? state.teamFinances.cash,
+        },
       };
+      return applyFinances(next);
+    }
     case "COORD_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
@@ -2503,8 +2529,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
 
-      // ✅ Role lock: do not allow hiring multiple for same role
-      if (state.assistantStaff[action.payload.role]) return state;
+      if (action.payload.role === "OC" && state.staff.ocId) return state;
+      if (action.payload.role === "DC" && state.staff.dcId) return state;
+      if (action.payload.role === "STC" && state.staff.stcId) return state;
 
       let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
 
@@ -2574,7 +2601,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
 
-      // ✅ Role lock: do not allow hiring multiple for same role
       if (state.assistantStaff[action.payload.role]) return state;
 
       let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import { HubShell } from "@/components/franchise-hub/HubShell";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -23,6 +24,11 @@ export default function CoordinatorHiring() {
   const [levelIdx, setLevelIdx] = useState(1);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
+
+  const roleFilled =
+    (role === "OC" && Boolean(state.staff.ocId)) ||
+    (role === "DC" && Boolean(state.staff.dcId)) ||
+    (role === "STC" && Boolean(state.staff.stcId));
 
   const hiredSet = useMemo(
     () =>
@@ -82,10 +88,15 @@ export default function CoordinatorHiring() {
     return [...base, ...emergencyAny].slice(0, 30);
   }, [role, hiredSet, level, remainingBudget]);
 
-  const hire = (personId: string, salary: number) => dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
+  const hire = (personId: string, salary: number) => {
+    if (roleFilled) return;
+    dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
+  };
 
-  return (
-    <div className="p-4 md:p-8 space-y-4">
+  const wrapInShell = state.phase === "COORD_HIRING" && !location?.pathname?.startsWith?.("/hub/");
+
+  const content = (
+    <div className="space-y-4">
       <Card>
         <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
@@ -104,13 +115,31 @@ export default function CoordinatorHiring() {
       <Card>
         <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button size="sm" variant={role === "OC" ? "default" : "secondary"} onClick={() => setRole("OC")}>
+            <Button
+              size="sm"
+              variant={role === "OC" ? "default" : "secondary"}
+              onClick={() => setRole("OC")}
+              disabled={Boolean(state.staff.ocId)}
+              title={state.staff.ocId ? "OC already hired" : ""}
+            >
               OC
             </Button>
-            <Button size="sm" variant={role === "DC" ? "default" : "secondary"} onClick={() => setRole("DC")}>
+            <Button
+              size="sm"
+              variant={role === "DC" ? "default" : "secondary"}
+              onClick={() => setRole("DC")}
+              disabled={Boolean(state.staff.dcId)}
+              title={state.staff.dcId ? "DC already hired" : ""}
+            >
               DC
             </Button>
-            <Button size="sm" variant={role === "STC" ? "default" : "secondary"} onClick={() => setRole("STC")}>
+            <Button
+              size="sm"
+              variant={role === "STC" ? "default" : "secondary"}
+              onClick={() => setRole("STC")}
+              disabled={Boolean(state.staff.stcId)}
+              title={state.staff.stcId ? "STC already hired" : ""}
+            >
               STC
             </Button>
           </div>
@@ -122,6 +151,7 @@ export default function CoordinatorHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="text-xs text-muted-foreground mt-1">Offer: {LEVEL_LABEL[level]}</div>
+            {roleFilled ? <div className="text-xs text-amber-300">Role already filled</div> : null}
           </div>
         </CardContent>
       </Card>
@@ -141,7 +171,7 @@ export default function CoordinatorHiring() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
-                  <Button size="sm" variant="outline" onClick={() => hire(p.personId, salary)}>
+                  <Button size="sm" variant="outline" onClick={() => hire(p.personId, salary)} disabled={roleFilled || salary > remainingBudget}>
                     Offer {money(salary)} {emergency ? "(Emergency)" : safety ? "(Safety)" : ""}
                   </Button>
                 </div>
@@ -154,4 +184,7 @@ export default function CoordinatorHiring() {
       </Card>
     </div>
   );
+
+  return wrapInShell ? <HubShell title="HIRE COORDINATORS">{content}</HubShell> : <div className="p-4 md:p-8">{content}</div>;
 }
+

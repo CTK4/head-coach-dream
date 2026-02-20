@@ -25,7 +25,8 @@ export function roleBaseM(role: StaffRoleKey): number {
 }
 
 export function expectedSalary(role: StaffRoleKey, staffRep: number): number {
-  const r = Math.max(0, Math.min(100, staffRep));
+  const rep = Number.isFinite(staffRep) ? staffRep : 50;
+  const r = Math.max(0, Math.min(100, rep));
   const mult = 0.7 + (r / 100) * 0.9;
   return Math.round(roleBaseM(role) * mult * 1_000_000);
 }
