@@ -15,13 +15,55 @@ export type WeekResult = {
 export type LeagueState = {
   standings: Record<string, TeamStanding>;
   results: WeekResult[];
+  gmByTeamId: Record<string, string>;
   postseason?: PostseasonState;
 };
 
 export function initLeagueState(teamIds: string[], season = new Date().getFullYear()): LeagueState {
   const standings: Record<string, TeamStanding> = {};
   for (const id of teamIds) standings[id] = { w: 0, l: 0, pf: 0, pa: 0 };
-  return { standings, results: [], postseason: { season, resultsByTeamId: {} } };
+
+  const gmPool = [
+    "PERS_0033",
+    "PERS_0034",
+    "PERS_0035",
+    "PERS_0036",
+    "PERS_0037",
+    "PERS_0038",
+    "PERS_0039",
+    "PERS_0040",
+    "PERS_0041",
+    "PERS_0042",
+    "PERS_0043",
+    "PERS_0044",
+    "PERS_0045",
+    "PERS_0046",
+    "PERS_0047",
+    "PERS_0048",
+    "PERS_0049",
+    "PERS_0050",
+    "PERS_0051",
+    "PERS_0052",
+    "PERS_0053",
+    "PERS_0054",
+    "PERS_0055",
+    "PERS_0056",
+    "PERS_0057",
+    "PERS_0058",
+    "PERS_0059",
+    "PERS_0060",
+    "PERS_0061",
+    "PERS_0062",
+    "PERS_0063",
+    "PERS_0064",
+  ];
+
+  const gmByTeamId: Record<string, string> = {};
+  for (let i = 0; i < teamIds.length; i += 1) {
+    gmByTeamId[teamIds[i]] = gmPool[(season + i) % gmPool.length];
+  }
+
+  return { standings, results: [], gmByTeamId, postseason: { season, resultsByTeamId: {} } };
 }
 
 function applyResult(league: LeagueState, r: WeekResult): LeagueState {
@@ -45,7 +87,7 @@ function applyResult(league: LeagueState, r: WeekResult): LeagueState {
   standings[r.homeTeamId] = home;
   standings[r.awayTeamId] = away;
 
-  return { standings, results: [...league.results, r], postseason: league.postseason };
+  return { standings, results: [...league.results, r], gmByTeamId: league.gmByTeamId, postseason: league.postseason };
 }
 
 function hashMatchup(m: Matchup): number {

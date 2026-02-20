@@ -29,6 +29,8 @@ import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayer
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
+import { getGmTraits } from "@/engine/gmScouting";
+import { evalProspectForGm } from "@/engine/prospectEval";
 import type {
   CampSettings,
   CutDecision,
@@ -86,7 +88,7 @@ export type OffseasonData = {
     capUsed: number;
     capHitsByPlayerId: Record<string, number>;
   };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal> };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
@@ -464,6 +466,7 @@ export type GameAction =
   | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
+  | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" } }
   | { type: "DRAFT_INIT" }
   | { type: "DRAFT_SIM_NEXT" }
   | { type: "DRAFT_SIM_TO_USER" }
@@ -532,7 +535,7 @@ function createInitialState(): GameState {
         capUsed: 54_000_000,
         capHitsByPlayerId: {},
       },
-      preDraft: { board: [], visits: {}, workouts: {}, reveals: {} },
+      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
       draft: { board: [], picks: [], completed: false },
       camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
       cutDowns: { decisions: {} },
@@ -586,7 +589,7 @@ function createInitialState(): GameState {
       cash: 150_000_000,
       postJune1Sim: false,
     },
-    league: initLeagueState(teams, 2026),
+    league: initLeagueState(teams, saveSeed),
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
     draft: {
@@ -627,6 +630,62 @@ function mulberry32(seed: number): () => number {
 
 function detRand(saveSeed: number, key: string): number {
   return mulberry32(saveSeed ^ hashStr(key))();
+}
+
+function normalPosGroup(pos: string) {
+  const p = pos.toUpperCase();
+  if (["QB", "RB", "WR", "TE", "K", "P"].includes(p)) return p;
+  if (["C", "G", "T", "OL"].includes(p)) return "OL";
+  if (["DT", "NT", "DE", "DL"].includes(p)) return "DL";
+  if (["EDGE", "OLB"].includes(p)) return "EDGE";
+  if (["ILB", "MLB", "LB"].includes(p)) return "LB";
+  if (["CB"].includes(p)) return "CB";
+  if (["FS", "SS", "S"].includes(p)) return "S";
+  return p;
+}
+
+function teamNeedAtPos01(state: GameState, teamId: string, pos: string) {
+  const group = normalPosGroup(pos);
+  const roster = getPlayersByTeam(teamId);
+  const ovs = roster
+    .filter((r) => normalPosGroup(String(r.pos ?? "")) === group)
+    .map((r) => Number((r as any).ovr ?? (r as any).overall ?? 60));
+  const best = ovs.length ? Math.max(...ovs) : 55;
+  return clamp01((80 - best) / 20);
+}
+
+function prospectSpentProxyForUser(state: GameState, prospectId: string) {
+  const v = !!state.offseasonData.preDraft.visits[prospectId];
+  const w = !!state.offseasonData.preDraft.workouts[prospectId];
+  return (v ? 26 : 0) + (w ? 14 : 0);
+}
+
+function prospectSpentProxyForCpu(gmPersonId: string) {
+  const gm = getGmTraits(gmPersonId);
+  return Math.round(12 + gm.eval_bandwidth * 0.25);
+}
+
+function prospectEvalDetRand(saveSeed: number, key: string) {
+  return mulberry32(saveSeed ^ hashStr(key));
+}
+
+export function getUserProspectEval(state: GameState, prospect: Prospect) {
+  const userTeamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+  const gmPersonId = state.league.gmByTeamId[userTeamId];
+  const gm = getGmTraits(gmPersonId);
+  const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
+  const spent = prospectSpentProxyForUser(state, prospect.id);
+  const need = userTeamId ? teamNeedAtPos01(state, userTeamId, prospect.pos) : 0;
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+}
+
+export function getCpuProspectEval(state: GameState, teamId: string, prospect: Prospect) {
+  const gmPersonId = state.league.gmByTeamId[teamId];
+  const gm = getGmTraits(gmPersonId);
+  const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
+  const spent = prospectSpentProxyForCpu(gmPersonId);
+  const need = teamNeedAtPos01(state, teamId, prospect.pos);
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
 }
 
 function makeOfferId(state: GameState) {
@@ -3300,6 +3359,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
+    case "PREDRAFT_SET_VIEWMODE": {
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: { ...state.offseasonData.preDraft, viewMode: action.payload.mode },
+        },
+      };
+    }
+
     case "DRAFT_INIT":
       return ensureDraftInitialized(state);
 
@@ -3345,12 +3414,48 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "DRAFT_PICK": {
-      const s = ensureDraftInitialized(state);
-      if (s.draft.completed) return s;
-      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
-      if (!userTeamId) return s;
-      if (String(s.draft.onClockTeamId ?? "") !== userTeamId) return s;
-      return applyLeagueDraftPick(s, userTeamId, action.payload.prospectId);
+      if (state.offseasonData.draft.picks.length >= 7) return state;
+      const already = state.offseasonData.draft.picks.some((p) => p.id === action.payload.prospectId);
+      if (already) return state;
+
+      const p = (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : draftBoard()).find(
+        (x) => x.id === action.payload.prospectId,
+      );
+      if (!p) return state;
+
+      const nextState = {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          draft: {
+            ...state.offseasonData.draft,
+            board: state.offseasonData.draft.board.length ? state.offseasonData.draft.board : draftBoard(),
+            picks: [...state.offseasonData.draft.picks, p],
+          },
+        },
+      };
+
+      const row = getProspectRow(p.id);
+      const rank = row ? Number(row["Rank"] ?? 200) : 200;
+      const idx = nextState.rookies.length + 1;
+      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+      const rookie: RookiePlayer = {
+        playerId,
+        prospectId: p.id,
+        name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
+        pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : String(p.pos ?? "UNK").toUpperCase(),
+        age: row ? Number(row["Age"] ?? 22) : 22,
+        ovr: rookieOvrFromRank(rank),
+        dev: rookieDevFromTier(row ?? {}),
+        apy: rookieApyFromRank(rank),
+      };
+      const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
+
+      return {
+        ...nextState,
+        rookies: [...nextState.rookies, rookie],
+        rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
+      };
     }
 
     case "CAMP_SET":
@@ -3756,6 +3861,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
 const STORAGE_KEY = "hc_career_save";
 
+function ensureLeagueGmMap(state: GameState): GameState {
+  const ids = Object.keys(state.league?.standings ?? {});
+  const gmByTeamId = state.league?.gmByTeamId ?? {};
+  if (ids.length && Object.keys(gmByTeamId).length === ids.length) return state;
+  const seeded = initLeagueState(ids.length ? ids : getTeams().map((t) => t.teamId), state.saveSeed);
+  return { ...state, league: { ...state.league, gmByTeamId: { ...seeded.gmByTeamId, ...gmByTeamId } } };
+}
+
 function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   const saveSeed = oldState.saveSeed ?? Date.now();
@@ -3784,6 +3897,9 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const normalizedLeague: LeagueState = league.postseason
     ? league
     : { ...league, postseason: { season: Number(oldState.season ?? 2026), resultsByTeamId: {} } };
+  if (!normalizedLeague.gmByTeamId) {
+    normalizedLeague.gmByTeamId = initLeagueState(Object.keys(normalizedLeague.standings), saveSeed).gmByTeamId;
+  }
 
   let s: Partial<GameState> = {
     ...oldState,
@@ -3814,7 +3930,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           capUsed: 54_000_000,
           capHitsByPlayerId: {},
         },
-        preDraft: { board: [], visits: {}, workouts: {}, reveals: {} },
+        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
         draft: { board: [], picks: [], completed: false },
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },
@@ -3872,7 +3988,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     playerAccolades: (oldState as any).playerAccolades ?? {},
   };
   s = ensureAccolades(bootstrapAccolades(s as GameState));
-  return s;
+  return ensureLeagueGmMap(s as GameState);
 }
 
 
@@ -3985,6 +4101,7 @@ function loadState(): GameState {
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
     };
     out = ensureAccolades(bootstrapAccolades(out));
+    out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
     return out;
   } catch (error) {
