@@ -14,6 +14,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
+import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
+import { HubShell } from "@/components/franchise-hub/HubShell";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -180,22 +183,23 @@ export default function AssistantHiring() {
   };
 
   return (
-    <div className="space-y-4">
+    <HubShell title="HIRE STAFF">
+      <div className="space-y-4 overflow-x-hidden">
       {toast ? (
         <Card>
           <CardContent className="p-4 text-sm">{toast}</CardContent>
         </Card>
       ) : null}
 
-      <Card>
-        <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-2xl font-bold">Staff Construction</div>
-            <div className="text-sm text-muted-foreground">
-              Initial hiring pool is limited to coaches ≤ {repCap} reputation in {state.season}. Expands after year one.
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+      <HubPageCard
+        title="Staff Construction"
+        subtitle={
+          <>
+            Initial hiring pool is limited to coaches ≤ {repCap} reputation in {state.season}. Expands after year one.
+          </>
+        }
+        right={
+          <>
             <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
             <Badge variant="outline">Used {money(state.staffBudget.used)}</Badge>
             <Badge variant="secondary">Remaining {money(remainingBudget)}</Badge>
@@ -203,12 +207,10 @@ export default function AssistantHiring() {
             <Button onClick={handleContinue} disabled={!allFilled}>
               Continue →
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {ROLE_ORDER.map((r) => {
               const filled = Boolean(state.assistantStaff[r.key]);
@@ -235,32 +237,35 @@ export default function AssistantHiring() {
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="mt-1 text-xs text-muted-foreground">Offer Level: {LEVEL_LABEL[level]}</div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {roleAlreadyFilled ? (
-        <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            This role is filled. Pick another role to hire.
-          </CardContent>
-        </Card>
-      ) : null}
+        <Separator className="my-3 bg-slate-300/15" />
 
-      <div className="space-y-3">
-        {candidates.map((c) => (
-          <Card key={c.p.personId}>
-            <CardContent className="p-4 flex items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="font-semibold">{c.p.fullName}</div>
-                <div className="text-sm text-muted-foreground">
-                  Rep {repNumber(c.p)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
-                </div>
-              </div>
-              <Button onClick={() => attemptHire(c.p.personId, c.salary)}>Offer {money(c.salary)}</Button>
+        {roleAlreadyFilled ? (
+          <Card>
+            <CardContent className="p-4 text-sm text-muted-foreground">
+              This role is filled. Pick another role to hire.
             </CardContent>
           </Card>
-        ))}
-      </div>
+        ) : null}
+
+        <div className="space-y-3">
+          {candidates.map((c) => (
+            <Card key={c.p.personId}>
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="font-semibold">{c.p.fullName}</div>
+                  <div className="text-sm text-muted-foreground">
+                    Rep {repNumber(c.p)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
+                  </div>
+                </div>
+                <Button onClick={() => attemptHire(c.p.personId, c.salary)}>Offer {money(c.salary)}</Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </HubPageCard>
     </div>
+    </HubShell>
   );
 }

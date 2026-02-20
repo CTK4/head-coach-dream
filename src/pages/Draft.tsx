@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import MedicalIcon from "/badges/Medical.svg";
+import { computeTeamOnClock } from "@/components/franchise-hub/draftOrder";
 
 type Row = Record<string, unknown>;
 
@@ -75,14 +76,16 @@ export default function Draft() {
   }, [rows, selectedId]);
 
   const userTeamId = String(state.acceptedOffer?.teamId ?? "");
-  const onClock = String(state.draft.onClockTeamId ?? "");
-  const isUserOnClock = !!userTeamId && onClock === userTeamId;
-
   const teamsCount = state.draft.orderTeamIds.length || 32;
   const totalPicks = state.draft.totalRounds * teamsCount;
   const overall = state.draft.currentOverall;
   const round = Math.floor((overall - 1) / teamsCount) + 1;
   const pickInRound = ((overall - 1) % teamsCount) + 1;
+  const computedOnClockTeamId =
+    computeTeamOnClock({ league: state.league, season: Number(state.season), round, pick: pickInRound }) ??
+    String(state.draft.onClockTeamId ?? "");
+  const onClock = String(computedOnClockTeamId ?? "");
+  const isUserOnClock = !!userTeamId && onClock === userTeamId;
 
   const myPicks = state.draft.leaguePicks.filter((p) => p.teamId === userTeamId);
   const reveals = state.offseasonData.preDraft.reveals;

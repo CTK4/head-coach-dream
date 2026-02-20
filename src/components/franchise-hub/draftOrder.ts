@@ -5,9 +5,18 @@ import { computeCommonGamesWinPct, computeSplitRecords, getTeamMeta, recordWinPc
 
 export type TeamStanding = { w: number; l: number; pf: number; pa: number };
 
+export type DraftOrderEntry = {
+  season: number;
+  round: number;
+  pick: number;
+  teamId: string;
+};
+
 export type DraftOrderInputs = {
   league: LeagueState;
   userTeamId: string;
+  season?: number;
+  pickOwnerByKey?: Record<string, string>;
   postseason?: {
     playoffFinishRankByTeamId: Record<string, number>;
   };
@@ -23,6 +32,74 @@ type TeamMetrics = {
   divisionWinPct: number | null;
   conferenceWinPct: number | null;
 };
+
+const DRAFT_ORDER_2026_R1: DraftOrderEntry[] = [
+  { season: 2026, round: 1, pick: 1, teamId: "MILWAUKEE_NORTHSHORE" },
+  { season: 2026, round: 1, pick: 2, teamId: "MEMPHIS_BLUES" },
+  { season: 2026, round: 1, pick: 3, teamId: "ST._PETERSBURG_PELICANS" },
+  { season: 2026, round: 1, pick: 4, teamId: "ORLANDO_KINGDOM" },
+  { season: 2026, round: 1, pick: 5, teamId: "AUSTIN_EMPIRE" },
+  { season: 2026, round: 1, pick: 6, teamId: "JACKSONVILLE_FLEET" },
+  { season: 2026, round: 1, pick: 7, teamId: "BUFFALO_NORTHWIND" },
+  { season: 2026, round: 1, pick: 8, teamId: "CLEVELAND_FORGE" },
+  { season: 2026, round: 1, pick: 9, teamId: "INDIANAPOLIS_IGNITION" },
+  { season: 2026, round: 1, pick: 10, teamId: "DETROIT_ASSEMBLY" },
+  { season: 2026, round: 1, pick: 11, teamId: "BIRMINGHAM_VULCANS" },
+  { season: 2026, round: 1, pick: 12, teamId: "NASHVILLE_SOUND" },
+  { season: 2026, round: 1, pick: 13, teamId: "CHICAGO_UNION" },
+  { season: 2026, round: 1, pick: 14, teamId: "CHARLOTTE_CROWN" },
+  { season: 2026, round: 1, pick: 15, teamId: "BALTIMORE_ADMIRALS" },
+  { season: 2026, round: 1, pick: 16, teamId: "HOUSTON_LAUNCH" },
+  { season: 2026, round: 1, pick: 17, teamId: "PITTSBURGH_IRONCLADS" },
+  { season: 2026, round: 1, pick: 18, teamId: "PHOENIX_SCORCH" },
+  { season: 2026, round: 1, pick: 19, teamId: "MIAMI_TIDE" },
+  { season: 2026, round: 1, pick: 20, teamId: "SEATTLE_EVERGREENS" },
+  { season: 2026, round: 1, pick: 21, teamId: "LOS_ANGELES_STARS" },
+  { season: 2026, round: 1, pick: 22, teamId: "DALLAS_IMPERIALS" },
+  { season: 2026, round: 1, pick: 23, teamId: "NEW_ORLEANS_HEX" },
+  { season: 2026, round: 1, pick: 24, teamId: "DENVER_SUMMIT" },
+  { season: 2026, round: 1, pick: 25, teamId: "ATLANTA_APEX" },
+  { season: 2026, round: 1, pick: 26, teamId: "LAS_VEGAS_SYNDICATE" },
+  { season: 2026, round: 1, pick: 27, teamId: "NEW_YORK_GOTHIC_GUARDIANS" },
+  { season: 2026, round: 1, pick: 28, teamId: "ST._LOUIS_ARCHONS" },
+  { season: 2026, round: 1, pick: 29, teamId: "WASHINGTON_SENTINELS" },
+  { season: 2026, round: 1, pick: 30, teamId: "SAN_DIEGO_ARMADA" },
+  { season: 2026, round: 1, pick: 31, teamId: "PHILADELPHIA_FOUNDERS" },
+  { season: 2026, round: 1, pick: 32, teamId: "BOSTON_HARBORMEN" },
+];
+
+function pickKey(season: number, round: number, pick: number) {
+  return `S${season}-R${round}-P${pick}`;
+}
+
+function getPickOwnerTeamId(
+  input: DraftOrderInputs,
+  season: number,
+  round: number,
+  pick: number,
+  originalTeamId: string
+): string {
+  const key = pickKey(season, round, pick);
+  const fromInput = input.pickOwnerByKey?.[key];
+  if (fromInput) return String(fromInput);
+
+  const fromLeague = (input.league as any)?.draftPickOwnerByKey?.[key];
+  if (fromLeague) return String(fromLeague);
+
+  return originalTeamId;
+}
+
+export function getFixedDraftOrderIfAny(season: number, round: number): DraftOrderEntry[] | null {
+  if (season === 2026 && round === 1) return DRAFT_ORDER_2026_R1;
+  return null;
+}
+
+export function getFixedPickNumberIfAny(season: number, round: number, teamId: string): number | null {
+  const fixed = getFixedDraftOrderIfAny(season, round);
+  if (!fixed) return null;
+  const row = fixed.find((x) => x.teamId === teamId);
+  return row ? row.pick : null;
+}
 
 function getPlayoffFinishRankByTeamId(input: DraftOrderInputs): Record<string, number> {
   if (input.postseason) return input.postseason.playoffFinishRankByTeamId;
@@ -97,6 +174,10 @@ function computeMetricsByTeamId(league: LeagueState): Record<string, TeamMetrics
 }
 
 export function computeFirstRoundOrderTeamIds(input: DraftOrderInputs): string[] {
+  const season = Number(input.season);
+  const fixed = getFixedDraftOrderIfAny(season, 1);
+  if (fixed) return fixed.map((entry) => entry.teamId);
+
   const standingsTeamIds = Object.keys(input.league.standings ?? {});
   if (standingsTeamIds.length === 0) return [];
 
@@ -117,11 +198,53 @@ export function computeFirstRoundOrderTeamIds(input: DraftOrderInputs): string[]
   return [...nonPlayoffTeams, ...playoffTeams];
 }
 
-export function computeFirstRoundPickNumber(input: DraftOrderInputs): number | null {
-  if (!input.userTeamId || !(input.userTeamId in input.league.standings)) return null;
+export function computeUserOwnedFirstRoundPicks(input: DraftOrderInputs): number[] {
   const order = computeFirstRoundOrderTeamIds(input);
-  const index = order.indexOf(input.userTeamId);
-  return index === -1 ? null : index + 1;
+  if (!order.length) return [];
+
+  const season = Number(input.season);
+  if (!Number.isFinite(season)) {
+    const index = order.indexOf(input.userTeamId);
+    return index === -1 ? [] : [index + 1];
+  }
+
+  const picks: number[] = [];
+  for (let i = 0; i < order.length; i += 1) {
+    const pick = i + 1;
+    const originalTeamId = order[i];
+    const ownerTeamId = getPickOwnerTeamId(input, season, 1, pick, originalTeamId);
+    if (String(ownerTeamId) === String(input.userTeamId)) picks.push(pick);
+  }
+
+  return picks;
+}
+
+export function computeFirstRoundPickNumber(input: DraftOrderInputs): number | null {
+  if (!input.userTeamId) return null;
+  const owned = computeUserOwnedFirstRoundPicks(input);
+  return owned.length ? Math.min(...owned) : null;
+}
+
+export function computeTeamOnClock({
+  league,
+  season,
+  round,
+  pick,
+}: {
+  league: LeagueState;
+  season: number;
+  round: number;
+  pick: number;
+}): string | null {
+  const fixed = getFixedDraftOrderIfAny(season, round);
+  if (fixed) {
+    const row = fixed.find((x) => x.pick === pick);
+    return row ? row.teamId : null;
+  }
+
+  if (round !== 1) return null;
+  const order = computeFirstRoundOrderTeamIds({ league, userTeamId: "", season });
+  return order[pick - 1] ?? null;
 }
 
 export function computeOverallPickNumber(league: LeagueState, teamId: string): number | null {
