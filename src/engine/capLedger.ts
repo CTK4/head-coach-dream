@@ -1,7 +1,13 @@
 import type { GameState } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 
+const LEAGUE_CAP_DEFAULT = 250_000_000;
 const moneyRound = (n: number) => Math.round(n / 50_000) * 50_000;
+
+export type CapLedgerOptions = {
+  useTop51?: boolean;
+  capOverride?: number;
+};
 
 export type LedgerLineId =
   | "LEAGUE_CAP"
@@ -47,32 +53,46 @@ export type CapLedgerSnapshotV2 = {
   };
 };
 
-export function computeCapLedger(state: GameState, teamId: string) {
-  const roster = getEffectivePlayersByTeam(state, teamId).map((p: any) => ({
-    p,
-    s: getContractSummaryForPlayer(state, String(p.playerId)),
-  }));
+export function computeCapLedger(state: GameState, teamId: string, opts: CapLedgerOptions = {}) {
+  const cap =
+    Number.isFinite(opts.capOverride)
+      ? (opts.capOverride as number)
+      : Number.isFinite((state as any).finances?.cap)
+        ? (state as any).finances.cap
+        : LEAGUE_CAP_DEFAULT;
 
-  const deadItems = roster
-    .filter((r) => (r.s?.deadCapIfCutNow ?? 0) > 0)
-    .map((r) => ({
-      playerId: String(r.p.playerId),
-      name: String(r.p.fullName ?? "Unknown"),
-      pos: String(r.p.pos ?? "UNK"),
-      deadNow: moneyRound(r.s?.deadCapIfCutNow ?? 0),
-      proration: moneyRound(r.s?.prorationPerYear ?? 0),
-      bonusRemaining: moneyRound(r.s?.deadCapIfCutNow ?? 0),
-    }))
-    .sort((a, b) => b.deadNow - a.deadNow)
-    .slice(0, 25);
+  const roster = getEffectivePlayersByTeam(state, teamId).map((p: any) => {
+    const s = getContractSummaryForPlayer(state, String(p.playerId));
+    const capHit = moneyRound(Number(s?.capHit ?? 0) || 0);
+
+    return {
+      playerId: String(p.playerId),
+      name: String(p.fullName ?? p.name ?? "Unknown"),
+      pos: String(p.pos ?? "UNK"),
+      capHit,
+      yearsLeft: Number(s?.yearsRemaining ?? 0) || 0,
+    };
+  });
+
+  const committedAll = moneyRound(roster.reduce((sum, r) => sum + (Number(r.capHit) || 0), 0));
+  const committedTop51 = moneyRound(
+    roster
+      .slice()
+      .sort((a, b) => (b.capHit || 0) - (a.capHit || 0))
+      .slice(0, 51)
+      .reduce((sum, r) => sum + (Number(r.capHit) || 0), 0),
+  );
+
+  const useTop51 = Boolean(opts.useTop51);
+  const committed = useTop51 ? committedTop51 : committedAll;
+  const capSpace = moneyRound(cap - committed);
 
   return {
-    cap: state.finances.cap,
-    committed: state.finances.capCommitted,
-    capSpace: state.finances.capSpace,
-    deadThisYear: moneyRound(Number(state.finances.deadCapThisYear ?? 0)),
-    deadNextYear: moneyRound(Number(state.finances.deadCapNextYear ?? 0)),
-    deadItems,
+    cap,
+    committed,
+    capSpace,
+    mode: useTop51 ? "TOP_51" : "ALL_PLAYERS",
+    roster,
   };
 }
 
