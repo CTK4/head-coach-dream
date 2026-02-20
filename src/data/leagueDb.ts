@@ -59,6 +59,16 @@ export type ContractRow = {
   [key: string]: unknown;
 };
 
+export type TeamFinancesRow = {
+  teamId: string;
+  season: number;
+  capSpace: number;
+  cash: number;
+  revenue?: number;
+  expenses?: number;
+  notes?: string | null;
+};
+
 const root = leagueDbJson as Record<string, unknown[]>;
 
 function coerceNumber(value: unknown): number | undefined {
@@ -150,6 +160,15 @@ const teams: TeamRow[] = ((root.Teams ?? []) as any[]).map(normalizeTeamRow);
 const players: PlayerRow[] = ((root.Players ?? []) as any[]).map(normalizePlayerRow);
 const personnel: PersonnelRow[] = ((root.Personnel ?? []) as any[]).map(normalizePersonnelRow);
 const contracts: ContractRow[] = ((root.Contracts ?? []) as any[]).map(normalizeContractRow);
+const teamFinances: TeamFinancesRow[] = ((root.TeamFinances ?? []) as any[]).map((row) => ({
+  teamId: String(row.teamId ?? ""),
+  season: coerceInt(row.season) ?? 0,
+  capSpace: coerceNumber(row.capSpace) ?? 0,
+  cash: coerceNumber(row.cash) ?? 0,
+  revenue: coerceNumber(row.revenue),
+  expenses: coerceNumber(row.expenses),
+  notes: row.notes != null ? String(row.notes) : null,
+}));
 
 const teamsById = new Map(teams.map((team) => [team.teamId, team]));
 const playersById = new Map(players.map((player) => [player.playerId, player]));
@@ -419,4 +438,8 @@ export function getTeamSummary(teamId: string) {
     capSpace,
     playerCount: teamPlayers.length,
   };
+}
+
+export function getTeamFinancesRow(teamId: string, season: number): TeamFinancesRow | undefined {
+  return teamFinances.find((row) => String(row.teamId) === String(teamId) && Number(row.season) === Number(season));
 }
