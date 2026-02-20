@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { buildCapTable } from "@/engine/contractMath";
-import { HubShell } from "@/components/franchise-hub/HubShell";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,8 +31,7 @@ export default function RosterAudit() {
   const capTable = useMemo(() => buildCapTable(state), [state]);
 
   return (
-    <HubShell title="ROSTER REVIEW">
-      <div className="space-y-4 overflow-x-hidden">
+    <div className="space-y-4 overflow-x-hidden">
         <HubPageCard
           title="Roster Audit Dashboard"
           subtitle="Review contracts, cap impact, restructures, cut projections — with status icons."
@@ -52,14 +50,14 @@ export default function RosterAudit() {
           <StatusLegend />
         </HubPageCard>
 
-        <HubPageCard
+      <HubPageCard
           title="Players"
           subtitle={<span className="text-slate-200/70">Tap a player to view contract summary. Tap the Issue icon for details.</span>}
           right={<Badge variant="outline">{players.length} total</Badge>}
         >
           <Separator className="my-3 bg-slate-300/15" />
 
-          <div className="grid max-h-[560px] gap-2 overflow-y-auto overflow-x-hidden pr-1">
+          <div className="grid gap-2 overflow-x-hidden">
             {players.map((p: any) => {
               const summary = getContractSummaryForPlayer(state, p.playerId);
               const apy = summary?.apy ?? summary?.salary ?? 0;
@@ -111,6 +109,5 @@ export default function RosterAudit() {
           </DialogContent>
         </Dialog>
       </div>
-    </HubShell>
   );
 }

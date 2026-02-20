@@ -5,7 +5,7 @@ const TITLES: Record<string, string> = {
   "/hub/assistant-hiring": "HIRE STAFF",
   "/hub/roster": "ROSTER",
   "/hub/depth-chart": "DEPTH CHART",
-  "/hub/roster-audit": "ROSTER AUDIT",
+  "/hub/roster-audit": "ROSTER REVIEW",
   "/hub/combine": "COMBINE",
   "/hub/pre-draft": "PRE-DRAFT",
   "/hub/draft": "DRAFT",

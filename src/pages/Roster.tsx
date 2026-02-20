@@ -1,124 +1,103 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { HubShell } from "@/components/franchise-hub/HubShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { getDepthSlotLabel, getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
-import { PlayerStatusIcons, StatusLegend } from "@/components/franchise-hub/PlayerStatusUI";
+import { Badge } from "@/components/ui/badge";
 
-export default function RosterPage() {
-  const { state } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+const POS_GROUPS: Record<string, string[]> = {
+  Offense: ["QB", "RB", "WR", "TE", "OT", "OG", "C", "OL", "FB", "HB"],
+  Defense: ["DE", "DT", "DL", "LB", "OLB", "ILB", "MLB", "CB", "S", "FS", "SS", "DB", "EDGE"],
+  "Special Teams": ["K", "P", "LS", "KR", "PR"],
+};
 
-  const [playerId, setPlayerId] = useState<string | null>(null);
+function getGroup(pos: string): keyof typeof POS_GROUPS {
+  const p = String(pos ?? "").toUpperCase();
+  for (const [group, positions] of Object.entries(POS_GROUPS)) {
+    if (positions.includes(p)) return group as keyof typeof POS_GROUPS;
+  }
+  return "Offense";
+}
 
-  const players = useMemo(() => {
-    if (!teamId) return [];
-    return getEffectivePlayersByTeam(state, teamId);
-  }, [state, teamId]);
+export default function Roster() {
+  const { state, dispatch } = useGame();
+  const [tab, setTab] = useState<keyof typeof POS_GROUPS>("Offense");
 
-  const selected = useMemo(() => players.find((p) => p.playerId === playerId) ?? null, [players, playerId]);
+  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
+  if (!teamId) return null;
+
+  const { allPlayers, sorted } = useMemo(() => {
+    const all = getEffectivePlayersByTeam(state, String(teamId));
+    const filtered = all.filter((p) => getGroup(String(p.pos ?? "")) === tab);
+    const s = [...filtered].sort((a, b) => Number(b.overall ?? b.ovr ?? 0) - Number(a.overall ?? a.ovr ?? 0));
+    return { allPlayers: all, sorted: s };
+  }, [state, teamId, tab]);
 
   return (
-    <HubShell title="ROSTER">
-      <div className="space-y-4">
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardHeader className="space-y-2">
-            <CardTitle className="flex flex-col gap-2 text-slate-100 md:flex-row md:items-center md:justify-between">
-              <span>Manage Team</span>
-              <Badge variant="secondary">{players.length} players</Badge>
-            </CardTitle>
-            <div className="text-sm text-slate-200/70">Tap the Issue icon to see why a player is flagged.</div>
-            <StatusLegend />
-          </CardHeader>
-        </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="space-y-1">
+            <div className="text-2xl font-bold">Manage Team</div>
+            <div className="text-sm text-muted-foreground">{allPlayers.length} players</div>
+          </div>
+          <Button variant="secondary" onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>
+            Reset to Best
+          </Button>
+        </CardContent>
+      </Card>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <Card className="border-slate-300/15 bg-slate-950/35">
-            <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-100">Players</div>
-                <Badge variant="outline">{players.length}</Badge>
-              </div>
-              <Separator className="bg-slate-300/15" />
+      <Card>
+        <CardContent className="p-3">
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(POS_GROUPS) as Array<keyof typeof POS_GROUPS>).map((group) => (
+              <Button key={group} variant={tab === group ? "default" : "secondary"} size="sm" onClick={() => setTab(group)}>
+                {group}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-              <div className="grid gap-2">
-                {players.map((p: any) => (
-                  <button
-                    key={p.playerId}
-                    type="button"
-                    onClick={() => setPlayerId(p.playerId)}
-                    className={`w-full rounded-lg border p-3 text-left transition ${
-                      p.playerId === playerId
-                        ? "border-emerald-400/50 bg-emerald-900/20"
-                        : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-[220px]">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-semibold text-slate-100">
-                            {p.name} <span className="text-slate-200/70">({normalizePos(p.pos)})</span>
-                          </div>
-                          <PlayerStatusIcons player={p} />
-                        </div>
-                        <div className="text-xs text-slate-200/70">OVR {p.ovr ?? "—"} · Age {p.age ?? "—"}</div>
-                      </div>
-                      <div className="text-xs text-slate-200/70">{p.devTrait ?? ""}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
+      <div className="space-y-2">
+        {sorted.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">No players in this group</CardContent>
           </Card>
+        ) : (
+          sorted.map((player) => {
+            const depthSlot = getDepthSlotLabel(state, String(player.playerId));
+            const locked = depthSlot ? Boolean(state.depthChart.lockedBySlot[depthSlot]) : false;
+            const ovr = player.overall ?? player.ovr;
 
-          <Card className="border-slate-300/15 bg-slate-950/35">
-            <CardContent className="space-y-3 p-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-100">Player</div>
-                {selected?.pos ? <Badge variant="outline">{normalizePos(selected.pos)}</Badge> : <Badge variant="outline">—</Badge>}
-              </div>
-              <Separator className="bg-slate-300/15" />
-
-              {selected ? (
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-lg font-bold text-slate-100">{selected.name}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">OVR {selected.ovr ?? "—"}</Badge>
-                      <Badge variant="outline">Age {selected.age ?? "—"}</Badge>
-                      {selected.devTrait ? <Badge variant="outline">{String(selected.devTrait)}</Badge> : null}
-                    </div>
-                    <div className="mt-2">
-                      <PlayerStatusIcons player={selected} className="gap-2" />
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-slate-300/15 bg-slate-950/20 p-3 text-sm text-slate-200/80">
-                    <div className="font-semibold text-slate-100">Notes</div>
-                    <div className="mt-1 text-xs text-slate-200/70">
-                      This is a lightweight roster detail panel. You can extend it with depth chart, contracts, training, and more.
+            return (
+              <Card key={player.playerId}>
+                <CardContent className="flex items-center justify-between gap-3 p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Badge variant="outline" className="w-10 shrink-0 justify-center text-xs font-mono">
+                      {player.pos ?? "—"}
+                    </Badge>
+                    {depthSlot ? (
+                      <Badge variant="outline" className="shrink-0 text-xs">
+                        {depthSlot}
+                      </Badge>
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{player.fullName ?? player.name ?? "Unknown Player"}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        OVR {ovr ?? "—"} • Age {player.age ?? "—"} • {player.college ?? "Unknown"}
+                        {depthSlot ? ` • ${locked ? "Locked" : "Unlocked"}` : ""}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" disabled>
-                      Depth Chart (soon)
-                    </Button>
-                    <Button variant="secondary" disabled>
-                      Contracts (soon)
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-slate-200/70">Select a player to view details.</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  <Badge className="shrink-0 text-xs">{ovr ?? "—"}</Badge>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
-    </HubShell>
+    </div>
   );
 }
