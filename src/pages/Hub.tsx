@@ -56,6 +56,9 @@ export default function Hub() {
   }, [state]);
 
   const capRoom = formatMoneyM(state.finances.capSpace);
+  const assistantOpen = Object.values(state.assistantStaff ?? {}).filter((value) => !value).length;
+  const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
+  const hireStaffCta = assistantOpen > 0 ? "DECISION NEEDED" : "VIEW STAFF";
 
   const nextStage = nextStageForNavigate(state.careerStage);
   const nextLabel = stageLabel(nextStage);
@@ -90,10 +93,10 @@ export default function Hub() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <HubTile
           title="HIRE STAFF"
-          subtitle="3 Positions Open"
-          cta="DECISION NEEDED"
+          subtitle={hireStaffSubtitle}
+          cta={hireStaffCta}
           to="/hub/assistant-hiring"
-          badgeCount={badgeCounts.hireStaff}
+          badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
         />
         <HubTile title="ROSTER" subtitle="MANAGE TEAM" cta="MANAGE TEAM" to="/hub/roster" badgeCount={badgeCounts.roster} />
         <HubTile title="FRANCHISE STRATEGY" cta="PLAN FUTURE" to="/hub/staff-management" badgeCount={badgeCounts.franchiseStrategy} />
