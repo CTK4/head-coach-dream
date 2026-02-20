@@ -332,6 +332,68 @@ function requiredMultiplier(bestAssetValue: number) {
   return 1 + rho * Math.pow(bestAssetValue / V_REF, eta);
 }
 
+function tradePasses(youVals: number[], cpuVals: number[]) {
+  const Vyou = effectiveSideValue(youVals);
+  const Vcpu = effectiveSideValue(cpuVals);
+
+  const vYouMax = Math.max(...youVals, 0);
+  const vCpuMax = Math.max(...cpuVals, 0);
+
+  const nYou = youVals.length;
+  const nCpu = cpuVals.length;
+
+  const vStar = Math.max(vYouMax, vCpuMax);
+  const bestOnYou = vYouMax >= vCpuMax;
+
+  const baseReq = requiredMultiplier(vStar);
+
+  const c = 0.06;
+  const deltaN = Math.abs(nYou - nCpu);
+  const consReq = 1 + c * Math.log(1 + deltaN);
+
+  const tau = 0.35;
+
+  if (bestOnYou) {
+    let req = baseReq;
+    if (nYou < nCpu) req *= consReq;
+    const topHeavyOk = !(nYou === 1 && nCpu >= 3) || vCpuMax >= tau * vYouMax;
+    const required = Vyou * req;
+    const offered = Vcpu;
+    const passes = topHeavyOk && offered >= required;
+    return { passes, within20: topHeavyOk && offered >= required * 0.8, required, offered };
+  }
+
+  let req = baseReq;
+  if (nCpu < nYou) req *= consReq;
+  const topHeavyOk = !(nCpu === 1 && nYou >= 3) || vYouMax >= tau * vCpuMax;
+  const required = Vcpu * req;
+  const offered = Vyou;
+  const passes = topHeavyOk && offered >= required;
+  return { passes, within20: topHeavyOk && offered >= required * 0.8, required, offered };
+}
+
+export type OfferQualityLabel = "FAIR" | "CLOSE" | "BAD";
+
+export function labelUserOfferForUi(args: { offer: DraftTradeOffer }) {
+  const youVals = args.offer.give.map((p) => pickValue(p.overall));
+  const cpuVals = args.offer.receive.map((p) => pickValue(p.overall));
+  const r = tradePasses(youVals, cpuVals);
+  const label: OfferQualityLabel = r.passes ? "FAIR" : r.within20 ? "CLOSE" : "BAD";
+  return { label, offered: r.offered, required: r.required };
+}
+
+function offerIsReasonableForCpuTradeDown(args: { give: DraftPickSlot[]; receive: DraftPickSlot[] }) {
+  const youVals = args.give.map((p) => pickValue(p.overall));
+  const cpuVals = args.receive.map((p) => pickValue(p.overall));
+  return tradePasses(youVals, cpuVals).passes;
+}
+
+function offerIsReasonableForCpuIncoming(args: { give: DraftPickSlot[]; receive: DraftPickSlot[] }) {
+  const youVals = args.give.map((p) => pickValue(p.overall));
+  const cpuVals = args.receive.map((p) => pickValue(p.overall));
+  return tradePasses(youVals, cpuVals).passes;
+}
+
 function listFuturePicksForTeam(sim: DraftSimState, teamId: string) {
   const out: DraftPickSlot[] = [];
   for (let i = sim.cursor; i < sim.slots.length; i += 1) if (sim.slots[i].teamId === teamId) out.push(sim.slots[i]);
@@ -361,16 +423,17 @@ function markCpuCpuTrade(sim: DraftSimState, round: number): DraftSimState {
 }
 
 function buildTradeDownOffers(args: { saveSeed: number; sim: DraftSimState; count: number }) {
-  const slot = args.sim.slots[args.sim.cursor];
-  if (!slot || slot.teamId !== args.sim.userTeamId) return [];
+  const sim = normalizeOffersForCursor(args.sim);
+  const slot = sim.slots[sim.cursor];
+  if (!slot || slot.teamId !== sim.userTeamId) return [];
 
-  const byTeam = listFuturePicksByTeam(args.sim);
+  const byTeam = listFuturePicksByTeam(sim);
   const teams = Object.keys(byTeam)
-    .filter((t) => t !== args.sim.userTeamId)
+    .filter((t) => t !== sim.userTeamId)
     .filter((t) => (byTeam[t]?.[0]?.overall ?? 0) > slot.overall)
     .sort((a, b) => byTeam[a][0].overall - byTeam[b][0].overall);
 
-  const rng = mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_DOWN_OFFERS", args.sim.season, slot.overall));
+  const rng = mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_DOWN_OFFERS", sim.season, slot.overall));
   const offers: DraftTradeOffer[] = [];
   const valueGive = pickValue(slot.overall);
 
@@ -392,35 +455,40 @@ function buildTradeDownOffers(args: { saveSeed: number; sim: DraftSimState; coun
     const valueReceive = receive.reduce((acc, p) => acc + pickValue(p.overall), 0);
     if (valueReceive < valueGive * 0.88 || valueReceive > valueGive * 1.2) continue;
 
-    offers.push({
+    const offer = {
       offerId: `DTO_DN_${slot.overall}_${fromTeamId}_${Math.floor(rng() * 1e9)}`,
       source: "INCOMING",
       direction: "DOWN",
       fromTeamId,
-      toTeamId: args.sim.userTeamId,
+      toTeamId: sim.userTeamId,
       give: [slot],
       receive,
       valueGive,
       valueReceive,
       note: receive.length === 2 ? `Trade down to Overall ${theirFirst.overall} + extra pick` : `Trade down to Overall ${theirFirst.overall}`,
-    });
+    } satisfies DraftTradeOffer;
+
+    if (!offerIsReasonableForCpuTradeDown({ give: offer.give, receive: offer.receive })) continue;
+
+    offers.push(offer);
   }
 
   offers.sort((a, b) => b.valueReceive - a.valueReceive);
-  return offers;
+  return offers.slice(0, args.count);
 }
 
 function maybeIncomingTradeUpOffers(args: { saveSeed: number; sim: DraftSimState; count: number }) {
-  const slot = args.sim.slots[args.sim.cursor];
-  if (!slot || slot.teamId === args.sim.userTeamId) return [];
-  if (mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_UP_INCOMING_GATE", args.sim.season, slot.overall))() > 0.28) return [];
+  const sim = normalizeOffersForCursor(args.sim);
+  const slot = sim.slots[sim.cursor];
+  if (!slot || slot.teamId === sim.userTeamId) return [];
+  if (mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_UP_INCOMING_GATE", sim.season, slot.overall))() > 0.28) return [];
 
-  const userPicks = listFuturePicksForTeam(args.sim, args.sim.userTeamId);
+  const userPicks = listFuturePicksForTeam(sim, sim.userTeamId);
   const nextUser = userPicks[0];
   if (!nextUser || nextUser.overall - slot.overall > 14) return [];
 
   const candidatesToAdd = userPicks.filter((p) => p.overall > nextUser.overall).slice(0, 7);
-  const rng = mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_UP_INCOMING", args.sim.season, slot.overall, nextUser.overall));
+  const rng = mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_UP_INCOMING", sim.season, slot.overall, nextUser.overall));
   const valueNeed = pickValue(slot.overall);
   const offers: DraftTradeOffer[] = [];
 
@@ -428,24 +496,28 @@ function maybeIncomingTradeUpOffers(args: { saveSeed: number; sim: DraftSimState
     if (offers.length >= args.count) break;
     const give = [nextUser, add];
     const valueGive = give.reduce((acc, p) => acc + pickValue(p.overall), 0);
-    const theirFuture = listFuturePicksForTeam(args.sim, slot.teamId).filter((p) => p.overall > slot.overall).slice(0, 4);
+    const theirFuture = listFuturePicksForTeam(sim, slot.teamId).filter((p) => p.overall > slot.overall).slice(0, 4);
     const back = rng() < 0.55 && theirFuture.length ? theirFuture[Math.floor(rng() * theirFuture.length)] : null;
     const receive = back ? [slot, back] : [slot];
     const valueReceive = receive.reduce((acc, p) => acc + pickValue(p.overall), 0);
     if (valueGive < valueNeed * 0.94 || valueGive > valueNeed * 1.35) continue;
 
-    offers.push({
-      offerId: `DTO_UP_IN_${slot.overall}_${args.sim.userTeamId}_${Math.floor(rng() * 1e9)}`,
+    const offer = {
+      offerId: `DTO_UP_IN_${slot.overall}_${sim.userTeamId}_${Math.floor(rng() * 1e9)}`,
       source: "INCOMING",
       direction: "UP",
       fromTeamId: slot.teamId,
-      toTeamId: args.sim.userTeamId,
+      toTeamId: sim.userTeamId,
       give,
       receive,
       valueGive,
       valueReceive,
       note: back ? `Trade up to Overall ${slot.overall} (get back O${back.overall})` : `Trade up to Overall ${slot.overall}`,
-    });
+    } satisfies DraftTradeOffer;
+
+    if (!offerIsReasonableForCpuIncoming({ give: offer.give, receive: offer.receive })) continue;
+
+    offers.push(offer);
   }
 
   offers.sort((a, b) => a.valueGive - b.valueGive);
@@ -501,33 +573,28 @@ export function applyTrade(sim: DraftSimState, offer: DraftTradeOffer): DraftSim
 
 function evaluateUserOfferWithRegression(args: { sim: DraftSimState; offer: DraftTradeOffer }) {
   const slot = args.sim.slots[args.sim.cursor];
-  if (!slot || slot.teamId !== args.offer.fromTeamId) return { status: "DECLINED" as const, need: 0, you: 0 };
+  if (!slot || slot.teamId !== args.offer.fromTeamId) return { status: "DECLINED" as const, required: 0, offered: 0 };
 
-  const cpuGiveVals = args.offer.receive.map((p) => pickValue(p.overall));
-  const youGiveVals = args.offer.give.map((p) => pickValue(p.overall));
+  const youVals = args.offer.give.map((p) => pickValue(p.overall));
+  const cpuVals = args.offer.receive.map((p) => pickValue(p.overall));
 
-  const Vcpu = effectiveSideValue(cpuGiveVals);
-  const Vyou = effectiveSideValue(youGiveVals);
+  const res = tradePasses(youVals, cpuVals);
 
-  const vStar = Math.max(...cpuGiveVals, 1);
-  const req = requiredMultiplier(vStar);
-  const need = Vcpu * req;
-
-  if (Vyou >= need) return { status: "ACCEPTED" as const, need, you: Vyou };
-  if (Vyou >= need * 0.8) return { status: "COUNTER" as const, need, you: Vyou };
-  return { status: "DECLINED" as const, need, you: Vyou };
+  if (res.passes) return { status: "ACCEPTED" as const, required: res.required, offered: res.offered };
+  if (res.within20) return { status: "COUNTER" as const, required: res.required, offered: res.offered };
+  return { status: "DECLINED" as const, required: res.required, offered: res.offered };
 }
 
-function buildCounterOfferRegression(args: { saveSeed: number; sim: DraftSimState; offer: DraftTradeOffer; need: number }) {
+function buildCounterOfferRegression(args: { saveSeed: number; sim: DraftSimState; offer: DraftTradeOffer; required: number }) {
   const sim = normalizeOffersForCursor(args.sim);
   const slot = sim.slots[sim.cursor];
   if (!slot) return null;
 
   const rng = mulberry32(hashSeed(args.saveSeed, "CPU_COUNTER_USER_OFFER", sim.season, slot.overall, args.offer.offerId));
 
-  const target = args.need * (1.02 + (rng() - 0.5) * 0.02);
+  const targetRequired = args.required * (1.02 + (rng() - 0.5) * 0.02);
 
-  const userFuture = listFuturePicksForTeam(sim, sim.userTeamId).slice(0, 24);
+  const userFuture = listFuturePicksForTeam(sim, sim.userTeamId).slice(0, 64);
   const offeredSet = new Set(args.offer.give.map((p) => p.overall));
   const addPool = userFuture.filter((p) => !offeredSet.has(p.overall));
 
@@ -538,17 +605,22 @@ function buildCounterOfferRegression(args: { saveSeed: number; sim: DraftSimStat
     receive = [slot];
   }
 
-  const eval0 = () => effectiveSideValue(give.map((p) => pickValue(p.overall)));
+  const score = () => {
+    const youVals = give.map((p) => pickValue(p.overall));
+    const cpuVals = receive.map((p) => pickValue(p.overall));
+    const r = tradePasses(youVals, cpuVals);
+    return { ...r, offered: r.offered, required: Math.max(r.required, targetRequired) };
+  };
 
-  let Vyou = eval0();
+  let s = score();
   for (const p of addPool) {
     if (give.length >= 10) break;
-    if (Vyou >= target) break;
+    if (s.offered >= s.required && s.passes) break;
     give.push(p);
-    Vyou = eval0();
+    s = score();
   }
 
-  if (Vyou < args.need * 0.8) return null;
+  if (!(s.passes || s.within20)) return null;
 
   const valueGive = give.reduce((a, p) => a + pickValue(p.overall), 0);
   const valueReceive = receive.reduce((a, p) => a + pickValue(p.overall), 0);
@@ -626,7 +698,7 @@ export function submitUserTradeUpOffer(args: { saveSeed: number; sim: DraftSimSt
   }
 
   if (res.status === "COUNTER") {
-    const counter = buildCounterOfferRegression({ saveSeed: args.saveSeed, sim, offer: args.offer, need: res.need });
+    const counter = buildCounterOfferRegression({ saveSeed: args.saveSeed, sim, offer: args.offer, required: res.required });
     if (!counter) return { status: "DECLINED", message: "They aren't looking for that package." };
     return { status: "COUNTERED", message: "They want more to move down.", counter };
   }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getDraftClass, upcomingUserPickSlots } from "@/engine/draftSim";
+import { getDraftClass, labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +91,41 @@ export default function Draft() {
   const incoming = (state.draft.tradeOffers ?? []).filter((o) => o.source === "INCOMING");
   const outgoing = (state.draft.tradeOffers ?? []).filter((o) => o.source === "OUTGOING");
 
+  const previewOffer = useMemo(() => {
+    if (!composeOpen || isUserOnClock || !slot) return null;
+
+    const give = userFuturePicks.filter((p) => !!composeGive[p.overall]).slice(0, 10);
+    if (!give.length) return null;
+
+    const receive = [slot];
+    if (composeAskBack !== "NONE") {
+      const back = cpuFuturePicks.find((p) => p.overall === composeAskBack);
+      if (back) receive.push(back);
+    }
+
+    return {
+      offerId: "__PREVIEW__",
+      source: "OUTGOING" as const,
+      direction: "UP" as const,
+      fromTeamId: slot.teamId,
+      toTeamId: state.draft.userTeamId,
+      give,
+      receive,
+      valueGive: 0,
+      valueReceive: 0,
+      note: "Preview",
+    };
+  }, [composeOpen, isUserOnClock, slot, userFuturePicks, composeGive, composeAskBack, cpuFuturePicks, state.draft.userTeamId]);
+
+  const previewLabel = useMemo(() => {
+    if (!previewOffer) return null;
+    const q = labelUserOfferForUi({ offer: previewOffer });
+    const chip =
+      q.label === "FAIR" ? "bg-green-600/15 text-green-700" : q.label === "CLOSE" ? "bg-amber-600/15 text-amber-700" : "bg-red-600/15 text-red-700";
+    const text = q.label === "FAIR" ? "Fair" : q.label === "CLOSE" ? "Close" : "Bad";
+    return { text, chip };
+  }, [previewOffer]);
+
   return (
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-4">
@@ -153,7 +188,10 @@ export default function Draft() {
                 <div className="mt-4 border rounded-md p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">Trade Offer Composer</div>
-                    <div className="text-xs text-muted-foreground">{giveCount}/10 selected</div>
+                    <div className="flex items-center gap-2">
+                      {previewLabel && <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${previewLabel.chip}`}>{previewLabel.text}</span>}
+                      <div className="text-xs text-muted-foreground">{giveCount}/10 selected</div>
+                    </div>
                   </div>
                   <div className="space-y-2"><div className="text-xs text-muted-foreground">Picks you give</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{userFuturePicks.map((p) => { const checked = !!composeGive[p.overall]; const disable = !checked && giveCount >= 10; return <label key={p.overall} className={`flex items-center gap-2 text-sm ${disable ? "opacity-50" : ""}`}><input type="checkbox" checked={checked} disabled={disable} onChange={(e) => setComposeGive((s) => ({ ...s, [p.overall]: e.target.checked }))} /><span>O{p.overall} (R{p.round}P{p.pickInRound})</span></label>; })}</div></div>
                   <div className="space-y-2"><div className="text-xs text-muted-foreground">Ask for a pick back (optional)</div><select className="w-full border rounded px-2 py-1 text-sm" value={composeAskBack} onChange={(e) => setComposeAskBack(e.target.value === "NONE" ? "NONE" : Number(e.target.value))}><option value="NONE">None</option>{cpuFuturePicks.slice(0, 9).map((p) => <option key={p.overall} value={p.overall}>O{p.overall} (R{p.round}P{p.pickInRound})</option>)}</select></div>
@@ -168,14 +206,14 @@ export default function Draft() {
                 <div className="mt-4 grid gap-2">
                   {incoming.length ? (
                     incoming.map((o) => (
-                      <Card key={o.offerId} className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{o.note}</div><div className="text-xs text-muted-foreground">Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")}</div></div><div className="flex items-center gap-2"><Button onClick={() => acceptTrade(o.offerId)}>Accept</Button><Button variant="outline" onClick={() => declineOffer(o.offerId)}>Decline</Button></div></CardContent></Card>
+                      <Card key={o.offerId} className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{o.note}</div><div className="text-xs text-muted-foreground">Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")}</div></div><div className="flex items-center gap-2"><span className="rounded px-2 py-0.5 text-[11px] font-semibold bg-amber-600/15 text-amber-700">Close</span><Button onClick={() => acceptTrade(o.offerId)}>Accept</Button><Button variant="outline" onClick={() => declineOffer(o.offerId)}>Decline</Button></div></CardContent></Card>
                     ))
                   ) : (
                     <Card className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm">Incoming Offers</div><div className="text-xs text-muted-foreground">No incoming offers right now.</div></div><Button variant="outline" onClick={() => dispatch({ type: "DRAFT_SHOP" })}>Refresh</Button></CardContent></Card>
                   )}
 
                   {!!outgoing.length && (
-                    <Card className="border-dashed"><CardContent className="py-3"><div className="font-semibold text-sm">Last Sent</div>{outgoing.slice(0, 1).map((o) => <div key={o.offerId} className="mt-1 text-xs text-muted-foreground">{o.note} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")} · Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")}</div>)}</CardContent></Card>
+                    <Card className="border-dashed"><CardContent className="py-3"><div className="font-semibold text-sm">Last Sent</div>{outgoing.slice(0, 1).map((o) => { const q = labelUserOfferForUi({ offer: o }); const chip = q.label === "FAIR" ? "bg-green-600/15 text-green-700" : q.label === "CLOSE" ? "bg-amber-600/15 text-amber-700" : "bg-red-600/15 text-red-700"; return <div key={o.offerId} className="mt-2 flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs text-muted-foreground">{o.note} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")} · Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")}</div></div><span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold ${chip}`}>{q.label === "FAIR" ? "Fair" : q.label === "CLOSE" ? "Close" : "Bad"}</span></div>; })}</CardContent></Card>
                   )}
                 </div>
               )}
