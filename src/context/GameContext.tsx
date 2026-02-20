@@ -31,6 +31,8 @@ import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import { getGmTraits } from "@/engine/gmScouting";
 import { evalProspectForGm } from "@/engine/prospectEval";
+import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
+import { generateCombineResult } from "@/engine/prospectIntel";
 import type {
   CampSettings,
   CutDecision,
@@ -88,7 +90,14 @@ export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
   tagCenter: { applied?: TagApplied };
   rosterAudit: { cutDesignations: Record<string, "NONE" | "POST_JUNE_1"> };
-  combine: { results: ScoutingCombineResult[]; generated: boolean };
+  combine: { results: Record<string, any>; generated: boolean };
+  scouting: {
+    windowId: ScoutingWindowId;
+    budget: { total: number; spent: number; remaining: number; carryIn: number };
+    carryover: number;
+    intelByProspectId: Record<string, PlayerIntel>;
+    intelByFAId: Record<string, PlayerIntel>;
+  };
   tampering: { offers: FreeAgentOffer[] };
   freeAgency: {
     offers: FreeAgentOffer[];
@@ -443,6 +452,8 @@ export type GameAction =
   | { type: "TAG_REMOVE" }
   | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
+  | { type: "SCOUTING_WINDOW_INIT"; payload: { windowId: ScoutingWindowId } }
+  | { type: "SCOUTING_SPEND"; payload: { targetType: "PROSPECT" | "FA"; targetId: string; actionType: ScoutAction; prospect?: Prospect } }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "TAMPERING_INIT" }
@@ -546,7 +557,14 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
       rosterAudit: { cutDesignations: {} },
-      combine: { results: [], generated: false },
+      combine: { results: {}, generated: false },
+      scouting: {
+        windowId: "COMBINE",
+        budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
+        carryover: 0,
+        intelByProspectId: {},
+        intelByFAId: {},
+      },
       tampering: { offers: [] },
       freeAgency: {
         offers: [],
@@ -2829,18 +2847,66 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       return pushNews(next, `Restructure applied: ${Math.round(x / 1_000_000)}M converted to bonus.`);
     }
+    case "SCOUTING_WINDOW_INIT": {
+      const teamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+      const gm = getGmTraits(state.league.gmByTeamId[teamId]);
+      const budget = computeWindowBudget(gm, action.payload.windowId, state.offseasonData.scouting.carryover);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          scouting: {
+            ...state.offseasonData.scouting,
+            windowId: action.payload.windowId,
+            budget: { total: budget.total, spent: 0, remaining: budget.total, carryIn: budget.carryIn },
+          },
+        },
+      };
+    }
+
+    case "SCOUTING_SPEND": {
+      const scouting = state.offseasonData.scouting;
+      const budget = { ...scouting.budget };
+      const teamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+      const gm = getGmTraits(state.league.gmByTeamId[teamId]);
+      const windowKey = `${state.season}:${state.offseason.stepId}:${scouting.windowId}`;
+      if (action.payload.targetType === "PROSPECT") {
+        const intel = scouting.intelByProspectId[action.payload.targetId] ? { ...scouting.intelByProspectId[action.payload.targetId] } : freshIntel();
+        const res = applyScoutAction((k) => detRand(state.saveSeed, k), budget as any, intel, action.payload.actionType, gm, windowKey);
+        if (!res.ok) return state;
+        if (action.payload.prospect) updateRevealedTiers((k) => detRand(state.saveSeed, k), intel, action.payload.prospect);
+        return {
+          ...state,
+          offseasonData: {
+            ...state.offseasonData,
+            scouting: {
+              ...scouting,
+              budget,
+              carryover: budget.remaining,
+              intelByProspectId: { ...scouting.intelByProspectId, [action.payload.targetId]: intel },
+            },
+          },
+        };
+      }
+      const intel = scouting.intelByFAId[action.payload.targetId] ? { ...scouting.intelByFAId[action.payload.targetId] } : freshIntel();
+      const res = applyScoutAction((k) => detRand(state.saveSeed, k), budget as any, intel, action.payload.actionType, gm, windowKey);
+      if (!res.ok) return state;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          scouting: {
+            ...scouting,
+            budget,
+            carryover: budget.remaining,
+            intelByFAId: { ...scouting.intelByFAId, [action.payload.targetId]: intel },
+          },
+        },
+      };
+    }
+
     case "COMBINE_GENERATE": {
-      const results = draftBoard()
-        .slice(0, 80)
-        .map((p, i) => ({
-          id: p.id,
-          name: p.name,
-          pos: p.pos,
-          forty: num(DRAFT_ROWS[i]?.["40"], 4.75),
-          shuttle: num(DRAFT_ROWS[i]?.["Shuttle"], 4.35),
-          threeCone: num(DRAFT_ROWS[i]?.["ThreeCone"], 7.15),
-          grade: p.ras,
-        }));
+      const results = Object.fromEntries(draftBoard().slice(0, 220).map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, k), p)]));
       return { ...state, offseasonData: { ...state.offseasonData, combine: { results, generated: true } } };
     }
     case "TAMPERING_ADD_OFFER":
@@ -4103,7 +4169,14 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
         rosterAudit: { cutDesignations: {} },
-        combine: { results: [], generated: false },
+        combine: { results: {}, generated: false },
+      scouting: {
+        windowId: "COMBINE",
+        budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
+        carryover: 0,
+        intelByProspectId: {},
+        intelByFAId: {},
+      },
         tampering: { offers: [] },
         freeAgency: {
           offers: [],
@@ -4252,6 +4325,7 @@ function loadState(): GameState {
         tagCenter: { ...initial.offseasonData.tagCenter, ...migrated.offseasonData?.tagCenter },
         rosterAudit: { ...initial.offseasonData.rosterAudit, ...migrated.offseasonData?.rosterAudit, cutDesignations: { ...initial.offseasonData.rosterAudit.cutDesignations, ...(migrated.offseasonData?.rosterAudit?.cutDesignations ?? {}) } },
         combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
+        scouting: { ...initial.offseasonData.scouting, ...migrated.offseasonData?.scouting },
         tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
         freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
         preDraft: { ...initial.offseasonData.preDraft, ...migrated.offseasonData?.preDraft },
