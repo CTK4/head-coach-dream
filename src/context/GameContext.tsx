@@ -47,6 +47,17 @@ import {
   type GameType,
   type LeagueSchedule,
 } from "@/engine/schedule";
+import {
+  applySelection,
+  applyTrade,
+  buildUserTradeUpOffer,
+  cpuAdvanceUntilUser,
+  generateTradeOffers,
+  getDraftClass as getDraftClassFromSim,
+  initDraftSim,
+  submitUserTradeUpOffer,
+  type DraftSimState,
+} from "@/engine/draftSim";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -394,7 +405,11 @@ export type DraftState = {
   leaguePicks: DraftPick[];
   onClockTeamId?: string;
   withdrawnBoardIds: Record<string, true>;
-};
+} &
+  DraftSimState & {
+    rosterCountsByTeamBucket: Record<string, Record<string, number>>;
+    draftedCountsByTeamBucket: Record<string, Record<string, number>>;
+  };
 
 export type GameAction =
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
@@ -468,6 +483,12 @@ export type GameAction =
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" } }
   | { type: "DRAFT_INIT" }
+  | { type: "DRAFT_CPU_ADVANCE" }
+  | { type: "DRAFT_USER_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_SHOP" }
+  | { type: "DRAFT_ACCEPT_TRADE"; payload: { offerId: string } }
+  | { type: "DRAFT_SEND_TRADE_UP_OFFER"; payload: { giveOveralls: number[]; askBackOverall?: number | null } }
+  | { type: "DRAFT_CLEAR_TRADE_OFFERS" }
   | { type: "DRAFT_SIM_NEXT" }
   | { type: "DRAFT_SIM_TO_USER" }
   | { type: "DRAFT_SIM_ALL" }
@@ -601,6 +622,9 @@ function createInitialState(): GameState {
       leaguePicks: [],
       onClockTeamId: undefined,
       withdrawnBoardIds: {},
+      ...initDraftSim({ saveSeed, season: 2026, userTeamId: "MILWAUKEE_NORTHSHORE" }),
+      rosterCountsByTeamBucket: {},
+      draftedCountsByTeamBucket: {},
     },
     rookies: [],
     rookieContracts: {},
@@ -2339,6 +2363,29 @@ function computeAndStoreFiringMeter(state: GameState, week: number, winPct?: num
   };
 }
 
+
+function initDraftRosterCounts(state: GameState): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  const teams = getTeams().map((t) => String((t as any).teamId));
+  for (const teamId of teams) {
+    const players = getPlayers().filter((pl) => String((pl as any).teamId ?? "") === teamId);
+    const counts: Record<string, number> = {};
+    for (const pl of players) {
+      const pos = String((pl as any).pos ?? "").toUpperCase();
+      const bucket =
+        ["OT", "OG", "C"].includes(pos) ? "OL" :
+        ["DT", "NT"].includes(pos) ? "DL" :
+        ["DE"].includes(pos) ? "EDGE" :
+        ["MLB", "ILB", "OLB"].includes(pos) ? "LB" :
+        ["FS", "SS"].includes(pos) ? "S" :
+        pos;
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+    }
+    out[teamId] = counts;
+  }
+  return out;
+}
+
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
@@ -3369,48 +3416,170 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
-    case "DRAFT_INIT":
-      return ensureDraftInitialized(state);
-
-    case "DRAFT_SIM_NEXT": {
-      const s = ensureDraftInitialized(state);
-      if (s.draft.completed) return s;
-      const onClock = String(s.draft.onClockTeamId ?? "");
-      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
-      if (!onClock || onClock === userTeamId) return s;
-      const pid = cpuDraftPickProspectId(s, onClock);
-      return pid ? applyLeagueDraftPick(s, onClock, pid) : s;
+    case "DRAFT_INIT": {
+      const userTeamId = String(state.acceptedOffer?.teamId ?? "MILWAUKEE_NORTHSHORE");
+      const season = state.season;
+      const sim = initDraftSim({ saveSeed: state.saveSeed, season, userTeamId });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...sim,
+          rosterCountsByTeamBucket: initDraftRosterCounts(state),
+          draftedCountsByTeamBucket: {},
+        },
+      };
     }
 
-    case "DRAFT_SIM_TO_USER": {
-      let s = ensureDraftInitialized(state);
-      if (s.draft.completed) return s;
-      const userTeamId = String(s.acceptedOffer?.teamId ?? "");
-      if (!userTeamId) return s;
-      let guard = 0;
-      while (!s.draft.completed && String(s.draft.onClockTeamId ?? "") !== userTeamId && guard < 600) {
-        const onClock = String(s.draft.onClockTeamId ?? "");
-        const pid = cpuDraftPickProspectId(s, onClock);
-        if (!pid) break;
-        s = applyLeagueDraftPick(s, onClock, pid);
-        guard++;
-      }
-      return s;
+    case "DRAFT_CPU_ADVANCE": {
+      if (!state.draft || state.draft.complete) return state;
+      const res = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: state.draft,
+        prospects: getDraftClassFromSim(),
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket ?? {},
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket ?? {},
+      });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...res.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: res.draftedCountsByTeamBucket,
+        },
+      };
     }
 
-    case "DRAFT_SIM_ALL": {
-      let s = ensureDraftInitialized(state);
-      if (s.draft.completed) return s;
-      let guard = 0;
-      while (!s.draft.completed && guard < 4000) {
-        const onClock = String(s.draft.onClockTeamId ?? "");
-        if (!onClock) break;
-        const pid = cpuDraftPickProspectId(s, onClock);
-        if (!pid) break;
-        s = applyLeagueDraftPick(s, onClock, pid);
-        guard++;
+    case "DRAFT_SHOP": {
+      const offers = generateTradeOffers({ saveSeed: state.saveSeed, sim: state.draft, count: 3 });
+      return { ...state, draft: { ...state.draft, tradeOffers: offers } };
+    }
+
+    case "DRAFT_ACCEPT_TRADE": {
+      const offer = state.draft.tradeOffers.find((o) => o.offerId === action.payload.offerId);
+      if (!offer) return state;
+      const sim = applyTrade(state.draft, offer);
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: sim,
+        prospects: getDraftClassFromSim(),
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+      });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+        },
+      };
+    }
+
+    case "DRAFT_SEND_TRADE_UP_OFFER": {
+      const slot = state.draft.slots[state.draft.cursor];
+      if (!slot || slot.teamId === state.draft.userTeamId) return state;
+
+      const offer = buildUserTradeUpOffer({
+        saveSeed: state.saveSeed,
+        sim: state.draft,
+        giveOveralls: action.payload.giveOveralls,
+        askBackOverall: action.payload.askBackOverall ?? null,
+      });
+      if (!offer) return { ...state, uiToast: "Invalid offer." };
+
+      const outcome = submitUserTradeUpOffer({ saveSeed: state.saveSeed, sim: state.draft, offer });
+      if (outcome.status === "DECLINED") {
+        return { ...state, draft: { ...state.draft, tradeOffers: [offer, ...state.draft.tradeOffers] }, uiToast: outcome.message };
       }
-      return s;
+      if (outcome.status === "COUNTERED") {
+        return {
+          ...state,
+          draft: { ...state.draft, tradeOffers: [outcome.counter, offer, ...state.draft.tradeOffers] },
+          uiToast: outcome.message,
+        };
+      }
+
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: outcome.appliedSim,
+        prospects: getDraftClassFromSim(),
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+      });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+          tradeOffers: [offer, ...state.draft.tradeOffers],
+        },
+        uiToast: outcome.message,
+      };
+    }
+
+    case "DRAFT_CLEAR_TRADE_OFFERS": {
+      return { ...state, draft: { ...state.draft, tradeOffers: [] } };
+    }
+
+    case "DRAFT_USER_PICK": {
+      if (state.draft.complete) return state;
+      const slot = state.draft.slots[state.draft.cursor];
+      if (!slot || slot.teamId !== state.draft.userTeamId) return state;
+
+      const p = getDraftClassFromSim().find((x) => x.prospectId === String(action.payload.prospectId));
+      if (!p || state.draft.takenProspectIds[p.prospectId]) return state;
+
+      const idx = state.rookies.length + 1;
+      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+      const rookie: RookiePlayer = {
+        playerId,
+        prospectId: p.prospectId,
+        name: p.name,
+        pos: p.pos,
+        age: p.age,
+        ovr: rookieOvrFromRank(p.rank),
+        dev: rookieDevFromTier({ DraftTier: p.tier }),
+        apy: rookieApyFromRank(p.rank),
+        teamId: state.draft.userTeamId,
+        scoutOvr: rookieOvrFromRank(p.rank),
+        scoutDev: rookieDevFromTier({ DraftTier: p.tier }),
+        scoutConf: 80,
+      };
+
+      const sim = applySelection(state.draft, slot, p);
+      const withRookie: GameState = {
+        ...state,
+        rookies: [...state.rookies, rookie],
+        rookieContracts: { ...state.rookieContracts, [rookie.playerId]: rookieContractFromApy(state.season + 1, rookie.apy) },
+        draft: {
+          ...state.draft,
+          ...sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+        },
+      };
+
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: withRookie.saveSeed,
+        state: withRookie.draft,
+        prospects: getDraftClassFromSim(),
+        rosterCountsByTeamBucket: withRookie.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: withRookie.draft.draftedCountsByTeamBucket,
+      });
+      return {
+        ...withRookie,
+        draft: {
+          ...withRookie.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: withRookie.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+        },
+      };
     }
 
     case "DRAFT_PICK": {
