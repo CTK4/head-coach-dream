@@ -1,112 +1,43 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { getCpuProspectEval } from "@/context/GameContext";
+import { getDraftClass as getDraftClassFromSim } from "@/engine/draftSim";
+import { IntelMeters } from "@/components/IntelMeters";
 
 export default function Draft() {
   const { state, dispatch } = useGame();
+  const [pos, setPos] = useState("ALL");
+  const sim = state.draft;
+  const scouting = state.offseasonData.scouting;
 
-  const board = useMemo(
-    () => (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : []),
-    [state.offseasonData.draft.board],
-  );
+  useEffect(() => {
+    if (!sim.started) dispatch({ type: "DRAFT_INIT" });
+    else if (!sim.complete && sim.slots[sim.cursor]?.teamId !== sim.userTeamId) dispatch({ type: "DRAFT_CPU_ADVANCE" });
+  }, [dispatch, sim]);
 
-  const picks = state.offseasonData.draft.picks;
-  const available = useMemo(() => board.filter((p) => !picks.some((x) => x.id === p.id)).slice(0, 80), [board, picks]);
+  const available = useMemo(() => {
+    let list = getDraftClassFromSim().filter((p) => !sim.takenProspectIds[p.prospectId]);
+    if (pos !== "ALL") list = list.filter((p) => p.pos === pos);
+    return list;
+  }, [sim.takenProspectIds, pos]);
 
-  const pick = (id: string) => dispatch({ type: "DRAFT_PICK", payload: { prospectId: id } });
-  const completeStep = () => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "DRAFT" } });
-  const next = () => dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
-
-  const userTeamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
-  const cpuTeamIdForPreview = Object.keys(state.league.gmByTeamId).find((t) => t && t !== userTeamId);
+  const onClock = sim.slots[sim.cursor]?.teamId === sim.userTeamId;
 
   return (
-    <div className="p-4 md:p-8 space-y-4">
-      <Card>
-        <CardContent className="p-6 flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="text-xl font-bold">Draft</div>
-            <div className="text-sm text-muted-foreground">Choose 7 picks from the board.</div>
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between"><h1 className="text-xl font-bold">DRAFT</h1><div>{onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div></div>
+      <div className="flex gap-2 flex-wrap">{["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => <button key={x} className="px-2 py-1 border rounded" onClick={() => setPos(x)}>{x}</button>)}</div>
+      {available.slice(0, 80).map((p) => (
+        <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">{p.name} ({p.pos})</div>
+            <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
           </div>
-          <Badge variant="outline">Step 6</Badge>
-        </CardContent>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold">Available</div>
-              <Badge variant="outline">{available.length}</Badge>
-            </div>
-
-            <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
-              {available.map((p, idx) => {
-                const cpuPreview = cpuTeamIdForPreview ? getCpuProspectEval(state, cpuTeamIdForPreview, p) : null;
-
-                return (
-                  <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">
-                        #{idx + 1} {p.name} <span className="text-muted-foreground">({p.pos})</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Consensus {p.grade} · RAS {p.ras}
-                        {cpuPreview ? <> · CPU GM {cpuPreview.roundBand} ({cpuPreview.value})</> : null}
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => pick(p.id)} disabled={picks.length >= 7}>
-                      Pick
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold">Your Picks</div>
-              <Badge variant="secondary">{picks.length}/7</Badge>
-            </div>
-            <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
-              {picks.length ? (
-                picks.map((p, idx) => (
-                  <div key={p.id} className="border rounded-md px-3 py-2">
-                    <div className="font-medium">
-                      R{idx + 1}: {p.name} <span className="text-muted-foreground">({p.pos})</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Consensus {p.grade} · RAS {p.ras} · Interview {p.interview}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-muted-foreground">No picks yet.</div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent className="p-6 flex items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">{picks.length >= 7 ? "Draft complete." : "Make 7 picks to finish."}</div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={completeStep} disabled={picks.length < 7}>
-              Complete Step
-            </Button>
-            <Button onClick={next} disabled={!state.offseason.stepsComplete.DRAFT}>
-              Next →
-            </Button>
+          <div className="flex flex-col gap-2">
+            <button disabled={!onClock} className="px-2 py-1 border rounded disabled:opacity-50" onClick={() => dispatch({ type: "DRAFT_USER_PICK", payload: { prospectId: p.prospectId } })}>Draft Player</button>
+            <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "PROSPECT", targetId: p.prospectId, actionType: "FILM_DEEP", prospect: { id: p.prospectId, name: p.name, pos: p.pos, archetype: "Prospect", grade: 70, ras: 50, interview: 50 } } })}>Deep Scout (-5)</button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      ))}
     </div>
   );
 }
