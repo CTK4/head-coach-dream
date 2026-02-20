@@ -11,7 +11,7 @@ import Offers from "./pages/Offers";
 import CoordinatorHiring from "./pages/CoordinatorHiring";
 import Hub from "./pages/Hub";
 import Roster from "./pages/Roster";
-import Draft from "./pages/Draft";
+import Draft from "@/pages/hub/offseason/Draft";
 import Playcall from "./pages/Playcall";
 import NotFound from "./pages/NotFound";
 import HubLayout from "./pages/hub/HubLayout";

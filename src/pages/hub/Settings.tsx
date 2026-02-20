@@ -20,6 +20,7 @@ type UserSettings = {
   confirmAutoAdvance: boolean;
   reduceMotion: boolean;
   theme: Theme;
+  useTop51CapRule: boolean;
 };
 
 const SETTINGS_KEY = "hcd:settings";
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   confirmAutoAdvance: true,
   reduceMotion: false,
   theme: "DARK",
+  useTop51CapRule: false,
 };
 
 function readSettings(): UserSettings {
@@ -213,6 +215,13 @@ export default function SettingsPage() {
                 title="Confirm Auto-Advance"
                 description="Require confirmation before advancing to the next phase."
                 right={<Switch checked={settings.confirmAutoAdvance} onCheckedChange={(checked) => update({ confirmAutoAdvance: checked })} />}
+              />
+
+              <SettingRow
+                icon={<UtilityIcon name="Tag" className="h-5 w-5" />}
+                title="Top-51 Cap Rule (Offseason)"
+                description="Uses NFL-style Top-51 cap accounting during the offseason. During the regular season, cap is always calculated using all players (hard-locked)."
+                right={<Switch checked={settings.useTop51CapRule} onCheckedChange={(checked) => update({ useTop51CapRule: checked })} />}
               />
             </div>
 

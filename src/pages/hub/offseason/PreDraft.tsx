@@ -1,90 +1,104 @@
-import { useMemo } from "react";
-import { useGame } from "@/context/GameContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import { HubShell } from "@/components/franchise-hub/HubShell";
+import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { useGame } from "@/context/GameContext";
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 export default function PreDraft() {
   const { state, dispatch } = useGame();
+  const [posFilter, setPosFilter] = useState<string>("ALL");
 
-  const board = useMemo(() => {
-    const b = state.offseasonData.preDraft.board.length ? state.offseasonData.preDraft.board : state.offseasonData.draft.board;
-    return (b.length ? b : []).slice(0, 90);
-  }, [state.offseasonData.preDraft.board, state.offseasonData.draft.board]);
+  const pre = (state as any).offseasonData?.preDraft ?? {};
+  const prospects: any[] = Array.isArray(pre.prospects) ? pre.prospects : [];
+  const board: any[] = Array.isArray(pre.board) ? pre.board : [];
 
-  const visits = state.offseasonData.preDraft.visits;
-  const workouts = state.offseasonData.preDraft.workouts;
-  const visitsUsed = Object.values(visits).filter(Boolean).length;
+  const list = useMemo(() => {
+    const merged = board.length ? board : prospects;
+    const filtered = posFilter === "ALL" ? merged : merged.filter((p) => String(p.pos ?? "").toUpperCase() === posFilter);
+    return filtered
+      .slice()
+      .sort((a, b) => Number(b.grade ?? 0) - Number(a.grade ?? 0))
+      .slice(0, 80);
+  }, [board, prospects, posFilter]);
 
-  const toggleVisit = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
-  const toggleWorkout = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_WORKOUT", payload: { prospectId: id } });
-  const completeStep = () => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "PRE_DRAFT" } });
-  const next = () => dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
+  function completeStep() {
+    dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "PRE_DRAFT" } } as any);
+  }
+
+  function next() {
+    dispatch({ type: "OFFSEASON_ADVANCE_STEP" } as any);
+  }
 
   return (
-    <div className="p-4 md:p-8 space-y-4">
-      <Card>
-        <CardContent className="p-6 flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="text-xl font-bold">Pre-Draft</div>
-            <div className="text-sm text-muted-foreground">Top 30 visits / private workouts.</div>
+    <HubShell title="PRE-DRAFT">
+      <div className="space-y-4 overflow-x-hidden">
+        <HubPageCard
+          title="Pre-Draft Board"
+          subtitle="Finalize your board and scout priorities before Draft day."
+          right={
+            <>
+              <Badge variant="outline">{list.length} Shown</Badge>
+              <Button variant="outline" onClick={completeStep}>
+                Complete Step
+              </Button>
+              <Button
+                onClick={next}
+                disabled={!state.offseason?.stepsComplete?.PRE_DRAFT && !(state as any).offseason?.stepsComplete?.PRE_DRAFT}
+              >
+                Continue →
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((p) => (
+              <Button key={p} size="sm" variant={posFilter === p ? "default" : "secondary"} onClick={() => setPosFilter(p)}>
+                {p}
+              </Button>
+            ))}
           </div>
-          <Badge variant="outline">Step 5</Badge>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">Board</div>
-            <Badge variant="outline">{board.length}</Badge>
-          </div>
-          <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
-            {board.map((p, idx) => {
-              const v = !!visits[p.id];
-              const w = !!workouts[p.id];
-              const workoutEligible = ["QB", "WR", "DL", "DB"].includes(p.pos);
-              return (
-                <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      #{idx + 1} {p.name} <span className="text-muted-foreground">({p.pos})</span>
+
+          <Separator className="my-3 bg-slate-300/15" />
+
+          <div className="max-h-[560px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
+            {list.length === 0 ? (
+              <div className="text-sm text-slate-200/70">No prospects available.</div>
+            ) : (
+              list.map((p, idx) => {
+                const name = String(p.name ?? p.fullName ?? "Prospect");
+                const pos = String(p.pos ?? "UNK");
+                const tier = clamp(Number(p.tier ?? 60), 1, 99);
+                const grade = Number.isFinite(Number(p.grade)) ? Number(p.grade).toFixed(0) : "—";
+
+                return (
+                  <div
+                    key={String(p.id ?? p.playerId ?? `${idx}-${name}`)}
+                    className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-300/15 bg-slate-950/20 p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-100">
+                        #{idx + 1} {name} <span className="text-slate-200/70">({pos})</span>
+                      </div>
+                      <div className="truncate text-xs text-slate-200/70">
+                        Grade {grade} · {p.archetype ? `Archetype ${p.archetype}` : "Archetype —"}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Grade {p.grade} · RAS {p.ras} · Interview {p.interview} · {p.archetype}
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Tier {tier}</Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant={v ? "default" : "outline"} onClick={() => toggleVisit(p.id)} disabled={!v && visitsUsed >= 30}>
-                      {v ? "Visited" : "Visit"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={w ? "default" : "outline"}
-                      onClick={() => toggleWorkout(p.id)}
-                      disabled={!workoutEligible}
-                    >
-                      {w ? "Workout" : "Set Workout"}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-6 flex items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">Visits/workouts are saved; complete when ready.</div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={completeStep}>
-              Complete Step
-            </Button>
-            <Button onClick={next} disabled={!state.offseason.stepsComplete.PRE_DRAFT}>
-              Next →
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        </HubPageCard>
+      </div>
+    </HubShell>
   );
 }

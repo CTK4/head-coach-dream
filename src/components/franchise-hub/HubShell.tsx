@@ -15,6 +15,8 @@ const warnedLogoKeys = new Set<string>();
 
 const NAV_LAST_ROUTE_KEY = "hcd:lastRoute";
 const NAV_PREV_ROUTE_KEY = "hcd:prevRoute";
+const SETTINGS_KEY = "hcd:settings";
+const OFFSEASON_CAREER_STAGES = new Set(["HIRE_STAFF", "ROSTER_REVIEW", "COMBINE", "PRE_DRAFT", "DRAFT", "OFFSEASON"]);
 
 const stageTabs = [
   { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
@@ -26,6 +28,21 @@ const stageTabs = [
 
 function resolveUserTeamId(state: any): string | undefined {
   return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
+}
+
+function readUseTop51Setting(): boolean {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { useTop51CapRule?: boolean };
+    return Boolean(parsed.useTop51CapRule);
+  } catch {
+    return false;
+  }
+}
+
+function isOffseasonState(state: any): boolean {
+  return OFFSEASON_CAREER_STAGES.has(String(state?.careerStage ?? "").toUpperCase());
 }
 
 function formatMoneyM(n: number) {
@@ -192,6 +209,20 @@ export function HubShell({
 
   useRouteMemory(location.pathname);
 
+  useEffect(() => {
+    try {
+      document.documentElement.scrollLeft = 0;
+      document.body.scrollLeft = 0;
+    } catch {
+      // ignore
+    }
+    try {
+      window.scrollTo({ left: 0, top: window.scrollY, behavior: "instant" as ScrollBehavior });
+    } catch {
+      window.scrollTo(0, window.scrollY);
+    }
+  }, [location.pathname]);
+
   const teamId = resolveUserTeamId(state);
   const team = teamId ? getTeamById(teamId) : undefined;
 
@@ -200,7 +231,9 @@ export function HubShell({
   const capRoom = useMemo(() => {
     if (!teamId) return state.finances?.capSpace ?? 0;
     try {
-      return computeCapLedger(state as any, String(teamId), state.finances?.postJune1Sim).capSpace;
+      const wantsTop51 = readUseTop51Setting();
+      const applyTop51 = wantsTop51 && isOffseasonState(state);
+      return computeCapLedger(state as any, String(teamId), { useTop51: applyTop51 }).capSpace;
     } catch {
       return state.finances?.capSpace ?? 0;
     }
@@ -226,7 +259,7 @@ export function HubShell({
   }
 
   return (
-    <section className={`relative p-2 md:p-4 ${HUB_BG}`}>
+    <section className={`relative overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 

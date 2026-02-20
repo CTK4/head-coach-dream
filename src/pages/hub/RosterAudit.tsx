@@ -2,19 +2,18 @@ import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { buildCapTable } from "@/engine/contractMath";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HubShell } from "@/components/franchise-hub/HubShell";
+import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { HubShell } from "@/components/franchise-hub/HubShell";
 import { PlayerStatusIcons, StatusLegend } from "@/components/franchise-hub/PlayerStatusUI";
 
 function money(n: number) {
-  const m = n / 1_000_000;
-  const abs = Math.abs(m);
-  const s = abs >= 10 ? `${Math.round(m)}M` : `${Math.round(m * 10) / 10}M`;
-  return `${m < 0 ? "-" : ""}$${s}`;
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "$0.00M";
+  return `$${(v / 1_000_000).toFixed(2)}M`;
 }
 
 export default function RosterAudit() {
@@ -26,99 +25,88 @@ export default function RosterAudit() {
 
   const players = useMemo(() => {
     if (!teamId) return [];
-    return getEffectivePlayersByTeam(state, teamId);
+    return getEffectivePlayersByTeam(state, String(teamId));
   }, [state, teamId]);
 
-  const selected = useMemo(() => players.find((p) => p.playerId === playerId) ?? null, [players, playerId]);
+  const selected = useMemo(() => players.find((p) => String(p.playerId) === String(playerId)) ?? null, [players, playerId]);
   const capTable = useMemo(() => buildCapTable(state), [state]);
 
   return (
     <HubShell title="ROSTER REVIEW">
-      <div className="space-y-4">
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardHeader className="space-y-3">
-            <CardTitle className="flex flex-col gap-2 text-slate-100 md:flex-row md:items-center md:justify-between">
-              <span>Roster Audit Dashboard</span>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-200/70">Players</span>
-                  <Badge variant="secondary">{players.length}</Badge>
-                </div>
-                <Button onClick={() => setRestructureOpen(true)} disabled={!selected}>
-                  Restructure
-                </Button>
+      <div className="space-y-4 overflow-x-hidden">
+        <HubPageCard
+          title="Roster Audit Dashboard"
+          subtitle="Review contracts, cap impact, restructures, cut projections — with status icons."
+          right={
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-200/70">Players</span>
+                <Badge variant="secondary">{players.length}</Badge>
               </div>
-            </CardTitle>
+              <Button onClick={() => setRestructureOpen(true)} disabled={!selected}>
+                Restructure
+              </Button>
+            </>
+          }
+        >
+          <StatusLegend />
+        </HubPageCard>
 
-            <div className="text-sm text-slate-200/70">Review contracts, cap impact, restructures, cut projections — with status icons.</div>
+        <HubPageCard
+          title="Players"
+          subtitle={<span className="text-slate-200/70">Tap a player to view contract summary. Tap the Issue icon for details.</span>}
+          right={<Badge variant="outline">{players.length} total</Badge>}
+        >
+          <Separator className="my-3 bg-slate-300/15" />
 
-            <StatusLegend />
-          </CardHeader>
-        </Card>
+          <div className="grid max-h-[560px] gap-2 overflow-y-auto overflow-x-hidden pr-1">
+            {players.map((p: any) => {
+              const summary = getContractSummaryForPlayer(state, p.playerId);
+              const apy = summary?.apy ?? summary?.salary ?? 0;
 
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardContent className="space-y-3 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-slate-100">Players</div>
-              <Badge variant="outline">{players.length} total</Badge>
-            </div>
-
-            <div className="grid gap-2">
-              {players.map((p: any) => {
-                const apy = getContractSummaryForPlayer(state, p.playerId).apy;
-
-                return (
-                  <button
-                    key={p.playerId}
-                    type="button"
-                    className={`w-full rounded-lg border p-3 text-left transition ${
-                      p.playerId === playerId
-                        ? "border-emerald-400/50 bg-emerald-900/20"
-                        : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"
-                    }`}
-                    onClick={() => setPlayerId(p.playerId)}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-[240px]">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-semibold text-slate-100">
-                            {p.name} <span className="text-slate-200/70">({normalizePos(p.pos)})</span>
-                          </div>
-
-                          <PlayerStatusIcons player={p} />
+              return (
+                <button
+                  key={String(p.playerId)}
+                  type="button"
+                  className={`w-full min-w-0 rounded-lg border p-3 text-left transition ${
+                    String(p.playerId) === String(playerId)
+                      ? "border-emerald-400/50 bg-emerald-900/20"
+                      : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"
+                  }`}
+                  onClick={() => setPlayerId(String(p.playerId))}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0 min-w-[240px]">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="truncate font-semibold text-slate-100">
+                          {p.name ?? p.fullName ?? "Player"} <span className="text-slate-200/70">({normalizePos(String(p.pos ?? "UNK"))})</span>
                         </div>
-
-                        <div className="text-xs text-slate-200/70">{money(apy)} APY</div>
+                        <PlayerStatusIcons player={p} />
                       </div>
-
-                      <div className="text-xs text-slate-200/70">{p.devTrait ?? ""}</div>
+                      <div className="text-xs text-slate-200/70">{money(apy)} APY</div>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="border-slate-300/15 bg-slate-950/35">
-          <CardContent className="space-y-4 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-slate-100">Cap Table</div>
-              <Badge variant="secondary">Current</Badge>
-            </div>
-            <Separator className="bg-slate-300/15" />
-            <pre className="whitespace-pre-wrap rounded-lg border border-slate-300/15 bg-slate-950/30 p-3 text-xs text-slate-100">
-              {JSON.stringify(capTable, null, 2)}
-            </pre>
-          </CardContent>
-        </Card>
+                    <div className="text-xs text-slate-200/70">{p.devTrait ?? ""}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </HubPageCard>
+
+        <HubPageCard title="Cap Table" subtitle="Debug view (temporary).">
+          <Separator className="my-3 bg-slate-300/15" />
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg border border-slate-300/15 bg-slate-950/30 p-3 text-xs text-slate-100">
+            {JSON.stringify(capTable, null, 2)}
+          </pre>
+        </HubPageCard>
 
         <Dialog open={restructureOpen} onOpenChange={setRestructureOpen}>
           <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
             <DialogHeader>
               <DialogTitle>Restructure</DialogTitle>
             </DialogHeader>
-            <div className="text-sm text-slate-200/70">Keep existing restructure logic/UI here.</div>
+            <div className="text-sm text-slate-200/70">Hook your restructure UI here.</div>
             <Button onClick={() => setRestructureOpen(false)}>Close</Button>
           </DialogContent>
         </Dialog>
