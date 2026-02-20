@@ -33,14 +33,16 @@ export default function Draft() {
   const upcoming = useMemo(() => upcomingUserPickSlots(state.draft, 8), [state.draft]);
   const recent = useMemo(() => (state.draft.selections ?? []).slice(-10).reverse(), [state.draft.selections]);
 
-  const userFuturePicks = useMemo(
-    () => state.draft.slots.slice(state.draft.cursor).filter((p) => p.teamId === state.draft.userTeamId).slice(0, 12),
-    [state.draft.cursor, state.draft.slots, state.draft.userTeamId],
-  );
+  const userFuturePicks = useMemo(() => {
+    return state.draft.slots
+      .slice(state.draft.cursor)
+      .filter((p) => p.teamId === state.draft.userTeamId)
+      .slice(0, 32);
+  }, [state.draft.cursor, state.draft.slots, state.draft.userTeamId]);
 
   const cpuFuturePicks = useMemo(() => {
     if (!slot) return [];
-    return state.draft.slots.slice(state.draft.cursor).filter((p) => p.teamId === slot.teamId && p.overall > slot.overall).slice(0, 8);
+    return state.draft.slots.slice(state.draft.cursor).filter((p) => p.teamId === slot.teamId && p.overall > slot.overall).slice(0, 32);
   }, [slot, state.draft.cursor, state.draft.slots]);
 
   const submitPick = () => {
@@ -61,12 +63,17 @@ export default function Draft() {
     setComposeAskBack(cpuFuturePicks[0]?.overall ?? "NONE");
   };
 
+  const giveCount = Object.values(composeGive).filter(Boolean).length;
+
   const sendOffer = () => {
     const giveOveralls = Object.entries(composeGive)
       .filter(([, v]) => v)
       .map(([k]) => Number(k))
       .sort((a, b) => a - b);
-    if (!giveOveralls.length || !window.confirm("Send this offer?")) return;
+    if (!giveOveralls.length) return;
+    if (giveOveralls.length > 10) return;
+
+    if (!window.confirm("Send this offer?")) return;
     dispatch({
       type: "DRAFT_SEND_TRADE_UP_OFFER",
       payload: { giveOveralls, askBackOverall: composeAskBack === "NONE" ? null : composeAskBack },
@@ -78,6 +85,8 @@ export default function Draft() {
     if (!window.confirm("Accept this trade?")) return;
     dispatch({ type: "DRAFT_ACCEPT_TRADE", payload: { offerId } });
   };
+
+  const declineOffer = (offerId: string) => dispatch({ type: "DRAFT_DECLINE_OFFER", payload: { offerId } });
 
   const incoming = (state.draft.tradeOffers ?? []).filter((o) => o.source === "INCOMING");
   const outgoing = (state.draft.tradeOffers ?? []).filter((o) => o.source === "OUTGOING");
@@ -138,29 +147,39 @@ export default function Draft() {
                 <Button onClick={submitPick} disabled={!isUserOnClock || !selectedId}>Submit Pick</Button>
                 <Button variant="outline" onClick={shop} disabled={!slot || state.draft.complete}>{isUserOnClock ? "Shop Pick" : "Trade Up?"}</Button>
                 {!isUserOnClock && <Button variant="secondary" onClick={openComposer} disabled={!slot || state.draft.complete}>Send Offer</Button>}
-                {!!state.draft.tradeOffers.length && <Button variant="ghost" onClick={() => dispatch({ type: "DRAFT_CLEAR_TRADE_OFFERS" })}>Clear</Button>}
               </div>
 
               {composeOpen && !isUserOnClock && slot && (
                 <div className="mt-4 border rounded-md p-3 space-y-3">
-                  <div className="text-sm font-semibold">Trade Offer Composer</div>
-                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Picks you give</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{userFuturePicks.map((p) => <label key={p.overall} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!composeGive[p.overall]} onChange={(e) => setComposeGive((s) => ({ ...s, [p.overall]: e.target.checked }))} /><span>O{p.overall} (R{p.round}P{p.pickInRound})</span></label>)}</div></div>
-                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Ask for a pick back (optional)</div><select className="w-full border rounded px-2 py-1 text-sm" value={composeAskBack} onChange={(e) => setComposeAskBack(e.target.value === "NONE" ? "NONE" : Number(e.target.value))}><option value="NONE">None</option>{cpuFuturePicks.map((p) => <option key={p.overall} value={p.overall}>O{p.overall} (R{p.round}P{p.pickInRound})</option>)}</select></div>
-                  <div className="flex items-center gap-2"><Button onClick={sendOffer}>Send</Button><Button variant="outline" onClick={() => setComposeOpen(false)}>Cancel</Button></div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Trade Offer Composer</div>
+                    <div className="text-xs text-muted-foreground">{giveCount}/10 selected</div>
+                  </div>
+                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Picks you give</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{userFuturePicks.map((p) => { const checked = !!composeGive[p.overall]; const disable = !checked && giveCount >= 10; return <label key={p.overall} className={`flex items-center gap-2 text-sm ${disable ? "opacity-50" : ""}`}><input type="checkbox" checked={checked} disabled={disable} onChange={(e) => setComposeGive((s) => ({ ...s, [p.overall]: e.target.checked }))} /><span>O{p.overall} (R{p.round}P{p.pickInRound})</span></label>; })}</div></div>
+                  <div className="space-y-2"><div className="text-xs text-muted-foreground">Ask for a pick back (optional)</div><select className="w-full border rounded px-2 py-1 text-sm" value={composeAskBack} onChange={(e) => setComposeAskBack(e.target.value === "NONE" ? "NONE" : Number(e.target.value))}><option value="NONE">None</option>{cpuFuturePicks.slice(0, 9).map((p) => <option key={p.overall} value={p.overall}>O{p.overall} (R{p.round}P{p.pickInRound})</option>)}</select></div>
+                  <div className="flex items-center gap-2"><Button onClick={sendOffer} disabled={giveCount === 0 || giveCount > 10}>Send</Button><Button variant="outline" onClick={() => setComposeOpen(false)}>Cancel</Button></div>
+                  <div className="text-xs text-muted-foreground">
+                    Counters expire when the on-clock pick changes.
+                  </div>
                 </div>
               )}
 
-              {!!incoming.length && (
+              {!isUserOnClock && (
                 <div className="mt-4 grid gap-2">
-                  {incoming.map((o) => (
-                    <Card key={o.offerId} className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{o.direction === "DOWN" ? "TRADE DOWN" : "TRADE UP"} · {o.note}</div><div className="text-xs text-muted-foreground">Receive: {o.receive.map((p) => `O${p.overall}(R${p.round}P${p.pickInRound})`).join(", ")} · Give: {o.give.map((p) => `O${p.overall}(R${p.round}P${p.pickInRound})`).join(", ")}</div></div><Button onClick={() => acceptTrade(o.offerId)}>Accept</Button></CardContent></Card>
-                  ))}
+                  {incoming.length ? (
+                    incoming.map((o) => (
+                      <Card key={o.offerId} className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{o.note}</div><div className="text-xs text-muted-foreground">Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")}</div></div><div className="flex items-center gap-2"><Button onClick={() => acceptTrade(o.offerId)}>Accept</Button><Button variant="outline" onClick={() => declineOffer(o.offerId)}>Decline</Button></div></CardContent></Card>
+                    ))
+                  ) : (
+                    <Card className="border-dashed"><CardContent className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="font-semibold text-sm">Incoming Offers</div><div className="text-xs text-muted-foreground">No incoming offers right now.</div></div><Button variant="outline" onClick={() => dispatch({ type: "DRAFT_SHOP" })}>Refresh</Button></CardContent></Card>
+                  )}
+
+                  {!!outgoing.length && (
+                    <Card className="border-dashed"><CardContent className="py-3"><div className="font-semibold text-sm">Last Sent</div>{outgoing.slice(0, 1).map((o) => <div key={o.offerId} className="mt-1 text-xs text-muted-foreground">{o.note} · Give: {o.give.map((p) => `O${p.overall}`).join(", ")} · Receive: {o.receive.map((p) => `O${p.overall}`).join(", ")}</div>)}</CardContent></Card>
+                  )}
                 </div>
               )}
 
-              {!!outgoing.length && (
-                <Card className="mt-4 border-dashed"><CardContent className="py-3"><div className="font-semibold text-sm">Last Sent Offer</div><div className="mt-1 text-xs text-muted-foreground">{outgoing[0].note} · Give: {outgoing[0].give.map((p) => `O${p.overall}`).join(", ")} · Receive: {outgoing[0].receive.map((p) => `O${p.overall}`).join(", ")}</div></CardContent></Card>
-              )}
             </CardContent>
           </Card>
 
