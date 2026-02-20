@@ -2,6 +2,7 @@ import type { Prospect } from "@/context/GameContext";
 import type { GmScoutTraits } from "@/engine/gmScouting";
 import { hiddenIntelForProspect } from "@/engine/prospectIntel";
 import type { PlayerIntel } from "@/engine/scoutingCapacity";
+import type { ProspectScoutProfile } from "@/engine/scouting/types";
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
@@ -18,9 +19,14 @@ export function valueToRoundBand(v: number) {
   return "7th/UDFA";
 }
 
-function computeRiskSignal(detRand: (key: string) => number, prospect: Prospect, intel?: PlayerIntel) {
+function computeRiskSignal(detRand: (key: string) => number, prospect: Prospect, intel?: PlayerIntel | ProspectScoutProfile) {
+  if (intel?.revealed?.medicalTier === "BLACK" || intel?.revealed?.characterTier === "BLACK") return 1;
+  if (intel?.revealed?.medicalTier === "RED" || intel?.revealed?.characterTier === "RED") return 0.75;
+  if (intel?.revealed?.medicalTier === "ORANGE" || intel?.revealed?.characterTier === "ORANGE") return 0.45;
+  if (intel?.revealed?.medicalTier === "YELLOW" || intel?.revealed?.characterTier === "YELLOW") return 0.2;
+  if (intel?.revealed?.medicalTier || intel?.revealed?.characterTier) return 0.08;
   const hidden = hiddenIntelForProspect(detRand, prospect);
-  return intel?.revealed?.medicalTier || intel?.revealed?.characterTier ? hidden.riskSignal : hidden.riskSignal * 0.35;
+  return hidden.riskSignal * 0.35;
 }
 
 function computeSignals(detRand: (key: string) => number, prospect: Prospect) {
@@ -41,7 +47,7 @@ export function evalProspectForGm(args: {
   spentPoints: number;
   teamNeedAtPos01: number;
   detRand?: (key: string) => number;
-  intel?: PlayerIntel;
+  intel?: PlayerIntel | ProspectScoutProfile;
 }) {
   const { prospect, gm, seedRand, spentPoints, teamNeedAtPos01 } = args;
   const det = args.detRand ?? ((k: string) => seedRand() + (k.length % 7) * 0.001);

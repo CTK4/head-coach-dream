@@ -20,9 +20,7 @@ import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
 import FreeAgency from "./pages/hub/FreeAgency";
 import ResignPlayers from "./pages/hub/ResignPlayers";
-import Combine from "./pages/hub/Combine";
 import Tampering from "./pages/hub/Tampering";
-import PreDraft from "./pages/hub/PreDraft";
 import DraftResults from "@/pages/hub/DraftResults";
 import TrainingCamp from "./pages/hub/TrainingCamp";
 import Cutdowns from "./pages/hub/Cutdowns";
@@ -37,6 +35,15 @@ import DraftOrderDebug from "./pages/hub/DraftOrderDebug";
 import StaffManagement from "./pages/hub/StaffManagement";
 import LeagueNews from "./pages/hub/LeagueNews";
 import SettingsPage from "./pages/hub/Settings";
+import ScoutingLayout from "@/pages/hub/scouting/ScoutingLayout";
+import ScoutingHome from "@/pages/hub/scouting/ScoutingHome";
+import BigBoard from "@/pages/hub/scouting/BigBoard";
+import ScoutingCombine from "@/pages/hub/scouting/ScoutingCombine";
+import PrivateWorkouts from "@/pages/hub/scouting/PrivateWorkouts";
+import ScoutingInterviews from "@/pages/hub/scouting/ScoutingInterviews";
+import MedicalBoard from "@/pages/hub/scouting/MedicalBoard";
+import ScoutAllocation from "@/pages/hub/scouting/ScoutAllocation";
+import InSeasonScouting from "@/pages/hub/scouting/InSeasonScouting";
 
 const queryClient = new QueryClient();
 
@@ -93,14 +100,22 @@ const App = () => (
               <Route path="roster-audit" element={<RosterAudit />} />
               <Route path="resign" element={<ResignPlayers />} />
               <Route path="tag-center" element={<TagCenter />} />
-              <Route path="combine" element={<Combine />} />
               <Route path="tampering" element={<Tampering />} />
               <Route path="free-agency" element={<FreeAgency />} />
               <Route path="trades" element={<TradeHub />} />
               <Route path="staff-management" element={<StaffManagement />} />
+              <Route path="scouting" element={<ScoutingLayout />}>
+                <Route index element={<ScoutingHome />} />
+                <Route path="big-board" element={<BigBoard />} />
+                <Route path="combine" element={<ScoutingCombine />} />
+                <Route path="private-workouts" element={<PrivateWorkouts />} />
+                <Route path="interviews" element={<ScoutingInterviews />} />
+                <Route path="medical" element={<MedicalBoard />} />
+                <Route path="allocation" element={<ScoutAllocation />} />
+                <Route path="in-season" element={<InSeasonScouting />} />
+              </Route>
               <Route path="league-news" element={<LeagueNews />} />
               <Route path="settings" element={<SettingsPage />} />
-              <Route path="pre-draft" element={<PreDraft />} />
               <Route path="draft" element={<Draft />} />
               <Route path="draft-results" element={<DraftResults />} />
               <Route path="training-camp" element={<TrainingCamp />} />
@@ -111,6 +126,8 @@ const App = () => (
               <Route path="cap-baseline" element={<CapBaseline />} />
               <Route path="player/:playerId" element={<PlayerProfile />} />
               <Route path="playcall" element={<Playcall />} />
+              <Route path="combine" element={<Navigate to="/hub/scouting/combine" replace />} />
+              <Route path="pre-draft" element={<Navigate to="/hub/scouting/big-board" replace />} />
               {import.meta.env.DEV ? <Route path="draft-order-debug" element={<DraftOrderDebug />} /> : null}
             </Route>
 

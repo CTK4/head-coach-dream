@@ -33,6 +33,9 @@ import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termin
 import { getGmTraits } from "@/engine/gmScouting";
 import { evalProspectForGm } from "@/engine/prospectEval";
 import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
+import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
+import { detRand as detRand2 } from "@/engine/scouting/rng";
+import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import type {
   CampSettings,
@@ -362,6 +365,7 @@ export type GameState = {
     defense?: { style: "MAN" | "ZONE" | "MIXED"; aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE" };
   };
   scouting?: { boardSeed: number; combineRun?: boolean };
+  scoutingState?: ScoutingState;
   hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
   finances: TeamFinances;
   league: LeagueState;
@@ -455,6 +459,17 @@ export type GameAction =
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
   | { type: "SCOUTING_WINDOW_INIT"; payload: { windowId: ScoutingWindowId } }
   | { type: "SCOUTING_SPEND"; payload: { targetType: "PROSPECT" | "FA"; targetId: string; actionType: ScoutAction; prospect?: Prospect } }
+  | { type: "SCOUT_INIT" }
+  | { type: "SCOUT_BOARD_MOVE"; payload: { prospectId: string; dir: "UP" | "DOWN" } }
+  | { type: "SCOUT_BOARD_MOVE_TIER"; payload: { prospectId: string; tierId: "T1" | "T2" | "T3" | "T4" | "T5" } }
+  | { type: "SCOUT_PIN"; payload: { prospectId: string } }
+  | { type: "SCOUT_SPEND"; payload: { prospectId: string; action: "FILM_QUICK" | "FILM_DEEP" | "REQUEST_MED" | "BACKGROUND" } }
+  | { type: "SCOUT_COMBINE_GENERATE" }
+  | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 | 5 } }
+  | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
+  | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
+  | { type: "SCOUT_DEV_SIM_WEEK" }
   | { type: "COMBINE_GENERATE" }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "TAMPERING_INIT" }
@@ -2873,6 +2888,249 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       return pushNews(next, `Restructure applied: ${Math.round(x / 1_000_000)}M converted to bonus.`);
     }
+    case "SCOUT_INIT": {
+      const saveSeed = state.saveSeed;
+      const windowId =
+        state.careerStage === "COMBINE" ? "COMBINE" :
+        state.careerStage === "PRE_DRAFT" ? "PRE_DRAFT" :
+        state.careerStage === "FREE_AGENCY" ? "FREE_AGENCY" :
+        "IN_SEASON";
+      const windowKey = `${state.season}:${state.careerStage}:${windowId}`;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const draftClass = (draftClassJson as any[]).map((row, i) => ({
+        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+        name: row.name ?? row["Name"] ?? "Unknown",
+        pos: row.pos ?? row["POS"] ?? "UNK",
+        school: row.school ?? row.college ?? "—",
+        age: row.age ?? 21,
+        grade: row.grade ?? row.ovr ?? row["Grade"] ?? row["Overall"] ?? 75,
+      }));
+      const seed = (k: string) => detRand2(saveSeed, `scout:${k}`);
+
+      const trueProfiles: Record<string, ProspectTrueProfile> = {};
+      const scoutProfiles: Record<string, any> = {};
+
+      for (const p of draftClass) {
+        const medR = seed(`true:med:${p.id}`);
+        const charR = seed(`true:char:${p.id}`);
+        const medTier = medR < 0.62 ? "GREEN" : medR < 0.82 ? "YELLOW" : medR < 0.93 ? "ORANGE" : medR < 0.985 ? "RED" : "BLACK";
+        const charTier = charR < 0.08 ? "BLUE" : charR < 0.72 ? "GREEN" : charR < 0.86 ? "YELLOW" : charR < 0.94 ? "ORANGE" : charR < 0.985 ? "RED" : "BLACK";
+
+        trueProfiles[p.id] = {
+          trueOVR: Math.round(p.grade),
+          trueMedical: { tier: medTier as any, recurrence01: Math.round(seed(`true:rec:${p.id}`) * 100) / 100, degenerative: seed(`true:deg:${p.id}`) < 0.06 },
+          trueCharacter: {
+            tier: charTier as any,
+            volatility01: Math.round(seed(`true:vol:${p.id}`) * 100) / 100,
+            leadershipTag: seed(`true:lead:${p.id}`) < 0.2 ? "HIGH" : seed(`true:lead2:${p.id}`) < 0.55 ? "MED" : "LOW",
+          },
+        };
+
+        scoutProfiles[p.id] = initScoutProfile({
+          prospectId: p.id,
+          trueOVR: trueProfiles[p.id].trueOVR,
+          pos: p.pos,
+          seed: (kk: string) => seed(kk),
+          gm,
+          windowKey,
+        });
+      }
+
+      const tiers = { T1: [] as string[], T2: [] as string[], T3: [] as string[], T4: [] as string[], T5: [] as string[] };
+      const tierBy: Record<string, "T1" | "T2" | "T3" | "T4" | "T5"> = {};
+      const sorted = [...draftClass].sort((a, b) => trueProfiles[b.id].trueOVR - trueProfiles[a.id].trueOVR);
+      sorted.forEach((p, i) => {
+        const t = i < 25 ? "T1" : i < 60 ? "T2" : i < 110 ? "T3" : i < 170 ? "T4" : "T5";
+        tiers[t].push(p.id);
+        tierBy[p.id] = t;
+      });
+
+      const budget = computeBudget({ gm, windowId: windowId as any, carryIn: 0 });
+
+      return {
+        ...state,
+        scoutingState: {
+          windowId: windowId as any,
+          windowKey,
+          budget,
+          carryover: budget.remaining,
+          trueProfiles,
+          scoutProfiles,
+          bigBoard: { tiers, tierByProspectId: tierBy },
+          combine: { generated: false, day: 1, resultsByProspectId: {}, feed: [], recapByDay: {} },
+          visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
+          interviews: { interviewsRemaining: 15, history: {} },
+          medical: { requests: {} },
+          allocation: { poolHours: windowId === "COMBINE" ? 60 : 20, byGroup: {} },
+          inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
+        },
+      };
+    }
+
+    case "SCOUT_BOARD_MOVE": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, dir } = action.payload;
+      const tier = s.bigBoard.tierByProspectId[prospectId];
+      const list = [...(s.bigBoard.tiers[tier] ?? [])];
+      const idx = list.indexOf(prospectId);
+      if (idx < 0) return state;
+      const j = dir === "UP" ? idx - 1 : idx + 1;
+      if (j < 0 || j >= list.length) return state;
+      [list[idx], list[j]] = [list[j], list[idx]];
+      return { ...state, scoutingState: { ...s, bigBoard: { ...s.bigBoard, tiers: { ...s.bigBoard.tiers, [tier]: list } } } };
+    }
+
+    case "SCOUT_BOARD_MOVE_TIER": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, tierId } = action.payload;
+      const from = s.bigBoard.tierByProspectId[prospectId];
+      if (!from || from === tierId) return state;
+      const fromList = (s.bigBoard.tiers[from] ?? []).filter((id) => id !== prospectId);
+      const toList = [...(s.bigBoard.tiers[tierId] ?? []), prospectId];
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          bigBoard: {
+            tiers: { ...s.bigBoard.tiers, [from]: fromList, [tierId]: toList },
+            tierByProspectId: { ...s.bigBoard.tierByProspectId, [prospectId]: tierId },
+          },
+        },
+      };
+    }
+
+    case "SCOUT_PIN": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId } = action.payload;
+      const p = s.scoutProfiles[prospectId];
+      if (!p) return state;
+      return { ...state, scoutingState: { ...s, scoutProfiles: { ...s.scoutProfiles, [prospectId]: { ...p, pinned: !p.pinned } } } };
+    }
+
+    case "SCOUT_SPEND": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, action: a } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `scout:${k}`);
+      const cost = a === "FILM_QUICK" ? 2 : a === "FILM_DEEP" ? 5 : 4;
+      if (s.budget.remaining < cost) return state;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      const budget = { ...s.budget, remaining: s.budget.remaining - cost, spent: s.budget.spent + cost };
+
+      if (a === "FILM_QUICK") {
+        addClarity({ profile, track: "TALENT", points: 8, gm });
+        tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: a, hoursOrPoints: 2, minWidth: 6 });
+      } else if (a === "FILM_DEEP") {
+        addClarity({ profile, track: "TALENT", points: 22, gm });
+        addClarity({ profile, track: "FIT", points: 6, gm });
+        tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: a, hoursOrPoints: 5, minWidth: 5 });
+      } else if (a === "BACKGROUND") {
+        addClarity({ profile, track: "CHAR", points: 20, gm });
+        revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      } else {
+        addClarity({ profile, track: "MED", points: 20, gm });
+        revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      }
+
+      return { ...state, scoutingState: { ...s, budget, carryover: budget.remaining, scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile } } };
+    }
+
+    case "SCOUT_COMBINE_GENERATE": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const seed = (k: string) => detRand2(state.saveSeed, `combine:${k}`);
+      const results: Record<string, any> = {};
+      const feed: { id: string; day: number; text: string }[] = [];
+
+      for (const id of Object.keys(s.scoutProfiles)) {
+        const r1 = seed(`${id}:r1`);
+        const r2 = seed(`${id}:r2`);
+        const r3 = seed(`${id}:r3`);
+        const r4 = seed(`${id}:r4`);
+        const forty = Math.round((4.3 + r1 * 1.0) * 100) / 100;
+        const shuttle = Math.round((3.9 + r2 * 1.2) * 100) / 100;
+        const vert = Math.round((26 + r3 * 14) * 10) / 10;
+        const bench = Math.round(8 + r4 * 32);
+        const ras = Math.round(clamp01(1 - (forty - 4.3) / 1.0) * 100) / 10;
+        results[id] = { forty, shuttle, vert, bench, ras };
+        if (seed(`feed:${id}`) < 0.06) feed.push({ id: `buzz:${id}`, day: 2, text: `${id} turned heads with testing (buzz may be wrong).` });
+      }
+
+      return { ...state, scoutingState: { ...s, combine: { ...s.combine, generated: true, resultsByProspectId: results, feed } } };
+    }
+
+    case "SCOUT_COMBINE_SET_DAY": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      return { ...state, scoutingState: { ...s, combine: { ...s.combine, day: action.payload.day } } };
+    }
+
+    case "SCOUT_PRIVATE_WORKOUT": {
+      const s = state.scoutingState;
+      if (!s || s.visits.privateWorkoutsRemaining <= 0) return state;
+      const { prospectId, focus } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `pw:${k}`);
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      addClarity({ profile, track: focus, points: 18, gm });
+      tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: `PW:${focus}`, hoursOrPoints: 5, minWidth: 5 });
+      if (focus === "MED") revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      if (focus === "CHAR") revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          visits: { ...s.visits, privateWorkoutsRemaining: s.visits.privateWorkoutsRemaining - 1 },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || s.interviews.interviewsRemaining <= 0) return state;
+      const { prospectId, category } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `int:${k}`);
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      addClarity({ profile, track: "CHAR", points: 16, gm });
+      addClarity({ profile, track: "FIT", points: category === "IQ" ? 10 : 4, gm });
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      const outcome = seed(`${prospectId}:${category}`) < 0.15 ? "Concerning answers" : seed(`${prospectId}:${category}:2`) < 0.45 ? "Mixed" : "Positive";
+      const hist = s.interviews.history[prospectId] ?? [];
+      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome, windowKey: s.windowKey }] };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          interviews: { ...s.interviews, interviewsRemaining: s.interviews.interviewsRemaining - 1, history },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_ALLOC_ADJ": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { group, delta } = action.payload;
+      const cur = s.allocation.byGroup[group] ?? 0;
+      const next = Math.max(0, cur + delta);
+      const used = Object.values({ ...s.allocation.byGroup, [group]: next }).reduce((a, b) => a + b, 0);
+      if (used > s.allocation.poolHours) return state;
+      return { ...state, scoutingState: { ...s, allocation: { ...s.allocation, byGroup: { ...s.allocation.byGroup, [group]: next } } } };
+    }
+
+    case "SCOUT_DEV_SIM_WEEK": {
+      return { ...state, uiToast: "TODO: in-season update tick. (dev stub)" };
+    }
+
     case "SCOUTING_WINDOW_INIT": {
       const teamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
       const gm = getGmTraits(state.league.gmByTeamId[teamId]);
