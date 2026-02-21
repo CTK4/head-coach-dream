@@ -304,7 +304,7 @@ export function HubShell({
                   <span className="hidden sm:inline">HUB</span>
                 </IconButton>
 
-                <IconButton label="Settings" onClick={() => navigate("/hub/settings")}>
+                <IconButton label="Settings" onClick={() => navigate("/settings")}>
                   <UtilityIcon name="Settings" className="h-4 w-4" />
                   <span className="hidden sm:inline">SET</span>
                 </IconButton>

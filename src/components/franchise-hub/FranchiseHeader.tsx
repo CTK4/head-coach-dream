@@ -176,15 +176,19 @@ export function FranchiseHeader({ title = "FRANCHISE HUB", backPath }: { title?:
 
       <div className={HUB_DIVIDER} />
       
-      {/* Sub-header controls if needed, e.g. back button on sub-pages */}
-      {location.pathname !== "/hub" && (
-          <div className="flex items-center gap-2">
-            <IconButton label="Back" onClick={goBack}>
-                <span aria-hidden="true">←</span>
-                <span className="hidden sm:inline">BACK</span>
-            </IconButton>
-          </div>
-      )}
+      {/* Sub-header controls */}
+      <div className="flex items-center gap-2">
+        {location.pathname !== "/hub" && (
+          <IconButton label="Back" onClick={goBack}>
+            <span aria-hidden="true">←</span>
+            <span className="hidden sm:inline">BACK</span>
+          </IconButton>
+        )}
+        <IconButton label="Settings" onClick={() => navigate("/settings")}>
+          <UtilityIcon name="Settings" className="h-4 w-4" />
+          <span className="hidden sm:inline">SETTINGS</span>
+        </IconButton>
+      </div>
     </header>
   );
 }
