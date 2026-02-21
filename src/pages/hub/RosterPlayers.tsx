@@ -1,0 +1,55 @@
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useGame } from "@/context/GameContext";
+import { ScreenHeader } from "@/components/layout/ScreenHeader";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { getTeamRosterPlayers } from "@/data/leagueDb";
+
+export default function RosterPlayers() {
+  const { state } = useGame();
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
+
+  const rows = useMemo(() => {
+    if (!teamId) return [];
+    return getTeamRosterPlayers(String(teamId))
+      .map((p: any) => ({
+        playerId: String(p.playerId),
+        name: String(p.fullName),
+        pos: String(p.pos ?? "UNK").toUpperCase(),
+        ovr: Number(p.overall ?? 0),
+        age: Number(p.age ?? 0),
+      }))
+      .sort((a, b) => b.ovr - a.ovr);
+  }, [teamId]);
+
+  return (
+    <div className="min-w-0">
+      <ScreenHeader title="ROSTER" subtitle="Players" />
+      <div className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-slate-300">Tap a player to view profile.</div>
+          <Badge variant="outline">{rows.length}</Badge>
+        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y divide-white/10">
+              {rows.map((r) => (
+                <Link
+                  key={r.playerId}
+                  to={`/roster/player/${r.playerId}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-white/5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{r.name}</div>
+                    <div className="text-xs text-slate-400">{r.pos} • OVR {r.ovr} • Age {r.age}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

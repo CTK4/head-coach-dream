@@ -29,7 +29,7 @@ export function stageToRoute(stage: CareerStage): string {
     case "ROSTER_REVIEW":
       return "/hub/roster-audit";
     case "RESIGN":
-      return "/hub/resign";
+      return "/hub/re-sign";
     case "COMBINE":
       return "/hub/combine";
     case "TAMPERING":

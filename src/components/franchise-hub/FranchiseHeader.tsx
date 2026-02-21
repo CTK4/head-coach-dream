@@ -55,6 +55,7 @@ function buildLogoCandidates(logoKey: string): { triedPaths: string[]; expectedF
 }
 
 function TeamLogo({ logoKey, teamId, teamName, pathname, alt }: { logoKey?: string; teamId?: string; teamName?: string; pathname?: string; alt: string; }) {
+  const navigate = useNavigate();
   const [attemptIndex, setAttemptIndex] = useState(0);
   const { triedPaths, expectedFiles } = useMemo(() => {
     if (!logoKey) return { triedPaths: [], expectedFiles: [] };
@@ -81,14 +82,22 @@ function TeamLogo({ logoKey, teamId, teamName, pathname, alt }: { logoKey?: stri
   }
 
   return (
-    <img
-      src={currentSrc}
-      alt={alt}
-      className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/20 object-contain"
-      loading="eager"
-      decoding="async"
-      onError={() => setAttemptIndex((i) => Math.min(i + 1, sources.length - 1))}
-    />
+    <button
+      type="button"
+      onClick={() => navigate("/hub")}
+      className="h-10 w-10 rounded-sm"
+      aria-label="Team logo (back to hub)"
+      title="Back to Hub"
+    >
+      <img
+        src={currentSrc}
+        alt={alt}
+        className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/20 object-contain"
+        loading="eager"
+        decoding="async"
+        onError={() => setAttemptIndex((i) => Math.min(i + 1, sources.length - 1))}
+      />
+    </button>
   );
 }
 
