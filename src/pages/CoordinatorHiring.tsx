@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { HubShell } from "@/components/franchise-hub/HubShell";
+import { Avatar } from "@/components/common/Avatar";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -160,13 +161,16 @@ export default function CoordinatorHiring() {
         <CardContent className="p-4 space-y-2">
           {candidates.length ? (
             candidates.map(({ p, exp, salary, safety, emergency }) => (
-              <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">
-                    {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Rep {Number(p.reputation ?? 0)} · Expected {money(exp)}
+              <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex items-center gap-3">
+                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach") }} size={40} />
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">
+                      {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Rep {Number(p.reputation ?? 0)} · Expected {money(exp)}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
