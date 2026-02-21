@@ -92,6 +92,14 @@ export default function CoordinatorHiring() {
   const hire = (personId: string, salary: number) => {
     if (roleFilled) return;
     dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
+
+    // Auto-advance to the next unfilled coordinator position
+    const allRoles: Array<"OC" | "DC" | "STC"> = ["OC", "DC", "STC"];
+    const filledAfterHire = new Set<string>(
+      [role, state.staff.ocId && "OC", state.staff.dcId && "DC", state.staff.stcId && "STC"].filter(Boolean) as string[]
+    );
+    const nextRole = allRoles.find((r) => !filledAfterHire.has(r));
+    if (nextRole) setRole(nextRole);
   };
 
   const wrapInShell = state.phase === "COORD_HIRING" && !location?.pathname?.startsWith?.("/hub/");
