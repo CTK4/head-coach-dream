@@ -2,6 +2,7 @@ export type AvatarEntity = {
   id: string;
   name?: string;
   type: "player" | "personnel";
+  avatarUrl?: string;
 };
 
 function stableSeed(parts: Array<string | undefined | null>): string {
@@ -26,6 +27,7 @@ export function diceBearUrl(seed: string, style: "personas" | "lorelei" = "perso
 }
 
 export function avatarUrlFor(entity: AvatarEntity): string {
+  if (entity.avatarUrl) return entity.avatarUrl;
   const seed = avatarSeedFor(entity);
   return diceBearUrl(seed, "personas");
 }

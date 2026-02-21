@@ -171,7 +171,7 @@ export default function CoordinatorHiring() {
             candidates.map(({ p, exp, salary, safety, emergency }) => (
               <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-3">
-                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach") }} size={40} />
+                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach"), avatarUrl: p.avatarUrl }} size={40} />
                   <div className="min-w-0">
                     <div className="font-medium truncate">
                       {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>

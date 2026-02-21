@@ -48,8 +48,9 @@ export default function StaffManagement() {
         return {
           ...s,
           pid,
-          name: String((p as any)?.fullName ?? "Coach"),
-          rep: Number((p as any)?.reputation ?? 0),
+          name: String(p?.fullName ?? "Coach"),
+          rep: Number(p?.reputation ?? 0),
+          avatarUrl: p?.avatarUrl,
           salary,
           remainingYears,
           total,
@@ -94,7 +95,7 @@ export default function StaffManagement() {
           {rows.map((r) => (
             <div key={r.pid} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
               <div className="min-w-0 flex items-center gap-3">
-                <Avatar entity={{ type: "personnel", id: r.pid, name: r.name }} size={40} />
+                <Avatar entity={{ type: "personnel", id: r.pid, name: r.name, avatarUrl: r.avatarUrl }} size={40} />
                 <div className="min-w-0">
                   <div className="font-medium truncate">
                     {r.name} <span className="text-muted-foreground">— {r.label}</span>
