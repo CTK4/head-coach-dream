@@ -260,7 +260,7 @@ export default function AssistantHiring() {
             <Card key={c.p.personId}>
               <CardContent className="p-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Avatar entity={{ type: "personnel", id: String(c.p.personId), name: String(c.p.fullName ?? "Coach") }} size={44} />
+                  <Avatar entity={{ type: "personnel", id: String(c.p.personId), name: String(c.p.fullName ?? "Coach"), avatarUrl: c.p.avatarUrl }} size={44} />
                   <div className="space-y-1 min-w-0">
                     <div className="font-semibold truncate">{c.p.fullName}</div>
                     <div className="text-sm text-muted-foreground">
