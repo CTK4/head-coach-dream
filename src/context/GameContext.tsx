@@ -384,6 +384,9 @@ export type GameState = {
   teamId?: string;
   playerMorale?: Record<string, number>;
   uiToast?: string;
+  trainingFocus?: {
+    posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
+  };
 };
 
 export type RookieContract = {
@@ -558,6 +561,7 @@ export type GameAction =
   | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
   | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
+  | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
   | { type: "RESET" };
 
 function createSchedule(seed: number): LeagueSchedule {
@@ -4215,6 +4219,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           camp: { settings: { ...state.offseasonData.camp.settings, ...action.payload.settings } },
         },
       };
+    case "SET_TRAINING_FOCUS":
+      return { ...state, trainingFocus: { posGroupFocus: action.payload.posGroupFocus } };
     case "CUT_TOGGLE": {
       const cur = state.offseasonData.cutDowns.decisions[action.payload.playerId];
       const next = cur?.keep === false ? { keep: true } : { keep: false };
