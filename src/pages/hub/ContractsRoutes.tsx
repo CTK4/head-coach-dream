@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
+import PlayerContractScreen from "@/pages/hub/PlayerContractScreen";
 
 function Summary() {
   return (
@@ -28,7 +29,7 @@ export default function ContractsRoutes() {
       <Route index element={<Navigate to="summary" replace />} />
       <Route path="summary" element={<Summary />} />
       <Route path="players" element={<Simple title="PLAYER CONTRACTS" />} />
-      <Route path="player/:playerId" element={<Simple title="CONTRACT BREAKDOWN" />} />
+      <Route path="player/:playerId" element={<PlayerContractScreen />} />
       <Route path="dead-money" element={<Simple title="DEAD MONEY" />} />
       <Route path="projection" element={<Simple title="FUTURE CAP PROJECTION" />} />
       <Route path="tag" element={<Simple title="FRANCHISE TAG" />} />

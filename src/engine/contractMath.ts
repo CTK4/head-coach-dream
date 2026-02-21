@@ -117,6 +117,36 @@ export function computeCutProjection(state: GameState, playerId: string, postJun
   return { deadThisYear, deadNextYear, savingsThisYear };
 }
 
+/** Convenience selector – returns the same shape as getContractSummaryForPlayer. */
+export function getContract(state: GameState, playerId: string) {
+  return getContractSummaryForPlayer(state, playerId);
+}
+
+/** Return the cap hit for a specific season year from the contract summary. */
+export function computeCapHitByYear(state: GameState, playerId: string, year: number): number {
+  const summary = getContractSummaryForPlayer(state, playerId);
+  return round50k(summary?.capHitBySeason?.[year] ?? 0);
+}
+
+/**
+ * Compute dead-cap and savings for a hypothetical cut.
+ * designation = "pre" → Pre-June 1 (all dead cap accelerates into current year)
+ * designation = "post" → Post-June 1 (dead cap split across current + next year)
+ * year is used to look up the cap hit for the relevant season when computing savings.
+ */
+export function computeDeadCap(
+  state: GameState,
+  playerId: string,
+  year: number,
+  designation: "pre" | "post",
+): { deadThisYear: number; deadNextYear: number; savings: number } {
+  const postJune1 = designation === "post";
+  const proj = computeCutProjection(state, playerId, postJune1);
+  const capHit = computeCapHitByYear(state, playerId, year);
+  const savingsThisYear = round50k(capHit - proj.deadThisYear);
+  return { deadThisYear: proj.deadThisYear, deadNextYear: proj.deadNextYear, savings: savingsThisYear };
+}
+
 export function getRestructureEligibility(state: GameState, playerId: string): RestructureEligibility {
   const reasons: string[] = [];
   const o = state.playerContractOverrides?.[playerId] as PlayerContractOverride | undefined;
