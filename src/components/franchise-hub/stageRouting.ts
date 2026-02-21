@@ -87,6 +87,6 @@ export function stageLabel(stage: CareerStage): string {
     case "REGULAR_SEASON":
       return "Regular Season";
     default:
-      return stage.replaceAll("_", " ");
+      return stage.replace(/_/g, " ");
   }
 }
