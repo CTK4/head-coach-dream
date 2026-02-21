@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
+import CapProjection from "@/pages/hub/CapProjection";
 
 function Summary() {
   return (
@@ -30,7 +31,7 @@ export default function ContractsRoutes() {
       <Route path="players" element={<Simple title="PLAYER CONTRACTS" />} />
       <Route path="player/:playerId" element={<Simple title="CONTRACT BREAKDOWN" />} />
       <Route path="dead-money" element={<Simple title="DEAD MONEY" />} />
-      <Route path="projection" element={<Simple title="FUTURE CAP PROJECTION" />} />
+      <Route path="projection" element={<CapProjection />} />
       <Route path="tag" element={<Simple title="FRANCHISE TAG" />} />
     </Routes>
   );
