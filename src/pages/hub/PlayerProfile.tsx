@@ -152,7 +152,7 @@ export default function PlayerProfile() {
                     <Button
                       disabled={capIllegal}
                       className="rounded-xl flex-1 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                      onClick={() => dispatch({ type: "FA_SUBMIT_OFFER", payload: { playerId, years, aav } })}
+                      onClick={() => dispatch({ type: "FA_SUBMIT_OFFER", payload: { playerId } })}
                     >
                       Submit Offer
                     </Button>
