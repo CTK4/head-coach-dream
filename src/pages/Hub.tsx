@@ -21,6 +21,7 @@ const IMAGES = {
     freeAgency: "/placeholders/accounting.png",
     resign: "/placeholders/depth_chart.png",
     trades: "/placeholders/strategy_meeting.png",
+    injuryReport: "/placeholders/depth_chart.png",
 }
 
 type UserSettings = {
@@ -150,6 +151,12 @@ export default function Hub() {
                 {showTrades ? (
                   <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} />
                 ) : null}
+                <HubTile
+                    title="Injury Report"
+                    subtitle="Health & Medical"
+                    to="/hub/injury-report"
+                    imageUrl={IMAGES.injuryReport}
+                />
             </div>
 
             <HubPhaseQuickLinks />

@@ -41,6 +41,10 @@ import PlayerProfile from "./pages/hub/PlayerProfile";
 import TradesPage from "./pages/hub/Trades";
 import ReSignPage from "./pages/hub/ReSign";
 import CapProjection from "@/pages/hub/CapProjection";
+import TagCenter from "./pages/hub/TagCenter";
+import DeadMoney from "./pages/hub/DeadMoney";
+import Development from "./pages/hub/Development";
+import InjuryReport from "./pages/hub/InjuryReport";
 
 const queryClient = new QueryClient();
 
@@ -138,6 +142,10 @@ const App = () => (
                <Route path="/hub/playcall" element={<Playcall />} />
                <Route path="/hub/player/:playerId" element={<PlayerProfile />} />
                <Route path="/hub/cap-projection" element={<CapProjection />} />
+               <Route path="/hub/tag-center" element={<TagCenter />} />
+               <Route path="/hub/dead-money" element={<DeadMoney />} />
+               <Route path="/hub/development" element={<Development />} />
+               <Route path="/hub/injury-report" element={<InjuryReport />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
