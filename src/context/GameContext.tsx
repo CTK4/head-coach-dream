@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
+import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
 import {
   clearPersonnelTeam,
@@ -247,6 +248,31 @@ export type PlayerContractOverride = {
   prorationBySeason?: Record<number, number>;
 };
 
+export type TransactionType = "CUT" | "TRADE" | "VOID";
+export type AccelerationType = "PRE_JUNE_1" | "POST_JUNE_1" | "NONE";
+export type Transaction = {
+  id: string;
+  type: TransactionType;
+  playerId: string;
+  playerName: string;
+  playerPos: string;
+  fromTeamId: string;
+  toTeamId?: string;
+  season: number;
+  week?: number;
+  june1Designation: AccelerationType;
+  notes?: string;
+  deadCapThisYear: number;
+  deadCapNextYear: number;
+  remainingProration: number;
+  contractSnapshot?: {
+    startSeason: number;
+    endSeason: number;
+    signingBonus: number;
+    salaries: number[];
+  };
+};
+
 export type BuyoutLedger = { bySeason: Record<number, number> };
 export type DepthChart = {
   startersByPos: Record<string, string | undefined>;
@@ -380,10 +406,15 @@ export type GameState = {
   playerContractOverrides: Record<string, PlayerContractOverride>;
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
+  transactions: Transaction[];
   userTeamId?: string;
   teamId?: string;
   playerMorale?: Record<string, number>;
+  injuries?: Injury[];
   uiToast?: string;
+  trainingFocus?: {
+    posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
+  };
 };
 
 export type RookieContract = {
@@ -558,6 +589,11 @@ export type GameAction =
   | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
   | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
+  | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
+  | { type: "INJURY_UPSERT"; payload: Injury }
+  | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_START_PRACTICE_WINDOW"; payload: { injuryId: string } }
   | { type: "RESET" };
 
 function createSchedule(seed: number): LeagueSchedule {
@@ -680,6 +716,7 @@ function createInitialState(): GameState {
     playerContractOverrides: {},
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
+    transactions: [],
   };
 
   return ensureAccolades(bootstrapAccolades(base));
@@ -3863,6 +3900,32 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const deadThisYear = designation === "POST_JUNE_1" ? Math.round((deadTotal * 0.5) / 50_000) * 50_000 : deadTotal;
       const deadNextYear = designation === "POST_JUNE_1" ? Math.max(0, deadTotal - deadThisYear) : 0;
 
+      const cutPlayer = getEffectivePlayersByTeam(state, teamId).find((p: any) => String(p.playerId) === String(playerId));
+      const cutOverride = state.playerContractOverrides[playerId];
+      const cutTransaction: Transaction = {
+        id: `${state.season}_${playerId}_CUT`,
+        type: "CUT",
+        playerId,
+        playerName: String(cutPlayer?.fullName ?? cutPlayer?.name ?? "Unknown"),
+        playerPos: String(cutPlayer?.pos ?? "UNK"),
+        fromTeamId: teamId,
+        season: state.season,
+        week: state.week,
+        june1Designation: designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1",
+        notes: designation === "POST_JUNE_1"
+          ? `Post–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M accelerated this year, $${Math.round(deadNextYear / 1_000_000)}M next year.`
+          : deadThisYear > 0 ? `Pre–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M dead cap.` : "Cut with no dead cap.",
+        deadCapThisYear: deadThisYear,
+        deadCapNextYear: deadNextYear,
+        remainingProration: summary?.deadCapIfCutNow ?? 0,
+        contractSnapshot: cutOverride ? {
+          startSeason: cutOverride.startSeason,
+          endSeason: cutOverride.endSeason,
+          signingBonus: cutOverride.signingBonus,
+          salaries: [...cutOverride.salaries],
+        } : undefined,
+      };
+
       const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" };
       const playerContractOverrides = { ...state.playerContractOverrides };
       delete playerContractOverrides[playerId];
@@ -3883,6 +3946,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           deadCapThisYear: (state.finances.deadCapThisYear ?? 0) + deadThisYear,
           deadCapNextYear: (state.finances.deadCapNextYear ?? 0) + deadNextYear,
         },
+        transactions: [...(state.transactions ?? []), cutTransaction],
       });
 
       const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
@@ -4218,6 +4282,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           camp: { settings: { ...state.offseasonData.camp.settings, ...action.payload.settings } },
         },
       };
+    case "SET_TRAINING_FOCUS":
+      return { ...state, trainingFocus: { posGroupFocus: action.payload.posGroupFocus } };
     case "CUT_TOGGLE": {
       const cur = state.offseasonData.cutDowns.decisions[action.payload.playerId];
       const next = cur?.keep === false ? { keep: true } : { keep: false };
@@ -4479,6 +4545,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
       if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
       return state;
+    }
+    case "INJURY_UPSERT": {
+      const existing = state.injuries ?? [];
+      const idx = existing.findIndex((i) => i.id === action.payload.id);
+      const updated = idx >= 0 ? existing.map((i) => (i.id === action.payload.id ? action.payload : i)) : [...existing, action.payload];
+      return { ...state, injuries: updated };
+    }
+    case "INJURY_MOVE_TO_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "IR" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_ACTIVATE_FROM_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "QUESTIONABLE" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_START_PRACTICE_WINDOW": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, practiceStatus: "LIMITED" as const, rehabStage: "RETURN_TO_PLAY" as const } : i
+      );
+      return { ...state, injuries };
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
@@ -4848,6 +4938,7 @@ function loadState(): GameState {
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
+      transactions: (migrated as any).transactions ?? [],
     };
     out = ensureAccolades(bootstrapAccolades(out));
     out = ensureLeagueGmMap(out);

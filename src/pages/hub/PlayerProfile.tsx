@@ -116,6 +116,16 @@ export default function PlayerProfile() {
                 <span className="text-muted-foreground">Signing Bonus</span>
                 <span className="font-semibold">{contract ? money(contract.signingBonus) : "—"}</span>
               </div>
+              {contract ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-xl border-white/15 text-xs mt-2"
+                  onClick={() => navigate(`/contracts/player/${playerId}`)}
+                >
+                  View Full Contract
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
         </div>
