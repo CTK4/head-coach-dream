@@ -466,6 +466,7 @@ export type GameAction =
   | { type: "SCOUT_SPEND"; payload: { prospectId: string; action: "FILM_QUICK" | "FILM_DEEP" | "REQUEST_MED" | "BACKGROUND" } }
   | { type: "SCOUT_COMBINE_GENERATE" }
   | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 | 5 } }
+  | { type: "SCOUT_COMBINE_FOCUS"; payload: { prospectId: string } }
   | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
   | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
@@ -2416,6 +2417,21 @@ function computeAndStoreFiringMeter(state: GameState, week: number, winPct?: num
 }
 
 
+function posToGroup(pos: string) {
+  const p = String(pos || "").toUpperCase();
+  if (p === "QB") return "QB";
+  if (p === "WR") return "WR";
+  if (p === "RB") return "RB";
+  if (p === "TE") return "TE";
+  if (p === "OL") return "OL";
+  if (p === "DL") return "DL";
+  if (p === "EDGE") return "EDGE";
+  if (p === "LB") return "LB";
+  if (p === "CB" || p === "S") return "DB";
+  return "DB";
+}
+
+
 function initDraftRosterCounts(state: GameState): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   const teams = getTeams().map((t) => String((t as any).teamId));
@@ -3068,6 +3084,68 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const s = state.scoutingState;
       if (!s) return state;
       return { ...state, scoutingState: { ...s, combine: { ...s.combine, day: action.payload.day } } };
+    }
+
+    case "SCOUT_COMBINE_FOCUS": {
+      const s = state.scoutingState;
+      if (!s || s.windowId !== "COMBINE") return state;
+
+      const day = s.combine?.day ?? 1;
+      if (day !== 2 && day !== 3) {
+        return { ...state, uiToast: "Focus Drill is only available on Combine Day 2 and Day 3." };
+      }
+
+      const { prospectId } = action.payload;
+      const p = (draftClassJson as any[]).map((row, i) => ({
+        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+        pos: row.pos ?? row["POS"] ?? "UNK",
+      })).find((x) => x.id === prospectId);
+      if (!p) return state;
+
+      const group = posToGroup(p.pos);
+      const costHours = 4;
+      const cur = s.allocation.byGroup[group] ?? 0;
+      const usedTotal = Object.values(s.allocation.byGroup).reduce((a: number, b: number) => a + b, 0);
+      if (usedTotal + costHours > s.allocation.poolHours) {
+        return { ...state, uiToast: "Not enough Combine Hours. Allocate more in Allocation screen." };
+      }
+
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `combinefocus:${k}`);
+
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      if (!profile || !truth) return state;
+
+      const allocation = {
+        ...s.allocation,
+        byGroup: { ...s.allocation.byGroup, [group]: cur + costHours },
+      };
+
+      addClarity({ profile, track: "TALENT", points: 10, gm });
+      addClarity({ profile, track: "FIT", points: 8, gm });
+
+      tightenBand({
+        profile,
+        gm,
+        seed,
+        windowKey: s.windowKey,
+        actionKey: `COMBINE_FOCUS:${group}:D${day}`,
+        hoursOrPoints: costHours,
+        minWidth: 4,
+      });
+
+      revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          allocation,
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
     }
 
     case "SCOUT_PRIVATE_WORKOUT": {
