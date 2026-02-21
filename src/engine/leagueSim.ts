@@ -66,10 +66,9 @@ export function initLeagueState(teamIds: string[], season = new Date().getFullYe
   return { standings, results: [], gmByTeamId, postseason: { season, resultsByTeamId: {} } };
 }
 
-function applyResult(league: LeagueState, r: WeekResult): LeagueState {
-  const standings = { ...league.standings };
-  const home = { ...(standings[r.homeTeamId] ?? { w: 0, l: 0, pf: 0, pa: 0 }) };
-  const away = { ...(standings[r.awayTeamId] ?? { w: 0, l: 0, pf: 0, pa: 0 }) };
+function applyResult(standings: Record<string, TeamStanding>, r: WeekResult): void {
+  const home = standings[r.homeTeamId] ?? { w: 0, l: 0, pf: 0, pa: 0 };
+  const away = standings[r.awayTeamId] ?? { w: 0, l: 0, pf: 0, pa: 0 };
 
   home.pf += r.homeScore;
   home.pa += r.awayScore;
@@ -86,8 +85,6 @@ function applyResult(league: LeagueState, r: WeekResult): LeagueState {
 
   standings[r.homeTeamId] = home;
   standings[r.awayTeamId] = away;
-
-  return { standings, results: [...league.results, r], gmByTeamId: league.gmByTeamId, postseason: league.postseason };
 }
 
 function hashMatchup(m: Matchup): number {
@@ -117,7 +114,9 @@ export function simulateLeagueWeek(params: {
       : schedule.regularSeasonWeeks.find((w) => w.week === week);
   if (!ws) return params.league;
 
-  let league = params.league;
+  const standings = { ...params.league.standings };
+  const newResults: WeekResult[] = [];
+
   for (const m of ws.matchups) {
     const isUserGame =
       (m.homeTeamId === userHomeTeamId && m.awayTeamId === userAwayTeamId) ||
@@ -127,8 +126,15 @@ export function simulateLeagueWeek(params: {
       ? userScore
       : simulateFullGame({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, seed: seed + hashMatchup(m) + week * 997 });
 
-    league = applyResult(league, { gameType, week, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, ...scores });
+    const r: WeekResult = { gameType, week, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, ...scores };
+    applyResult(standings, r);
+    newResults.push(r);
   }
 
-  return league;
+  return {
+    standings,
+    results: [...params.league.results, ...newResults],
+    gmByTeamId: params.league.gmByTeamId,
+    postseason: params.league.postseason,
+  };
 }

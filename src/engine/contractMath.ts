@@ -1,5 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
-import { getContracts, getPlayers } from "@/data/leagueDb";
+import { getContractById, getPlayerById } from "@/data/leagueDb";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 
 export type CapYearRow = { season: number; salary: number; bonus: number; capHit: number };
@@ -15,7 +15,7 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 function isRookieHeuristic(state: GameState, playerId: string): boolean {
-  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   const age = Number(p?.age ?? 0);
   const o = state.playerContractOverrides?.[playerId] as PlayerContractOverride | undefined;
   if (!o) return false;
@@ -43,9 +43,9 @@ function buildOverrideCapRows(state: GameState, o: PlayerContractOverride, seaso
 }
 
 function buildBaseCapRows(state: GameState, playerId: string, seasons: number) {
-  const p = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   if (!p?.contractId) return null;
-  const c = getContracts().find((x: any) => x.contractId === p.contractId);
+  const c = getContractById(p.contractId);
   if (!c) return null;
 
   const start = Number(c.startSeason ?? state.season);

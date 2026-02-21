@@ -1,5 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
-import { getPlayers, getContracts } from "@/data/leagueDb";
+import { getPlayerById, getContractById, getPlayers } from "@/data/leagueDb";
 
 export function normalizePos(pos: string): string {
   const p = String(pos ?? "").toUpperCase();
@@ -132,9 +132,9 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
     };
   }
 
-  const p = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   if (!p?.contractId) return null;
-  const c = getContracts().find((x: any) => String(x.contractId) === String(p.contractId));
+  const c = getContractById(p.contractId);
   if (!c) return null;
 
   const startSeason = parseMoney(c.startSeason, state.season);
@@ -248,7 +248,7 @@ export function buildDepthSlotsForTeam(state: GameState, teamId: string): Record
 }
 
 export function getDepthSlotLabel(state: GameState, playerId: string): string | null {
-  const base = getPlayers().find((p: any) => String(p.playerId) === String(playerId));
+  const base = getPlayerById(playerId);
   const teamId = state.playerTeamOverrides[playerId] ?? base?.teamId;
   if (!teamId || String(teamId).toUpperCase() === "FREE_AGENT") return null;
 

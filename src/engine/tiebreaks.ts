@@ -36,8 +36,10 @@ export function computeSplitRecords(league: LeagueState): {
 
   for (const game of normalizeGames(league)) {
     const { homeId, awayId, homeScore, awayScore } = game;
-    opponentsByTeamId[homeId] = [...(opponentsByTeamId[homeId] ?? []), awayId];
-    opponentsByTeamId[awayId] = [...(opponentsByTeamId[awayId] ?? []), homeId];
+    if (!opponentsByTeamId[homeId]) opponentsByTeamId[homeId] = [];
+    if (!opponentsByTeamId[awayId]) opponentsByTeamId[awayId] = [];
+    opponentsByTeamId[homeId].push(awayId);
+    opponentsByTeamId[awayId].push(homeId);
 
     if (!overall[homeId]) overall[homeId] = { w: 0, l: 0 };
     if (!overall[awayId]) overall[awayId] = { w: 0, l: 0 };
