@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
+import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
 import {
   clearPersonnelTeam,
@@ -383,6 +384,7 @@ export type GameState = {
   userTeamId?: string;
   teamId?: string;
   playerMorale?: Record<string, number>;
+  injuries?: Injury[];
   uiToast?: string;
   trainingFocus?: {
     posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
@@ -562,6 +564,10 @@ export type GameAction =
   | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
+  | { type: "INJURY_UPSERT"; payload: Injury }
+  | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_START_PRACTICE_WINDOW"; payload: { injuryId: string } }
   | { type: "RESET" };
 
 function createSchedule(seed: number): LeagueSchedule {
@@ -4482,6 +4488,30 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
       if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
       return state;
+    }
+    case "INJURY_UPSERT": {
+      const existing = state.injuries ?? [];
+      const idx = existing.findIndex((i) => i.id === action.payload.id);
+      const updated = idx >= 0 ? existing.map((i) => (i.id === action.payload.id ? action.payload : i)) : [...existing, action.payload];
+      return { ...state, injuries: updated };
+    }
+    case "INJURY_MOVE_TO_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "IR" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_ACTIVATE_FROM_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "QUESTIONABLE" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_START_PRACTICE_WINDOW": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, practiceStatus: "LIMITED" as const, rehabStage: "RETURN_TO_PLAY" as const } : i
+      );
+      return { ...state, injuries };
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
