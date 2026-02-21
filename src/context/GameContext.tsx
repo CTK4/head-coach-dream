@@ -471,6 +471,7 @@ export type GameAction =
   | { type: "SCOUT_COMBINE_GENERATE" }
   | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 | 5 } }
   | { type: "SCOUT_COMBINE_FOCUS"; payload: { prospectId: string } }
+  | { type: "SCOUT_COMBINE_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
   | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
@@ -3151,6 +3152,69 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...s,
           allocation,
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_COMBINE_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || s.windowId !== "COMBINE") return state;
+
+      if ((s.combine?.day ?? 1) !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
+      if (s.interviews.interviewsRemaining <= 0) return { ...state, uiToast: "No interview slots remaining." };
+
+      const { prospectId, category } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `combine:int:${k}`);
+
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      if (!profile || !truth) return state;
+
+      addClarity({ profile, track: "CHAR", points: 16, gm });
+      addClarity({ profile, track: "FIT", points: category === "IQ" ? 12 : category === "LEADERSHIP" ? 8 : 6, gm });
+
+      if (!profile.revealed.leadershipTag && profile.clarity.CHAR >= 60) {
+        let p = 0.2 + (gm.intel_network - 50) * 0.003;
+        if (category === "LEADERSHIP") p += 0.12;
+        if (category === "STRESS") p += 0.04;
+        p = Math.max(0.05, Math.min(0.55, p));
+        if (seed(`lead:${s.windowKey}:${prospectId}:${category}`) < p) {
+          profile.revealed.leadershipTag = truth.trueCharacter.leadershipTag;
+        }
+      }
+
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+
+      const hist = s.interviews.history[prospectId] ?? [];
+      const outcome =
+        seed(`out:${s.windowKey}:${prospectId}:${category}`) < 0.15
+          ? "Concerning"
+          : seed(`out2:${s.windowKey}:${prospectId}:${category}`) < 0.45
+            ? "Mixed"
+            : "Positive";
+
+      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome, windowKey: s.windowKey }] };
+
+      const p = (draftClassJson as any[])
+        .map((row, i) => ({
+          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+          name: row.name ?? row["Name"] ?? "Unknown",
+        }))
+        .find((x) => x.id === prospectId);
+
+      const feed = [
+        ...s.combine.feed,
+        { id: `int:${prospectId}:${Date.now()}`, day: 4, text: `${p?.name ?? prospectId} interview (${category}): ${outcome}` },
+      ];
+
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          interviews: { ...s.interviews, interviewsRemaining: s.interviews.interviewsRemaining - 1, history },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+          combine: { ...s.combine, feed },
         },
       };
     }

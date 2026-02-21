@@ -3,6 +3,38 @@ import { getDraftClass, useGame } from "@/context/GameContext";
 
 const TIERS = ["T1", "T2", "T3", "T4", "T5"] as const;
 
+function combinedRiskLevel(med?: string, chr?: string): "LOW" | "MED" | "HIGH" | null {
+  if (!med || !chr) return null;
+
+  const rank = (t: string) => {
+    if (t === "BLACK") return 5;
+    if (t === "RED") return 4;
+    if (t === "ORANGE") return 3;
+    if (t === "YELLOW") return 2;
+    if (t === "GREEN" || t === "BLUE") return 1;
+    return 0;
+  };
+
+  const worst = Math.max(rank(med), rank(chr));
+  if (worst >= 4) return "HIGH";
+  if (worst >= 3) return "MED";
+  return "LOW";
+}
+
+function RiskBadgeCombined({ med, chr }: { med?: string; chr?: string }) {
+  const lvl = combinedRiskLevel(med, chr);
+  if (!lvl) return <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px]">RISK —</span>;
+
+  const cls =
+    lvl === "LOW"
+      ? "bg-emerald-500/20 border-emerald-400/30 text-emerald-100"
+      : lvl === "MED"
+        ? "bg-amber-500/20 border-amber-400/30 text-amber-100"
+        : "bg-red-500/20 border-red-400/30 text-red-100";
+
+  return <span className={`rounded border px-2 py-0.5 text-[11px] ${cls}`}>RISK {lvl}</span>;
+}
+
 export default function BigBoard() {
   const { state, dispatch } = useGame();
   const scouting = state.scoutingState;
@@ -13,9 +45,9 @@ export default function BigBoard() {
     if (!scouting) dispatch({ type: "SCOUT_INIT" });
   }, [scouting, dispatch]);
 
-  const draftClass = getDraftClass() as any[];
+  const draftClass = getDraftClass() as Record<string, unknown>[];
   const byId = useMemo(() => {
-    const m = new Map<string, any>();
+    const m = new Map<string, Record<string, unknown>>();
     for (const p of draftClass) m.set(p.id ?? p.prospectId ?? p["Player ID"], p);
     return m;
   }, [draftClass]);
@@ -86,6 +118,9 @@ export default function BigBoard() {
                   <button className="min-w-0 text-left" onClick={() => setOpenId(id)}>
                     <div className="truncate font-semibold">{p.name ?? p["Name"]} <span className="opacity-70">{p.pos ?? p["POS"]}</span></div>
                     <div className="text-xs opacity-70">Band {s.estLow}-{s.estHigh} • Conf {s.confidence}%</div>
+                    <div className="mt-1">
+                      <RiskBadgeCombined med={s.revealed.medicalTier} chr={s.revealed.characterTier} />
+                    </div>
                   </button>
                   <div className="flex flex-col gap-2">
                     <button className="rounded border border-white/10 px-3 py-1" onClick={() => move(id, "UP")}>↑</button>
