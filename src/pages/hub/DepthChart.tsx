@@ -197,8 +197,8 @@ export default function DepthChart() {
     return { set, total: activeSection.slots.length };
   })();
 
-  const handleDrop = (toSlot: string) => {
-    const fromSlot = dragFromSlot.current;
+  const handleDrop = (toSlot: string, explicitFromSlot?: string | null) => {
+    const fromSlot = explicitFromSlot ?? dragFromSlot.current;
     dragFromSlot.current = null;
     if (!fromSlot || fromSlot === toSlot) return;
     const gA = slotGroup(fromSlot);
@@ -249,7 +249,6 @@ export default function DepthChart() {
       dragFromSlot.current = slot;
       setDraggingSlot(slot);
       setGhostPos({ x: e.clientX, y: e.clientY });
-      await hapticTap("light");
       await hapticTap("light");
     }, 250);
   };
@@ -404,8 +403,15 @@ export default function DepthChart() {
                       data-depth-slot={slot}
                       className={`relative flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between
                         ${dropSlot === slot && draggingSlot ? (dropValid ? "ring-2 ring-accent" : "ring-2 ring-red-500") : ""}`}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => handleDrop(slot)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = e.dataTransfer.getData("text/depth-slot") || dragFromSlot.current;
+                        handleDrop(slot, from);
+                      }}
                     >
                       {draggingSlot && dropSlot === slot ? (
                         <div className={`pointer-events-none absolute inset-0 rounded-xl ${dropValid ? "bg-accent/10" : "bg-red-500/10"}`} />
@@ -419,11 +425,13 @@ export default function DepthChart() {
                             locked ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"
                           } ${draggingSlot === slot ? "ring-2 ring-accent" : ""}`}
                           draggable={!locked}
-                          onDragStart={() => {
+                          onDragStart={(e) => {
                             if (locked) return;
                             dragFromSlot.current = slot;
                             setDraggingSlot(slot);
                             setGhostPos(null);
+                            e.dataTransfer.setData("text/depth-slot", slot);
+                            e.dataTransfer.effectAllowed = "move";
                             ghostLabelRef.current = {
                               fromSlot: slot,
                               groupKey: slotGroup(slot),
