@@ -92,6 +92,14 @@ export default function CoordinatorHiring() {
   const hire = (personId: string, salary: number) => {
     if (roleFilled) return;
     dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
+
+    // Auto-advance to the next unfilled coordinator position
+    const allRoles: Array<"OC" | "DC" | "STC"> = ["OC", "DC", "STC"];
+    const filledAfterHire = new Set<string>(
+      [role, state.staff.ocId && "OC", state.staff.dcId && "DC", state.staff.stcId && "STC"].filter(Boolean) as string[]
+    );
+    const nextRole = allRoles.find((r) => !filledAfterHire.has(r));
+    if (nextRole) setRole(nextRole);
   };
 
   const wrapInShell = state.phase === "COORD_HIRING" && !location?.pathname?.startsWith?.("/hub/");
@@ -163,7 +171,7 @@ export default function CoordinatorHiring() {
             candidates.map(({ p, exp, salary, safety, emergency }) => (
               <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-3">
-                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach") }} size={40} />
+                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach"), avatarUrl: p.avatarUrl }} size={40} />
                   <div className="min-w-0">
                     <div className="font-medium truncate">
                       {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>

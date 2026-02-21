@@ -39,6 +39,7 @@ export type PersonnelRow = {
   reputation?: number;
   contractId?: string;
   scheme?: string;
+  avatarUrl?: string;
   [key: string]: unknown;
 };
 
