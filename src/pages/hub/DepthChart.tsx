@@ -184,9 +184,24 @@ export default function DepthChart() {
       .sort((a, b) => b.ovr - a.ovr);
   }, [teamId, activeIds]);
 
+  const sectionGroups = useMemo(() => {
+    const section = SECTIONS.find((s) => s.key === unit) ?? SECTIONS[0];
+    const slotSet = new Set(section.slots);
+    const groups: { key: string; slots: string[] }[] = [];
+    const seen = new Set<string>();
+    for (const slot of section.slots) {
+      const g = slotGroup(slot);
+      if (!g || seen.has(g)) continue;
+      seen.add(g);
+      groups.push({ key: g, slots: GROUPS[g].filter((s) => slotSet.has(s)) });
+    }
+    return groups;
+  }, [unit]);
+
   if (!teamId) return <HubEmptyState title="Roster not loaded" description="Assign a team to configure your depth chart." action={{ label: "Back to Hub", to: "/hub" }} />;
 
   const activeSection = SECTIONS.find((s) => s.key === unit) ?? SECTIONS[0];
+
   const dupes = (() => {
     const counts = new Map<string, number>();
     for (const v of Object.values(state.depthChart.startersByPos)) {
@@ -416,6 +431,128 @@ export default function DepthChart() {
                   </div>
                 </div>
 
+                {sectionGroups.map(({ key: group, slots: groupSlots }) => (
+                  <Card key={group} className="border">
+                    <CardHeader className="px-4 pb-2 pt-3">
+                      <CardTitle className="text-base">{groupLabel(group)}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 px-4 pb-3 pt-0">
+                      {groupSlots.map((slot, depthIdx) => {
+                        const pid = state.depthChart.startersByPos[slot];
+                        const isAuto = !pid;
+                        const locked = !!state.depthChart.lockedBySlot?.[slot];
+
+                        const used = usedPlayerIds(state.depthChart);
+                        used.delete(String(pid ?? ""));
+                        const options = eligibleRosterForSlot(slot, roster, pid, used);
+                        const sel = chosenPlayer(pid);
+
+                        if (draggingSlot === slot) {
+                          ghostLabelRef.current = {
+                            fromSlot: `${group} #${depthIdx + 1}`,
+                            groupKey: group,
+                            line1: sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)",
+                            line2: sel ? playerMeta(sel.raw) : "—",
+                          };
+                        }
+
+                        return (
+                          <div
+                            key={slot}
+                            data-depth-slot={slot}
+                            className={`relative flex flex-col gap-2 rounded-lg border px-3 py-2 md:flex-row md:items-center
+                              ${dropSlot === slot && draggingSlot ? (dropValid ? "ring-2 ring-accent" : "ring-2 ring-red-500") : ""}`}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const from = e.dataTransfer.getData("text/depth-slot") || dragFromSlot.current;
+                              handleDrop(slot, from);
+                            }}
+                          >
+                            {draggingSlot && dropSlot === slot ? (
+                              <div className={`pointer-events-none absolute inset-0 rounded-lg ${dropValid ? "bg-accent/10" : "bg-red-500/10"}`} />
+                            ) : null}
+
+                            {draggingSlot === slot ? <div className="pointer-events-none absolute inset-0 rounded-lg border border-dashed border-accent/60 bg-white/5" /> : null}
+
+                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                              <div className="w-5 shrink-0 text-center text-sm font-semibold text-muted-foreground select-none">{depthIdx + 1}</div>
+
+                              <div
+                                className={`rounded-md border border-white/10 bg-white/5 p-1.5 select-none touch-none ${
+                                  locked ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"
+                                } ${draggingSlot === slot ? "ring-2 ring-accent" : ""}`}
+                                draggable={!locked}
+                                onDragStart={(e) => {
+                                  if (locked) return;
+                                  dragFromSlot.current = slot;
+                                  setDraggingSlot(slot);
+                                  setGhostPos(null);
+                                  e.dataTransfer.setData("text/depth-slot", slot);
+                                  e.dataTransfer.effectAllowed = "move";
+                                  ghostLabelRef.current = {
+                                    fromSlot: `${group} #${depthIdx + 1}`,
+                                    groupKey: group,
+                                    line1: sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)",
+                                    line2: sel ? playerMeta(sel.raw) : "—",
+                                  };
+                                }}
+                                onDragEnd={() => {
+                                  dragFromSlot.current = null;
+                                  setDraggingSlot(null);
+                                  setGhostPos(null);
+                                  ghostLabelRef.current = null;
+                                }}
+                                title={locked ? "Locked slots cannot move" : "Drag to reorder within this position group"}
+                                onPointerDown={onHandlePointerDown(slot, locked)}
+                                onPointerMove={onHandlePointerMove}
+                                onPointerUp={onHandlePointerUp}
+                                onPointerCancel={onHandlePointerCancel}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-70" />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium">
+                                  {sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)"} {locked ? "• Locked" : ""}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">{sel ? playerMeta(sel.raw) : "—"}</div>
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant={locked ? "default" : "secondary"}
+                                disabled={isAuto}
+                                title={isAuto ? "Lock requires a manual selection" : ""}
+                                onClick={() => dispatch({ type: "TOGGLE_DEPTH_SLOT_LOCK", payload: { slot } })}
+                              >
+                                {locked ? "Locked" : "Lock"}
+                              </Button>
+
+                              <Select
+                                value={pid ?? "AUTO"}
+                                onValueChange={(v) => dispatch({ type: "SET_STARTER", payload: { slot, playerId: v as string | "AUTO" } })}
+                              >
+                                <SelectTrigger className="w-[320px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="AUTO">Auto (top OVR)</SelectItem>
+                                  {options.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.name} ({p.pos} {p.ovr})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Badge variant="outline">{pid ? "Manual" : "Auto"}</Badge>
+                            </div>
                 {activeSection.slots.map((slot) => {
                   const pid = state.depthChart.startersByPos[slot];
                   const isAuto = !pid;
@@ -489,43 +626,11 @@ export default function DepthChart() {
                           <div className="truncate text-sm font-medium text-slate-200">
                             {sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)"} {locked ? "• Locked" : ""}
                           </div>
-                          <div className="truncate text-xs text-muted-foreground">{sel ? playerMeta(sel.raw) : "—"}</div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant={locked ? "default" : "secondary"}
-                          disabled={isAuto}
-                          title={isAuto ? "Lock requires a manual selection" : ""}
-                          onClick={() => dispatch({ type: "TOGGLE_DEPTH_SLOT_LOCK", payload: { slot } })}
-                        >
-                          {locked ? "Locked" : "Lock"}
-                        </Button>
-
-                        <Select
-                          value={pid ?? "AUTO"}
-                          onValueChange={(v) => dispatch({ type: "SET_STARTER", payload: { slot, playerId: v as string | "AUTO" } })}
-                        >
-                          <SelectTrigger className="w-[320px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="AUTO">Auto (top OVR)</SelectItem>
-                            {options.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.name} ({p.pos} {p.ovr})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Badge variant="outline">{pid ? "Manual" : "Auto"}</Badge>
-                      </div>
-                    </div>
-                  );
-                })}
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </ScrollArea>
           </div>
