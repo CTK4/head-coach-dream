@@ -21,7 +21,7 @@ export function BottomNav() {
     { label: "Home", route: "/hub", icon: Home },
     { label: "Team", route: "/roster", icon: Users },
     { label: "Staff", route: "/staff", icon: Briefcase },
-    { label: "Scouting", route: "/scouting", icon: Search },
+    { label: "Scouting", route: "/hub/scouting", icon: Search },
     {
       label: isFreeAgency ? "Agency" : isRegularSeason ? "Trades" : isResign ? "Re-Sign" : "Strategy",
       route: isFreeAgency ? "/free-agency" : isRegularSeason ? "/trades" : isResign ? "/re-sign" : "/strategy",

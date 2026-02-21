@@ -30,3 +30,7 @@ export function isReSignAllowed(state: any): boolean {
   return getPhaseKey(state) === "PHASE_2_RETENTION";
 }
 
+export function selectCurrentPhase(state: any): PhaseKey {
+  return getPhaseKey(state);
+}
+
