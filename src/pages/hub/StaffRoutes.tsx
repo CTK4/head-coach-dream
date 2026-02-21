@@ -5,7 +5,8 @@ import { useGame } from "@/context/GameContext";
 
 export default function StaffRoutes() {
   const { state } = useGame();
-  const hasOpenAssistantRole = Object.values(state.assistantStaff ?? {}).some((personId) => !personId);
+  const roles: Array<keyof typeof state.assistantStaff> = ["assistantHcId", "qbCoachId", "olCoachId", "dlCoachId", "lbCoachId", "dbCoachId", "rbCoachId", "wrCoachId"];
+  const hasOpenAssistantRole = roles.some((role) => !state.assistantStaff?.[role]);
 
   return (
     <Routes>

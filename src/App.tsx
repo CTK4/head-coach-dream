@@ -18,6 +18,7 @@ import ContractsRoutes from "@/pages/hub/ContractsRoutes";
 import StrategyRoutes from "@/pages/hub/StrategyRoutes";
 import LeagueNews from "./pages/hub/LeagueNews";
 import SettingsPage from "./pages/hub/Settings";
+import OffseasonRoutes from "@/pages/hub/offseason/OffseasonRoutes";
 import ScoutingLayout from "@/pages/hub/scouting/ScoutingLayout";
 import ScoutingHome from "@/pages/hub/scouting/ScoutingHome";
 import BigBoard from "@/pages/hub/scouting/BigBoard";
@@ -116,12 +117,14 @@ const App = () => (
             {/* Hub Routes wrapped in AppShell and HubGate */}
             <Route element={<HubGate><AppShell /></HubGate>}>
               <Route path="/hub" element={<Hub />} />
+              <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
               <Route path="/staff/*" element={<StaffRoutes />} />
               <Route path="/roster/*" element={<RosterRoutes />} />
               <Route path="/contracts/*" element={<ContractsRoutes />} />
               <Route path="/strategy/*" element={<StrategyRoutes />} />
               <Route path="/hub/scouting/*" element={<ScoutingRoutes />} />
               <Route path="/scouting/*" element={<Navigate to="/hub/scouting" replace />} />
+              <Route path="/hub/offseason/*" element={<OffseasonRoutes />} />
               <Route path="/news" element={<LeagueNews />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />

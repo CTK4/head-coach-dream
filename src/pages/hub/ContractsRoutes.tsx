@@ -2,6 +2,9 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import CapProjection from "@/pages/hub/CapProjection";
 import PlayerContractScreen from "@/pages/hub/PlayerContractScreen";
+import DeadMoney from "@/pages/hub/DeadMoney";
+import TagCenter from "@/pages/hub/TagCenter";
+import PlayerContracts from "@/pages/hub/PlayerContracts";
 
 function Summary() {
   return (
@@ -20,20 +23,16 @@ function Summary() {
   );
 }
 
-function Simple({ title }: { title: string }) {
-  return <div><ScreenHeader title={title} /><div className="p-4 text-sm text-slate-300">{title} view</div></div>;
-}
-
 export default function ContractsRoutes() {
   return (
     <Routes>
       <Route index element={<Navigate to="summary" replace />} />
       <Route path="summary" element={<Summary />} />
-      <Route path="players" element={<Simple title="PLAYER CONTRACTS" />} />
+      <Route path="players" element={<PlayerContracts />} />
       <Route path="player/:playerId" element={<PlayerContractScreen />} />
-      <Route path="dead-money" element={<Simple title="DEAD MONEY" />} />
+      <Route path="dead-money" element={<DeadMoney />} />
       <Route path="projection" element={<CapProjection />} />
-      <Route path="tag" element={<Simple title="FRANCHISE TAG" />} />
+      <Route path="tag" element={<TagCenter />} />
     </Routes>
   );
 }
