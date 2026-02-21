@@ -46,7 +46,7 @@ const NEGOTIATION_DEADLINE_WEEK = 8;
 
 export default function TagCenter() {
   const { state, dispatch } = useGame();
-  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId;
 
   // Phase gate: no team yet
   if (!teamId) {
@@ -89,7 +89,7 @@ export default function TagCenter() {
     return ps
       .filter(
         (p: any) =>
-          String((state as any).playerTeamOverrides?.[String(p.playerId)] ?? p.teamId) === String(teamId),
+          String(state.playerTeamOverrides?.[String(p.playerId)] ?? p.teamId) === String(teamId),
       )
       .map((p: any) => {
         const c = contracts.find((x: any) => x.contractId === p.contractId);
@@ -175,13 +175,16 @@ export default function TagCenter() {
     };
   }, [applied]);
 
-  // Negotiation timeline
+  // Negotiation timeline: progress = elapsed weeks since tag applied vs. total window
   const negoWeekStart = applied?.appliedWeek ?? 0;
+  const currentWeek = state.week ?? 0;
   const negoProgress = Math.min(
     100,
-    Math.round(((negoWeekStart) / NEGOTIATION_DEADLINE_WEEK) * 100),
+    negoWeekStart < NEGOTIATION_DEADLINE_WEEK
+      ? Math.round(((currentWeek - negoWeekStart) / (NEGOTIATION_DEADLINE_WEEK - negoWeekStart)) * 100)
+      : 100,
   );
-  const weeksLeft = Math.max(0, NEGOTIATION_DEADLINE_WEEK - negoWeekStart);
+  const weeksLeft = Math.max(0, NEGOTIATION_DEADLINE_WEEK - currentWeek);
 
   const tagLabel: Record<TagType, string> = {
     FRANCHISE_NON_EX: "Franchise (Non-Ex)",
