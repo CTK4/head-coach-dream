@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { PlayerStatusIcons, StatusLegend } from "@/components/franchise-hub/PlayerStatusUI";
+import { Avatar } from "@/components/common/Avatar";
 
 function money(n: number) {
   const v = Number(n);
@@ -74,14 +75,23 @@ export default function RosterAudit() {
                   onClick={() => setPlayerId(String(p.playerId))}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0 min-w-[240px]">
+                    <div className="flex min-w-0 min-w-[240px] items-center gap-3">
+                      <Avatar
+                        entity={{
+                          type: "player",
+                          id: String(p.playerId),
+                          name: String(p.name ?? p.fullName ?? "Player"),
+                        }}
+                        size={44}
+                      />
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div className="truncate font-semibold text-slate-100">
-                          {p.name ?? p.fullName ?? "Player"} <span className="text-slate-200/70">({normalizePos(String(p.pos ?? "UNK"))})</span>
+                          {p.name ?? p.fullName ?? "Player"}{" "}
+                          <span className="text-slate-200/70">({normalizePos(String(p.pos ?? "UNK"))})</span>
                         </div>
                         <PlayerStatusIcons player={p} />
+                        <div className="text-xs text-slate-200/70">{money(apy)} APY</div>
                       </div>
-                      <div className="text-xs text-slate-200/70">{money(apy)} APY</div>
                     </div>
 
                     <div className="text-xs text-slate-200/70">{p.devTrait ?? ""}</div>

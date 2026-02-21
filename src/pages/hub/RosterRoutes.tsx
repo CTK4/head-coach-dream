@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
+import { Avatar } from "@/components/common/Avatar";
 
 function RosterList() {
   const players = ["Jaylen Fox", "Marco Bell", "Trey Owens"];
@@ -14,8 +15,13 @@ function RosterList() {
         </div>
         {players.map((p, i) => (
           <Link key={p} to={`/roster/player/${i + 1}`} className="block rounded-xl border border-white/10 bg-slate-900 p-3">
-            <div className="font-semibold">{p}</div>
-            <div className="text-xs text-slate-400">QB{i + 1} · OVR {78 + i}</div>
+            <div className="flex items-center gap-3">
+              <Avatar entity={{ type: "player", id: String(i + 1), name: p }} size={40} />
+              <div>
+                <div className="font-semibold">{p}</div>
+                <div className="text-xs text-slate-400">QB{i + 1} · OVR {78 + i}</div>
+              </div>
+            </div>
           </Link>
         ))}
       </div>
