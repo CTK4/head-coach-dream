@@ -145,8 +145,8 @@ export default function BigBoard() {
         );
       })}
       {openId ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/70" onClick={() => setOpenId(null)}>
-          <div className="w-full rounded-t-2xl border border-white/10 bg-slate-950 p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/70" onClick={() => setOpenId(null)}>
+          <div className="w-full rounded-t-2xl border border-white/10 bg-slate-950 p-4 pb-28" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="font-semibold">{byId.get(openId)?.name ?? byId.get(openId)?.["Name"]}</div>

@@ -121,6 +121,7 @@ const App = () => (
               <Route path="/contracts/*" element={<ContractsRoutes />} />
               <Route path="/strategy/*" element={<StrategyRoutes />} />
               <Route path="/hub/scouting/*" element={<ScoutingRoutes />} />
+              <Route path="/scouting/*" element={<Navigate to="/hub/scouting" replace />} />
               <Route path="/news" element={<LeagueNews />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />

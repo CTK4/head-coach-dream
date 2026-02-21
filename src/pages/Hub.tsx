@@ -131,7 +131,7 @@ export default function Hub() {
                 />
                 <HubTile
                     title="Scouting"
-                    to="/scouting"
+                    to="/hub/scouting"
                     imageUrl={IMAGES.scouting}
                     badgeCount={badgeCounts.scouting}
                 />

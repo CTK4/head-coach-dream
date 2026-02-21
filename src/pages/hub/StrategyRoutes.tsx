@@ -1,37 +1,253 @@
+import { useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
+import { useGame } from "@/context/GameContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const PRIORITIES_KEY = "hcd:strategy:draftFaPriorities";
+
+type PriorityPos =
+  | "QB"
+  | "RB"
+  | "WR"
+  | "TE"
+  | "OL"
+  | "DL"
+  | "EDGE"
+  | "LB"
+  | "CB"
+  | "S"
+  | "K"
+  | "P";
+
+const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
+
+function loadPriorities(): PriorityPos[] {
+  try {
+    const raw = localStorage.getItem(PRIORITIES_KEY);
+    if (!raw) return ["QB", "OL", "EDGE"];
+    const parsed = JSON.parse(raw) as PriorityPos[];
+    return Array.isArray(parsed) ? parsed.filter((x): x is PriorityPos => POS_GROUPS.includes(x as PriorityPos)) : ["QB", "OL", "EDGE"];
+  } catch {
+    return ["QB", "OL", "EDGE"];
+  }
+}
+
+function savePriorities(p: PriorityPos[]) {
+  localStorage.setItem(PRIORITIES_KEY, JSON.stringify(p));
+}
 
 function StrategyHome() {
   return (
-    <div>
+    <div className="min-w-0">
       <ScreenHeader title="FRANCHISE STRATEGY" subtitle="Identity + Priorities" />
       <div className="space-y-3 p-4">
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <button className="rounded-lg bg-slate-700 px-3 py-2">Rebuild</button>
-          <button className="rounded-lg border border-white/10 px-3 py-2">Reload</button>
-          <button className="rounded-lg border border-white/10 px-3 py-2">Contend</button>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <Link to="identity" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            <div className="font-semibold">Team Identity</div>
+            <div className="text-xs text-slate-400">Offense/Defense style & tempo</div>
+          </Link>
+          <Link to="priorities" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            <div className="font-semibold">Draft / FA Priorities</div>
+            <div className="text-xs text-slate-400">Set position targets</div>
+          </Link>
         </div>
-        <div className="rounded-xl border border-white/10 bg-slate-900 p-4 text-sm">Cap allocation sliders and generated action plan.</div>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <Link to="identity" className="rounded-lg border border-white/10 bg-slate-900 p-2">Identity</Link>
-          <Link to="priorities" className="rounded-lg border border-white/10 bg-slate-900 p-2">Draft/FA Priorities</Link>
+
+        <div className="grid grid-cols-1 gap-2 text-sm">
+          <Link to="tag" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold">Franchise Tag</div>
+                <div className="text-xs text-slate-400">Open Tag Center</div>
+              </div>
+              <Badge variant="secondary">Hub</Badge>
+            </div>
+          </Link>
         </div>
       </div>
     </div>
   );
 }
 
-const Pane = ({ title }: { title: string }) => <div><ScreenHeader title={title} /><div className="p-4 text-sm text-slate-300">{title} settings.</div></div>;
+function IdentityScreen() {
+  const { state, dispatch } = useGame();
+
+  const offenseStyle = state.scheme?.offense?.style ?? "BALANCED";
+  const offenseTempo = state.scheme?.offense?.tempo ?? "NORMAL";
+  const defenseStyle = state.scheme?.defense?.style ?? "MIXED";
+  const defenseAgg = state.scheme?.defense?.aggression ?? "NORMAL";
+
+  return (
+    <div className="min-w-0">
+      <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" />
+      <div className="space-y-3 p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Offense</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Style</div>
+              <Select
+                value={offenseStyle}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: { offense: { style: v as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BALANCED">Balanced</SelectItem>
+                  <SelectItem value="RUN_HEAVY">Run Heavy</SelectItem>
+                  <SelectItem value="PASS_HEAVY">Pass Heavy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Tempo</div>
+              <Select
+                value={offenseTempo}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: { offense: { style: offenseStyle as never, tempo: v as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SLOW">Slow</SelectItem>
+                  <SelectItem value="NORMAL">Normal</SelectItem>
+                  <SelectItem value="FAST">Fast</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Defense</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Coverage</div>
+              <Select
+                value={defenseStyle}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: v as never, aggression: defenseAgg as never } },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MAN">Man</SelectItem>
+                  <SelectItem value="ZONE">Zone</SelectItem>
+                  <SelectItem value="MIXED">Mixed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Aggression</div>
+              <Select
+                value={defenseAgg}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: v as never } },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONSERVATIVE">Conservative</SelectItem>
+                  <SelectItem value="NORMAL">Normal</SelectItem>
+                  <SelectItem value="AGGRESSIVE">Aggressive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="text-xs text-slate-400">
+          These settings are saved in your career file and can be used later for staff fit, playcalling, and roster logic.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrioritiesScreen() {
+  const [priorities, setPriorities] = useState<PriorityPos[]>(() => loadPriorities());
+
+  const toggle = (pos: PriorityPos) => {
+    setPriorities((prev) => {
+      const next = prev.includes(pos) ? prev.filter((x) => x !== pos) : [...prev, pos];
+      savePriorities(next);
+      return next;
+    });
+  };
+
+  const top3 = useMemo(() => priorities.slice(0, 3), [priorities]);
+
+  return (
+    <div className="min-w-0">
+      <ScreenHeader title="DRAFT / FA PRIORITIES" subtitle="Targets & Focus" />
+      <div className="space-y-3 p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Focus (stored locally)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {top3.length ? top3.map((p) => <Badge key={p}>{p}</Badge>) : <span className="text-sm text-slate-400">None selected</span>}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {POS_GROUPS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => toggle(p)}
+                  className={`rounded-lg border px-3 py-2 text-xs ${
+                    priorities.includes(p) ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-slate-400">
+              This screen was previously a placeholder. These priorities are now persisted to local storage and can be wired into draft/FA CPU logic later.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 export default function StrategyRoutes() {
   return (
     <Routes>
       <Route index element={<StrategyHome />} />
-      <Route path="identity" element={<Pane title="TEAM IDENTITY" />} />
-      <Route path="focus" element={<Pane title="SHORT VS LONG FOCUS" />} />
-      <Route path="scheme" element={<Pane title="SCHEME PHILOSOPHY" />} />
-      <Route path="allocation" element={<Pane title="CAP ALLOCATION STRATEGY" />} />
-      <Route path="priorities" element={<Pane title="DRAFT / FA PRIORITIES" />} />
+      <Route path="identity" element={<IdentityScreen />} />
+      <Route path="priorities" element={<PrioritiesScreen />} />
+      <Route path="tag" element={<Navigate to="/hub/tag-center" replace />} />
       <Route path="*" element={<Navigate to="/strategy" replace />} />
     </Routes>
   );
