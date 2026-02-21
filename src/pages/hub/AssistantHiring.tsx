@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useGame, type AssistantStaff } from "@/context/GameContext";
 import {
   getAssistantHeadCoachCandidates,
@@ -17,6 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Avatar } from "@/components/common/Avatar";
+import { nextStageForNavigate, stageToRoute } from "@/components/franchise-hub/stageRouting";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -51,6 +53,7 @@ function repNumber(p: PersonnelRow): number {
 
 export default function AssistantHiring() {
   const { state, dispatch } = useGame();
+  const navigate = useNavigate();
   const teamId = resolveUserTeamId(state);
   const coordinatorsReady = !!(state.staff?.ocId && state.staff?.dcId && state.staff?.stcId);
 
@@ -180,7 +183,9 @@ export default function AssistantHiring() {
 
   const handleContinue = () => {
     if (!allFilled) return;
+    const next = nextStageForNavigate(state.careerStage);
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
+    navigate(stageToRoute(next));
   };
 
   return (

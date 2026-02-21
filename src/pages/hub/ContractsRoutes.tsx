@@ -4,6 +4,8 @@ import CapProjection from "@/pages/hub/CapProjection";
 import PlayerContractScreen from "@/pages/hub/PlayerContractScreen";
 import DeadMoney from "@/pages/hub/DeadMoney";
 import TagCenter from "@/pages/hub/TagCenter";
+import CapBaseline from "@/pages/hub/CapBaseline";
+import RosterAudit from "@/pages/hub/RosterAudit";
 import PlayerContracts from "@/pages/hub/PlayerContracts";
 
 function Summary() {
@@ -11,7 +13,12 @@ function Summary() {
     <div>
       <ScreenHeader title="CONTRACTS & CAP" subtitle="Cap Summary" />
       <div className="space-y-3 p-4">
-        <div className="rounded-xl border border-white/10 bg-slate-900 p-4 text-sm">Cap chart + top cap hits</div>
+        <Link
+          to="/contracts/cap-baseline"
+          className="block rounded-xl border border-white/10 bg-slate-900 p-4 text-sm hover:bg-white/5"
+        >
+          Cap chart + top cap hits
+        </Link>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <Link to="/contracts/players" className="rounded-lg border border-white/10 bg-slate-900 p-3">Player Contracts</Link>
           <Link to="/contracts/dead-money" className="rounded-lg border border-white/10 bg-slate-900 p-3">Dead Money</Link>
@@ -33,6 +40,8 @@ export default function ContractsRoutes() {
       <Route path="dead-money" element={<DeadMoney />} />
       <Route path="projection" element={<CapProjection />} />
       <Route path="tag" element={<TagCenter />} />
+      <Route path="cap-baseline" element={<CapBaseline />} />
+      <Route path="roster-audit" element={<RosterAudit />} />
     </Routes>
   );
 }

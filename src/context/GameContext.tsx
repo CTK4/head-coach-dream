@@ -3555,7 +3555,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "SCOUT_DEV_SIM_WEEK": {
-      return { ...state, uiToast: "TODO: in-season update tick. (dev stub)" };
+      const schedule = state.hub.schedule ?? createSchedule(state.saveSeed);
+      return {
+        ...state,
+        hub: { ...state.hub, schedule, regularSeasonWeek: 1 },
+        careerStage: "REGULAR_SEASON",
+        week: 1,
+        uiToast: "Advanced to Week 1 (dev). In-season scouting unlocked.",
+      };
     }
 
     case "SCOUTING_WINDOW_INIT": {

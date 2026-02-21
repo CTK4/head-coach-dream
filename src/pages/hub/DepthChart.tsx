@@ -554,8 +554,8 @@ export default function DepthChart() {
                               <Badge variant="outline">{pid ? "Manual" : "Auto"}</Badge>
                             </div>
                           </div>
-                        );
-                      })}
+                      );
+                    })}
                     </CardContent>
                   </Card>
                 ))}

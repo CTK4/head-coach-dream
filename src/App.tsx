@@ -46,6 +46,12 @@ import TagCenter from "./pages/hub/TagCenter";
 import DeadMoney from "./pages/hub/DeadMoney";
 import Development from "./pages/hub/Development";
 import InjuryReport from "./pages/hub/InjuryReport";
+import CapBaseline from "./pages/hub/CapBaseline";
+import RosterAudit from "./pages/hub/RosterAudit";
+import AssistantHiring from "./pages/hub/AssistantHiring";
+import Combine from "./pages/hub/Combine";
+import Tampering from "./pages/hub/Tampering";
+import PreDraft from "./pages/hub/PreDraft";
 
 const queryClient = new QueryClient();
 
@@ -117,7 +123,6 @@ const App = () => (
             {/* Hub Routes wrapped in AppShell and HubGate */}
             <Route element={<HubGate><AppShell /></HubGate>}>
               <Route path="/hub" element={<Hub />} />
-              <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
               <Route path="/staff/*" element={<StaffRoutes />} />
               <Route path="/roster/*" element={<RosterRoutes />} />
               <Route path="/contracts/*" element={<ContractsRoutes />} />
@@ -150,6 +155,17 @@ const App = () => (
                <Route path="/hub/dead-money" element={<DeadMoney />} />
                <Route path="/hub/development" element={<Development />} />
                <Route path="/hub/injury-report" element={<InjuryReport />} />
+               <Route path="/hub/cap-baseline" element={<CapBaseline />} />
+               <Route path="/hub/roster-audit" element={<RosterAudit />} />
+               <Route path="/hub/assistant-hiring" element={<AssistantHiring />} />
+               <Route path="/hub/combine" element={<Combine />} />
+               <Route path="/hub/tampering" element={<Tampering />} />
+               <Route path="/hub/pre-draft" element={<PreDraft />} />
+
+               <Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} />
+               <Route path="/contracts/cap-baseline" element={<Navigate to="/hub/cap-baseline" replace />} />
+               <Route path="/contracts/roster-audit" element={<Navigate to="/hub/roster-audit" replace />} />
+               <Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
