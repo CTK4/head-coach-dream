@@ -471,6 +471,7 @@ export type GameAction =
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
+  | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
   | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
@@ -2601,6 +2602,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
+    case "SET_SCHEME":
+      return { ...state, scheme: { ...state.scheme, ...action.payload } };
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item
@@ -2691,10 +2694,33 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       nextState = addStaffSalaryAndCash({ ...nextState, staff }, action.payload.personId, action.payload.salary);
 
+      const staffComplete = !!(staff.ocId && staff.dcId && staff.stcId);
+
+      if (staffComplete) {
+        const hasActive = Object.keys(nextState.rosterMgmt.active ?? {}).length > 0;
+        if (!hasActive) {
+          const rosterPlayers = getTeamRosterPlayers(teamId);
+          const active = Object.fromEntries(rosterPlayers.map((p: any) => [String(p.playerId), true as const]));
+
+          const withActive: GameState = {
+            ...(nextState as GameState),
+            rosterMgmt: { ...nextState.rosterMgmt, active, cuts: {}, finalized: false },
+          };
+
+          nextState = {
+            ...withActive,
+            depthChart: {
+              ...withActive.depthChart,
+              startersByPos: autoFillDepthChartGaps(withActive, teamId),
+            },
+          };
+        }
+      }
+
       return {
         ...nextState,
-        phase: staff.ocId && staff.dcId && staff.stcId ? "HUB" : nextState.phase,
-        careerStage: staff.ocId && staff.dcId && staff.stcId ? "OFFSEASON_HUB" : nextState.careerStage,
+        phase: staffComplete ? "HUB" : nextState.phase,
+        careerStage: staffComplete ? "OFFSEASON_HUB" : nextState.careerStage,
         memoryLog: addMemoryEvent(nextState, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
       };
     }

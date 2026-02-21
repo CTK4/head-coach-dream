@@ -13,7 +13,9 @@ export default function RosterRoutes() {
       <Route path="injuries" element={<InjuryReport />} />
       <Route path="development" element={<Development />} />
       <Route path="player/:playerId" element={<PlayerProfile />} />
+      <Route path="needs" element={<RosterAudit />} />
       <Route path="audit" element={<RosterAudit />} />
+      <Route path="*" element={<Navigate to="depth-chart" replace />} />
     </Routes>
   );
 }

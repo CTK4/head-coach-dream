@@ -19,13 +19,17 @@ const SECTIONS: Section[] = [
 
 export default function DepthChart() {
   const { state, dispatch } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
   const activeIds = state.rosterMgmt.active;
 
   const roster = useMemo(() => {
     if (!teamId) return [];
     return getTeamRosterPlayers(teamId)
-      .filter((p) => !!activeIds[String((p as any).playerId)])
+      .filter((p) => {
+        const pid = String((p as any).playerId);
+        const hasActive = Object.keys(activeIds ?? {}).length > 0;
+        return hasActive ? !!activeIds[pid] : true;
+      })
       .map((p) => ({
         id: String((p as any).playerId),
         name: String((p as any).fullName),
