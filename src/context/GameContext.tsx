@@ -377,6 +377,10 @@ export type GameState = {
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
   firing: FiringMeter;
+  userTeamId?: string;
+  teamId?: string;
+  playerMorale?: Record<string, number>;
+  uiToast?: string;
 };
 
 export type RookieContract = {
@@ -1062,7 +1066,7 @@ function qbGateAllowsAcquisition(state: GameState, teamId: string, role: "STARTE
   if (bad) return true;
 
   if (role === "BACKUP") {
-    const cap = Math.max(1, capSpaceForTeam(state, teamId) + (computeCapLedger(state, teamId, state.finances.postJune1Sim)?.adjustedCap ?? 0));
+    const cap = Math.max(1, capSpaceForTeam(state, teamId) + (computeCapLedger(state, teamId, { useTop51: !!state.finances.postJune1Sim })?.capSpace ?? 0));
     return apy <= cap * 0.06;
   }
   return false;
@@ -1594,6 +1598,9 @@ function seasonRollover(state: GameState): GameState {
       maxResolvesPerPhase: 5,
       activity: [],
       draftByPlayerId: {},
+      resolveRoundByPlayerId: {},
+      pendingCounterTeamByPlayerId: {},
+      cpuTickedOnOpen: false,
     },
     playerTeamOverrides,
     playerContractOverrides,
@@ -2517,13 +2524,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           cash: financeRow?.cash ?? state.teamFinances.cash,
         },
       };
-      return applyFinances(next);
+      return applyFinances(next as GameState);
     }
     case "COORD_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
 
-      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
       if (!teamId) return state;
 
       const expected = expectedSalary(action.payload.role, Number((person as any).reputation ?? 55));
@@ -4060,6 +4067,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ovr: rookieOvrFromRank(rank),
         dev: rookieDevFromTier(row ?? {}),
         apy: rookieApyFromRank(rank),
+        teamId: String(state.acceptedOffer?.teamId ?? ""),
+        scoutOvr: rookieOvrFromRank(rank),
+        scoutDev: rookieDevFromTier(row ?? {}),
+        scoutConf: 50,
       };
       const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
 
@@ -4248,8 +4259,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!teamId) return state;
       const prev = state.depthChart.startersByPos;
 
-      let next = sanitizeDepthChart(state, teamId);
-      const startersByPos = autoFillDepthChartGaps(next, teamId, { resetToBest: true });
+      let next: GameState = state;
+      const startersByPos = autoFillDepthChartGaps(next, teamId);
       next = { ...next, depthChart: { ...next.depthChart, startersByPos } };
 
       next = pushMajorDepthNews(next, teamId, prev, startersByPos);
@@ -4578,27 +4589,16 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       },
     league: normalizedLeague,
     game,
-    draft: oldState.draft
-      ? {
-          started: Boolean((oldState.draft as any).started),
-          completed: Boolean((oldState.draft as any).completed),
-          totalRounds: Number((oldState.draft as any).totalRounds ?? 7),
-          currentOverall: Number((oldState.draft as any).currentOverall ?? 1),
-          orderTeamIds: Array.isArray((oldState.draft as any).orderTeamIds) ? (oldState.draft as any).orderTeamIds : [],
-          leaguePicks: Array.isArray((oldState.draft as any).leaguePicks) ? (oldState.draft as any).leaguePicks : [],
-          onClockTeamId: (oldState.draft as any).onClockTeamId,
-          withdrawnBoardIds: (oldState.draft as any).withdrawnBoardIds ?? {},
-        }
-      : {
-          started: false,
-          completed: false,
-          totalRounds: 7,
-          currentOverall: 1,
-          orderTeamIds: [],
-          leaguePicks: [],
-          onClockTeamId: undefined,
-          withdrawnBoardIds: {},
-        },
+    draft: (oldState.draft ?? {
+      started: false,
+      completed: false,
+      totalRounds: 7,
+      currentOverall: 1,
+      orderTeamIds: [],
+      leaguePicks: [],
+      onClockTeamId: undefined,
+      withdrawnBoardIds: {},
+    }) as DraftState,
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
     firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },

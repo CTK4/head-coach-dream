@@ -1,4 +1,4 @@
-import type { Prospect } from "@/context/GameContext";
+import type { Prospect } from "@/engine/offseasonData";
 import type { GmScoutTraits } from "@/engine/gmScouting";
 import { hiddenIntelForProspect } from "@/engine/prospectIntel";
 import type { PlayerIntel } from "@/engine/scoutingCapacity";

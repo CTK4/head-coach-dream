@@ -5,6 +5,7 @@ import { eligibleRosterForSlot, usedPlayerIds } from "@/engine/depthChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -19,11 +20,10 @@ const SECTIONS: Section[] = [
 export default function DepthChart() {
   const { state, dispatch } = useGame();
   const teamId = state.acceptedOffer?.teamId;
-  if (!teamId) return <HubEmptyState title="Roster not loaded" description="Assign a team to configure your depth chart." action={{ label: "Back to Hub", to: "/hub" }} />;
-
   const activeIds = state.rosterMgmt.active;
 
   const roster = useMemo(() => {
+    if (!teamId) return [];
     return getTeamRosterPlayers(teamId)
       .filter((p) => !!activeIds[String((p as any).playerId)])
       .map((p) => ({
@@ -34,6 +34,8 @@ export default function DepthChart() {
       }))
       .sort((a, b) => b.ovr - a.ovr);
   }, [teamId, activeIds]);
+
+  if (!teamId) return <HubEmptyState title="Roster not loaded" description="Assign a team to configure your depth chart." action={{ label: "Back to Hub", to: "/hub" }} />;
 
   const dupes = (() => {
     const counts = new Map<string, number>();

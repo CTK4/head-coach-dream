@@ -28,7 +28,7 @@ export default function RosterAudit() {
   }, [state, teamId]);
 
   const selected = useMemo(() => players.find((p) => String(p.playerId) === String(playerId)) ?? null, [players, playerId]);
-  const capTable = useMemo(() => buildCapTable(state), [state]);
+  const capTable = useMemo(() => selected ? buildCapTable(state, String(selected.playerId)) : null, [state, selected]);
 
   return (
     <div className="space-y-4 overflow-x-hidden">
