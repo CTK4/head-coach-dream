@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { eligibleRosterForSlot, usedPlayerIds } from "@/engine/depthChart";
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GripVertical } from "lucide-react";
+import { hapticTap } from "@/lib/haptics";
 
 type Unit = "OFFENSE" | "DEFENSE" | "ST";
 type Section = { key: Unit; title: string; slots: string[] };
@@ -87,7 +88,13 @@ export default function DepthChart() {
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
   const activeIds = state.rosterMgmt.active;
   const [unit, setUnit] = useState<Unit>("OFFENSE");
-  const dragFromSlot = useRef<string | null>(null);
+  const dragFromSlot = useRef<string | null>(null); // desktop drag + mobile long-press
+  const [draggingSlot, setDraggingSlot] = useState<string | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
+  const dropTargetRef = useRef<string | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const rafScrollRef = useRef<number | null>(null);
 
   const roster = useMemo(() => {
     if (!teamId) return [];
@@ -144,6 +151,89 @@ export default function DepthChart() {
     dispatch({ type: "DEPTH_BULK_SET", payload: { startersByPos: next } });
   };
 
+
+  const clearPressTimer = () => {
+    if (pressTimerRef.current) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const endPointerDrag = () => {
+    clearPressTimer();
+    pointerIdRef.current = null;
+    dragFromSlot.current = null;
+    setDraggingSlot(null);
+    dropTargetRef.current = null;
+    if (rafScrollRef.current) {
+      cancelAnimationFrame(rafScrollRef.current);
+      rafScrollRef.current = null;
+    }
+  };
+
+  const onHandlePointerDown = (slot: string, locked: boolean) => (e: React.PointerEvent) => {
+    if (locked) return;
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return; // long-press for mobile only
+    pointerIdRef.current = e.pointerId;
+    dropTargetRef.current = slot;
+    clearPressTimer();
+    pressTimerRef.current = window.setTimeout(() => {
+      dragFromSlot.current = slot;
+      setDraggingSlot(slot);
+      void hapticTap("light");
+    }, 250);
+  };
+
+  const onHandlePointerMove = (e: React.PointerEvent) => {
+    if (!draggingSlot) return;
+    if (pointerIdRef.current !== e.pointerId) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const slot = el?.closest?.("[data-depth-slot]")?.getAttribute?.("data-depth-slot") ?? null;
+    dropTargetRef.current = slot;
+
+    const root = scrollAreaRef.current;
+    const viewport = root?.querySelector?.("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+    if (!viewport) return;
+    const r = viewport.getBoundingClientRect();
+    const y = e.clientY;
+    const edge = 48;
+    const maxSpeed = 18;
+    let delta = 0;
+
+    if (y < r.top + edge) {
+      const t = Math.max(0, (r.top + edge - y) / edge);
+      delta = -Math.round(maxSpeed * t);
+    } else if (y > r.bottom - edge) {
+      const t = Math.max(0, (y - (r.bottom - edge)) / edge);
+      delta = Math.round(maxSpeed * t);
+    }
+
+    if (!delta) return;
+    if (rafScrollRef.current) cancelAnimationFrame(rafScrollRef.current);
+    rafScrollRef.current = requestAnimationFrame(() => {
+      viewport.scrollTop += delta;
+      rafScrollRef.current = null;
+    });
+  };
+
+  const onHandlePointerUp = (e: React.PointerEvent) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    const from = draggingSlot;
+    const to = dropTargetRef.current;
+    endPointerDrag();
+    if (from && to) handleDrop(to);
+  };
+
+  const onHandlePointerCancel = (e: React.PointerEvent) => {
+    if (pointerIdRef.current !== e.pointerId) return;
+    endPointerDrag();
+  };
+
+  useEffect(() => {
+    return () => endPointerDrag();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -172,7 +262,7 @@ export default function DepthChart() {
               {dupes ? <div className="text-xs text-destructive">Warning: duplicate players assigned to multiple slots.</div> : null}
             </div>
 
-            <ScrollArea className="h-[70vh] pr-2">
+            <ScrollArea ref={scrollAreaRef} className="h-[70vh] pr-2">
               <div className="space-y-2">
                 <div className="sticky top-0 z-10 -mx-1 border-b bg-background/95 px-1 py-2 backdrop-blur">
                   <div className="flex items-center justify-between">
@@ -194,19 +284,30 @@ export default function DepthChart() {
                   return (
                     <div
                       key={slot}
+                      data-depth-slot={slot}
                       className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleDrop(slot)}
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <div
-                          className={`mt-1 rounded-lg border border-white/10 bg-white/5 p-2 ${locked ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"}`}
+                          className={`mt-1 rounded-lg border border-white/10 bg-white/5 p-2 select-none touch-none ${
+                            locked ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"
+                          } ${draggingSlot === slot ? "ring-2 ring-accent" : ""}`}
                           draggable={!locked}
                           onDragStart={() => {
                             if (locked) return;
                             dragFromSlot.current = slot;
                           }}
+                          onDragEnd={() => {
+                            dragFromSlot.current = null;
+                            setDraggingSlot(null);
+                          }}
                           title={locked ? "Locked slots cannot move" : "Drag to reorder within this position group"}
+                          onPointerDown={onHandlePointerDown(slot, locked)}
+                          onPointerMove={onHandlePointerMove}
+                          onPointerUp={onHandlePointerUp}
+                          onPointerCancel={onHandlePointerCancel}
                         >
                           <GripVertical className="h-4 w-4 opacity-70" />
                         </div>
