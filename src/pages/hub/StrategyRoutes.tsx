@@ -1,43 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
-import { useGame } from "@/context/GameContext";
+import { useGame, type PriorityPos } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const PRIORITIES_KEY = "hcd:strategy:draftFaPriorities";
-
-type PriorityPos =
-  | "QB"
-  | "RB"
-  | "WR"
-  | "TE"
-  | "OL"
-  | "DL"
-  | "EDGE"
-  | "LB"
-  | "CB"
-  | "S"
-  | "K"
-  | "P";
-
 const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
-
-function loadPriorities(): PriorityPos[] {
-  try {
-    const raw = localStorage.getItem(PRIORITIES_KEY);
-    if (!raw) return ["QB", "OL", "EDGE"];
-    const parsed = JSON.parse(raw) as PriorityPos[];
-    return Array.isArray(parsed) ? parsed.filter((x): x is PriorityPos => POS_GROUPS.includes(x as PriorityPos)) : ["QB", "OL", "EDGE"];
-  } catch {
-    return ["QB", "OL", "EDGE"];
-  }
-}
-
-function savePriorities(p: PriorityPos[]) {
-  localStorage.setItem(PRIORITIES_KEY, JSON.stringify(p));
-}
 
 function StrategyHome() {
   return (
@@ -194,14 +163,12 @@ function IdentityScreen() {
 }
 
 function PrioritiesScreen() {
-  const [priorities, setPriorities] = useState<PriorityPos[]>(() => loadPriorities());
+  const { state, dispatch } = useGame();
+  const priorities = state.strategy?.draftFaPriorities ?? ["QB", "OL", "EDGE"];
 
   const toggle = (pos: PriorityPos) => {
-    setPriorities((prev) => {
-      const next = prev.includes(pos) ? prev.filter((x) => x !== pos) : [...prev, pos];
-      savePriorities(next);
-      return next;
-    });
+    const next = priorities.includes(pos) ? priorities.filter((x) => x !== pos) : [...priorities, pos];
+    dispatch({ type: "SET_STRATEGY_PRIORITIES", payload: { positions: next } });
   };
 
   const top3 = useMemo(() => priorities.slice(0, 3), [priorities]);
@@ -212,7 +179,7 @@ function PrioritiesScreen() {
       <div className="space-y-3 p-4">
         <Card>
           <CardHeader>
-            <CardTitle>Top Focus (stored locally)</CardTitle>
+            <CardTitle>Top Focus</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -232,7 +199,7 @@ function PrioritiesScreen() {
               ))}
             </div>
             <div className="text-xs text-slate-400">
-              This screen was previously a placeholder. These priorities are now persisted to local storage and can be wired into draft/FA CPU logic later.
+              Saved to your career file. Used for team-mode draft board sorting and AI-assisted FA offers when coach autonomy is low.
             </div>
           </CardContent>
         </Card>
