@@ -22,8 +22,10 @@ export function computeOpponentsByTeamId(league: LeagueState): Record<string, st
   for (const teamId of Object.keys(league.standings ?? {})) opponentsByTeamId[teamId] = [];
 
   for (const game of normalizeGames(league)) {
-    opponentsByTeamId[game.homeId] = [...(opponentsByTeamId[game.homeId] ?? []), game.awayId];
-    opponentsByTeamId[game.awayId] = [...(opponentsByTeamId[game.awayId] ?? []), game.homeId];
+    if (!opponentsByTeamId[game.homeId]) opponentsByTeamId[game.homeId] = [];
+    if (!opponentsByTeamId[game.awayId]) opponentsByTeamId[game.awayId] = [];
+    opponentsByTeamId[game.homeId].push(game.awayId);
+    opponentsByTeamId[game.awayId].push(game.homeId);
   }
 
   return opponentsByTeamId;
