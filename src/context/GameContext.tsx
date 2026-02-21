@@ -211,6 +211,7 @@ export type InterviewResult = {
 export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number>; result?: InterviewResult };
 export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string; score?: number };
 export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
+export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 
 const CURRENT_SAVE_VERSION = 3;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
@@ -476,7 +477,13 @@ export type GameState = {
   strategy: StrategyState;
   scouting?: { boardSeed: number; combineRun?: boolean };
   scoutingState?: ScoutingState;
-  hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
+  hub: {
+    news: NewsItem[];
+    newsReadIds: Record<string, true>;
+    preseasonWeek: number;
+    regularSeasonWeek: number;
+    schedule: LeagueSchedule | null;
+  };
   finances: TeamFinances;
   league: LeagueState;
   saveSeed: number;
@@ -660,6 +667,7 @@ export type GameAction =
   | { type: "FIRE_STAFF"; payload: { personId: string; roleLabel: string; spreadSeasons: 1 | 2 } }
   | { type: "CHARGE_BUYOUTS_FOR_SEASON"; payload: { season: number } }
   | { type: "SET_STARTER"; payload: { slot: string; playerId: string | "AUTO" } }
+  | { type: "DEPTH_BULK_SET"; payload: { startersByPos: Record<string, string | undefined> } }
   | { type: "TOGGLE_DEPTH_SLOT_LOCK"; payload: { slot: string } }
   | { type: "RECALC_OWNER_FINANCIAL"; payload?: { season?: number } }
   | { type: "INIT_PRESEASON_ROTATION" }
@@ -674,6 +682,8 @@ export type GameAction =
   | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
   | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
   | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
+  | { type: "HUB_MARK_NEWS_READ" }
+  | { type: "HUB_MARK_NEWS_ITEM_READ"; payload: { id: string } }
   | { type: "INJURY_UPSERT"; payload: Injury }
   | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
   | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
@@ -766,7 +776,7 @@ function createInitialState(): GameState {
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
-    hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    hub: { news: defaultNews(2026), newsReadIds: {}, preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
     finances: {
       cap: 250_000_000,
       carryover: 0,
@@ -1453,23 +1463,58 @@ function applyFinances(state: GameState, patch: Partial<TeamFinances> = {}): Gam
   return { ...next, finances: { ...next.finances, capCommitted, capSpace } };
 }
 
-function defaultNews(season: number): string[] {
+function stableHashId(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `n_${(h >>> 0).toString(16)}`;
+}
+
+function makeNewsItem(title: string, opts?: { body?: string; category?: string; createdAt?: number }): NewsItem {
+  const createdAt = opts?.createdAt ?? Date.now();
+  const id = stableHashId(`${createdAt}:${opts?.category ?? ""}:${title}:${opts?.body ?? ""}`);
+  return { id, title, body: opts?.body, category: opts?.category, createdAt };
+}
+
+function defaultNews(season: number): NewsItem[] {
+  const now = Date.now();
   return [
-    `League announces ${season} salary cap at $250M`,
-    "Coaching staffs begin offseason installs",
-    "Front offices prepare for free agency",
-    "Draft prospects begin pro day circuit",
+    makeNewsItem(`League announces ${season} salary cap at $250M`, { category: "LEAGUE", createdAt: now - 10 * 60_000 }),
+    makeNewsItem("Coaching staffs begin offseason installs", { category: "COACHING", createdAt: now - 9 * 60_000 }),
+    makeNewsItem("Front offices prepare for free agency", { category: "LEAGUE", createdAt: now - 8 * 60_000 }),
+    makeNewsItem("Draft prospects begin pro day circuit", { category: "DRAFT", createdAt: now - 7 * 60_000 }),
   ];
 }
 
+function ensureNewsItems(raw: unknown, now: number): NewsItem[] {
+  if (!Array.isArray(raw)) return [];
+  if (!raw.length) return [];
+  if (typeof raw[0] === "object" && raw[0] && "id" in (raw[0] as any)) {
+    return (raw as any[]).map((x) => ({
+      id: String((x as any).id),
+      title: String((x as any).title ?? ""),
+      body: (x as any).body ? String((x as any).body) : undefined,
+      category: (x as any).category ? String((x as any).category) : undefined,
+      createdAt: Number((x as any).createdAt ?? now),
+    }));
+  }
+  return (raw as any[]).map((line, idx) => ({
+    id: stableHashId(`${String(line ?? "")}:${idx}`),
+    title: String(line ?? ""),
+    createdAt: now - idx * 60_000,
+  }));
+}
+
 function pushNews(state: GameState, line: string): GameState {
-  const news = [line, ...(state.hub.news ?? [])].slice(0, 50);
+  const news = [makeNewsItem(line), ...(state.hub.news ?? [])].slice(0, 200);
   return { ...state, hub: { ...state.hub, news } };
 }
 
 function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
-  const suffix = item.body ? ` — ${item.body}` : "";
-  return pushNews(state, `${item.title}${suffix}`);
+  const news = [makeNewsItem(item.title, { body: item.body, category: item.category }), ...(state.hub.news ?? [])].slice(0, 200);
+  return { ...state, hub: { ...state.hub, news } };
 }
 
 function ensureAccolades(state: GameState): GameState {
@@ -1719,6 +1764,7 @@ function seasonRollover(state: GameState): GameState {
     hub: {
       ...state.hub,
       news: defaultNews(nextSeason),
+      newsReadIds: {},
       preseasonWeek: 1,
       regularSeasonWeek: 1,
       schedule,
@@ -2637,6 +2683,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "ADD_NEWS_ITEM":
       return addNews(state, action.payload);
+    case "HUB_MARK_NEWS_READ": {
+      const ids: Record<string, true> = { ...(state.hub.newsReadIds ?? {}) };
+      for (const item of state.hub.news ?? []) ids[item.id] = true;
+      return { ...state, hub: { ...state.hub, newsReadIds: ids } };
+    }
+    case "HUB_MARK_NEWS_ITEM_READ": {
+      const id = String(action.payload.id);
+      if (state.hub.newsReadIds?.[id]) return state;
+      return { ...state, hub: { ...state.hub, newsReadIds: { ...(state.hub.newsReadIds ?? {}), [id]: true } } };
+    }
     case "SET_PLAYER_TRADE_BLOCK": {
       const { playerId, isOnBlock } = action.payload;
       return {
@@ -4504,6 +4560,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "CHARGE_BUYOUTS_FOR_SEASON": {
       return chargeBuyouts(state, action.payload.season);
     }
+    case "DEPTH_BULK_SET": {
+      return {
+        ...state,
+        depthChart: {
+          ...state.depthChart,
+          startersByPos: { ...state.depthChart.startersByPos, ...action.payload.startersByPos },
+        },
+      };
+    }
     case "SET_STARTER": {
       const { slot, playerId } = action.payload;
       const starters = { ...state.depthChart.startersByPos };
@@ -4830,6 +4895,13 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const saveSeed = oldState.saveSeed ?? Date.now();
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
+  const now = Date.now();
+  const migratedNews = ensureNewsItems((oldState as any).hub?.news, now);
+  const legacyReadCount = Number((oldState as any).hub?.newsReadCount ?? 0);
+  const newsReadIds: Record<string, true> = { ...((oldState as any).hub?.newsReadIds ?? {}) };
+  if (legacyReadCount > 0 && migratedNews.length > 0) {
+    for (const item of migratedNews.slice(0, legacyReadCount)) newsReadIds[item.id] = true;
+  }
 
   const game =
     oldState.game && (oldState.game as any).clock
@@ -4902,7 +4974,9 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {
-      ...(oldState.hub ?? { news: [] }),
+      ...(oldState.hub ?? ({} as any)),
+      news: migratedNews,
+      newsReadIds,
       schedule,
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,

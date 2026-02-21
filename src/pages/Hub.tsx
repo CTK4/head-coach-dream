@@ -53,6 +53,7 @@ export default function Hub() {
   const badgeCounts = useMemo(() => {
     const hub = (state as any).hub;
     const b = hub?.badges;
+    const unread = (hub?.news ?? []).filter((x: any) => !hub?.newsReadIds?.[String(x?.id)]).length;
     return {
       hireStaff: clampInt(b?.hireStaff ?? 1, 0, 99),
       franchiseStrategy: clampInt(b?.franchiseStrategy ?? 1, 0, 99),
@@ -60,7 +61,7 @@ export default function Hub() {
       roster: clampInt(b?.roster ?? 1, 0, 99),
       finances: clampInt(b?.finances ?? 1, 0, 99),
       leagueNews: clampInt(b?.leagueNews ?? 4, 0, 99),
-      leagueNewsUnread: clampInt(b?.leagueNewsUnread ?? 3, 0, 99),
+      leagueNewsUnread: clampInt(unread, 0, 99),
     };
   }, [state]);
 

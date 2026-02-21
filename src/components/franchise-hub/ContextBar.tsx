@@ -23,7 +23,8 @@ export function ContextBar({ state }: { state: GameState }) {
     ["Draft", "/hub/draft"],
     ["League News", "/hub/league-news"],
   ] as const;
-  const notifications = [{ label: "Hire Staff", count: 1 }, { label: "League News", count: state.hub.news.length }].filter((n) => n.count > 0);
+  const unread = (state.hub.news ?? []).filter((n) => !state.hub.newsReadIds?.[n.id]).length;
+  const notifications = [{ label: "Hire Staff", count: 1 }, { label: "League News", count: unread }].filter((n) => n.count > 0);
 
   const last = getLastGameForTeam(state.league, teamId);
   const next = getNextGameForTeam(state, state.league, teamId);

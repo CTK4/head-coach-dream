@@ -52,6 +52,7 @@ function repNumber(p: PersonnelRow): number {
 export default function AssistantHiring() {
   const { state, dispatch } = useGame();
   const teamId = resolveUserTeamId(state);
+  const coordinatorsReady = !!(state.staff?.ocId && state.staff?.dcId && state.staff?.stcId);
 
   const firstUnfilled = useMemo(
     () => ROLE_ORDER.find((r) => !state.assistantStaff[r.key])?.key ?? "assistantHcId",
@@ -209,6 +210,11 @@ export default function AssistantHiring() {
           </>
         }
       >
+        {!coordinatorsReady ? (
+          <div className="mb-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+            Hire OC/DC/STC first. Assistant roles unlock after coordinator hiring is complete.
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {ROLE_ORDER.map((r) => {
