@@ -7,40 +7,101 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { hapticTap } from "@/lib/haptics";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 
 export default function LeagueNews() {
   const { state, dispatch } = useGame();
   const [openId, setOpenId] = useState<string | null>(null);
   const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const [query, setQuery] = useState<string>("");
+
+  const filter = (state.hub.newsFilter ?? "ALL").toUpperCase();
+  const filters = useMemo(() => {
+    const preferred = ["LEAGUE", "COACHING", "DRAFT", "INJURY"];
+    const present = new Set<string>();
+    for (const n of state.hub.news) if (n.category) present.add(String(n.category).toUpperCase());
+    const cats = preferred.filter((c) => present.has(c));
+    for (const c of Array.from(present)) if (!cats.includes(c)) cats.push(c);
+    return ["ALL", ...cats];
+  }, [state.hub.news]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("hcd:newsFilter", filter);
+    } catch {
+      // ignore
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("hcd:newsQuery", query);
+    } catch {
+      // ignore
+    }
+  }, [query]);
+
+  useEffect(() => {
+    const current = (state.hub.newsFilter ?? "ALL").toUpperCase();
+    if (current !== "ALL") return;
+    try {
+      const saved = String(localStorage.getItem("hcd:newsFilter") ?? "").toUpperCase();
+      if (saved && saved !== "ALL") dispatch({ type: "HUB_SET_NEWS_FILTER", payload: { filter: saved } });
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = String(localStorage.getItem("hcd:newsQuery") ?? "");
+      if (saved && !query) setQuery(saved);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openItem = (id: string) => {
     setOpenId(id);
     dispatch({ type: "HUB_MARK_NEWS_ITEM_READ", payload: { id } });
   };
 
-  const selected = useMemo(
-    () => (openId ? state.hub.news.find((n) => n.id === openId) ?? null : null),
-    [openId, state.hub.news],
-  );
+  const visibleNews = useMemo(() => {
+    const base =
+      filter === "ALL" ? state.hub.news : state.hub.news.filter((n) => String(n.category ?? "").toUpperCase() === filter);
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((n) => {
+      const t = String(n.title ?? "").toLowerCase();
+      const b = String(n.body ?? "").toLowerCase();
+      const c = String(n.category ?? "").toLowerCase();
+      return t.includes(q) || b.includes(q) || c.includes(q);
+    });
+  }, [state.hub.news, filter, query]);
+
+  const selected = useMemo(() => (openId ? visibleNews.find((n) => n.id === openId) ?? null : null), [openId, visibleNews]);
 
   const selectedIndex = useMemo(() => {
     if (!openId) return -1;
-    return state.hub.news.findIndex((n) => n.id === openId);
-  }, [openId, state.hub.news]);
+    return visibleNews.findIndex((n) => n.id === openId);
+  }, [openId, visibleNews]);
 
   const canPrev = selectedIndex > 0;
-  const canNext = selectedIndex >= 0 && selectedIndex < state.hub.news.length - 1;
+  const canNext = selectedIndex >= 0 && selectedIndex < visibleNews.length - 1;
 
   const openPrev = async () => {
     if (!canPrev) return;
-    const nextId = state.hub.news[selectedIndex - 1].id;
+    const nextId = visibleNews[selectedIndex - 1].id;
     await hapticTap("light");
     openItem(nextId);
   };
 
   const openNext = async () => {
     if (!canNext) return;
-    const nextId = state.hub.news[selectedIndex + 1].id;
+    const nextId = visibleNews[selectedIndex + 1].id;
     await hapticTap("light");
     openItem(nextId);
   };
@@ -59,9 +120,26 @@ export default function LeagueNews() {
 
   return (
     <HubPanel title="LEAGUE NEWS">
+      <div className="px-4 pt-3">
+        <Tabs value={filter} onValueChange={(v) => dispatch({ type: "HUB_SET_NEWS_FILTER", payload: { filter: v } })}>
+          <TabsList className="flex w-full overflow-x-auto">
+            {filters.map((f) => (
+              <TabsTrigger key={f} value={f} className="min-w-[88px] flex-1">
+                {f === "ALL" ? "All" : f}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="mt-3">
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search news (title/body/category)…" aria-label="Search news" />
+          {query.trim() ? <div className="mt-1 text-xs text-muted-foreground">Showing {visibleNews.length} match{visibleNews.length === 1 ? "" : "es"}</div> : null}
+        </div>
+      </div>
+
       <ScrollArea className="h-[65vh] pr-3" aria-label="League news list">
         <ul className="space-y-3">
-          {state.hub.news.map((n) => (
+          {visibleNews.map((n) => (
             <li key={n.id}>
               <button
                 type="button"
@@ -86,9 +164,13 @@ export default function LeagueNews() {
               </button>
             </li>
           ))}
-          {state.hub.news.length === 0 ? (
+          {visibleNews.length === 0 ? (
             <li>
-              <HubEmptyState title="No headlines yet" description="The wire is quiet this week." action={{ label: "Back to Hub", to: "/hub" }} />
+              <HubEmptyState
+                title={query.trim() ? "No results" : "No stories in this filter"}
+                description={query.trim() ? "Try a different search term or category." : "Try a different category, or check back later."}
+                action={{ label: "Back to Hub", to: "/hub" }}
+              />
             </li>
           ) : null}
         </ul>
@@ -129,7 +211,7 @@ export default function LeagueNews() {
               Prev
             </Button>
             <div className="tabular-nums text-xs text-muted-foreground">
-              {selectedIndex >= 0 ? `${selectedIndex + 1} / ${state.hub.news.length}` : ""}
+              {selectedIndex >= 0 ? `${selectedIndex + 1} / ${visibleNews.length}` : ""}
               <span className="ml-2 hidden sm:inline">• Arrow keys / swipe</span>
             </div>
             <Button variant="secondary" onClick={() => void openNext()} disabled={!canNext}>

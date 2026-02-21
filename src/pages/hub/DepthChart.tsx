@@ -41,6 +41,67 @@ function slotGroup(slot: string): string | null {
   return null;
 }
 
+function groupLabel(group: string | null): string {
+  if (!group) return "Unknown group";
+  const map: Record<string, string> = {
+    QB: "Quarterbacks",
+    RB: "Running Backs",
+    WR: "Wide Receivers",
+    TE: "Tight Ends",
+    OL: "Offensive Line",
+    DL: "Defensive Line",
+    EDGE: "Edge Rushers",
+    LB: "Linebackers",
+    CB: "Cornerbacks",
+    S: "Safeties",
+    K: "Kicker",
+    P: "Punter",
+  };
+  return map[group] ?? group;
+}
+
+function getCenterRect(el: Element): { cx: number; cy: number; r: DOMRect } {
+  const r = el.getBoundingClientRect();
+  return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, r };
+}
+
+function distance2(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+
+function getBestSnapTarget(args: {
+  clientX: number;
+  clientY: number;
+  fromSlot: string;
+  lockedBySlot?: Record<string, boolean | undefined>;
+}): { slot: string | null; snap: { x: number; y: number } | null; valid: boolean } {
+  const { clientX, clientY, fromSlot, lockedBySlot } = args;
+  const locked = lockedBySlot ?? {};
+  const fromGroup = slotGroup(fromSlot);
+  if (!fromGroup) return { slot: null, snap: null, valid: true };
+
+  const groupSlots = GROUPS[fromGroup] ?? [];
+  const nodes = Array.from(document.querySelectorAll("[data-depth-slot]")) as HTMLElement[];
+
+  let best: { slot: string; d2: number; snap: { x: number; y: number } } | null = null;
+  for (const el of nodes) {
+    const slot = el.getAttribute("data-depth-slot");
+    if (!slot) continue;
+    if (!groupSlots.includes(slot)) continue;
+    if (locked[slot]) continue;
+    const { cx, cy, r } = getCenterRect(el);
+    const inYBand = clientY >= r.top - 80 && clientY <= r.bottom + 80;
+    if (!inYBand) continue;
+    const d2 = distance2(clientX, clientY, cx, cy);
+    if (!best || d2 < best.d2) best = { slot, d2, snap: { x: cx, y: r.top + 18 } };
+  }
+
+  if (!best) return { slot: null, snap: null, valid: true };
+  return { slot: best.slot, snap: best.snap, valid: true };
+}
+
 function playerMeta(p: any): string {
   const age = Number(p.age ?? 0);
   const pro = Number(p.years_pro ?? p.yearsPro ?? 0);
@@ -88,8 +149,12 @@ export default function DepthChart() {
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
   const activeIds = state.rosterMgmt.active;
   const [unit, setUnit] = useState<Unit>("OFFENSE");
-  const dragFromSlot = useRef<string | null>(null); // desktop drag + mobile long-press
+  const dragFromSlot = useRef<string | null>(null);
   const [draggingSlot, setDraggingSlot] = useState<string | null>(null);
+  const [dropSlot, setDropSlot] = useState<string | null>(null);
+  const [dropValid, setDropValid] = useState<boolean>(true);
+  const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const ghostLabelRef = useRef<{ fromSlot: string; groupKey: string | null; line1: string; line2: string } | null>(null);
   const pointerIdRef = useRef<number | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const dropTargetRef = useRef<string | null>(null);
@@ -151,7 +216,6 @@ export default function DepthChart() {
     dispatch({ type: "DEPTH_BULK_SET", payload: { startersByPos: next } });
   };
 
-
   const clearPressTimer = () => {
     if (pressTimerRef.current) {
       window.clearTimeout(pressTimerRef.current);
@@ -165,31 +229,49 @@ export default function DepthChart() {
     dragFromSlot.current = null;
     setDraggingSlot(null);
     dropTargetRef.current = null;
+    setDropSlot(null);
+    setDropValid(true);
+    setGhostPos(null);
+    ghostLabelRef.current = null;
     if (rafScrollRef.current) {
       cancelAnimationFrame(rafScrollRef.current);
       rafScrollRef.current = null;
     }
   };
 
-  const onHandlePointerDown = (slot: string, locked: boolean) => (e: React.PointerEvent) => {
+  const onHandlePointerDown = (slot: string, locked: boolean) => async (e: React.PointerEvent) => {
     if (locked) return;
-    if (e.pointerType !== "touch" && e.pointerType !== "pen") return; // long-press for mobile only
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
     pointerIdRef.current = e.pointerId;
     dropTargetRef.current = slot;
     clearPressTimer();
-    pressTimerRef.current = window.setTimeout(() => {
+    pressTimerRef.current = window.setTimeout(async () => {
       dragFromSlot.current = slot;
       setDraggingSlot(slot);
-      void hapticTap("light");
+      setGhostPos({ x: e.clientX, y: e.clientY });
+      await hapticTap("light");
+      await hapticTap("light");
     }, 250);
   };
 
   const onHandlePointerMove = (e: React.PointerEvent) => {
     if (!draggingSlot) return;
     if (pointerIdRef.current !== e.pointerId) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    const slot = el?.closest?.("[data-depth-slot]")?.getAttribute?.("data-depth-slot") ?? null;
-    dropTargetRef.current = slot;
+
+    const from = dragFromSlot.current ?? draggingSlot;
+    const snap = getBestSnapTarget({
+      clientX: e.clientX,
+      clientY: e.clientY,
+      fromSlot: from,
+      lockedBySlot: state.depthChart.lockedBySlot,
+    });
+
+    if (snap.snap) setGhostPos(snap.snap);
+    else setGhostPos({ x: e.clientX, y: e.clientY });
+
+    dropTargetRef.current = snap.slot;
+    setDropSlot(snap.slot);
+    setDropValid(snap.valid);
 
     const root = scrollAreaRef.current;
     const viewport = root?.querySelector?.("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
@@ -221,7 +303,14 @@ export default function DepthChart() {
     const from = draggingSlot;
     const to = dropTargetRef.current;
     endPointerDrag();
-    if (from && to) handleDrop(to);
+    if (from && to) {
+      const gA = slotGroup(from);
+      const gB = slotGroup(to);
+      const ok = !!gA && !!gB && gA === gB;
+      if (!ok) void hapticTap("medium");
+      else void hapticTap("light");
+      handleDrop(to);
+    }
   };
 
   const onHandlePointerCancel = (e: React.PointerEvent) => {
@@ -233,6 +322,25 @@ export default function DepthChart() {
     return () => endPointerDrag();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragFromSlot.current) return;
+      const from = dragFromSlot.current;
+      const snap = getBestSnapTarget({
+        clientX: e.clientX,
+        clientY: e.clientY,
+        fromSlot: from,
+        lockedBySlot: state.depthChart.lockedBySlot,
+      });
+      if (snap.snap) setGhostPos(snap.snap);
+      else setGhostPos({ x: e.clientX, y: e.clientY });
+      setDropSlot(snap.slot);
+      setDropValid(snap.valid);
+    };
+    window.addEventListener("dragover", onMove);
+    return () => window.removeEventListener("dragover", onMove);
+  }, [state.depthChart.lockedBySlot]);
 
   return (
     <div className="space-y-4">
@@ -281,14 +389,30 @@ export default function DepthChart() {
                   const options = eligibleRosterForSlot(slot, roster, pid, used);
                   const sel = chosenPlayer(pid);
 
+                  if (draggingSlot === slot) {
+                    ghostLabelRef.current = {
+                      fromSlot: slot,
+                      groupKey: slotGroup(slot),
+                      line1: sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)",
+                      line2: sel ? playerMeta(sel.raw) : "—",
+                    };
+                  }
+
                   return (
                     <div
                       key={slot}
                       data-depth-slot={slot}
-                      className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
+                      className={`relative flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between
+                        ${dropSlot === slot && draggingSlot ? (dropValid ? "ring-2 ring-accent" : "ring-2 ring-red-500") : ""}`}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => handleDrop(slot)}
                     >
+                      {draggingSlot && dropSlot === slot ? (
+                        <div className={`pointer-events-none absolute inset-0 rounded-xl ${dropValid ? "bg-accent/10" : "bg-red-500/10"}`} />
+                      ) : null}
+
+                      {draggingSlot === slot ? <div className="pointer-events-none absolute inset-0 rounded-xl border border-dashed border-accent/60 bg-white/5" /> : null}
+
                       <div className="flex min-w-0 items-start gap-3">
                         <div
                           className={`mt-1 rounded-lg border border-white/10 bg-white/5 p-2 select-none touch-none ${
@@ -298,10 +422,20 @@ export default function DepthChart() {
                           onDragStart={() => {
                             if (locked) return;
                             dragFromSlot.current = slot;
+                            setDraggingSlot(slot);
+                            setGhostPos(null);
+                            ghostLabelRef.current = {
+                              fromSlot: slot,
+                              groupKey: slotGroup(slot),
+                              line1: sel ? `${sel.name} (${sel.pos} ${sel.ovr})` : "Auto (top OVR)",
+                              line2: sel ? playerMeta(sel.raw) : "—",
+                            };
                           }}
                           onDragEnd={() => {
                             dragFromSlot.current = null;
                             setDraggingSlot(null);
+                            setGhostPos(null);
+                            ghostLabelRef.current = null;
                           }}
                           title={locked ? "Locked slots cannot move" : "Drag to reorder within this position group"}
                           onPointerDown={onHandlePointerDown(slot, locked)}
@@ -359,6 +493,27 @@ export default function DepthChart() {
           </div>
         </CardContent>
       </Card>
+
+      {draggingSlot && ghostPos && ghostLabelRef.current ? (
+        <div className="pointer-events-none fixed z-[80]" style={{ left: ghostPos.x, top: ghostPos.y, transform: "translate(-50%, -110%)" }}>
+          <div className="w-[320px] rounded-xl border border-white/10 bg-slate-950/95 shadow-xl backdrop-blur">
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold">{ghostLabelRef.current.fromSlot}</div>
+                <div className="truncate text-[11px] text-slate-400">{groupLabel(ghostLabelRef.current.groupKey)}</div>
+              </div>
+              <div className="truncate text-sm text-slate-100">{ghostLabelRef.current.line1}</div>
+              <div className="truncate text-[11px] text-slate-400">{ghostLabelRef.current.line2}</div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-400">
+                  {dropSlot ? (dropValid ? `Dropping into ${dropSlot}` : `Invalid target (${dropSlot})`) : "Choose a target slot"}
+                </div>
+              </div>
+              <div className={`mt-2 h-1 rounded-full ${dropValid ? "bg-accent/70" : "bg-red-500/70"}`} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
