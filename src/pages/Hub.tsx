@@ -8,6 +8,7 @@ import { HubTile } from "@/components/franchise-hub/HubTile";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
+import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 
 // Placeholder images - using simple colored gradients or specific placeholders from the list if available
 const IMAGES = {
@@ -66,6 +67,8 @@ export default function Hub() {
   // const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
   
   const nextStage = nextStageForNavigate(state.careerStage);
+  const showTrades = isTradesAllowed(state);
+  const showReSign = isReSignAllowed(state);
   const nextLabel = stageLabel(nextStage);
   const nextRoute = stageToRoute(nextStage);
 
@@ -141,11 +144,11 @@ export default function Hub() {
                 {state.careerStage === "FREE_AGENCY" ? (
                   <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} />
                 ) : null}
-                {state.careerStage === "RESIGN" ? (
-                  <HubTile title="Re-Sign" to="/re-sign" imageUrl={IMAGES.resign} badgeCount={1} />
+                {showReSign ? (
+                  <HubTile title="Re-Sign" to="/hub/re-sign" imageUrl={IMAGES.resign} badgeCount={1} />
                 ) : null}
-                {state.careerStage === "REGULAR_SEASON" ? (
-                  <HubTile title="Trades" to="/trades" imageUrl={IMAGES.trades} badgeCount={1} />
+                {showTrades ? (
+                  <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} />
                 ) : null}
             </div>
 

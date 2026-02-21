@@ -38,6 +38,8 @@ import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
 import Playcall from "./pages/Playcall";
 import PlayerProfile from "./pages/hub/PlayerProfile";
+import TradesPage from "./pages/hub/Trades";
+import ReSignPage from "./pages/hub/ReSign";
 
 const queryClient = new QueryClient();
 
@@ -120,9 +122,10 @@ const App = () => (
               <Route path="/re-sign/*" element={<ReSignRoutes />} />
               <Route path="/trades/*" element={<TradesRoutes />} />
 
-              <Route path="/hub/trades" element={<Navigate to="/trades" replace />} />
+              <Route path="/hub/trades" element={<TradesPage />} />
+              <Route path="/hub/re-sign" element={<ReSignPage />} />
+
               <Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
-              <Route path="/hub/re-sign" element={<Navigate to="/re-sign" replace />} />
               
               {/* Other legacy/specific routes that might not fit the main buckets yet but need to be accessible */}
                <Route path="/hub/draft" element={<Draft />} />

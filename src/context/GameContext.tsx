@@ -11,6 +11,7 @@ import {
   getTeamFinancesRow,
   getTeamRosterPlayers,
   getTeams,
+  getTeamById,
   setPersonnelTeamAndContract,
 } from "@/data/leagueDb";
 import type { CoachReputation } from "@/engine/reputation";
@@ -242,6 +243,7 @@ export type PlayerContractOverride = {
   endSeason: number;
   salaries: number[];
   signingBonus: number;
+  guaranteedAtSigning?: number;
   prorationBySeason?: Record<number, number>;
 };
 
@@ -376,6 +378,7 @@ export type GameState = {
   rookieContracts: Record<string, RookieContract>;
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
+  tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
   userTeamId?: string;
   teamId?: string;
@@ -510,6 +513,10 @@ export type GameAction =
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
+  | { type: "ADD_NEWS_ITEM"; payload: { title: string; body?: string; category?: string } }
+  | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
+  | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] } }
+  | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
   | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
@@ -670,6 +677,7 @@ function createInitialState(): GameState {
     rookieContracts: {},
     playerTeamOverrides: {},
     playerContractOverrides: {},
+    tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
   };
 
@@ -1334,6 +1342,11 @@ function defaultNews(season: number): string[] {
 function pushNews(state: GameState, line: string): GameState {
   const news = [line, ...(state.hub.news ?? [])].slice(0, 50);
   return { ...state, hub: { ...state.hub, news } };
+}
+
+function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
+  const suffix = item.body ? ` — ${item.body}` : "";
+  return pushNews(state, `${item.title}${suffix}`);
 }
 
 function ensureAccolades(state: GameState): GameState {
@@ -2498,6 +2511,55 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
       }
       return next;
+    }
+    case "ADD_NEWS_ITEM":
+      return addNews(state, action.payload);
+    case "SET_PLAYER_TRADE_BLOCK": {
+      const { playerId, isOnBlock } = action.payload;
+      return {
+        ...state,
+        tradeBlockByPlayerId: { ...state.tradeBlockByPlayerId, [String(playerId)]: Boolean(isOnBlock) },
+      };
+    }
+    case "EXECUTE_TRADE": {
+      const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds } = action.payload;
+      const overrides = { ...(state.playerTeamOverrides ?? {}) };
+      for (const pid of outgoingPlayerIds) overrides[String(pid)] = String(teamB);
+      for (const pid of incomingPlayerIds) overrides[String(pid)] = String(teamA);
+
+      const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
+      const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
+      const next = { ...state, playerTeamOverrides: overrides } as GameState;
+      return addNews(next, {
+        title: "Trade Completed",
+        body: `${teamAName} traded ${outgoingPlayerIds.length} player(s) with ${teamBName} and received ${incomingPlayerIds.length} player(s).`,
+        category: "TRADES",
+      });
+    }
+    case "EXTEND_PLAYER": {
+      const { playerId, years, apy, signingBonus, guaranteedAtSigning } = action.payload;
+      const term = Math.max(1, Math.min(4, Number(years)));
+      const startSeason = Number(state.season) + 1;
+      const endSeason = startSeason + term - 1;
+      const salaries = Array.from({ length: term }, () => Math.round(apy));
+      const nextOverrides = {
+        ...(state.playerContractOverrides ?? {}),
+        [String(playerId)]: {
+          startSeason,
+          endSeason,
+          salaries,
+          signingBonus: Math.round(signingBonus),
+          guaranteedAtSigning: Math.round(guaranteedAtSigning),
+          prorationBySeason: undefined,
+        },
+      };
+      const next = { ...state, playerContractOverrides: nextOverrides } as GameState;
+      const name = getPersonnelById(String(playerId))?.fullName ?? "Player";
+      return addNews(next, {
+        title: "Extension Signed",
+        body: `${name} agreed to a ${term}-year extension.`,
+        category: "CONTRACTS",
+      });
     }
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };

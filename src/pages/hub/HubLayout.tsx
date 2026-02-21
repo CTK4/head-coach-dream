@@ -13,6 +13,7 @@ const TITLES: Record<string, string> = {
   "/hub/staff-management": "STAFF MANAGEMENT",
   "/hub/league-news": "LEAGUE NEWS",
   "/hub/trades": "TRADES",
+  "/hub/re-sign": "RE-SIGN",
   "/hub/tag-center": "TAG CENTER",
   "/hub/cap-baseline": "CAP BASELINE",
 };
