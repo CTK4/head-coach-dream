@@ -480,6 +480,7 @@ export type GameState = {
   hub: {
     news: NewsItem[];
     newsReadIds: Record<string, true>;
+    newsFilter: string;
     preseasonWeek: number;
     regularSeasonWeek: number;
     schedule: LeagueSchedule | null;
@@ -684,6 +685,7 @@ export type GameAction =
   | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
   | { type: "HUB_MARK_NEWS_READ" }
   | { type: "HUB_MARK_NEWS_ITEM_READ"; payload: { id: string } }
+  | { type: "HUB_SET_NEWS_FILTER"; payload: { filter: string } }
   | { type: "INJURY_UPSERT"; payload: Injury }
   | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
   | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
@@ -776,7 +778,7 @@ function createInitialState(): GameState {
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
-    hub: { news: defaultNews(2026), newsReadIds: {}, preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    hub: { news: defaultNews(2026), newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
     finances: {
       cap: 250_000_000,
       carryover: 0,
@@ -2692,6 +2694,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const id = String(action.payload.id);
       if (state.hub.newsReadIds?.[id]) return state;
       return { ...state, hub: { ...state.hub, newsReadIds: { ...(state.hub.newsReadIds ?? {}), [id]: true } } };
+    }
+    case "HUB_SET_NEWS_FILTER": {
+      const filter = String(action.payload.filter || "ALL").toUpperCase();
+      return { ...state, hub: { ...state.hub, newsFilter: filter } };
     }
     case "SET_PLAYER_TRADE_BLOCK": {
       const { playerId, isOnBlock } = action.payload;
@@ -4977,6 +4983,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       ...(oldState.hub ?? ({} as any)),
       news: migratedNews,
       newsReadIds,
+      newsFilter: String((oldState as any).hub?.newsFilter ?? "ALL"),
       schedule,
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
