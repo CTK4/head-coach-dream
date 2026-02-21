@@ -7,6 +7,7 @@ import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/fra
 import { HubTile } from "@/components/franchise-hub/HubTile";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
+import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
 
 // Placeholder images - using simple colored gradients or specific placeholders from the list if available
 const IMAGES = {
@@ -15,7 +16,10 @@ const IMAGES = {
     strategy: "/placeholders/strategy_meeting.png",
     contracts: "/placeholders/accounting.png",
     scouting: "/placeholders/scout.png",
-    news: "/placeholders/news.png"
+    news: "/placeholders/news.png",
+    freeAgency: "/placeholders/accounting.png",
+    resign: "/placeholders/depth_chart.png",
+    trades: "/placeholders/strategy_meeting.png",
 }
 
 type UserSettings = {
@@ -82,6 +86,7 @@ export default function Hub() {
   else if (state.careerStage === "COMBINE") advanceText = "ADVANCE COMBINE DAY";
   else if (state.careerStage === "DRAFT") advanceText = "ADVANCE PICK";
   else if (state.careerStage === "REGULAR_SEASON") advanceText = "ADVANCE WEEK";
+  else if (state.careerStage === "RESIGN") advanceText = "ADVANCE RE-SIGN DAY";
   else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
 
 
@@ -133,7 +138,18 @@ export default function Hub() {
                     badgeCount={badgeCounts.leagueNews}
                     cornerBubbleCount={badgeCounts.leagueNewsUnread}
                 />
+                {state.careerStage === "FREE_AGENCY" ? (
+                  <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} />
+                ) : null}
+                {state.careerStage === "RESIGN" ? (
+                  <HubTile title="Re-Sign" to="/re-sign" imageUrl={IMAGES.resign} badgeCount={1} />
+                ) : null}
+                {state.careerStage === "REGULAR_SEASON" ? (
+                  <HubTile title="Trades" to="/trades" imageUrl={IMAGES.trades} badgeCount={1} />
+                ) : null}
             </div>
+
+            <HubPhaseQuickLinks />
 
             <Button 
                 onClick={onAdvanceClick} 

@@ -27,6 +27,7 @@ import ScoutingInterviews from "@/pages/hub/scouting/ScoutingInterviews";
 import MedicalBoard from "@/pages/hub/scouting/MedicalBoard";
 import ScoutAllocation from "@/pages/hub/scouting/ScoutAllocation";
 import InSeasonScouting from "@/pages/hub/scouting/InSeasonScouting";
+import { FreeAgencyRoutes, ProspectProfileScreen, ReSignRoutes, TradesRoutes } from "@/pages/hub/PhaseSubsystemRoutes";
 
 // Import other pages that might be needed or were present
 import Draft from "@/pages/hub/offseason/Draft";
@@ -79,7 +80,9 @@ function ScoutingRoutes() {
                 <Route index element={<ScoutingHome />} />
                 <Route path="big-board" element={<BigBoard />} />
                 <Route path="combine" element={<ScoutingCombine />} />
+                <Route path="prospect/:prospectId" element={<ProspectProfileScreen />} />
                 <Route path="private-workouts" element={<PrivateWorkouts />} />
+                <Route path="workouts" element={<PrivateWorkouts />} />
                 <Route path="interviews" element={<ScoutingInterviews />} />
                 <Route path="medical" element={<MedicalBoard />} />
                 <Route path="allocation" element={<ScoutAllocation />} />
@@ -113,6 +116,13 @@ const App = () => (
               <Route path="/scouting/*" element={<ScoutingRoutes />} />
               <Route path="/news" element={<LeagueNews />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
+              <Route path="/re-sign/*" element={<ReSignRoutes />} />
+              <Route path="/trades/*" element={<TradesRoutes />} />
+
+              <Route path="/hub/trades" element={<Navigate to="/trades" replace />} />
+              <Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
+              <Route path="/hub/re-sign" element={<Navigate to="/re-sign" replace />} />
               
               {/* Other legacy/specific routes that might not fit the main buckets yet but need to be accessible */}
                <Route path="/hub/draft" element={<Draft />} />

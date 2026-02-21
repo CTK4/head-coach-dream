@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCallback } from "react";
 
 interface ScreenHeaderProps {
   title: string;
@@ -12,12 +13,23 @@ interface ScreenHeaderProps {
 
 export function ScreenHeader({ title, subtitle, rightAction, backPath, className }: ScreenHeaderProps) {
   const navigate = useNavigate();
+  const goBack = useCallback(() => {
+    if (backPath) {
+      navigate(backPath);
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/hub");
+  }, [backPath, navigate]);
 
   return (
     <div className={cn("sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-slate-950/80 px-4 py-3 backdrop-blur-md", className)}>
       <div className="flex items-center gap-3">
         <button 
-            onClick={() => backPath ? navigate(backPath) : navigate(-1)}
+            onClick={goBack}
             className="rounded-full p-1 hover:bg-white/10 transition-colors"
         >
           <ArrowLeft className="h-5 w-5 text-slate-100" />

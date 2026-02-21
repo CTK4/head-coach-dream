@@ -1,10 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Users, Search, Briefcase, MoreHorizontal } from "lucide-react";
+import { Home, Users, Search, Briefcase, Lightbulb, Handshake, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGame } from "@/context/GameContext";
 
 export function BottomNav() {
+  const { state } = useGame();
   const location = useLocation();
   const path = location.pathname;
+  const isFreeAgency = state.careerStage === "FREE_AGENCY";
+  const isResign = state.careerStage === "RESIGN";
+  const isRegularSeason = state.careerStage === "REGULAR_SEASON";
 
   const isActive = (route: string) => {
     if (route === "/hub" && path === "/hub") return true;
@@ -17,7 +22,12 @@ export function BottomNav() {
     { label: "Team", route: "/roster", icon: Users },
     { label: "Staff", route: "/staff", icon: Briefcase },
     { label: "Scouting", route: "/scouting", icon: Search },
-    { label: "More", route: "/strategy", icon: MoreHorizontal }, // Strategy as 'More' or a Strategy specific icon
+    {
+      label: isFreeAgency ? "Agency" : isRegularSeason ? "Trades" : isResign ? "Re-Sign" : "Strategy",
+      route: isFreeAgency ? "/free-agency" : isRegularSeason ? "/trades" : isResign ? "/re-sign" : "/strategy",
+      icon: isFreeAgency ? Sparkles : isRegularSeason ? Handshake : isResign ? Handshake : Lightbulb,
+      hot: isFreeAgency || isRegularSeason || isResign,
+    },
   ];
 
   return (
@@ -34,6 +44,7 @@ export function BottomNav() {
           >
             <item.icon className="h-6 w-6" />
             <span className="text-[10px] font-medium tracking-wide">{item.label}</span>
+            {item.hot ? <span className="text-[9px] text-amber-300">HOT</span> : null}
           </Link>
         ))}
       </div>
