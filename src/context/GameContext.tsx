@@ -132,7 +132,7 @@ type PreDraftReveal = {
 };
 
 export type TagType = "FRANCHISE_NON_EX" | "FRANCHISE_EX" | "TRANSITION";
-export type TagApplied = { playerId: string; type: TagType; cost: number };
+export type TagApplied = { playerId: string; type: TagType; cost: number; teamId?: string; appliedWeek?: number };
 
 export type OrgRoles = {
   hcCoachId?: string;
@@ -2932,7 +2932,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       return applyFinances({
         ...state,
-        offseasonData: { ...state.offseasonData, tagCenter: { applied: { ...action.payload, cost } } },
+        offseasonData: {
+          ...state.offseasonData,
+          tagCenter: { applied: { ...action.payload, cost, teamId: String(teamId), appliedWeek: state.week ?? 0 } },
+        },
         playerContractOverrides: pco,
       });
     }
