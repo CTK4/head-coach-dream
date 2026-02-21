@@ -40,6 +40,7 @@ import Playcall from "./pages/Playcall";
 import PlayerProfile from "./pages/hub/PlayerProfile";
 import TradesPage from "./pages/hub/Trades";
 import ReSignPage from "./pages/hub/ReSign";
+import DeadMoney from "./pages/hub/DeadMoney";
 
 const queryClient = new QueryClient();
 
@@ -136,6 +137,7 @@ const App = () => (
                <Route path="/hub/regular-season" element={<RegularSeason />} />
                <Route path="/hub/playcall" element={<Playcall />} />
                <Route path="/hub/player/:playerId" element={<PlayerProfile />} />
+               <Route path="/hub/dead-money" element={<DeadMoney />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

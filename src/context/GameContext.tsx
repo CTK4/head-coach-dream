@@ -247,6 +247,31 @@ export type PlayerContractOverride = {
   prorationBySeason?: Record<number, number>;
 };
 
+export type TransactionType = "CUT" | "TRADE" | "VOID";
+export type AccelerationType = "PRE_JUNE_1" | "POST_JUNE_1" | "NONE";
+export type Transaction = {
+  id: string;
+  type: TransactionType;
+  playerId: string;
+  playerName: string;
+  playerPos: string;
+  fromTeamId: string;
+  toTeamId?: string;
+  season: number;
+  week?: number;
+  june1Designation: AccelerationType;
+  notes?: string;
+  deadCapThisYear: number;
+  deadCapNextYear: number;
+  remainingProration: number;
+  contractSnapshot?: {
+    startSeason: number;
+    endSeason: number;
+    signingBonus: number;
+    salaries: number[];
+  };
+};
+
 export type BuyoutLedger = { bySeason: Record<number, number> };
 export type DepthChart = {
   startersByPos: Record<string, string | undefined>;
@@ -380,6 +405,7 @@ export type GameState = {
   playerContractOverrides: Record<string, PlayerContractOverride>;
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
+  transactions: Transaction[];
   userTeamId?: string;
   teamId?: string;
   playerMorale?: Record<string, number>;
@@ -680,6 +706,7 @@ function createInitialState(): GameState {
     playerContractOverrides: {},
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
+    transactions: [],
   };
 
   return ensureAccolades(bootstrapAccolades(base));
@@ -3860,6 +3887,32 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const deadThisYear = designation === "POST_JUNE_1" ? Math.round((deadTotal * 0.5) / 50_000) * 50_000 : deadTotal;
       const deadNextYear = designation === "POST_JUNE_1" ? Math.max(0, deadTotal - deadThisYear) : 0;
 
+      const cutPlayer = getEffectivePlayersByTeam(state, teamId).find((p: any) => String(p.playerId) === String(playerId));
+      const cutOverride = state.playerContractOverrides[playerId];
+      const cutTransaction: Transaction = {
+        id: `${state.season}_${playerId}_CUT`,
+        type: "CUT",
+        playerId,
+        playerName: String(cutPlayer?.fullName ?? cutPlayer?.name ?? "Unknown"),
+        playerPos: String(cutPlayer?.pos ?? "UNK"),
+        fromTeamId: teamId,
+        season: state.season,
+        week: state.week,
+        june1Designation: designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1",
+        notes: designation === "POST_JUNE_1"
+          ? `Post–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M accelerated this year, $${Math.round(deadNextYear / 1_000_000)}M next year.`
+          : deadThisYear > 0 ? `Pre–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M dead cap.` : "Cut with no dead cap.",
+        deadCapThisYear: deadThisYear,
+        deadCapNextYear: deadNextYear,
+        remainingProration: summary?.deadCapIfCutNow ?? 0,
+        contractSnapshot: cutOverride ? {
+          startSeason: cutOverride.startSeason,
+          endSeason: cutOverride.endSeason,
+          signingBonus: cutOverride.signingBonus,
+          salaries: [...cutOverride.salaries],
+        } : undefined,
+      };
+
       const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" };
       const playerContractOverrides = { ...state.playerContractOverrides };
       delete playerContractOverrides[playerId];
@@ -3880,6 +3933,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           deadCapThisYear: (state.finances.deadCapThisYear ?? 0) + deadThisYear,
           deadCapNextYear: (state.finances.deadCapNextYear ?? 0) + deadNextYear,
         },
+        transactions: [...(state.transactions ?? []), cutTransaction],
       });
 
       const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
@@ -4845,6 +4899,7 @@ function loadState(): GameState {
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
+      transactions: (migrated as any).transactions ?? [],
     };
     out = ensureAccolades(bootstrapAccolades(out));
     out = ensureLeagueGmMap(out);
