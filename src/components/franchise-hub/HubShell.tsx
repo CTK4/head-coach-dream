@@ -250,7 +250,7 @@ export function HubShell({
   const capValue = formatMoneyM(capRoom);
   const phase = getPhaseLabel(state);
 
-  const fullName = [team?.city, team?.name].filter(Boolean).join(" ").trim();
+  const fullName = [(team as any)?.city, team?.name].filter(Boolean).join(" ").trim();
   const teamName = team?.abbrev ?? (fullName.length ? fullName : undefined);
 
   const showBack = location.pathname !== "/hub";

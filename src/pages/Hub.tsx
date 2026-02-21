@@ -1,13 +1,22 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { HubShell } from "@/components/franchise-hub/HubShell";
-import { HubTile } from "@/components/franchise-hub/HubTile";
 import { useGame } from "@/context/GameContext";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
+import { HubTile } from "@/components/franchise-hub/HubTile";
+import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
+import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
+
+// Placeholder images - using simple colored gradients or specific placeholders from the list if available
+const IMAGES = {
+    staff: "/placeholders/coach.png",
+    roster: "/placeholders/depth_chart.png",
+    strategy: "/placeholders/strategy_meeting.png",
+    contracts: "/placeholders/accounting.png",
+    scouting: "/placeholders/scout.png",
+    news: "/placeholders/news.png"
+}
 
 type UserSettings = {
   confirmAutoAdvance?: boolean;
@@ -30,15 +39,9 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function formatMoneyM(n: number): string {
-  const m = Math.max(0, n) / 1_000_000;
-  return `$${m.toFixed(1)}M`;
-}
-
 export default function Hub() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
-
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const badgeCounts = useMemo(() => {
@@ -55,11 +58,9 @@ export default function Hub() {
     };
   }, [state]);
 
-  const capRoom = formatMoneyM(state.finances.capSpace);
   const assistantOpen = Object.values(state.assistantStaff ?? {}).filter((value) => !value).length;
-  const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
-  const hireStaffCta = assistantOpen > 0 ? "DECISION NEEDED" : "VIEW STAFF";
-
+  // const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
+  
   const nextStage = nextStageForNavigate(state.careerStage);
   const nextLabel = stageLabel(nextStage);
   const nextRoute = stageToRoute(nextStage);
@@ -75,70 +76,87 @@ export default function Hub() {
     else doAdvance();
   }
 
+  // Determine Advance Label based on careerStage (Mock requirement)
+  let advanceText = "ADVANCE PHASE";
+  if (state.careerStage === "FREE_AGENCY") advanceText = "ADVANCE FA DAY";
+  else if (state.careerStage === "COMBINE") advanceText = "ADVANCE COMBINE DAY";
+  else if (state.careerStage === "DRAFT") advanceText = "ADVANCE PICK";
+  else if (state.careerStage === "REGULAR_SEASON") advanceText = "ADVANCE WEEK";
+  else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
+
+
   return (
-    <HubShell title="FRANCHISE HUB">
-      <Card className="border-slate-300/15 bg-slate-950/35">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="space-y-1">
-            <div className="text-sm font-semibold text-slate-100">Head Coach Hub</div>
-            <div className="text-xs text-slate-200/70">Manage staff, roster, scouting, and finances.</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline">Cap Room {capRoom}</Badge>
-            <Badge variant="outline">Stage {stageLabel(state.careerStage)}</Badge>
-          </div>
-        </CardContent>
-      </Card>
+    <section className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
+        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
+        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <HubTile
-          title="HIRE STAFF"
-          subtitle={hireStaffSubtitle}
-          cta={hireStaffCta}
-          to="/hub/assistant-hiring"
-          badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
-        />
-        <HubTile title="ROSTER" subtitle="MANAGE TEAM" cta="MANAGE TEAM" to="/hub/roster" badgeCount={badgeCounts.roster} />
-        <HubTile title="FRANCHISE STRATEGY" cta="PLAN FUTURE" to="/hub/staff-management" badgeCount={badgeCounts.franchiseStrategy} />
-        <HubTile title="CONTRACTS & CAP MANAGEMENT" cta="VIEW FINANCES" to="/hub/finances" badgeCount={badgeCounts.finances} />
-        <HubTile title="SCOUTING" cta="BEGIN SCOUTING" to="/hub/pre-draft" badgeCount={badgeCounts.scouting} />
-        <HubTile
-          title="LEAGUE NEWS"
-          cta="VIEW HEADLINES"
-          to="/hub/league-news"
-          badgeCount={badgeCounts.leagueNews}
-          cornerBubbleCount={badgeCounts.leagueNewsUnread}
-        />
-      </div>
+        <div className={`relative z-10 mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME} space-y-6`}>
+            
+            <FranchiseHeader />
 
-      <Card className="border-slate-300/15 bg-slate-950/35">
-        <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <div className="text-sm font-semibold text-slate-100">Advance to next phase</div>
-            <div className="text-xs text-slate-200/70">Next: {nextLabel}</div>
-          </div>
-          <Button onClick={onAdvanceClick} aria-label="Advance to next phase">
-            ADVANCE TO NEXT PHASE →
-          </Button>
-        </CardContent>
-      </Card>
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
+                <HubTile
+                    title="Hire Staff"
+                    to="/staff"
+                    imageUrl={IMAGES.staff}
+                    badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
+                />
+                <HubTile
+                    title="Roster"
+                    to="/roster"
+                    imageUrl={IMAGES.roster}
+                    badgeCount={badgeCounts.roster}
+                />
+                <HubTile
+                    title="Franchise Strategy"
+                    to="/strategy"
+                    imageUrl={IMAGES.strategy}
+                    badgeCount={badgeCounts.franchiseStrategy}
+                />
+                <HubTile
+                    title="Contracts & Cap"
+                    subtitle="Management"
+                    to="/contracts"
+                    imageUrl={IMAGES.contracts}
+                    badgeCount={badgeCounts.finances}
+                />
+                <HubTile
+                    title="Scouting"
+                    to="/scouting"
+                    imageUrl={IMAGES.scouting}
+                    badgeCount={badgeCounts.scouting}
+                />
+                <HubTile
+                    title="News"
+                    to="/news"
+                    imageUrl={IMAGES.news}
+                    badgeCount={badgeCounts.leagueNews}
+                    cornerBubbleCount={badgeCounts.leagueNewsUnread}
+                />
+            </div>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
-          <DialogHeader>
-            <DialogTitle>Advance to next phase?</DialogTitle>
-            <DialogDescription className="text-slate-200/70">
-              Next: {nextLabel}. You can disable this confirmation in Settings.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-              Cancel
+            <Button 
+                onClick={onAdvanceClick} 
+                className="w-full py-6 text-lg font-bold tracking-widest bg-gradient-to-r from-blue-900 to-slate-900 border border-blue-500/30 hover:from-blue-800 hover:to-slate-800 transition-all shadow-lg"
+            >
+                {advanceText}
             </Button>
-            <Button onClick={doAdvance}>Advance</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </HubShell>
+        </div>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                <DialogHeader>
+                    <DialogTitle>Advance?</DialogTitle>
+                    <DialogDescription className="text-slate-200/70">
+                    Next: {nextLabel}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+                    <Button onClick={doAdvance}>Advance</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    </section>
   );
 }
