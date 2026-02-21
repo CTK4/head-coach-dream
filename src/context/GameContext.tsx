@@ -86,6 +86,39 @@ export type CareerStage =
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
+export type PriorityPos = "QB" | "RB" | "WR" | "TE" | "OL" | "DL" | "EDGE" | "LB" | "CB" | "S" | "K" | "P";
+
+export type StrategyState = {
+  draftFaPriorities: PriorityPos[];
+};
+
+const DEFAULT_STRATEGY: StrategyState = { draftFaPriorities: ["QB", "OL", "EDGE"] };
+
+function normalizePriorityPos(pos: string): PriorityPos | null {
+  const p = String(pos || "").toUpperCase().trim();
+  const ok: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
+  return (ok as string[]).includes(p) ? (p as PriorityPos) : null;
+}
+
+function normalizePriorityList(list: unknown): PriorityPos[] {
+  if (!Array.isArray(list)) return DEFAULT_STRATEGY.draftFaPriorities.slice();
+  const out: PriorityPos[] = [];
+  for (const item of list) {
+    const p = normalizePriorityPos(String(item));
+    if (!p || out.includes(p)) continue;
+    out.push(p);
+  }
+  return out.length ? out : DEFAULT_STRATEGY.draftFaPriorities.slice();
+}
+
+function priorityWeight(priorities: PriorityPos[], pos: string): number {
+  const p = normalizePriorityPos(pos);
+  if (!p) return 0;
+  const idx = priorities.indexOf(p);
+  if (idx < 0) return 0;
+  return Math.max(0, 1 - idx * 0.25);
+}
+
 export type OffseasonState = {
   stepId: OffseasonStepId;
   completed: Record<OffseasonTaskId, boolean>;
@@ -114,7 +147,7 @@ export type OffseasonData = {
     capUsed: number;
     capHitsByPlayerId: Record<string, number>;
   };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM" };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
@@ -179,7 +212,7 @@ export type InterviewItem = { teamId: string; completed: boolean; answers: Recor
 export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string; score?: number };
 export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
 
-const CURRENT_SAVE_VERSION = 2;
+const CURRENT_SAVE_VERSION = 3;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = draftClassJson as DraftRow[];
@@ -202,6 +235,54 @@ function draftBoard(): Prospect[] {
   const rows = DRAFT_ROWS.slice();
   rows.sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999));
   return rows.map(toProspect);
+}
+
+function applyDraftPriorities(state: GameState, board: Prospect[]): Prospect[] {
+  const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  return board
+    .slice()
+    .map((p: any) => {
+      const rank = Number(p.rank ?? p.Rank ?? 9999);
+      const grade = Number(p.grade ?? 0);
+      const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
+      return { ...p, __score: score };
+    })
+    .sort((a: any, b: any) => (b.__score ?? 0) - (a.__score ?? 0));
+}
+
+function seedUserAutoFaOffersFromPriorities(state: GameState, maxOffers = 3): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+  if ((state.coach.autonomy ?? 60) >= 50) return state;
+  const teamId = String(state.acceptedOffer?.teamId ?? "");
+  if (!teamId) return state;
+
+  const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  const candidates = getEffectiveFreeAgents(state)
+    .map((p: any) => ({ p, id: String(p.playerId), pos: normalizePos(String(p.pos ?? "UNK")), ovr: Number(p.overall ?? 0) }))
+    .filter((x) => !state.freeAgency.signingsByPlayerId[x.id]);
+
+  const ranked = candidates
+    .map((x) => {
+      const need = teamNeedsScore(state, teamId, x.pos);
+      const w = priorityWeight(priorities, x.pos);
+      return { ...x, score: need * 0.55 + w * 0.35 + (x.ovr / 100) * 0.1 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 24);
+
+  let next = state;
+  let created = 0;
+  for (const pick of ranked) {
+    if (created >= maxOffers) break;
+    const existing = next.freeAgency.offersByPlayerId[pick.id] ?? [];
+    if (existing.some((o) => o.isUser && o.status === "PENDING")) continue;
+    const { years, aav } = cpuOfferParams(next, teamId, pick.p);
+    next = gameReducer(next, { type: "FA_SET_DRAFT", payload: { playerId: pick.id, years, aav } });
+    next = gameReducer(next, { type: "FA_SUBMIT_OFFER", payload: { playerId: pick.id } });
+    created += 1;
+  }
+
+  return next;
 }
 
 function mergeOffers(a: FreeAgentOffer[], b: FreeAgentOffer[]): FreeAgentOffer[] {
@@ -392,6 +473,7 @@ export type GameState = {
     offense?: { style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY"; tempo: "SLOW" | "NORMAL" | "FAST" };
     defense?: { style: "MAN" | "ZONE" | "MIXED"; aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE" };
   };
+  strategy: StrategyState;
   scouting?: { boardSeed: number; combineRun?: boolean };
   scoutingState?: ScoutingState;
   hub: { news: string[]; preseasonWeek: number; regularSeasonWeek: number; schedule: LeagueSchedule | null };
@@ -472,6 +554,7 @@ export type GameAction =
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
   | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
+  | { type: "SET_STRATEGY_PRIORITIES"; payload: { positions: PriorityPos[] } }
   | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
@@ -553,7 +636,7 @@ export type GameAction =
   | { type: "ADVANCE_SEASON" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
-  | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" } }
+  | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" | "TEAM" } }
   | { type: "DRAFT_INIT" }
   | { type: "DRAFT_CPU_ADVANCE" }
   | { type: "DRAFT_USER_PICK"; payload: { prospectId: string } }
@@ -681,6 +764,7 @@ function createInitialState(): GameState {
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
     scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: [], preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
     finances: {
@@ -2539,12 +2623,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...next.offseasonData,
           preDraft: {
             ...next.offseasonData.preDraft,
-            board: draftBoard(),
+            board: applyDraftPriorities(next, draftBoard()),
           },
         },
       };
       if (nextStage === "DRAFT") next = ensureDraftInitialized(next);
-      if (nextStage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
+      if (nextStage === "FREE_AGENCY") next = seedUserAutoFaOffersFromPriorities(resetFaPhase(clearResignOffers(next)));
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -2604,6 +2688,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
     case "SET_SCHEME":
       return { ...state, scheme: { ...state.scheme, ...action.payload } };
+    case "SET_STRATEGY_PRIORITIES": {
+      const positions = normalizePriorityList(action.payload.positions);
+      return { ...state, strategy: { ...state.strategy, draftFaPriorities: positions } };
+    }
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item
@@ -4811,6 +4899,7 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         cutDowns: { decisions: {} },
       } as OffseasonData),
     scheme: oldState.scheme ?? { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {
       ...(oldState.hub ?? { news: [] }),
@@ -4940,6 +5029,7 @@ function loadState(): GameState {
         camp: { ...initial.offseasonData.camp, ...migrated.offseasonData?.camp },
         cutDowns: { ...initial.offseasonData.cutDowns, ...migrated.offseasonData?.cutDowns },
       },
+      strategy: { ...initial.strategy, ...((migrated as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((migrated as any).strategy?.draftFaPriorities) },
       freeAgency: {
         ...initial.freeAgency,
         ...migrated.freeAgency,

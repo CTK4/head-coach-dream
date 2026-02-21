@@ -1,19 +1,37 @@
 import { useMemo } from "react";
-import { useGame } from "@/context/GameContext";
+import { getUserProspectEval, useGame, type PriorityPos } from "@/context/GameContext";
+import type { Prospect } from "@/engine/offseasonData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getUserProspectEval } from "@/context/GameContext";
+
+function priorityWeight(priorities: PriorityPos[], pos: string): number {
+  const p = String(pos || "").toUpperCase().trim() as PriorityPos;
+  const idx = priorities.indexOf(p);
+  if (idx < 0) return 0;
+  return Math.max(0, 1 - idx * 0.25);
+}
 
 export default function PreDraft() {
   const { state, dispatch } = useGame();
+  const viewMode = (state.offseasonData.preDraft.viewMode as "CONSENSUS" | "GM" | "TEAM") ?? "CONSENSUS";
+  const priorities = useMemo<PriorityPos[]>(() => state.strategy?.draftFaPriorities ?? ["QB", "OL", "EDGE"], [state.strategy?.draftFaPriorities]);
 
   const board = useMemo(() => {
-    const b = state.offseasonData.preDraft.board.length ? state.offseasonData.preDraft.board : state.offseasonData.draft.board;
-    return (b.length ? b : []).slice(0, 90);
-  }, [state.offseasonData.preDraft.board, state.offseasonData.draft.board]);
+    const base = state.offseasonData.preDraft.board.length ? state.offseasonData.preDraft.board : state.offseasonData.draft.board;
+    const ranked: Prospect[] = (base.length ? base : []).slice();
+    if (viewMode !== "TEAM") return ranked.slice(0, 90);
 
-  const viewMode = state.offseasonData.preDraft.viewMode ?? "CONSENSUS";
+    return ranked
+      .map((p) => {
+        const rank = Number(p.rank ?? p.Rank ?? 9999);
+        const grade = Number(p.grade ?? 0);
+        const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
+        return { ...p, __score: score };
+      })
+      .sort((a, b) => (b.__score ?? 0) - (a.__score ?? 0))
+      .slice(0, 90);
+  }, [state.offseasonData.preDraft.board, state.offseasonData.draft.board, viewMode, priorities]);
 
   const visits = state.offseasonData.preDraft.visits;
   const workouts = state.offseasonData.preDraft.workouts;
@@ -21,7 +39,7 @@ export default function PreDraft() {
 
   const toggleVisit = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
   const toggleWorkout = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_WORKOUT", payload: { prospectId: id } });
-  const setViewMode = (mode: "CONSENSUS" | "GM") => dispatch({ type: "PREDRAFT_SET_VIEWMODE", payload: { mode } });
+  const setViewMode = (mode: "CONSENSUS" | "GM" | "TEAM") => dispatch({ type: "PREDRAFT_SET_VIEWMODE", payload: { mode } });
 
   const completeStep = () => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "PRE_DRAFT" } });
   const next = () => dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
@@ -44,26 +62,30 @@ export default function PreDraft() {
             <div className="font-semibold">Board</div>
             <div className="flex items-center gap-2">
               <div className="flex rounded-md border overflow-hidden">
-                <Button
-                  size="sm"
-                  variant={viewMode === "CONSENSUS" ? "default" : "ghost"}
-                  className="rounded-none"
-                  onClick={() => setViewMode("CONSENSUS")}
-                >
+                <Button size="sm" variant={viewMode === "CONSENSUS" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("CONSENSUS")}>
                   Consensus
                 </Button>
-                <Button
-                  size="sm"
-                  variant={viewMode === "GM" ? "default" : "ghost"}
-                  className="rounded-none"
-                  onClick={() => setViewMode("GM")}
-                >
+                <Button size="sm" variant={viewMode === "GM" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("GM")}>
                   GM View
+                </Button>
+                <Button size="sm" variant={viewMode === "TEAM" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("TEAM")}>
+                  Team View
                 </Button>
               </div>
               <Badge variant="outline">{board.length}</Badge>
             </div>
           </div>
+
+          {viewMode === "TEAM" ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Priority bump:</span>
+              {priorities.slice(0, 3).map((p) => (
+                <Badge key={p} variant="secondary">
+                  {p}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
 
           <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
             {board.map((p, idx) => {
