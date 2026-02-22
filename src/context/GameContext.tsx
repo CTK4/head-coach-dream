@@ -23,9 +23,11 @@ import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode } from "@/engine/gameSim";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
+import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
@@ -5058,10 +5060,45 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
 
       let out = { ...state, league, hub };
+      out = resolveInjuriesEngine(out);
       if (gameType === "REGULAR_SEASON") {
         out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
         if (week >= REGULAR_SEASON_WEEKS) {
           out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
+          const { postseason, championTeamId } = simulatePlayoffs({
+            league: out.league,
+            season: Number(out.season ?? 2026),
+            seed: Number(out.saveSeed ?? 1) + 99991,
+          });
+          const nextSeason = Number(out.season ?? 2026) + 1;
+          const teams = getTeams()
+            .filter((t) => t.isActive)
+            .map((t) => t.teamId);
+          const nextSchedule = generateLeagueSchedule(teams, Number(out.saveSeed ?? 1) + nextSeason * 1337);
+
+          out = {
+            ...out,
+            season: nextSeason,
+            week: 0,
+            league: { ...out.league, postseason },
+            hub: {
+              ...out.hub,
+              schedule: nextSchedule,
+              preseasonWeek: 1,
+              regularSeasonWeek: 1,
+              news: [
+                {
+                  id: `NEWS_${Date.now()}`,
+                  title: `${championTeamId} crowned champion`,
+                  body: "The season is complete. Offseason begins now.",
+                  createdAt: Date.now(),
+                  category: "LEAGUE",
+                },
+                ...(out.hub.news ?? []),
+              ],
+            },
+            careerStage: "OFFSEASON_HUB",
+          };
         }
       }
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
