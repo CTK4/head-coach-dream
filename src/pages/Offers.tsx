@@ -1,16 +1,60 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function money(n: number): string {
+  const v = Number(n || 0);
+  if (v >= 1_000_000) return `$${Math.round(v / 100_000) / 10}M`;
+  if (v >= 1_000) return `$${Math.round(v / 100) / 10}K`;
+  return `$${v}`;
+}
 
 const Offers = () => {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
+  const [openTeamId, setOpenTeamId] = useState<string | null>(null);
+  const [draftYears, setDraftYears] = useState<number>(3);
+  const [draftSalary, setDraftSalary] = useState<number>(2_000_000);
+  const [draftAutonomy, setDraftAutonomy] = useState<number>(50);
+
+  const activeOffer = useMemo(
+    () => (openTeamId ? state.offers.find((o) => o.teamId === openTeamId) ?? null : null),
+    [openTeamId, state.offers],
+  );
 
   const handleAccept = (offer: typeof state.offers[0]) => {
     dispatch({ type: "ACCEPT_OFFER", payload: offer });
+  };
+
+  const openNegotiate = (offer: typeof state.offers[0]) => {
+    setOpenTeamId(offer.teamId);
+    setDraftYears(offer.years);
+    setDraftSalary(offer.salary);
+    setDraftAutonomy(offer.autonomy);
+  };
+
+  const commitNegotiate = () => {
+    if (!activeOffer) return;
+    dispatch({
+      type: "NEGOTIATE_OFFER",
+      payload: {
+        teamId: activeOffer.teamId,
+        years: clamp(draftYears, 1, 6),
+        salary: clamp(draftSalary, Math.floor(activeOffer.salary * 0.8), Math.floor(activeOffer.salary * 1.2)),
+        autonomy: clamp(draftAutonomy, 0, 100),
+      },
+    });
+    setOpenTeamId(null);
   };
 
   if (state.offers.length === 0) {
@@ -19,9 +63,6 @@ const Offers = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-6 text-center">
             <p className="text-lg">No offers yet. Complete all interviews first.</p>
-            <p className="text-xs text-muted-foreground mt-2 break-all">
-              Debug: phase={state.phase} completedCount={state.interviews.completedCount} completed=[{state.interviews.items.map((item) => String(item.completed)).join(", ")}]
-            </p>
             <Button onClick={() => navigate("/interviews")} className="mt-4">Back to Interviews</Button>
           </CardContent>
         </Card>
@@ -39,41 +80,106 @@ const Offers = () => {
             const team = getTeamById(offer.teamId);
             return (
               <Card key={offer.teamId} className="hover:border-primary transition-all">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
+                <CardContent className="p-6 space-y-4">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-xl font-bold">{team?.name ?? offer.teamId}</h3>
-                      <p className="text-sm text-muted-foreground">{team?.region}</p>
+                      <h2 className="text-xl font-semibold">{team?.name ?? offer.teamId}</h2>
+                      <p className="text-sm text-muted-foreground">{team?.city ?? team?.region ?? ""}</p>
                     </div>
-                    <Badge variant="secondary">{team?.conferenceId}</Badge>
+                    <Badge variant="secondary">{offer.mediaNarrativeKey}</Badge>
                   </div>
-                  <div className="flex gap-4 mb-4">
-                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Contract</p>
-                      <p className="font-bold">{offer.years} years</p>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-muted-foreground">Years</div>
+                      <div className="font-semibold">{offer.years}</div>
                     </div>
-                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Salary</p>
-                      <p className="font-bold">${(offer.salary / 1_000_000).toFixed(1)}M/yr</p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-muted-foreground">Salary</div>
+                      <div className="font-semibold">{money(offer.salary)} / yr</div>
                     </div>
-                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Autonomy</p>
-                      <p className="font-bold">{offer.autonomy}</p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-muted-foreground">Autonomy</div>
+                      <div className="font-semibold">{offer.autonomy}</div>
                     </div>
-                    <div className="bg-secondary rounded-lg px-4 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Patience</p>
-                      <p className="font-bold">{offer.patience}</p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="text-xs text-muted-foreground">Patience</div>
+                      <div className="font-semibold">{offer.patience}</div>
                     </div>
                   </div>
-                  <Button onClick={() => handleAccept(offer)} className="w-full">
-                    Accept Offer
-                  </Button>
+
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => openNegotiate(offer)}>
+                      Negotiate
+                    </Button>
+                    <Button className="flex-1" onClick={() => handleAccept(offer)}>
+                      Accept Offer
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
       </div>
+
+      <Dialog open={!!openTeamId} onOpenChange={(v) => !v && setOpenTeamId(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Negotiate Offer</DialogTitle>
+          </DialogHeader>
+          {activeOffer ? (
+            <div className="space-y-5">
+              <div className="text-sm text-muted-foreground">You can adjust terms within a reasonable range. Patience is fixed for now.</div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">Contract Length</div>
+                  <div className="text-sm">{draftYears} years</div>
+                </div>
+                <Slider
+                  value={[draftYears]}
+                  min={Math.max(1, activeOffer.years - 1)}
+                  max={Math.min(6, activeOffer.years + 2)}
+                  step={1}
+                  onValueChange={(v) => setDraftYears(v[0] ?? activeOffer.years)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">Salary</div>
+                  <div className="text-sm">{money(draftSalary)} / yr</div>
+                </div>
+                <Slider
+                  value={[draftSalary]}
+                  min={Math.floor(activeOffer.salary * 0.8)}
+                  max={Math.floor(activeOffer.salary * 1.2)}
+                  step={50_000}
+                  onValueChange={(v) => setDraftSalary(v[0] ?? activeOffer.salary)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">Autonomy</div>
+                  <div className="text-sm">{draftAutonomy}</div>
+                </div>
+                <Slider value={[draftAutonomy]} min={0} max={100} step={5} onValueChange={(v) => setDraftAutonomy(v[0] ?? 50)} />
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setOpenTeamId(null)}>
+                  Cancel
+                </Button>
+                <Button className="flex-1" onClick={commitNegotiate}>
+                  Submit Counter
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

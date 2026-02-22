@@ -19,12 +19,14 @@ export default function ScoutAllocation() {
 
   return (
     <div className="space-y-3 p-4">
-      <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-3">
-        <div>
-          <div className="font-semibold">Scout Allocation</div>
-          <div className="text-xs opacity-70">Hours remaining: {remaining}</div>
+      <div className="sticky top-0 z-10 -mx-4 border-b border-white/10 bg-slate-950/95 px-4 py-2 backdrop-blur">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-semibold">Scout Allocation</div>
+            <div className="text-xs opacity-70">Tip: Keep a few hours unassigned for flexibility.</div>
+          </div>
+          <div className="text-xs opacity-70">Remaining {remaining} / {total}</div>
         </div>
-        <div className="text-xs opacity-70">Total {total}</div>
       </div>
 
       <div className="space-y-2">

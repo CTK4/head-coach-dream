@@ -559,6 +559,7 @@ export type GameAction =
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
+  | { type: "NEGOTIATE_OFFER"; payload: { teamId: string; years: number; salary: number; autonomy: number } }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
   | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
@@ -2778,6 +2779,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
       return applyFinances(next as GameState);
+    }
+    case "NEGOTIATE_OFFER": {
+      const { teamId, years, salary, autonomy } = action.payload;
+      return {
+        ...state,
+        offers: state.offers.map((offer) =>
+          offer.teamId === teamId
+            ? {
+                ...offer,
+                years: Math.max(1, Math.min(6, Math.floor(years))),
+                salary: Math.max(100_000, Math.floor(salary)),
+                autonomy: Math.max(0, Math.min(100, Math.floor(autonomy))),
+              }
+            : offer,
+        ),
+      };
     }
     case "COORD_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);

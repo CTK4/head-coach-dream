@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Avatar } from "@/components/common/Avatar";
-import { nextStageForNavigate, stageToRoute } from "@/components/franchise-hub/stageRouting";
+import { stageToRoute } from "@/components/franchise-hub/stageRouting";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -183,9 +183,8 @@ export default function AssistantHiring() {
 
   const handleContinue = () => {
     if (!allFilled) return;
-    const next = nextStageForNavigate(state.careerStage);
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
-    navigate(stageToRoute(next));
+    navigate(stageToRoute("ROSTER_REVIEW"));
   };
 
   return (
@@ -195,6 +194,25 @@ export default function AssistantHiring() {
           <CardContent className="p-4 text-sm">{toast}</CardContent>
         </Card>
       ) : null}
+
+
+      {allFilled ? (
+        <Card>
+          <CardContent className="p-4 text-sm flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold">Ready to Advance</div>
+              <div className="text-muted-foreground text-xs">Next phase: Roster Review</div>
+            </div>
+            <Button onClick={handleContinue}>Continue →</Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Fill all assistant roles to unlock <span className="font-semibold text-slate-200">Roster Review</span>.
+          </CardContent>
+        </Card>
+      )}
 
       <HubPageCard
         title="Staff Construction"
