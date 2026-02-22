@@ -1,0 +1,1 @@
+export const CURRENT_SEASON_YEAR = 2026;

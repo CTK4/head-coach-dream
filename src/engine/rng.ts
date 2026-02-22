@@ -32,3 +32,8 @@ export function shuffleDeterministic<T>(items: T[], rng: () => number): T[] {
   }
   return out;
 }
+
+export function rng(seed: number, contextKey = ""): () => number {
+  const contextualSeed = contextKey.length > 0 ? hashSeed(seed, contextKey) : seed;
+  return mulberry32(contextualSeed);
+}

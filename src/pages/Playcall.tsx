@@ -3,10 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { recommendFourthDown } from "@/engine/gameSim";
+import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
+import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import GameLog from "@/components/GameLog/GameLog";
+import { adaptDriveLog } from "@/components/GameLog/adaptDriveLog";
 
 // ─── Play catalog ──────────────────────────────────────────────────────────
 
@@ -60,6 +64,31 @@ function tagIcon(kind: ResultTag["kind"]): string {
   return icons[kind] ?? "•";
 }
 
+
+function fatigueTone(v: number): string {
+  if (v >= FATIGUE_THRESHOLDS.INJURY) return "bg-red-500";
+  if (v >= FATIGUE_THRESHOLDS.SPEED) return "bg-orange-500";
+  if (v >= FATIGUE_THRESHOLDS.ACCURACY) return "bg-yellow-500";
+  return "bg-green-500";
+}
+
+
+function personnelToneClass(code: PersonnelPackage): string {
+  const tone = PERSONNEL_PACKAGE_DEFINITIONS[code].toneClass;
+  if (tone === "light") return "bg-sky-100 text-sky-900";
+  if (tone === "heavy") return "bg-slate-800 text-slate-100";
+  return "bg-indigo-100 text-indigo-900";
+}
+
+function FatigueBar({ value }: { value: number }) {
+  const safe = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <div className="w-full rounded bg-muted h-2 overflow-hidden">
+      <div className={`${fatigueTone(safe)} h-2 transition-all duration-300`} style={{ width: `${safe}%` }} />
+    </div>
+  );
+}
+
 function statLine(g: GameSim): string {
   const h = g.stats.home;
   const a = g.stats.away;
@@ -109,7 +138,7 @@ function PlayCard({ play, onClick }: { play: PlayDef; onClick: () => void }) {
   );
 }
 
-function PostgamePanel({ g, homeName, awayName }: { g: GameSim; homeName: string; awayName: string }) {
+function PostgamePanel({ g, homeName, awayName, fatigueById }: { g: GameSim; homeName: string; awayName: string; fatigueById: Record<string, { fatigue: number; last3SnapLoads: number[] }> }) {
   const h = g.stats.home;
   const a = g.stats.away;
   return (
@@ -141,6 +170,22 @@ function PostgamePanel({ g, homeName, awayName }: { g: GameSim; homeName: string
             {a.topReceiverYards > 0 && <p>Top receiver: {a.topReceiverYards} yds</p>}
           </div>
         </div>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">High Workload</p>
+          {Object.entries(g.snapLoadThisGame).filter(([playerId]) => (g.playerFatigue[playerId] ?? 50) > HIGH_WORKLOAD_THRESHOLD).length === 0 ? (
+            <p className="text-xs text-muted-foreground">No warning badges.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(g.snapLoadThisGame).map(([playerId, snaps]) => {
+                const fatigue = g.playerFatigue[playerId] ?? 50;
+                if (fatigue <= HIGH_WORKLOAD_THRESHOLD) return null;
+                const last3 = fatigueById[playerId]?.last3SnapLoads ?? [];
+                const avg = last3.length ? Math.round(last3.reduce((s, n) => s + n, 0) / last3.length) : 0;
+                return <Badge key={playerId} variant="destructive" title={`Snaps: ${snaps} | Rolling avg: ${avg}`}>High Workload</Badge>;
+              })}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -154,6 +199,7 @@ const Playcall = () => {
   const [, force] = useState(0);
   const [aggression, setAggression] = useState<AggressionLevel>("NORMAL");
   const [tempo, setTempo] = useState<TempoMode>("NORMAL");
+  const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
 
   const teamId = state.acceptedOffer?.teamId;
   const g = state.game;
@@ -171,7 +217,7 @@ const Playcall = () => {
   );
 
   const handlePlay = (playType: PlayType) => {
-    dispatch({ type: "RESOLVE_PLAY", payload: { playType, aggression, tempo } });
+    dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
     force((x) => x + 1);
   };
 
@@ -233,6 +279,46 @@ const Playcall = () => {
                 {g.lastResultTags && g.lastResultTags.length > 0 && <ResultRibbon tags={g.lastResultTags} />}
               </div>
             )}
+
+            <div className="pt-1 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tracked Fatigue</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(g.trackedPlayers[g.possession] ?? {}).map(([pos, playerId]) => {
+                  if (!playerId) return null;
+                  const v = g.playerFatigue[playerId] ?? 50;
+                  return (
+                    <div key={`${pos}-${playerId}`} className="rounded border p-2">
+                      <div className="flex items-center justify-between text-xs mb-1"><span>{pos}</span><span>{Math.round(v)}</span></div>
+                      <FatigueBar value={v} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge className={personnelToneClass(personnelPackage)} title={`${PERSONNEL_PACKAGE_DEFINITIONS[personnelPackage].label} — ${PERSONNEL_PACKAGE_DEFINITIONS[personnelPackage].description}`}>
+                  {personnelPackage}
+                </Badge>
+                <div className="flex gap-1 overflow-x-auto">
+                  {(["10","11","12","21","22"] as PersonnelPackage[]).map((pkg) => (
+                    <Button key={pkg} size="sm" variant={personnelPackage === pkg ? "default" : "outline"} onClick={() => setPersonnelPackage(pkg)}>{pkg}</Button>
+                  ))}
+                </div>
+              </div>
+              {(() => {
+                const reactions = getDefensiveReaction(g.down, g.distance, personnelPackage);
+                const primary = reactions[0];
+                const secondary = reactions[1];
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    Defense likely in: <span className="font-medium text-foreground">{primary?.defensivePackage} ({primary?.probability}%)</span>
+                    {secondary && secondary.probability > 15 ? <span> · {secondary.defensivePackage} ({secondary.probability}%)</span> : null}
+                  </p>
+                );
+              })()}
+            </div>
 
             {/* 4th down recommendation */}
             {rec && (
@@ -305,7 +391,7 @@ const Playcall = () => {
             </div>
           </>
         ) : (
-          <PostgamePanel g={g} homeName={homeName} awayName={awayName} />
+          <PostgamePanel g={g} homeName={homeName} awayName={awayName} fatigueById={state.playerFatigueById} />
         )}
 
         {/* ── Drive Log ── */}
@@ -318,26 +404,7 @@ const Playcall = () => {
             {!isOver && (
               <p className="text-xs text-muted-foreground">{statLine(g)}</p>
             )}
-            <div className="max-h-[360px] overflow-auto space-y-2 pr-1">
-              {g.driveLog.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No plays yet.</div>
-              ) : (
-                g.driveLog.map((e, i) => (
-                  <div key={`${e.drive}-${e.play}-${i}`} className="rounded-md border p-3 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Badge variant="secondary">D{e.drive}·P{e.play}</Badge>
-                      <Badge variant="outline">Q{e.quarter} {fmtClock(e.clockSec)}</Badge>
-                      <Badge variant="outline">{e.possession}</Badge>
-                      <Badge variant="outline">{e.down}&amp;{e.distance} @ {e.ballOn}</Badge>
-                      <Badge variant="outline">{e.homeScore}-{e.awayScore}</Badge>
-                      <Badge variant="outline">{e.playType.replace(/_/g, " ")}</Badge>
-                    </div>
-                    <div className="text-sm">{e.result}</div>
-                    {e.resultTags.length > 0 && <ResultRibbon tags={e.resultTags} />}
-                  </div>
-                ))
-              )}
-            </div>
+            <GameLog entries={adaptDriveLog(g.driveLog)} isLive={!isOver} />
             {isOver && (
               <Button onClick={() => navigate("/hub")}>Back to Hub</Button>
             )}

@@ -1,6 +1,9 @@
 import { simulateFullGame } from "@/engine/gameSim";
 import type { GameType, LeagueSchedule, Matchup } from "@/engine/schedule";
+import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
+import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
 import type { PostseasonState } from "@/engine/postseason";
+import { CURRENT_SEASON_YEAR } from "@/config/season";
 
 export type TeamStanding = { w: number; l: number; pf: number; pa: number };
 export type WeekResult = {
@@ -17,9 +20,14 @@ export type LeagueState = {
   results: WeekResult[];
   gmByTeamId: Record<string, string>;
   postseason?: PostseasonState;
+  week: number;
+  tradeDeadlineWeek: number;
 };
 
-export function initLeagueState(teamIds: string[], season = new Date().getFullYear()): LeagueState {
+export function initLeagueState(teamIds: string[], season = CURRENT_SEASON_YEAR, tradeDeadlineWeek = 10): LeagueState {
+  if (!Number.isInteger(tradeDeadlineWeek) || tradeDeadlineWeek < 1 || tradeDeadlineWeek >= REGULAR_SEASON_WEEKS) {
+    throw new Error(`Invalid tradeDeadlineWeek ${tradeDeadlineWeek}. Must be >= 1 and < ${REGULAR_SEASON_WEEKS}.`);
+  }
   const standings: Record<string, TeamStanding> = {};
   for (const id of teamIds) standings[id] = { w: 0, l: 0, pf: 0, pa: 0 };
 
@@ -63,7 +71,7 @@ export function initLeagueState(teamIds: string[], season = new Date().getFullYe
     gmByTeamId[teamIds[i]] = gmPool[(season + i) % gmPool.length];
   }
 
-  return { standings, results: [], gmByTeamId, postseason: { season, resultsByTeamId: {} } };
+  return { standings, results: [], gmByTeamId, postseason: { season, resultsByTeamId: {} }, week: 1, tradeDeadlineWeek };
 }
 
 function applyResult(standings: Record<string, TeamStanding>, r: WeekResult): void {
@@ -136,5 +144,7 @@ export function simulateLeagueWeek(params: {
     results: [...params.league.results, ...newResults],
     gmByTeamId: params.league.gmByTeamId,
     postseason: params.league.postseason,
+    week: week + 1,
+    tradeDeadlineWeek: params.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK,
   };
 }

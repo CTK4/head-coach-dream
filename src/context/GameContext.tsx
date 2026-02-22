@@ -20,7 +20,7 @@ import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost } from "@
 import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
 import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
 import { isOfferAccepted } from "@/engine/coachAcceptance";
-import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode } from "@/engine/gameSim";
+import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
@@ -38,6 +38,10 @@ import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termin
 import { getGmTraits } from "@/engine/gmScouting";
 import { evalProspectForGm } from "@/engine/prospectEval";
 import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
+import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
+import type { PersonnelPackage } from "@/engine/personnel";
+import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, type TradeDeadlineError } from "@/engine/tradeDeadline";
+import { DEFAULT_PRACTICE_PLAN, applyPracticeFatigue, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity, type PracticePlan } from "@/engine/practiceFocus";
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
 import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
@@ -461,6 +465,17 @@ export type PlayerAccolades = {
   proBowls?: number;
 };
 
+export type PersistedFatigue = { fatigue: number; last3SnapLoads: number[] };
+
+export type PendingTradeOffer = {
+  id: string;
+  playerId: string;
+  fromTeamId: string;
+  toTeamId: string;
+  createdWeek: number;
+  status: "PENDING" | "CANCELLED" | "ACCEPTED";
+};
+
 export type GameState = {
   coach: {
     name: string;
@@ -539,6 +554,14 @@ export type GameState = {
   rookieContracts: Record<string, RookieContract>;
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
+  playerFatigueById: Record<string, PersistedFatigue>;
+  practicePlan: PracticePlan;
+  practicePlanConfirmed: boolean;
+  weeklyFamiliarityBonus: number;
+  nextGameInjuryRiskMod: number;
+  playerDevXpById: Record<string, number>;
+  pendingTradeOffers: PendingTradeOffer[];
+  tradeError?: TradeDeadlineError;
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
   transactions: Transaction[];
@@ -616,7 +639,7 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number; gameType?: GameType; week?: number } }
-  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; aggression?: AggressionLevel; tempo?: TempoMode } }
+  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
   | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
@@ -733,11 +756,131 @@ export type GameAction =
   | { type: "HUB_MARK_NEWS_READ" }
   | { type: "HUB_MARK_NEWS_ITEM_READ"; payload: { id: string } }
   | { type: "HUB_SET_NEWS_FILTER"; payload: { filter: string } }
+  | { type: "SET_PRACTICE_PLAN"; payload: PracticePlan }
   | { type: "INJURY_UPSERT"; payload: Injury }
   | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
   | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
   | { type: "INJURY_START_PRACTICE_WINDOW"; payload: { injuryId: string } }
   | { type: "RESET" };
+
+
+function pickTopPlayerIdByPos(teamId: string, pos: string): string | undefined {
+  const players = getPlayersByTeam(teamId)
+    .filter((p) => String(p.pos ?? "").toUpperCase() === pos)
+    .sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  return players[0]?.playerId;
+}
+
+function buildTrackedPlayers(teamId: string): Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>> {
+  const qb = pickTopPlayerIdByPos(teamId, "QB");
+  const rb = pickTopPlayerIdByPos(teamId, "RB");
+  const wr = pickTopPlayerIdByPos(teamId, "WR");
+  const te = pickTopPlayerIdByPos(teamId, "TE");
+  const ol = pickTopPlayerIdByPos(teamId, "OL");
+  const dl = pickTopPlayerIdByPos(teamId, "DL") ?? pickTopPlayerIdByPos(teamId, "EDGE");
+  const lb = pickTopPlayerIdByPos(teamId, "LB");
+  const db = pickTopPlayerIdByPos(teamId, "CB") ?? pickTopPlayerIdByPos(teamId, "S");
+  return { QB: qb, RB: rb, WR: wr, TE: te, OL: ol, DL: dl, LB: lb, DB: db };
+}
+
+function hydrateGameFatigue(state: GameState, trackedPlayers: Record<Possession, Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const side of ["HOME", "AWAY"] as const) {
+    for (const playerId of Object.values(trackedPlayers[side])) {
+      if (!playerId) continue;
+      out[playerId] = clampFatigue(state.playerFatigueById[playerId]?.fatigue ?? FATIGUE_DEFAULT);
+    }
+  }
+  return out;
+}
+
+function applyWeeklyFatigueRecovery(state: GameState, snapLoadThisGame: Record<string, number>): Record<string, PersistedFatigue> {
+  const next = { ...state.playerFatigueById };
+  for (const [playerId, load] of Object.entries(snapLoadThisGame)) {
+    const base = next[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    const p = getPlayers().find((pl) => String(pl.playerId) === String(playerId));
+    const recovery = getRecoveryRate(String(p?.pos ?? "WR"));
+    const recovered = recoverFatigue(base.fatigue, recovery);
+    const last3SnapLoads = pushLast3SnapLoad(base.last3SnapLoads, load);
+    next[playerId] = { fatigue: recovered, last3SnapLoads };
+  }
+  return next;
+}
+
+function upsertGameFatigueState(state: GameState, sim: GameSim): GameState {
+  const next = { ...state.playerFatigueById };
+  for (const [playerId, fatigue] of Object.entries(sim.playerFatigue ?? {})) {
+    const prev = next[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    next[playerId] = { ...prev, fatigue: clampFatigue(fatigue) };
+  }
+  return { ...state, playerFatigueById: next };
+}
+
+type PracticeApplicationSummary = { avgFatigueDelta: number; devXpPlayers: number; avgFamiliarityGain: number; injuryRiskMod: number };
+
+export function applyPracticePlanForWeek(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { nextState: GameState; summary: PracticeApplicationSummary } {
+  const plan = state.practicePlan ?? DEFAULT_PRACTICE_PLAN;
+  const effect = getPracticeEffect(plan);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const fatigue = { ...state.playerFatigueById };
+  const dev = { ...state.playerDevXpById };
+  const injuries = state.injuries ?? [];
+
+  let totalFatigueDelta = 0;
+  let devXpPlayers = 0;
+  let totalFamiliarity = 0;
+
+  for (const p of roster) {
+    const playerId = String((p as { playerId?: string }).playerId ?? "");
+    if (!playerId) continue;
+    if (failAfterPlayerId && playerId === failAfterPlayerId) throw new Error("practice-atomic-test");
+
+    const base = fatigue[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    const nextFatigue = applyPracticeFatigue(base.fatigue, effect.fatigueBase);
+    fatigue[playerId] = { ...base, fatigue: nextFatigue };
+    totalFatigueDelta += nextFatigue - base.fatigue;
+
+    const isInjured = injuries.some((inj) => inj.playerId === playerId && inj.status !== "QUESTIONABLE");
+    if (!isInjured && effect.devXP > 0) {
+      dev[playerId] = (dev[playerId] ?? 0) + effect.devXP;
+      devXpPlayers += 1;
+    }
+
+    const famGain = resolveInstallFamiliarity(state.saveSeed, week, playerId, effect.familiarityGain);
+    totalFamiliarity += famGain;
+  }
+
+  const size = Math.max(1, roster.length);
+  const summary: PracticeApplicationSummary = {
+    avgFatigueDelta: totalFatigueDelta / size,
+    devXpPlayers,
+    avgFamiliarityGain: totalFamiliarity / size,
+    injuryRiskMod: effect.injuryRiskMod,
+  };
+
+  return {
+    nextState: {
+      ...state,
+      playerFatigueById: fatigue,
+      playerDevXpById: dev,
+      weeklyFamiliarityBonus: summary.avgFamiliarityGain,
+      nextGameInjuryRiskMod: effect.injuryRiskMod,
+      practicePlan: DEFAULT_PRACTICE_PLAN,
+      practicePlanConfirmed: false,
+      uiToast: `Practice complete — avg fatigue ${summary.avgFatigueDelta >= 0 ? "+" : ""}${summary.avgFatigueDelta.toFixed(1)} | ${summary.devXpPlayers} players gained Dev XP`,
+    },
+    summary,
+  };
+}
+
+
+export function applyPracticePlanForWeekAtomic(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { state: GameState; applied: boolean } {
+  try {
+    return { state: applyPracticePlanForWeek(state, teamId, week, failAfterPlayerId).nextState, applied: true };
+  } catch {
+    return { state, applied: false };
+  }
+}
 
 function createSchedule(seed: number): LeagueSchedule {
   const teamIds = getTeams().filter((team) => team.isActive !== false).map((team) => team.teamId);
@@ -858,6 +1001,14 @@ function createInitialState(): GameState {
     rookieContracts: {},
     playerTeamOverrides: {},
     playerContractOverrides: {},
+    playerFatigueById: {},
+    practicePlan: DEFAULT_PRACTICE_PLAN,
+    practicePlanConfirmed: false,
+    weeklyFamiliarityBonus: 0,
+    nextGameInjuryRiskMod: 0,
+    playerDevXpById: {},
+    pendingTradeOffers: [],
+    tradeError: undefined,
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     transactions: [],
@@ -2743,7 +2894,7 @@ function patiencePenalty(args: {
   return clamp(Math.round(baseCost + yearsCost + salaryCost + autoCost + attemptCost), 0, 35);
 }
 
-function gameReducer(state: GameState, action: GameAction): GameState {
+export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
       return { ...state, coach: { ...state.coach, ...action.payload } };
@@ -2806,6 +2957,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "EXECUTE_TRADE": {
       const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds } = action.payload;
+      const currentWeek = Number(state.league.week ?? state.week ?? 1);
+      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      if (!isTradeAllowed(currentWeek, deadlineWeek)) {
+        return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+      }
       const overrides = { ...(state.playerTeamOverrides ?? {}) };
       for (const pid of outgoingPlayerIds) overrides[String(pid)] = String(teamB);
       for (const pid of incomingPlayerIds) overrides[String(pid)] = String(teamA);
@@ -4222,6 +4378,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "TRADE_ACCEPT": {
+      const currentWeek = Number(state.league.week ?? state.week ?? 1);
+      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      if (!isTradeAllowed(currentWeek, deadlineWeek)) {
+        return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+      }
       const teamId = state.acceptedOffer?.teamId;
       if (!teamId) return state;
       const playerId = String(action.payload.playerId);
@@ -4233,10 +4394,27 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
       if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
 
-      const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: toTeamId } };
+      const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: toTeamId }, tradeError: undefined };
       const next = applyFinances(nextState);
       const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
-      return pushNews(next, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value.`);
+      const tag = currentWeek <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)";
+      const tx = {
+        id: `TRADE_${state.season}_${currentWeek}_${playerId}`,
+        type: "TRADE" as const,
+        playerId,
+        playerName: name,
+        playerPos: String(getPlayers().find((p: any) => String(p.playerId) === playerId)?.pos ?? "UNK"),
+        fromTeamId: String(teamId),
+        toTeamId,
+        season: state.season,
+        week: currentWeek,
+        june1Designation: "NONE" as const,
+        notes: `${tag} Deadline W${deadlineWeek}`,
+        deadCapThisYear: 0,
+        deadCapNextYear: 0,
+        remainingProration: 0,
+      };
+      return pushNews({ ...next, transactions: [...(next.transactions ?? []), tx] }, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value. ${tag}`);
     }
 
     case "CUT_APPLY": {
@@ -4914,6 +5092,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
       return state;
     }
+    case "SET_PRACTICE_PLAN": {
+      const preview = getEffectPreview(action.payload);
+      return { ...state, practicePlan: action.payload, practicePlanConfirmed: true, uiToast: `Practice plan set — Fatigue ${preview.fatigueRange[0]} to ${preview.fatigueRange[1]} | Dev XP ${preview.devXP}` };
+    }
     case "INJURY_UPSERT": {
       const existing = state.injuries ?? [];
       const idx = existing.findIndex((i) => i.id === action.payload.id);
@@ -4948,6 +5130,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
       const teamId = base.acceptedOffer?.teamId;
       if (!teamId) return base;
+      const trackedPlayers = { HOME: buildTrackedPlayers(teamId), AWAY: buildTrackedPlayers(action.payload.opponentTeamId) };
       return {
         ...base,
         game: initGameSim({
@@ -4958,6 +5141,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           weekNumber: action.payload.weekNumber ?? action.payload.week,
           homeRatings: computeTeamGameRatings(teamId),
           awayRatings: computeTeamGameRatings(action.payload.opponentTeamId),
+          trackedPlayers,
+          playerFatigue: hydrateGameFatigue(base, trackedPlayers),
+          practiceExecutionBonus: base.weeklyFamiliarityBonus,
         }),
       };
     }
@@ -4968,12 +5154,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         aggression: action.payload.aggression ?? state.game.aggression,
         tempo: action.payload.tempo ?? state.game.tempo,
       };
-      const stepped = stepPlay(gameWithToggles, action.payload.playType);
-      const next = { ...state, game: stepped.sim };
+      const personnelPackage = action.payload.personnelPackage ?? "11";
+      if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
+      const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage);
+      const next = upsertGameFatigueState({ ...state, game: stepped.sim }, stepped.sim);
       if (!stepped.ended) return next;
+      const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}) };
+      let nextWithPractice = nextWithRecovery;
+      const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
+      if (!appliedPlayWeek.applied) return state;
+      nextWithPractice = appliedPlayWeek.state;
 
       const schedule = state.hub.schedule;
-      if (!schedule || !state.game.weekType || !state.game.weekNumber) return next;
+      if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
 
       const league = simulateLeagueWeek({
         schedule,
@@ -4996,13 +5189,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         const finishedPreseason = nextPre >= PRESEASON_WEEKS;
         if (finishedPreseason) {
           return {
-            ...next,
+            ...nextWithPractice,
             league,
             hub: { ...hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
             offseason: {
-              ...next.offseason,
+              ...nextWithPractice.offseason,
               stepId: "CUT_DOWNS",
-              stepsComplete: { ...next.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
+              stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
             },
             careerStage: "REGULAR_SEASON",
             game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777 }),
@@ -5011,7 +5204,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       let nextState = {
-        ...next,
+        ...nextWithPractice,
         league,
         hub,
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777 }),
@@ -5059,8 +5252,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
 
-      let out = { ...state, league, hub };
+      let out = { ...state, league, hub, playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}) };
+      const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
+      if (!appliedAdvance.applied) return state;
+      out = appliedAdvance.state;
       out = resolveInjuriesEngine(out);
+      if (Number(out.league.week ?? week + 1) > Number(out.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK)) {
+        // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
+        const cancelled = cancelPendingTradesAtDeadline(out.pendingTradeOffers ?? []);
+        if (cancelled.cancelledOffers > 0) {
+          console.warn(JSON.stringify({ event: "trade.deadline_passed", cancelledOffers: cancelled.cancelledOffers, week: Number(out.league.week ?? week + 1) }));
+        }
+        out = {
+          ...out,
+          pendingTradeOffers: cancelled.offers,
+        };
+      }
       if (gameType === "REGULAR_SEASON") {
         out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
         if (week >= REGULAR_SEASON_WEEKS) {
@@ -5121,7 +5328,7 @@ function ensureLeagueGmMap(state: GameState): GameState {
   return { ...state, league: { ...state.league, gmByTeamId: { ...seeded.gmByTeamId, ...gmByTeamId } } };
 }
 
-function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
+export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   const saveSeed = oldState.saveSeed ?? Date.now();
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
@@ -5154,11 +5361,16 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   };
 
   const normalizedLeague: LeagueState = league.postseason
-    ? league
-    : { ...league, postseason: { season: Number(oldState.season ?? 2026), resultsByTeamId: {} } };
+    ? (league as LeagueState)
+    : ({ ...league, postseason: { season: Number(oldState.season ?? 2026), resultsByTeamId: {} } } as LeagueState);
   if (!normalizedLeague.gmByTeamId) {
     normalizedLeague.gmByTeamId = initLeagueState(Object.keys(normalizedLeague.standings), saveSeed).gmByTeamId;
   }
+  if (!("tradeDeadlineWeek" in normalizedLeague)) {
+    console.warn(JSON.stringify({ level: "warn", event: "trade.deadline_missing_in_save", appliedWeek: TRADE_DEADLINE_DEFAULT_WEEK }));
+    normalizedLeague.tradeDeadlineWeek = TRADE_DEADLINE_DEFAULT_WEEK;
+  }
+  normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
 
   let s: Partial<GameState> = {
     ...oldState,
@@ -5229,6 +5441,17 @@ function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       },
     league: normalizedLeague,
     game,
+    playerFatigueById: Object.fromEntries(getPlayers().map((pl) => {
+      const v = (oldState as any).playerFatigueById?.[String(pl.playerId)];
+      return [String(pl.playerId), { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }];
+    })),
+    practicePlan: (oldState as any).practicePlan ?? DEFAULT_PRACTICE_PLAN,
+    practicePlanConfirmed: Boolean((oldState as any).practicePlanConfirmed ?? false),
+    weeklyFamiliarityBonus: Number((oldState as any).weeklyFamiliarityBonus ?? 0),
+    nextGameInjuryRiskMod: Number((oldState as any).nextGameInjuryRiskMod ?? 0),
+    playerDevXpById: { ...((oldState as any).playerDevXpById ?? {}) },
+    pendingTradeOffers: Array.isArray((oldState as any).pendingTradeOffers) ? (oldState as any).pendingTradeOffers : [],
+    tradeError: undefined,
     draft: (oldState.draft ?? {
       started: false,
       completed: false,
@@ -5356,6 +5579,16 @@ function loadState(): GameState {
           return [k, { startSeason: Number(v?.startSeason ?? initial.season), endSeason: Number(v?.endSeason ?? initial.season), salaries: Array.from({ length: years }, () => aav), signingBonus: Number(v?.signingBonus ?? 0) }];
         }),
       ) as Record<string, PlayerContractOverride>,
+      playerFatigueById: Object.fromEntries(
+        Object.entries((migrated as any).playerFatigueById ?? {}).map(([k, v]: [string, any]) => [k, { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }]),
+      ) as Record<string, PersistedFatigue>,
+      practicePlan: (migrated as any).practicePlan ?? DEFAULT_PRACTICE_PLAN,
+      practicePlanConfirmed: Boolean((migrated as any).practicePlanConfirmed ?? false),
+      weeklyFamiliarityBonus: Number((migrated as any).weeklyFamiliarityBonus ?? 0),
+      nextGameInjuryRiskMod: Number((migrated as any).nextGameInjuryRiskMod ?? 0),
+      playerDevXpById: { ...(initial.playerDevXpById ?? {}), ...((migrated as any).playerDevXpById ?? {}) },
+      pendingTradeOffers: Array.isArray((migrated as any).pendingTradeOffers) ? (migrated as any).pendingTradeOffers : [],
+      tradeError: undefined,
       saveVersion: CURRENT_SAVE_VERSION,
       memoryLog: migrated.memoryLog ?? initial.memoryLog,
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
