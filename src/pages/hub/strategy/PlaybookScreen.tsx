@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGame } from "@/context/GameContext";
-import PlaceholderPlaybook from "./playbooks/PlaceholderPlaybook";
 import AirRaidPlaybook from "./playbooks/AirRaidPlaybook";
 import ShanahanWideZonePlaybook from "./playbooks/ShanahanWideZonePlaybook";
 
@@ -22,6 +21,19 @@ export type DefenseSchemeId =
   | "COVER_3_CARROLL"
   | "TAMPA_2"
   | "THREE_FOUR_TWO_GAP";
+
+function PlaceholderPlaybook({ title, system }: { title: string; system: string }) {
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-2">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">
+          Detailed install content for <span className="font-medium text-foreground">{system}</span> is coming soon.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function normalizeSystem(raw: unknown): string {
   return String(raw ?? "")
