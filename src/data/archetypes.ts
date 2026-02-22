@@ -17,7 +17,7 @@ export type Archetype = {
 
 export const ARCHETYPES: Archetype[] = [
   {
-    id: "OC_TO_HC",
+    id: "oc_promoted",
     label: "OC → HC",
     desc: "Playcaller elevated based on offensive success.",
     repStart: 56,
@@ -42,7 +42,7 @@ export const ARCHETYPES: Archetype[] = [
     },
   },
   {
-    id: "DC_TO_HC",
+    id: "dc_promoted",
     label: "DC → HC",
     desc: "Culture, discipline, toughness leader.",
     repStart: 55,
@@ -67,7 +67,7 @@ export const ARCHETYPES: Archetype[] = [
     },
   },
   {
-    id: "COLLEGE_HC_TO_PRO_HC",
+    id: "college_hc",
     label: "College HC → Pro HC",
     desc: "Program builder entering the pros.",
     repStart: 60,
@@ -92,7 +92,7 @@ export const ARCHETYPES: Archetype[] = [
     },
   },
   {
-    id: "SPECIAL_TEAMS",
+    id: "stc_promoted",
     label: "Special Teams → HC",
     desc: "Detail-oriented organizational culture candidate.",
     repStart: 51,
@@ -117,7 +117,7 @@ export const ARCHETYPES: Archetype[] = [
     },
   },
   {
-    id: "ASSISTANT_TO_HC",
+    id: "assistant_grinder",
     label: "Assistant → HC",
     desc: "Fast-riser, not previously a primary coordinator.",
     repStart: 52,
@@ -142,7 +142,7 @@ export const ARCHETYPES: Archetype[] = [
     },
   },
   {
-    id: "YOUNG_GURU",
+    id: "young_guru",
     label: "Young Guru → HC",
     desc: "Innovator hired for offensive revolution.",
     repStart: 60,

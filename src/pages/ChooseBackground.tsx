@@ -1,11 +1,18 @@
 import { useGame } from "@/context/GameContext";
 import { ARCHETYPES, type Archetype } from "@/data/archetypes";
+import { getArchetypeTraits } from "@/data/archetypeTraits";
 import { Card, CardContent } from "@/components/ui/card";
+import { applyArchetypeDeltas, enforceArchetypeReputationCaps } from "@/engine/reputation";
 
 const ChooseBackground = () => {
   const { dispatch } = useGame();
 
   const handleSelect = (archetype: Archetype) => {
+    const traits = getArchetypeTraits(archetype.id);
+    const seededReputation = traits
+      ? applyArchetypeDeltas(archetype.reputationProfile, traits.startingDeltas)
+      : archetype.reputationProfile;
+
     dispatch({
       type: "SET_COACH",
       payload: {
@@ -18,7 +25,7 @@ const ChooseBackground = () => {
         mediaExpectation: archetype.mediaExpectation,
         lockerRoomCred: archetype.lockerRoomCred,
         volatility: archetype.volatility,
-        reputation: archetype.reputationProfile,
+        reputation: enforceArchetypeReputationCaps(seededReputation, { archetypeId: archetype.id, tenureYear: 1 }),
       },
     });
     dispatch({ type: "SET_PHASE", payload: "INTERVIEWS" });
