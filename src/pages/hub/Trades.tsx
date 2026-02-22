@@ -54,13 +54,19 @@ export default function TradesPage() {
 
   const decision = useMemo(() => {
     if (!userTeamId || !partnerTeamId) return null;
+    const gmMode = state.strategy?.gmMode ?? "CONTEND";
+    // CONTEND: slightly more lenient CPU accept (lower surplus needed), REBUILD: stricter (trading veterans away)
+    const hardRejectDeficitPct = gmMode === "REBUILD" ? 0.22 : gmMode === "CONTEND" ? 0.14 : 0.18;
+    const autoAcceptSurplusPct = gmMode === "REBUILD" ? 0.08 : gmMode === "CONTEND" ? 0.16 : 0.12;
     return decideTrade({
       season: Number(state.season ?? 0),
       userTeamId: String(userTeamId),
       partnerTeamId: String(partnerTeamId),
       pkg: { outgoing, incoming },
+      hardRejectDeficitPct,
+      autoAcceptSurplusPct,
     });
-  }, [state.season, userTeamId, partnerTeamId, outgoing, incoming]);
+  }, [state.season, state.strategy?.gmMode, userTeamId, partnerTeamId, outgoing, incoming]);
 
   if (!userTeamId) {
     return <LockedPhaseCard title="TRADES" message="No team selected yet." nextAvailable="After accepting an offer." />;
@@ -72,7 +78,7 @@ export default function TradesPage() {
       <LockedPhaseCard
         title="TRADES"
         message="Trades are unavailable in the current phase."
-        nextAvailable={phase === "PHASE_2_RETENTION" ? "Regular Season" : "Regular Season Week"}
+        nextAvailable={phase === "PHASE_2_RETENTION" ? "Free Agency / Regular Season" : "Free Agency or Regular Season"}
       />
     );
   }

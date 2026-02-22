@@ -42,7 +42,7 @@ export function ReSignRoutes() {
 
 export function TradesRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub" replace />;
+  if (state.careerStage !== "REGULAR_SEASON" && state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="block" replace />} />
@@ -64,7 +64,7 @@ export function HubPhaseQuickLinks() {
     <div className="grid grid-cols-3 gap-2 text-xs">
       {state.careerStage === "FREE_AGENCY" ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
       {state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
-      {state.careerStage === "REGULAR_SEASON" ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
+      {(state.careerStage === "REGULAR_SEASON" || state.careerStage === "FREE_AGENCY") ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
     </div>
   );
 }

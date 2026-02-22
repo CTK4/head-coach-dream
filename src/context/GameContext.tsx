@@ -86,13 +86,16 @@ export type CareerStage =
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
+export type GmMode = "REBUILD" | "RELOAD" | "CONTEND";
+
 export type PriorityPos = "QB" | "RB" | "WR" | "TE" | "OL" | "DL" | "EDGE" | "LB" | "CB" | "S" | "K" | "P";
 
 export type StrategyState = {
   draftFaPriorities: PriorityPos[];
+  gmMode: GmMode;
 };
 
-const DEFAULT_STRATEGY: StrategyState = { draftFaPriorities: ["QB", "OL", "EDGE"] };
+const DEFAULT_STRATEGY: StrategyState = { draftFaPriorities: ["QB", "OL", "EDGE"], gmMode: "CONTEND" };
 
 function normalizePriorityPos(pos: string): PriorityPos | null {
   const p = String(pos || "").toUpperCase().trim();
@@ -256,14 +259,28 @@ function draftBoard(): Prospect[] {
   return rows.map(toProspect);
 }
 
+// GM mode draft scoring constants
+const REBUILD_PRIME_AGE = 24;    // Age at which REBUILD mode gives zero age bonus (younger = higher bonus)
+const REBUILD_AGE_WEIGHT = 1.5;  // Points per year younger than prime age
+const CONTEND_BASELINE_GRADE = 60; // Neutral grade for CONTEND mode bonus (higher = bigger bonus)
+const CONTEND_GRADE_WEIGHT = 0.5;  // Points per grade point above baseline
+const FA_AUTO_OFFERS_MAX = 5;      // Hard cap on auto-seeded FA offers
+
 function applyDraftPriorities(state: GameState, board: Prospect[]): Prospect[] {
   const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  const gmMode = state.strategy?.gmMode ?? DEFAULT_STRATEGY.gmMode;
   return board
     .slice()
     .map((p: any) => {
       const rank = Number(p.rank ?? p.Rank ?? 9999);
       const grade = Number(p.grade ?? 0);
-      const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
+      const age = Number(p.age ?? 22);
+      // gmMode adjustments: REBUILD boosts young/high-ceiling prospects, CONTEND boosts immediate OVR
+      const gmBonus =
+        gmMode === "REBUILD" ? (REBUILD_PRIME_AGE - age) * REBUILD_AGE_WEIGHT :
+        gmMode === "CONTEND" ? (grade - CONTEND_BASELINE_GRADE) * CONTEND_GRADE_WEIGHT :
+        0;
+      const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01 + gmBonus;
       return { ...p, __score: score };
     })
     .sort((a: any, b: any) => (b.__score ?? 0) - (a.__score ?? 0));
@@ -276,6 +293,13 @@ function seedUserAutoFaOffersFromPriorities(state: GameState, maxOffers = 3): Ga
   if (!teamId) return state;
 
   const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  const gmMode = state.strategy?.gmMode ?? DEFAULT_STRATEGY.gmMode;
+  // REBUILD mode limits auto-seeded offers to save cap space; CONTEND mode allows one more
+  const effectiveMax = Math.min(
+    gmMode === "REBUILD" ? Math.min(maxOffers, 1) : gmMode === "CONTEND" ? maxOffers + 1 : maxOffers,
+    FA_AUTO_OFFERS_MAX,
+  );
+
   const candidates = getEffectiveFreeAgents(state)
     .map((p: any) => ({ p, id: String(p.playerId), pos: normalizePos(String(p.pos ?? "UNK")), ovr: Number(p.overall ?? 0) }))
     .filter((x) => !state.freeAgency.signingsByPlayerId[x.id]);
@@ -292,7 +316,7 @@ function seedUserAutoFaOffersFromPriorities(state: GameState, maxOffers = 3): Ga
   let next = state;
   let created = 0;
   for (const pick of ranked) {
-    if (created >= maxOffers) break;
+    if (created >= effectiveMax) break;
     const existing = next.freeAgency.offersByPlayerId[pick.id] ?? [];
     if (existing.some((o) => o.isUser && o.status === "PENDING")) continue;
     const { years, aav } = cpuOfferParams(next, teamId, pick.p);
@@ -582,6 +606,7 @@ export type GameAction =
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
   | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
   | { type: "SET_STRATEGY_PRIORITIES"; payload: { positions: PriorityPos[] } }
+  | { type: "SET_GM_MODE"; payload: { gmMode: GmMode } }
   | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
   | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
@@ -2824,6 +2849,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const positions = normalizePriorityList(action.payload.positions);
       return { ...state, strategy: { ...state.strategy, draftFaPriorities: positions } };
     }
+    case "SET_GM_MODE":
+      return { ...state, strategy: { ...state.strategy, gmMode: action.payload.gmMode } };
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
         item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item

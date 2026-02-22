@@ -1,18 +1,54 @@
 import { useMemo } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
-import { useGame, type PriorityPos } from "@/context/GameContext";
+import { useGame, type GmMode, type PriorityPos } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
 
+const GM_MODES: { value: GmMode; label: string; desc: string }[] = [
+  { value: "REBUILD", label: "Rebuild", desc: "Draft-heavy, cap-conservative. Favors youth & upside." },
+  { value: "RELOAD", label: "Reload", desc: "Balanced mix of FA signings and youth development." },
+  { value: "CONTEND", label: "Contend", desc: "FA-aggressive, trade for veterans. Win now." },
+];
+
 function StrategyHome() {
+  const { state, dispatch } = useGame();
+  const gmMode = state.strategy?.gmMode ?? "CONTEND";
+
   return (
     <div className="min-w-0">
       <ScreenHeader title="FRANCHISE STRATEGY" subtitle="Identity + Priorities" />
       <div className="space-y-3 p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Franchise Mode</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {GM_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => dispatch({ type: "SET_GM_MODE", payload: { gmMode: m.value } })}
+                  className={`rounded-lg border px-3 py-3 text-left transition ${
+                    gmMode === m.value
+                      ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
+                      : "border-white/10 bg-white/5 text-slate-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm">{m.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-slate-400">
+              Affects draft board sorting, FA offer aggression, and trade acceptance thresholds.
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-2 gap-2 text-sm">
           <Link to="identity" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
             <div className="font-semibold">Team Identity</div>

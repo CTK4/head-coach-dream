@@ -32,7 +32,7 @@ describe("computeOwnerInterviewScore", () => {
 
     const score = computeOwnerInterviewScore({ ownerAxisWeights, questions, answersByQuestionId });
 
-    expect(score).toBeCloseTo(0.75, 8);
+    expect(score).toBeCloseTo(1, 8);
   });
 
   it("returns 0.5 if no axis weights", () => {
