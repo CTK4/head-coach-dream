@@ -404,7 +404,7 @@ export default function CapProjection() {
   if (!teamId) {
     return (
       <div>
-        <ScreenHeader title="CAP PROJECTION" backPath="/contracts" />
+        <ScreenHeader title="CAP PROJECTION" backPath="/contracts" showBack />
         <div className="p-4 text-sm text-slate-400">No team assigned yet.</div>
       </div>
     );
@@ -427,6 +427,7 @@ export default function CapProjection() {
         title="CAP PROJECTION"
         subtitle={`${baseSeason}–${baseSeason + 2} · 3-Year Horizon`}
         backPath="/contracts"
+        showBack
       />
 
       <div className="p-4 space-y-4">

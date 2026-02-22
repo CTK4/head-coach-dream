@@ -8,7 +8,7 @@ import { ScreenHeader } from "@/components/layout/ScreenHeader";
 function PhaseLocked({ title, detail }: { title: string; detail: string }) {
   return (
     <div>
-      <ScreenHeader title={title} />
+      <ScreenHeader title={title} showBack />
       <div className="p-4 text-sm text-slate-300">{detail}</div>
     </div>
   );

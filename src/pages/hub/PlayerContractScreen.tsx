@@ -49,7 +49,7 @@ export default function PlayerContractScreen() {
   if (!player) {
     return (
       <div>
-        <ScreenHeader title="CONTRACT" />
+        <ScreenHeader title="CONTRACT" showBack />
         <div className="p-6 text-center text-muted-foreground">Player not found.</div>
       </div>
     );
@@ -58,7 +58,7 @@ export default function PlayerContractScreen() {
   if (!contract) {
     return (
       <div>
-        <ScreenHeader title="CONTRACT" subtitle={String(player.fullName ?? "Player")} />
+        <ScreenHeader title="CONTRACT" subtitle={String(player.fullName ?? "Player")} showBack />
         <div className="p-6 text-center text-muted-foreground">No contract on file.</div>
       </div>
     );
@@ -84,6 +84,7 @@ export default function PlayerContractScreen() {
     <div className="min-h-[calc(100vh-64px)] pb-24">
       <ScreenHeader
         title="CONTRACT BREAKDOWN"
+        showBack
         subtitle={`${name} · ${pos}`}
         rightAction={
           <div className="flex gap-1 flex-wrap justify-end">
