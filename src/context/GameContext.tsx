@@ -20,7 +20,8 @@ import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost } from "@
 import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
 import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
 import { isOfferAccepted } from "@/engine/coachAcceptance";
-import { initGameSim, stepPlay, type GameSim, type PlayType } from "@/engine/gameSim";
+import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode } from "@/engine/gameSim";
+import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
 import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
@@ -588,7 +589,7 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number; gameType?: GameType; week?: number } }
-  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType } }
+  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
   | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
@@ -4926,12 +4927,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           seed: base.saveSeed + (base.hub.preseasonWeek + base.hub.regularSeasonWeek) * 1009,
           weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
+          homeRatings: computeTeamGameRatings(teamId),
+          awayRatings: computeTeamGameRatings(action.payload.opponentTeamId),
         }),
       };
     }
     case "RESOLVE_PLAY": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
-      const stepped = stepPlay(state.game, action.payload.playType);
+      const gameWithToggles = {
+        ...state.game,
+        aggression: action.payload.aggression ?? state.game.aggression,
+        tempo: action.payload.tempo ?? state.game.tempo,
+      };
+      const stepped = stepPlay(gameWithToggles, action.payload.playType);
       const next = { ...state, game: stepped.sim };
       if (!stepped.ended) return next;
 
