@@ -23,7 +23,8 @@ export function getPhaseKey(state: any): PhaseKey {
 }
 
 export function isTradesAllowed(state: any): boolean {
-  return getPhaseKey(state) === "REGULAR_SEASON_WEEK";
+  const phase = getPhaseKey(state);
+  return phase === "REGULAR_SEASON_WEEK" || phase === "PHASE_4_FREE_AGENCY";
 }
 
 export function isReSignAllowed(state: any): boolean {
