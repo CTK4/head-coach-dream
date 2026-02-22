@@ -1,5 +1,8 @@
 import { applyTime, applyTwoMinuteGate, betweenPlaysRunoff, chooseSnapWithLeft, initClock, nextQuarter, type ClockState } from "@/engine/clock";
 import { clamp, mulberry32, tri } from "@/engine/rand";
+import { BASE_SNAP_COSTS, FATIGUE_VARIANCE_BAND, clampFatigue, computeFatigueEffects, type FatigueTrackedPosition } from "@/engine/fatigue";
+import { getDefensiveReaction, getMatchupModifier, selectDefensivePackageFromRoll, isRunPlay, type DefensivePackage, type MatchupModifier, type PersonnelPackage } from "@/engine/personnel";
+import { rng as contextualRng } from "@/engine/rng";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 
 // ─── Play types ────────────────────────────────────────────────────────────
@@ -67,6 +70,8 @@ export type TempoMode = "NORMAL" | "HURRY_UP";
 const DEFAULT_RATING = 68;
 
 export type DriveLogEntry = {
+  personnelPackage?: PersonnelPackage;
+  defensivePackage?: DefensivePackage;
   drive: number;
   play: number;
   quarter: 1 | 2 | 3 | 4 | "OT";
@@ -113,6 +118,16 @@ export type GameSim = {
   awayRatings?: TeamGameRatings;
   /** User control mode */
   controlMode: "PLAY_BY_PLAY" | "HYBRID" | "COACH";
+  /** Runtime fatigue state for tracked players */
+  playerFatigue: Record<string, number>;
+  /** Runtime snap load for current game */
+  snapLoadThisGame: Record<string, number>;
+  /** Tracked participant mapping by side */
+  trackedPlayers: Record<Possession, Partial<Record<FatigueTrackedPosition, string>>>;
+  currentPersonnelPackage: PersonnelPackage;
+  likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
+  selectedDefensivePackage?: DefensivePackage;
+  practiceExecutionBonus: number;
 };
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
@@ -246,19 +261,42 @@ function situationFit(playType: PlayType, sim: GameSim): number {
 }
 
 /** ExecutionState: fatigue not modeled yet; returns small modifier. */
-function executionState(): number {
-  return 0; // reserved for fatigue/weather/install penalties
+export function composeExecutionModifiers(params: { fatigueMod: number; matchupMod: number; pressureRisk: number; isRun: boolean }): number {
+  const pressureAdjust = params.isRun ? 1 : 1 / Math.max(0.7, params.pressureRisk);
+  const composite = params.fatigueMod * params.matchupMod * pressureAdjust;
+  return composite;
+}
+
+function executionState(sim: GameSim, playType: PlayType, matchup: MatchupModifier): number {
+  const tracked = sim.trackedPlayers[sim.possession];
+  const runPlay = isRunPlay(playType);
+  const weighted: Array<{ pos: FatigueTrackedPosition; w: number }> =
+    runPlay
+      ? [{ pos: "RB", w: 0.5 }, { pos: "OL", w: 0.35 }, { pos: "QB", w: 0.15 }]
+      : [{ pos: "QB", w: 0.45 }, { pos: "WR", w: 0.35 }, { pos: "TE", w: 0.2 }];
+
+  let acc = 0;
+  for (const item of weighted) {
+    const id = tracked[item.pos];
+    const fatigue = id ? clampFatigue(sim.playerFatigue[id] ?? 50) : 50;
+    const fx = computeFatigueEffects(fatigue);
+    const fatigueMod = runPlay ? fx.speed : fx.accuracy;
+    const matchupMod = runPlay ? matchup.runEfficiency : matchup.passEfficiency;
+    acc += composeExecutionModifiers({ fatigueMod, matchupMod, pressureRisk: matchup.pressureRisk, isRun: runPlay }) * item.w;
+  }
+
+  return (acc - 1) * 0.8 + sim.practiceExecutionBonus * 0.02;
 }
 
 /** Compute the Play Advantage Score. */
-function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim): { pas: number; cvl: number; me: number; sf: number } {
+function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, matchup: MatchupModifier): { pas: number; cvl: number; me: number; sf: number } {
   const off = sim.possession === "HOME" ? sim.homeRatings : sim.awayRatings;
   const def = sim.possession === "HOME" ? sim.awayRatings : sim.homeRatings;
 
   const cvl = callVsLook(playType, look);
   const me = off && def ? matchupEdge(playType, off, def) : 0;
   const sf = situationFit(playType, sim);
-  const exec = executionState();
+  const exec = executionState(sim, playType, matchup);
 
   // PAS = weighted sum
   const pas = 0.35 * cvl + 0.35 * me + 0.2 * sf + 0.1 * exec;
@@ -412,7 +450,8 @@ function resolveWithPAS(
   look: DefensiveLook,
   aggression: AggressionLevel
 ): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean } {
-  const pasComp = computePAS(playType, look, sim);
+  const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
+  const pasComp = computePAS(playType, look, sim, matchup);
   const { pas } = pasComp;
 
   // Aggression modifier
@@ -630,8 +669,10 @@ function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
     resultTags: sim.lastResultTags ?? [],
     homeScore: sim.homeScore,
     awayScore: sim.awayScore,
+    personnelPackage: sim.currentPersonnelPackage,
+    defensivePackage: sim.selectedDefensivePackage,
   };
-  return { ...sim, playNumberInDrive: sim.playNumberInDrive + 1, driveLog: [entry, ...sim.driveLog].slice(0, 80) };
+  return { ...sim, playNumberInDrive: sim.playNumberInDrive + 1, driveLog: [entry, ...sim.driveLog] };
 }
 
 function kickoffAfterScore(sim: GameSim, rng: () => number): GameSim {
@@ -945,6 +986,10 @@ export function initGameSim(params: {
   homeRatings?: TeamGameRatings;
   awayRatings?: TeamGameRatings;
   controlMode?: GameSim["controlMode"];
+  trackedPlayers?: GameSim["trackedPlayers"];
+  playerFatigue?: Record<string, number>;
+  currentPersonnelPackage?: PersonnelPackage;
+  practiceExecutionBonus?: number;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -968,10 +1013,42 @@ export function initGameSim(params: {
     homeRatings: params.homeRatings,
     awayRatings: params.awayRatings,
     controlMode: params.controlMode ?? "HYBRID",
+    playerFatigue: { ...(params.playerFatigue ?? {}) },
+    snapLoadThisGame: {},
+    trackedPlayers: params.trackedPlayers ?? { HOME: {}, AWAY: {} },
+    currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
+    likelyDefensiveReactions: [],
+    practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
   };
 }
 
-export function stepPlay(sim: GameSim, playType: PlayType): PlayResolution {
+function trackedForPlay(playType: PlayType): FatigueTrackedPosition[] {
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  return isRun ? ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"] : ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"];
+}
+
+function applySnapFatigue(sim: GameSim, playType: PlayType): GameSim {
+  const side = sim.possession;
+  const tracked = sim.trackedPlayers[side];
+  const nextFatigue = { ...sim.playerFatigue };
+  const nextLoads = { ...sim.snapLoadThisGame };
+  const playId = `${sim.driveNumber}-${sim.playNumberInDrive + 1}`;
+
+  for (const pos of trackedForPlay(playType)) {
+    const playerId = tracked[pos];
+    if (!playerId) continue;
+    const baseCost = BASE_SNAP_COSTS[pos][playType] ?? 0;
+    const varianceRoll = contextualRng(sim.seed, `fatigue-variance-${playId}-${playerId}`)();
+    const variance = Math.round((varianceRoll * 2 - 1) * FATIGUE_VARIANCE_BAND);
+    const increment = Math.max(0, baseCost + variance);
+    nextFatigue[playerId] = clampFatigue((nextFatigue[playerId] ?? 50) + increment);
+    nextLoads[playerId] = (nextLoads[playerId] ?? 0) + 1;
+  }
+
+  return { ...sim, playerFatigue: nextFatigue, snapLoadThisGame: nextLoads };
+}
+
+export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: PersonnelPackage = "11"): PlayResolution {
   const rng = mulberry32(sim.seed);
   let s: GameSim = { ...sim, seed: sim.seed + 1 };
 
@@ -985,8 +1062,11 @@ export function stepPlay(sim: GameSim, playType: PlayType): PlayResolution {
   }
 
   // Generate defensive look for this snap (use existing defLook if pre-set, else generate)
+  const reactions = getDefensiveReaction(s.down, s.distance, personnelPackage);
+  const defRoll = contextualRng(s.seed, `def-package-${s.driveNumber}-${s.playNumberInDrive + 1}`)();
+  const selectedDefensivePackage = selectDefensivePackageFromRoll(reactions, defRoll);
   const look = s.defLook ?? computeDefensiveLook(s, rng);
-  s = { ...s, defLook: look };
+  s = { ...s, defLook: look, currentPersonnelPackage: personnelPackage, likelyDefensiveReactions: reactions, selectedDefensivePackage };
 
   let tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE" = "IN_BOUNDS";
   let live = 0;
@@ -1018,6 +1098,7 @@ export function stepPlay(sim: GameSim, playType: PlayType): PlayResolution {
   const nextLook = computeDefensiveLook(s, mulberry32(s.seed + 13));
   s = { ...s, defLook: nextLook };
 
+  s = applySnapFatigue(s, playType);
   s = pushLog(s, playType, s.lastResult ?? "");
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
 }

@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useGame, REGULAR_SEASON_WEEKS } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DEFAULT_PRACTICE_PLAN, getEffectPreview, type FocusType, type Intensity } from "@/engine/practiceFocus";
 
 type StandingRow = { teamId: string; w: number; l: number; pf: number; pa: number; diff: number };
 
@@ -82,12 +83,21 @@ const RegularSeason = () => {
 
   if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub/offseason" replace />;
 
+  const [focus, setFocus] = useState<FocusType>(state.practicePlan?.primaryFocus ?? DEFAULT_PRACTICE_PLAN.primaryFocus);
+  const [intensity, setIntensity] = useState<Intensity>(state.practicePlan?.intensity ?? DEFAULT_PRACTICE_PLAN.intensity);
   const current = getCurrentTeamMatchup("REGULAR_SEASON");
   const matchup = current?.matchup;
   const teamId = state.acceptedOffer?.teamId;
 
   const opponentId = matchup ? (matchup.homeTeamId === teamId ? matchup.awayTeamId : matchup.homeTeamId) : undefined;
   const opponent = opponentId ? getTeamById(opponentId) : null;
+
+
+  const confirmPractice = () => {
+    dispatch({ type: "SET_PRACTICE_PLAN", payload: { primaryFocus: focus, intensity } });
+  };
+
+  const preview = getEffectPreview({ primaryFocus: focus, intensity });
 
   const kickoff = () => {
     if (!opponentId || !current) return;
@@ -109,6 +119,31 @@ const RegularSeason = () => {
           </Button>
         </CardContent>
       </Card>
+            <Card>
+        <CardContent className="p-6 space-y-3">
+          <h3 className="text-lg font-semibold">Weekly Practice Focus</h3>
+          <div className="flex flex-wrap gap-2">
+            {(["Install", "Conditioning", "Fundamentals", "Recovery"] as FocusType[]).map((f) => (
+              <Button key={f} size="sm" variant={focus === f ? "default" : "outline"} onClick={() => setFocus(f)}>{f}</Button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {(["Low", "Normal", "High"] as Intensity[]).map((i) => (
+              <Button key={i} size="sm" variant={intensity === i ? "default" : "outline"} onClick={() => setIntensity(i)}>{i}</Button>
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Fatigue: {preview.fatigueRange[0]} to {preview.fatigueRange[1]} across roster | Familiarity: {preview.familiarityRange[0]} to {preview.familiarityRange[1]} | Dev XP: {preview.devXP === 0 ? "none" : `+${preview.devXP}`} | Injury risk: {Math.round(preview.injuryRiskMod * 100)}%
+          </p>
+          {preview.note ? <p className="text-xs text-muted-foreground">{preview.note}</p> : null}
+          <div className="flex gap-2">
+            <Button onClick={confirmPractice} disabled={!focus || !intensity}>Confirm Practice Plan</Button>
+            <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_WEEK" })}>Advance Week</Button>
+          </div>
+          {state.uiToast ? <p className="text-xs text-muted-foreground">{state.uiToast}</p> : null}
+        </CardContent>
+      </Card>
+
       {teamId ? <StandingsPanel myTeamId={teamId} /> : null}
     </div>
   );

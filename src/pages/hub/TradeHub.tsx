@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { getDeadlineStatus } from "@/engine/tradeDeadline";
 import { tradeReturnEv } from "@/engine/marketModel";
 import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
@@ -29,6 +30,12 @@ export default function TradeHub() {
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [incomingOpen, setIncomingOpen] = useState(false);
+
+  const currentWeek = Number(state.league.week ?? state.week ?? 1);
+  const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? 0);
+  const deadlineStatus = getDeadlineStatus(currentWeek, deadlineWeek);
+  const weeksAway = Math.max(0, deadlineWeek - currentWeek);
+  const tradesLocked = deadlineStatus === "passed";
 
   const list = useMemo(() => {
     return getEffectivePlayersByTeam(state, teamId)
@@ -59,7 +66,14 @@ export default function TradeHub() {
       { teamId: mk(3), pick: tiers[Math.min(tiers.length - 1, idx + 1)], note: "Lowball" },
     ];
     return out.filter((o) => qbTradeOfferAllowed(state, o.teamId, focus.pos));
-  }, [focus, state.saveSeed]);
+  }, [focus, state, state.saveSeed]);
+
+  const tradeHistory = useMemo(() => {
+    return (state.transactions ?? [])
+      .filter((t) => t.type === "TRADE")
+      .slice(-8)
+      .reverse();
+  }, [state.transactions]);
 
   const incoming = useMemo(() => {
     const roster = getEffectivePlayersByTeam(state, teamId)
@@ -67,109 +81,123 @@ export default function TradeHub() {
       .sort((a, b) => b.ovr - a.ovr)
       .slice(0, 8);
 
-    return roster.map((p, i) => {
-      const tiers = ["1st–2nd", "2nd–3rd", "3rd–4th", "4th–5th", "6th–7th"];
-      const tier = tiers[Math.min(tiers.length - 1, Math.floor(i / 2))];
-      const aiTeamId = `AI_TEAM_${String(((state.saveSeed + i * 71) % 30) + 1).padStart(2, "0")}`;
-      if (!qbTradeOfferAllowed(state, aiTeamId, p.pos)) return null;
-      return { ...p, aiTeamId, tier, note: "Inbound inquiry" };
-    }).filter(Boolean) as Array<{ id: string; name: string; pos: string; ovr: number; aiTeamId: string; tier: string; note: string }>;
+    return roster
+      .map((p, i) => {
+        const tiers = ["1st–2nd", "2nd–3rd", "3rd–4th", "4th–5th", "6th–7th"];
+        const tier = tiers[Math.min(tiers.length - 1, Math.floor(i / 2))];
+        const aiTeamId = `AI_TEAM_${String(((state.saveSeed + i * 71) % 30) + 1).padStart(2, "0")}`;
+        if (!qbTradeOfferAllowed(state, aiTeamId, p.pos)) return null;
+        return { ...p, aiTeamId, tier, note: "Inbound inquiry" };
+      })
+      .filter(Boolean) as Array<{ id: string; name: string; pos: string; ovr: number; aiTeamId: string; tier: string; note: string }>;
   }, [state, teamId]);
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/30">
-      <div className="sticky top-0 z-20 bg-background/70 backdrop-blur border-b border-white/10">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="text-lg font-extrabold tracking-widest">TRADES</div>
-          <div className="flex gap-2">
-            <Button variant="secondary" className="rounded-2xl px-4" onClick={() => setIncomingOpen(true)}>
-              Incoming
-              <Badge variant="outline" className="ml-2 rounded-xl border-white/15 bg-white/5">
-                {incoming.length}
-              </Badge>
-            </Button>
-            <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
-              Continue
-            </Button>
-          </div>
+    <>
+      {state.tradeError?.code === "TRADE_DEADLINE_PASSED" ? (
+        <div className="max-w-3xl mx-auto px-4 pt-2 text-sm text-amber-300">
+          Trade deadline passed — Week {state.tradeError.deadlineWeek} (current week {state.tradeError.currentWeek}).
         </div>
-
-        <div className="max-w-3xl mx-auto px-4 pb-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-4 text-sm font-semibold overflow-x-auto">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`relative pb-2 whitespace-nowrap transition ${tab === t ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  {t}
-                  {tab === t ? <span className="absolute left-0 right-0 -bottom-[1px] h-[2px] bg-emerald-400 rounded-full" /> : null}
-                </button>
-              ))}
+      ) : null}
+      <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/30">
+        <div className="sticky top-0 z-20 bg-background/70 backdrop-blur border-b border-white/10">
+          <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="text-lg font-extrabold tracking-widest">TRADES</div>
+            <Badge variant={deadlineStatus === "approaching" ? "default" : "outline"} className={deadlineStatus === "approaching" ? "bg-amber-500 text-black" : undefined}>
+              {deadlineStatus === "open"
+                ? `Trade Deadline: Week ${deadlineWeek} — ${weeksAway} weeks away`
+                : deadlineStatus === "approaching"
+                  ? `Trade Deadline: Week ${deadlineWeek} — Act soon`
+                  : `Trade deadline passed after Week ${deadlineWeek}`}
+            </Badge>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="rounded-2xl px-4" onClick={() => setIncomingOpen(true)}>
+                Incoming
+                <Badge variant="outline" className="ml-2 rounded-xl border-white/15 bg-white/5">
+                  {incoming.length}
+                </Badge>
+              </Button>
+              <Button variant="secondary" onClick={() => dispatch({ type: "SHOP_PICKS" })} className="rounded-2xl px-4">
+                Shop Picks
+              </Button>
             </div>
           </div>
 
-          <div className="mt-2 flex gap-2">
+          <div className="max-w-3xl mx-auto px-4 pb-2 flex gap-2 overflow-x-auto no-scrollbar">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`shrink-0 px-3 py-1 rounded-xl text-sm border ${tab === t ? "bg-emerald-400/20 border-emerald-300/40" : "bg-white/5 border-white/10"}`}
+              >
+                {t}
+              </button>
+            ))}
             <div className="relative flex-1">
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players..." className="rounded-2xl bg-white/5 border-white/10" />
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-3xl mx-auto px-4 py-3">
-        <ScrollArea className="h-[calc(100vh-220px)] pr-2">
-          <div className="space-y-3">
-            {list.map((p) => (
-              <Card key={p.id} className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold truncate text-base">
-                        <button onClick={() => navigate(`/hub/player/${p.id}`)} className="hover:underline text-left">
-                          {p.name}
-                        </button>
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {p.age} | {normalizePos(p.pos)} · OVR {p.ovr}
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
-                          EV {p.ev}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <Button onClick={() => setOpenId(p.id)} className="rounded-xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold">
-                      Shop
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+        {tradesLocked ? (
+          <div className="max-w-3xl mx-auto px-4 pt-3">
+            <Card className="border-amber-400/40 bg-amber-500/10">
+              <CardContent className="p-3 text-sm">Trade deadline passed after Week {deadlineWeek}. No trades allowed.</CardContent>
+            </Card>
           </div>
-        </ScrollArea>
-      </div>
+        ) : null}
 
-      <Dialog open={!!openId} onOpenChange={(v) => !v && setOpenId(null)}>
-        <DialogContent className="max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{focus ? `Shop: ${focus.name}` : "Shop Player"}</DialogTitle>
-          </DialogHeader>
-
-          {!focus ? null : (
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <ScrollArea className="h-[calc(100vh-220px)] pr-2">
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2 text-sm">
-                <Badge variant="outline">EV {focus.ev}</Badge>
-                <Badge variant="outline">
-                  {normalizePos(focus.pos)} · OVR {focus.ovr}
-                </Badge>
-              </div>
+              {list.map((p) => (
+                <Card key={p.id} className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate text-base">
+                          <button onClick={() => navigate(`/hub/player/${p.id}`)} className="hover:underline text-left">
+                            {p.name}
+                          </button>
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {p.age} | {normalizePos(p.pos)} · OVR {p.ovr}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
+                            EV {p.ev}
+                          </Badge>
+                        </div>
+                      </div>
 
-              <div className="space-y-2">
-                {offers.map((o) => (
-                  (() => {
+                      <Button onClick={() => setOpenId(p.id)} disabled={tradesLocked} className="rounded-xl px-4 bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold">
+                        Shop
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+
+        <Dialog open={!!openId} onOpenChange={(v) => !v && setOpenId(null)}>
+          <DialogContent className="max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>{focus ? `Shop: ${focus.name}` : "Shop Player"}</DialogTitle>
+            </DialogHeader>
+
+            {!focus ? null : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <Badge variant="outline">EV {focus.ev}</Badge>
+                  <Badge variant="outline">
+                    {normalizePos(focus.pos)} · OVR {focus.ovr}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  {offers.map((o) => {
                     const delta = tradeCapDelta(state, teamId, focus.id, o.teamId);
                     const after = state.finances.capSpace + delta;
                     const capBad = after < 0;
@@ -189,7 +217,7 @@ export default function TradeHub() {
                         <Button
                           size="sm"
                           className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold"
-                          disabled={capBad}
+                          disabled={capBad || tradesLocked}
                           onClick={() => {
                             dispatch({ type: "TRADE_ACCEPT", payload: { playerId: focus.id, toTeamId: o.teamId, valueTier: o.pick } });
                             setOpenId(null);
@@ -200,44 +228,70 @@ export default function TradeHub() {
                         </Button>
                       </div>
                     );
-                  })()
-                ))}
+                  })}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  Trades update roster + cap immediately. Draft pick return is tracked as a simple “capital” note for now.
+                </div>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
-              <div className="text-xs text-muted-foreground">
-                Trades update roster + cap immediately. Draft pick return is tracked as a simple “capital” note for now.
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        <Dialog open={incomingOpen} onOpenChange={(v) => !v && setIncomingOpen(false)}>
+          <DialogContent className="max-w-lg rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Incoming Trade Offers</DialogTitle>
+            </DialogHeader>
 
-      <Dialog open={incomingOpen} onOpenChange={(v) => !v && setIncomingOpen(false)}>
-        <DialogContent className="max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Incoming Trade Offers</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            {incoming.map((o) => (
-              <div key={o.id} className="rounded-xl border p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{o.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {normalizePos(o.pos)} · OVR {o.ovr} · Offer: {o.aiTeamId} → {o.tier}
+            <div className="space-y-2">
+              {incoming.map((o) => (
+                <div key={o.id} className="rounded-xl border p-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{o.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {normalizePos(o.pos)} · OVR {o.ovr} · Offer: {o.aiTeamId} → {o.tier}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setIncomingOpen(false);
+                        setOpenId(o.id);
+                      }}
+                    >
+                      View
+                    </Button>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => { setIncomingOpen(false); setOpenId(o.id); }}>
-                    View
-                  </Button>
-                </div>
+              ))}
+              <div className="text-xs text-muted-foreground">
+                Incoming offers are refreshed deterministically each visit for now. {tradesLocked ? "(Post-deadline: locked)" : "(Pre-deadline)"}
               </div>
-            ))}
-            <div className="text-xs text-muted-foreground">Incoming offers are refreshed deterministically each visit for now.</div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <div className="max-w-3xl mx-auto px-4 pb-6">
+          <Card>
+            <CardContent className="p-3 space-y-2">
+              <div className="font-semibold">Trade History</div>
+              {tradeHistory.length === 0 ? (
+                <div className="text-xs text-muted-foreground">No trade history yet.</div>
+              ) : (
+                tradeHistory.map((t) => (
+                  <div key={t.id} className="text-xs text-muted-foreground">
+                    {t.playerName} {Number(t.week ?? 0) <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)"}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </>
   );
 }
