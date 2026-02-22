@@ -33,6 +33,7 @@ import { FreeAgencyRoutes, ProspectProfileScreen, ReSignRoutes, TradesRoutes } f
 // Import other pages that might be needed or were present
 import Draft from "@/pages/hub/offseason/Draft";
 import DraftResults from "@/pages/hub/DraftResults";
+import FreeAgencyRecap from "@/pages/hub/FreeAgencyRecap";
 import TrainingCamp from "./pages/hub/TrainingCamp";
 import Cutdowns from "./pages/hub/Cutdowns";
 import PreseasonWeek from "./pages/hub/PreseasonWeek";
@@ -144,6 +145,7 @@ const App = () => (
               {/* Other legacy/specific routes that might not fit the main buckets yet but need to be accessible */}
                <Route path="/hub/draft" element={<Draft />} />
                <Route path="/hub/draft-results" element={<DraftResults />} />
+               <Route path="/hub/free-agency-recap" element={<FreeAgencyRecap />} />
                <Route path="/hub/training-camp" element={<TrainingCamp />} />
                <Route path="/hub/cutdowns" element={<Cutdowns />} />
                <Route path="/hub/preseason" element={<PreseasonWeek />} />

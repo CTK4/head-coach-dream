@@ -5,6 +5,7 @@ import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
+import { moraleChipColor } from "@/engine/morale";
 
 export default function RosterPlayers() {
   const { state } = useGame();
@@ -19,6 +20,7 @@ export default function RosterPlayers() {
         pos: String(p.pos ?? "UNK").toUpperCase(),
         ovr: Number(p.overall ?? 0),
         age: Number(p.age ?? 0),
+        morale: Number(p.morale ?? 70),
       }))
       .sort((a, b) => b.ovr - a.ovr);
   }, [teamId]);
@@ -43,6 +45,9 @@ export default function RosterPlayers() {
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{r.name}</div>
                     <div className="text-xs text-slate-400">{r.pos} • OVR {r.ovr} • Age {r.age}</div>
+                  </div>
+                  <div className={`text-xs px-2 py-0.5 rounded-full border ${moraleChipColor(r.morale)}`}>
+                    M {r.morale}
                   </div>
                 </Link>
               ))}
