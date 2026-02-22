@@ -4,6 +4,7 @@ import { BASE_SNAP_COSTS, FATIGUE_VARIANCE_BAND, clampFatigue, computeFatigueEff
 import { getDefensiveReaction, getMatchupModifier, selectDefensivePackageFromRoll, isRunPlay, type DefensivePackage, type MatchupModifier, type PersonnelPackage } from "@/engine/personnel";
 import { rng as contextualRng } from "@/engine/rng";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
+import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -128,9 +129,33 @@ export type GameSim = {
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
   selectedDefensivePackage?: DefensivePackage;
   practiceExecutionBonus: number;
+  coachArchetypeId?: string;
+  coachTenureYear: number;
 };
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
+
+
+export function resolveArchetypePassives(coach: { archetypeId?: string; tenureYear?: number }, gameContext: { sim: GameSim; playType: PlayType; aggression: AggressionLevel }): PassiveResolution {
+  const traits = getArchetypeTraits(coach.archetypeId);
+  if (!traits) return {};
+
+  let resolved: PassiveResolution = {};
+  for (const trait of traits.passiveTraits) {
+    const input = { sim: gameContext.sim, playType: gameContext.playType, aggression: gameContext.aggression };
+    if (!trait.triggerCondition(input)) continue;
+    const effect = trait.effectFn(input);
+    resolved = {
+      offensiveExecutionBonus: (resolved.offensiveExecutionBonus ?? 0) + (effect.offensiveExecutionBonus ?? 0),
+      defensiveExecutionBonus: (resolved.defensiveExecutionBonus ?? 0) + (effect.defensiveExecutionBonus ?? 0),
+      penaltyRateMultiplier: (resolved.penaltyRateMultiplier ?? 1) * (effect.penaltyRateMultiplier ?? 1),
+      closeGameExecutionBonus: (resolved.closeGameExecutionBonus ?? 0) + (effect.closeGameExecutionBonus ?? 0),
+      notes: [...(resolved.notes ?? []), ...(effect.notes ?? [])],
+    };
+  }
+
+  return resolved;
+}
 
 export type FourthDownRecommendation = {
   best: PlayType;
@@ -451,8 +476,13 @@ function resolveWithPAS(
   aggression: AggressionLevel
 ): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
+  const passive = resolveArchetypePassives(
+    { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear },
+    { sim, playType, aggression }
+  );
   const pasComp = computePAS(playType, look, sim, matchup);
-  const { pas } = pasComp;
+  const passivePas = ((passive.offensiveExecutionBonus ?? 0) + (passive.closeGameExecutionBonus ?? 0)) / 40;
+  const pas = pasComp.pas + passivePas;
 
   // Aggression modifier
   const aggMod = aggression === "AGGRESSIVE" ? 0.2 : aggression === "CONSERVATIVE" ? -0.15 : 0;
@@ -990,6 +1020,8 @@ export function initGameSim(params: {
   playerFatigue?: Record<string, number>;
   currentPersonnelPackage?: PersonnelPackage;
   practiceExecutionBonus?: number;
+  coachArchetypeId?: string;
+  coachTenureYear?: number;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1019,6 +1051,8 @@ export function initGameSim(params: {
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
+    coachArchetypeId: params.coachArchetypeId,
+    coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
   };
 }
 
