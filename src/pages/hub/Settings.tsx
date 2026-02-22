@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { readSettings, writeSettings } from "@/lib/settings";
 
 type SimSpeed = "SLOW" | "NORMAL" | "FAST";
 type Theme = "DARK" | "OLED";
@@ -21,9 +22,8 @@ type UserSettings = {
   reduceMotion: boolean;
   theme: Theme;
   useTop51CapRule: boolean;
+  showTooltips: boolean;
 };
-
-const SETTINGS_KEY = "hcd:settings";
 
 const DEFAULT_SETTINGS: UserSettings = {
   simSpeed: "NORMAL",
@@ -33,26 +33,9 @@ const DEFAULT_SETTINGS: UserSettings = {
   reduceMotion: false,
   theme: "DARK",
   useTop51CapRule: false,
+  showTooltips: true,
 };
 
-function readSettings(): UserSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<UserSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-function writeSettings(settings: UserSettings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    // ignore
-  }
-}
 
 function hardResetApp() {
   try {
@@ -97,7 +80,7 @@ export default function SettingsPage() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
 
-  const [settings, setSettings] = useState<UserSettings>(() => readSettings());
+  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettings() }));
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const seasonLabel = useMemo(() => `${state.season}`, [state.season]);
@@ -208,6 +191,14 @@ export default function SettingsPage() {
                 title="Message Popups"
                 description="Show popups for news and messages."
                 right={<Switch checked={settings.messagePopups} onCheckedChange={(checked) => update({ messagePopups: checked })} />}
+              />
+
+
+              <SettingRow
+                icon={<UtilityIcon name="Messages" className="h-5 w-5" />}
+                title="Badge Tooltips"
+                description="Show hint legends when hovering badge bubbles in Hub views."
+                right={<Switch checked={settings.showTooltips} onCheckedChange={(checked) => update({ showTooltips: checked })} />}
               />
 
               <SettingRow

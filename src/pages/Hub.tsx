@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
 import { HubTile } from "@/components/franchise-hub/HubTile";
+import { readSettings } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
@@ -24,22 +25,6 @@ const IMAGES = {
     injuryReport: "/placeholders/depth_chart.png",
 }
 
-type UserSettings = {
-  confirmAutoAdvance?: boolean;
-};
-
-const SETTINGS_KEY = "hcd:settings";
-
-function readSettings(): UserSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { confirmAutoAdvance: true };
-    const parsed = JSON.parse(raw) as UserSettings;
-    return { confirmAutoAdvance: parsed.confirmAutoAdvance ?? true };
-  } catch {
-    return { confirmAutoAdvance: true };
-  }
-}
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -110,18 +95,24 @@ export default function Hub() {
                     to="/staff"
                     imageUrl={IMAGES.staff}
                     badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
+                    badgeHint="Open staff roles"
+                    badgeKind="task"
                 />
                 <HubTile
                     title="Roster"
                     to="/roster"
                     imageUrl={IMAGES.roster}
                     badgeCount={badgeCounts.roster}
+                    badgeHint="Lineup tasks"
+                    badgeKind="task"
                 />
                 <HubTile
                     title="Franchise Strategy"
                     to="/strategy"
                     imageUrl={IMAGES.strategy}
                     badgeCount={badgeCounts.franchiseStrategy}
+                    badgeHint="Strategy items"
+                    badgeKind="info"
                 />
                 <HubTile
                     title="Contracts & Cap"
@@ -129,34 +120,43 @@ export default function Hub() {
                     to="/contracts"
                     imageUrl={IMAGES.contracts}
                     badgeCount={badgeCounts.finances}
+                    badgeHint="Cap items"
+                    badgeKind="cap"
                 />
                 <HubTile
                     title="Scouting"
                     to="/hub/scouting"
                     imageUrl={IMAGES.scouting}
                     badgeCount={badgeCounts.scouting}
+                    badgeHint="Scouting actions"
+                    badgeKind="scouting"
                 />
                 <HubTile
                     title="News"
                     to="/news"
                     imageUrl={IMAGES.news}
-                    badgeCount={badgeCounts.leagueNews}
+                    badgeCount={badgeCounts.leagueNewsUnread}
+                    badgeHint="Unread news stories"
+                    badgeKind="unread"
                     cornerBubbleCount={badgeCounts.leagueNewsUnread}
                 />
                 {state.careerStage === "FREE_AGENCY" ? (
-                  <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} />
+                  <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} badgeHint="Free agency actions" badgeKind="info" />
                 ) : null}
                 {showReSign ? (
-                  <HubTile title="Re-Sign" to="/hub/re-sign" imageUrl={IMAGES.resign} badgeCount={1} />
+                  <HubTile title="Re-Sign" to="/hub/re-sign" imageUrl={IMAGES.resign} badgeCount={1} badgeHint="Re-sign actions" badgeKind="info" />
                 ) : null}
                 {showTrades ? (
-                  <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} />
+                  <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
                 ) : null}
                 <HubTile
                     title="Injury Report"
                     subtitle="Health & Medical"
                     to="/hub/injury-report"
                     imageUrl={IMAGES.injuryReport}
+                    badgeCount={badgeCounts.leagueNews}
+                    badgeHint="League updates"
+                    badgeKind="info"
                 />
             </div>
 

@@ -26,6 +26,7 @@ const Offers = () => {
   const [draftYears, setDraftYears] = useState<number>(3);
   const [draftSalary, setDraftSalary] = useState<number>(2_000_000);
   const [draftAutonomy, setDraftAutonomy] = useState<number>(50);
+  const [showCounter, setShowCounter] = useState<boolean>(false);
 
   const activeOffer = useMemo(
     () => (openTeamId ? state.offers.find((o) => o.teamId === openTeamId) ?? null : null),
@@ -41,6 +42,7 @@ const Offers = () => {
     setDraftYears(offer.years);
     setDraftSalary(offer.salary);
     setDraftAutonomy(offer.autonomy);
+    setShowCounter(false);
   };
 
   const commitNegotiate = () => {
@@ -54,7 +56,16 @@ const Offers = () => {
         autonomy: clamp(draftAutonomy, 0, 100),
       },
     });
-    setOpenTeamId(null);
+    setShowCounter(true);
+  };
+
+  const applyCounter = () => {
+    if (!activeOffer?.negotiation?.counter) return;
+    const c = activeOffer.negotiation.counter;
+    setDraftYears(c.years);
+    setDraftSalary(c.salary);
+    setDraftAutonomy(c.autonomy);
+    setShowCounter(false);
   };
 
   if (state.offers.length === 0) {
@@ -130,7 +141,7 @@ const Offers = () => {
           </DialogHeader>
           {activeOffer ? (
             <div className="space-y-5">
-              <div className="text-sm text-muted-foreground">You can adjust terms within a reasonable range. Patience is fixed for now.</div>
+              <div className="text-sm text-muted-foreground">Counter proposals are not guaranteed. You’ll see an estimated success chance before submitting.</div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -170,12 +181,39 @@ const Offers = () => {
 
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setOpenTeamId(null)}>
-                  Cancel
+                  Close
                 </Button>
                 <Button className="flex-1" onClick={commitNegotiate}>
                   Submit Counter
                 </Button>
               </div>
+              {showCounter && activeOffer.negotiation ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">Negotiation Result</div>
+                    <Badge variant="outline">{activeOffer.negotiation.status}</Badge>
+                  </div>
+                  <div className="text-sm text-slate-200">{activeOffer.negotiation.message ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">Estimated chance: {Math.round((activeOffer.negotiation.lastChance ?? 0) * 100)}%</div>
+                  {activeOffer.negotiation.counter ? (
+                    <div className="mt-2 space-y-2">
+                      <div className="text-sm font-semibold">Their Counter</div>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Years</div><div className="font-semibold">{activeOffer.negotiation.counter.years}</div></div>
+                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Salary</div><div className="font-semibold">{money(activeOffer.negotiation.counter.salary)}</div></div>
+                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Autonomy</div><div className="font-semibold">{activeOffer.negotiation.counter.autonomy}</div></div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="secondary" onClick={applyCounter}>Load Counter</Button>
+                        <Button onClick={() => setOpenTeamId(null)} className="flex-1">Done</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button onClick={() => setOpenTeamId(null)} className="w-full mt-2">Done</Button>
+                  )}
+                </div>
+              ) : null}
+
             </div>
           ) : null}
         </DialogContent>
