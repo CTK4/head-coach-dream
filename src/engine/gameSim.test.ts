@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { initGameSim, recommendFourthDown, stepPlay } from "@/engine/gameSim";
+import { computeDefensiveLook, initGameSim, recommendFourthDown, stepPlay } from "@/engine/gameSim";
+import { mulberry32 } from "@/engine/rand";
 
 describe("clock sim + drive log", () => {
   it("advances time and ends by Q4 0:00", () => {
@@ -45,5 +46,52 @@ describe("4th down recommendations", () => {
     expect(rec.ranked.length).toBeGreaterThanOrEqual(3);
     expect(rec.breakevenGoRate).toBeGreaterThanOrEqual(0);
     expect(rec.breakevenGoRate).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("PAS engine + defensive look", () => {
+  it("generates a valid defensive look", () => {
+    const sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 42 });
+    const rng = mulberry32(99);
+    const look = computeDefensiveLook(sim, rng);
+    expect(["TWO_HIGH", "SINGLE_HIGH"]).toContain(look.shell);
+    expect(["LIGHT", "NORMAL", "HEAVY"]).toContain(look.box);
+    expect(["NONE", "POSSIBLE", "LIKELY"]).toContain(look.blitz);
+  });
+
+  it("stepPlay with granular play types produces result tags in driveLog", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 7 });
+    sim = stepPlay(sim, "INSIDE_ZONE").sim;
+    expect(sim.driveLog.length).toBe(1);
+    expect(sim.driveLog[0].resultTags).toBeDefined();
+  });
+
+  it("full game with granular plays ends at Q4 0:00", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 55 });
+    let safety = 0;
+    while (!(sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0)) {
+      sim = stepPlay(sim, "DROPBACK").sim;
+      safety += 1;
+      if (safety > 6000) break;
+    }
+    expect(sim.clock.quarter).toBe(4);
+    expect(sim.clock.timeRemainingSec).toBe(0);
+  });
+
+  it("game stats accumulate rushing and passing yards", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 3 });
+    for (let i = 0; i < 20; i++) {
+      sim = stepPlay(sim, i % 2 === 0 ? "INSIDE_ZONE" : "QUICK_GAME").sim;
+    }
+    const totalRush = sim.stats.home.rushYards + sim.stats.away.rushYards;
+    const totalPass = sim.stats.home.passYards + sim.stats.away.passYards;
+    expect(totalRush + totalPass).toBeGreaterThan(0);
+  });
+
+  it("defLook is set after stepPlay", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 9 });
+    sim = stepPlay(sim, "QUICK_GAME").sim;
+    expect(sim.defLook).toBeDefined();
+    expect(sim.defLook?.shell).toBeDefined();
   });
 });
