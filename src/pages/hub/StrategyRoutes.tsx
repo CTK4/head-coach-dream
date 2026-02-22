@@ -5,6 +5,7 @@ import { useGame, type GmMode, type PriorityPos } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import PlaybookScreen from "@/pages/hub/strategy/PlaybookScreen";
 
 const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
 
@@ -88,6 +89,19 @@ function IdentityScreen() {
     <div className="min-w-0">
       <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" showBack />
       <div className="space-y-3 p-4">
+        <Link
+          to="/strategy/playbooks"
+          className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold">Playbooks</div>
+              <div className="text-xs text-muted-foreground">Offense &amp; Defense (driven by coordinator system)</div>
+            </div>
+            <span className="text-sm text-accent">Open →</span>
+          </div>
+        </Link>
+
         <Card>
           <CardHeader>
             <CardTitle>Offense</CardTitle>
@@ -250,6 +264,7 @@ export default function StrategyRoutes() {
       <Route index element={<StrategyHome />} />
       <Route path="identity" element={<IdentityScreen />} />
       <Route path="priorities" element={<PrioritiesScreen />} />
+      <Route path="playbooks" element={<PlaybookScreen />} />
       <Route path="tag" element={<Navigate to="/hub/tag-center" replace />} />
       <Route path="*" element={<Navigate to="/strategy" replace />} />
     </Routes>
