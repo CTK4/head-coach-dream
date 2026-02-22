@@ -86,7 +86,7 @@ function IdentityScreen() {
 
   return (
     <div className="min-w-0">
-      <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" />
+      <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" showBack />
       <div className="space-y-3 p-4">
         <Card>
           <CardHeader>
@@ -211,7 +211,7 @@ function PrioritiesScreen() {
 
   return (
     <div className="min-w-0">
-      <ScreenHeader title="DRAFT / FA PRIORITIES" subtitle="Targets & Focus" />
+      <ScreenHeader title="DRAFT / FA PRIORITIES" subtitle="Targets & Focus" showBack />
       <div className="space-y-3 p-4">
         <Card>
           <CardHeader>

@@ -43,12 +43,23 @@ export type CombineResult = {
   ras?: number;
 };
 
+export type CombineDayRecap = {
+  risers: string[];
+  fallers: string[];
+  flags: string[];
+  focusedProspectIds: string[];
+  interviewedProspectIds: string[];
+  focusHoursSpent: number;
+  interviewsUsed: number;
+};
+
 export type CombineState = {
   generated: boolean;
   day: 1 | 2 | 3 | 4 | 5;
+  hoursRemaining: number;
   resultsByProspectId: Record<string, CombineResult>;
-  feed: { id: string; day: number; text: string }[];
-  recapByDay: Record<number, { risers: string[]; fallers: string[]; flags: string[] }>;
+  feed: { id: string; day: number; text: string; prospectId?: string }[];
+  recapByDay: Record<number, CombineDayRecap>;
 };
 
 export type VisitState = {

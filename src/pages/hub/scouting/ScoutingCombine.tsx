@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDraftClass, useGame } from "@/context/GameContext";
+import {
+  COMBINE_DEFAULT_HOURS,
+  COMBINE_DEFAULT_INTERVIEW_SLOTS,
+  COMBINE_FOCUS_HOURS_COST,
+  COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
+} from "@/engine/scouting/combineConstants";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -21,13 +27,15 @@ export default function ScoutingCombine() {
     if (scouting && !scouting.combine.generated) dispatch({ type: "SCOUT_COMBINE_GENERATE" });
   }, [dispatch, scouting]);
 
-  const draftClass = useMemo((): { id: string; name: string; pos: string }[] =>
-    (getDraftClass() as any[]).map((row, i) => ({
-      id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
-      name: row.name ?? row["Name"] ?? "Unknown",
-      pos: row.pos ?? row["POS"] ?? "UNK",
-    })),
-  []);
+  const draftClass = useMemo(
+    (): { id: string; name: string; pos: string }[] =>
+      (getDraftClass() as any[]).map((row, i) => ({
+        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+        name: row.name ?? row["Name"] ?? "Unknown",
+        pos: row.pos ?? row["POS"] ?? "UNK",
+      })),
+    [],
+  );
 
   const topList = useMemo(() => {
     if (!scouting) return [];
@@ -45,9 +53,19 @@ export default function ScoutingCombine() {
   const focusEnabled = day === 2 || day === 3;
   const interviewEnabled = day === 4;
   const feed = scouting.combine.feed.filter((f) => f.day === day).slice(-12).reverse();
-  const recap = scouting.combine.recapByDay[day];
+  const recap =
+    scouting.combine.recapByDay[day] ?? {
+      risers: [],
+      fallers: [],
+      flags: [],
+      focusedProspectIds: [],
+      interviewedProspectIds: [],
+      focusHoursSpent: 0,
+      interviewsUsed: 0,
+    };
   const used = Object.values(scouting.allocation.byGroup).reduce((a, b) => a + b, 0);
-  const remaining = Math.max(0, scouting.allocation.poolHours - used);
+  const remaining = Math.max(0, scouting.combine.hoursRemaining ?? COMBINE_DEFAULT_HOURS);
+  const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_SLOTS);
 
   return (
     <div className="space-y-3 p-4">
@@ -55,8 +73,7 @@ export default function ScoutingCombine() {
         <div className="flex items-center justify-between">
           <div className="font-semibold">Combine</div>
           <div className="text-xs opacity-70">
-            Combine Hours: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews:{" "}
-            {interviewEnabled ? `${scouting.interviews.interviewsRemaining} left` : "OFF"}
+            Combine Hours: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews: {interviewEnabled ? `${interviewsRemaining} left` : "OFF"}
           </div>
         </div>
         <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -75,22 +92,30 @@ export default function ScoutingCombine() {
       <div className="rounded-lg border border-white/10 bg-white/5 p-3">
         <div className="font-semibold">Focus Drill</div>
         <div className="mt-1 text-xs opacity-70">Spend Combine Hours to tighten confidence (by position group).</div>
+        {!focusEnabled ? <div className="mt-2 text-xs text-amber-300/80">Focus drill opens on Day 2 and Day 3.</div> : null}
+        {remaining <= 0 ? <div className="mt-2 text-xs text-rose-300/80">No hours remaining.</div> : null}
         <div className="mt-3 space-y-2">
-          {topList.map(({ id, p, s }) => (
-            <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
-              <div className="min-w-0">
-                <div className="truncate font-semibold">{p.name} <span className="opacity-70">{p.pos}</span></div>
-                <div className="text-xs opacity-70">Band {s.estLow}-{s.estHigh} • Conf {s.confidence}%</div>
+          {topList.map(({ id, p, s }) => {
+            const alreadyFocusedToday = recap.focusedProspectIds.includes(id);
+            const focusDisabled = !focusEnabled || remaining < COMBINE_FOCUS_HOURS_COST || alreadyFocusedToday;
+            return (
+              <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">
+                    {p.name} <span className="opacity-70">{p.pos}</span>
+                  </div>
+                  <div className="text-xs opacity-70">Band {s.estLow}-{s.estHigh} • Conf {s.confidence}%</div>
+                </div>
+                <button
+                  className={`rounded border px-3 py-2 ${focusDisabled ? "cursor-not-allowed border-white/10 text-white/40" : "border-sky-500 text-sky-200"}`}
+                  disabled={focusDisabled}
+                  onClick={() => dispatch({ type: "SCOUT_COMBINE_FOCUS", payload: { prospectId: id } })}
+                >
+                  {alreadyFocusedToday ? "Focused" : `Focus (-${COMBINE_FOCUS_HOURS_COST}h)`}
+                </button>
               </div>
-              <button
-                className={`rounded border px-3 py-2 ${focusEnabled ? "border-sky-500 text-sky-200" : "cursor-not-allowed border-white/10 text-white/40"}`}
-                disabled={!focusEnabled}
-                onClick={() => dispatch({ type: "SCOUT_COMBINE_FOCUS", payload: { prospectId: id } })}
-              >
-                Focus (-4h)
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -98,7 +123,7 @@ export default function ScoutingCombine() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="font-semibold">Day 4 Interviews</div>
-            <div className="text-xs opacity-70">Consumes interview slots. Improves CHAR/FIT clarity and may reveal leadership.</div>
+            <div className="text-xs opacity-70">Consumes interview slots. Improves CHAR/FIT clarity and reveals selected interview attribute.</div>
           </div>
           <div className="flex gap-2">
             {INT_CATS.map((c) => (
@@ -107,33 +132,37 @@ export default function ScoutingCombine() {
                 className={`rounded border px-3 py-1 ${intCat === c ? "border-sky-400 text-sky-200" : "border-white/10"} ${interviewEnabled ? "" : "opacity-50"}`}
                 disabled={!interviewEnabled}
                 onClick={() => setIntCat(c)}
+                title={`Reveals ${COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[c]}`}
               >
                 {c}
               </button>
             ))}
           </div>
         </div>
+        <div className="mt-1 text-xs opacity-70">{interviewEnabled ? `${interviewsRemaining} interviews left` : "Interviews open on Day 4."}</div>
 
         <div className="mt-3 space-y-2">
-          {topList.map(({ id, p, s }) => (
-            <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
-              <div className="min-w-0">
-                <div className="truncate font-semibold">
-                  {p.name} <span className="opacity-70">{p.pos}</span>
+          {topList.map(({ id, p, s }) => {
+            const alreadyInterviewedToday = recap.interviewedProspectIds.includes(id);
+            const interviewDisabled = !interviewEnabled || interviewsRemaining <= 0 || alreadyInterviewedToday;
+            return (
+              <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">
+                    {p.name} <span className="opacity-70">{p.pos}</span>
+                  </div>
+                  <div className="text-xs opacity-70">Char {s.clarity.CHAR}% • Fit {s.clarity.FIT}% • Leadership: {s.revealed.leadershipTag ?? "—"}</div>
                 </div>
-                <div className="text-xs opacity-70">
-                  Char {s.clarity.CHAR}% • Fit {s.clarity.FIT}% • Leadership: {s.revealed.leadershipTag ?? "—"}
-                </div>
+                <button
+                  className={`rounded border px-3 py-2 ${interviewDisabled ? "cursor-not-allowed border-white/10 text-white/40" : "border-amber-500 text-amber-200"}`}
+                  disabled={interviewDisabled}
+                  onClick={() => dispatch({ type: "SCOUT_COMBINE_INTERVIEW", payload: { prospectId: id, category: intCat } })}
+                >
+                  {alreadyInterviewedToday ? "Interviewed" : `Interview (${COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[intCat]})`}
+                </button>
               </div>
-              <button
-                className={`rounded border px-3 py-2 ${interviewEnabled ? "border-amber-500 text-amber-200" : "cursor-not-allowed border-white/10 text-white/40"}`}
-                disabled={!interviewEnabled || scouting.interviews.interviewsRemaining <= 0}
-                onClick={() => dispatch({ type: "SCOUT_COMBINE_INTERVIEW", payload: { prospectId: id, category: intCat } })}
-              >
-                Interview
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -155,15 +184,12 @@ export default function ScoutingCombine() {
       <div className="rounded-lg border border-white/10 bg-white/5 p-3">
         <div className="font-semibold">Recap</div>
         <div className="mt-2 text-sm">
-          <div className="opacity-70">Risers: {(recap?.risers ?? []).slice(0, 5).join(", ") || "—"}</div>
-          <div className="opacity-70">Fallers: {(recap?.fallers ?? []).slice(0, 5).join(", ") || "—"}</div>
-          <div className="opacity-70">New flags: {(recap?.flags ?? []).slice(0, 5).join(", ") || "—"}</div>
+          <div className="opacity-70">Risers: {(recap.risers ?? []).slice(0, 5).join(", ") || "—"}</div>
+          <div className="opacity-70">Fallers: {(recap.fallers ?? []).slice(0, 5).join(", ") || "—"}</div>
+          <div className="opacity-70">New flags: {(recap.flags ?? []).slice(0, 5).join(", ") || "—"}</div>
+          <div className="opacity-70">Focus actions: {recap.focusedProspectIds.length} • Hours spent: {recap.focusHoursSpent}</div>
+          <div className="opacity-70">Interviews completed: {recap.interviewedProspectIds.length}</div>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <div className="font-semibold">League Buzz</div>
-        <div className="mt-2 text-sm opacity-80">TODO: marquee ticker; current: feed includes occasional wrong buzz lines.</div>
       </div>
     </div>
   );

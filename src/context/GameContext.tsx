@@ -46,6 +46,15 @@ import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/eng
 import { detRand as detRand2 } from "@/engine/scouting/rng";
 import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
+import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
+import {
+  COMBINE_DEFAULT_HOURS,
+  COMBINE_DEFAULT_INTERVIEW_SLOTS,
+  COMBINE_FEED_MAX_PER_DAY,
+  COMBINE_FEED_TEMPLATES,
+  COMBINE_FOCUS_HOURS_COST,
+  COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
+} from "@/engine/scouting/combineConstants";
 import type {
   CampSettings,
   CutDecision,
@@ -2821,6 +2830,53 @@ function posToGroup(pos: string) {
 }
 
 
+type CombineFeedCategory = keyof typeof COMBINE_FEED_TEMPLATES;
+
+function defaultCombineRecap() {
+  return {
+    risers: [] as string[],
+    fallers: [] as string[],
+    flags: [] as string[],
+    focusedProspectIds: [] as string[],
+    interviewedProspectIds: [] as string[],
+    focusHoursSpent: 0,
+    interviewsUsed: 0,
+  };
+}
+
+function buildCombineFeedEntry(args: {
+  saveSeed: number;
+  day: number;
+  prospectId: string;
+  name: string;
+  pos: string;
+  ras: number;
+  forty: number;
+  medicalTier?: string;
+}): { id: string; day: number; text: string; prospectId: string; category: CombineFeedCategory } {
+  const { saveSeed, day, prospectId, name, pos, ras, forty, medicalTier } = args;
+  let category: CombineFeedCategory;
+
+  if (medicalTier === "RED" || medicalTier === "BLACK") category = "INJURY";
+  else if (ras >= 9.2 || forty <= 4.42) category = "STANDOUT";
+  else if (ras >= 8.2) category = "SOLID";
+  else if (ras >= 6.2) category = "AVERAGE";
+  else category = "POOR";
+
+  const correctionRoll = detRand2(saveSeed, `combine-feed-correction:${day}:${prospectId}`);
+  if (category === "AVERAGE" && correctionRoll < 0.18) category = "BUZZ_CORRECTION";
+
+  const templates = COMBINE_FEED_TEMPLATES[category];
+  const pick = Math.floor(detRand2(saveSeed, `combine-feed-template:${day}:${prospectId}`) * templates.length) % templates.length;
+  const raw = templates[pick] ?? templates[0];
+  const text = raw
+    .replace("{name}", name)
+    .replace("{pos}", pos);
+
+  return { id: `combine-feed:${day}:${prospectId}`, day, text, prospectId, category };
+}
+
+
 function initDraftRosterCounts(state: GameState): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   const teams = getTeams().map((t) => String((t as any).teamId));
@@ -3389,14 +3445,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "RESIGN_REJECT_OFFER": {
       const { playerId } = action.payload;
-      const cur: any = state.offseasonData.resigning.decisions?.[String(playerId)];
+      const cur = state.offseasonData.resigning.decisions?.[String(playerId)];
       if (!cur?.offer) return state;
 
-      const offer = { ...(cur.offer as ResignOffer), rejectedCount: Number(cur.offer.rejectedCount ?? 0) + 1 };
-      const decisions = { ...state.offseasonData.resigning.decisions } as any;
-      decisions[String(playerId)] = { action: "RESIGN", offer };
+      const decisions = { ...state.offseasonData.resigning.decisions };
+      delete decisions[String(playerId)];
 
-      return pushNews({ ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } }, `Offer rejected. Agent requests improved terms.`);
+      return pushNews({ ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } }, `Offer declined. Active proposal cleared.`);
     }
     case "RESIGN_ACCEPT_OFFER": {
       const { playerId } = action.payload;
@@ -3591,11 +3646,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           trueProfiles,
           scoutProfiles,
           bigBoard: { tiers, tierByProspectId: tierBy },
-          combine: { generated: false, day: 1, resultsByProspectId: {}, feed: [], recapByDay: {} },
+          combine: { generated: false, day: 1, hoursRemaining: COMBINE_DEFAULT_HOURS, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
-          interviews: { interviewsRemaining: 15, history: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {} },
           medical: { requests: {} },
-          allocation: { poolHours: windowId === "COMBINE" ? 60 : 20, byGroup: {} },
+          allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_HOURS : 20, byGroup: {} },
           inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
         },
       };
@@ -3679,9 +3734,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!s) return state;
       const seed = (k: string) => detRand2(state.saveSeed, `combine:${k}`);
       const results: Record<string, any> = {};
-      const feed: { id: string; day: number; text: string }[] = [];
+      const feed: { id: string; day: number; text: string; prospectId?: string }[] = [];
+      const recapByDay = { ...s.combine.recapByDay };
+
+      for (let day = 1; day <= 5; day++) {
+        recapByDay[day] = recapByDay[day] ?? defaultCombineRecap();
+      }
 
       for (const id of Object.keys(s.scoutProfiles)) {
+        const draftProspect = (draftClassJson as any[])
+          .map((row, idx) => ({
+            id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
+            name: row.name ?? row["Name"] ?? "Unknown",
+            pos: String(row.pos ?? row["POS"] ?? "UNK").toUpperCase(),
+          }))
+          .find((x) => x.id === id);
+        if (!draftProspect) continue;
+
         const r1 = seed(`${id}:r1`);
         const r2 = seed(`${id}:r2`);
         const r3 = seed(`${id}:r3`);
@@ -3692,10 +3761,42 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const bench = Math.round(8 + r4 * 32);
         const ras = Math.round(clamp01(1 - (forty - 4.3) / 1.0) * 100) / 10;
         results[id] = { forty, shuttle, vert, bench, ras };
-        if (seed(`feed:${id}`) < 0.06) feed.push({ id: `buzz:${id}`, day: 2, text: `${id} turned heads with testing (buzz may be wrong).` });
+
+        for (let day = 1; day <= 5; day++) {
+          const entry = buildCombineFeedEntry({
+            saveSeed: state.saveSeed,
+            day,
+            prospectId: id,
+            name: draftProspect.name,
+            pos: draftProspect.pos,
+            ras,
+            forty,
+            medicalTier: s.trueProfiles[id]?.trueMedical?.tier,
+          });
+          feed.push({ id: entry.id, day: entry.day, text: entry.text, prospectId: id });
+
+          const recap = recapByDay[day] ?? defaultCombineRecap();
+          if (entry.category === "STANDOUT" || entry.category === "SOLID") recap.risers = [...recap.risers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+          if (entry.category === "POOR") recap.fallers = [...recap.fallers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+          if (entry.category === "INJURY" || entry.category === "BUZZ_CORRECTION") recap.flags = [...recap.flags, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+          recapByDay[day] = recap;
+        }
       }
 
-      return { ...state, scoutingState: { ...s, combine: { ...s.combine, generated: true, resultsByProspectId: results, feed } } };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            generated: true,
+            resultsByProspectId: results,
+            feed,
+            recapByDay,
+            hoursRemaining: Number.isFinite(s.combine.hoursRemaining) ? Math.max(0, s.combine.hoursRemaining) : COMBINE_DEFAULT_HOURS,
+          },
+        },
+      };
     }
 
     case "SCOUT_COMBINE_SET_DAY": {
@@ -3713,18 +3814,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, uiToast: "Focus Drill is only available on Combine Day 2 and Day 3." };
       }
 
+      if ((s.combine.hoursRemaining ?? 0) <= 0) {
+        return { ...state, uiToast: "No hours remaining." };
+      }
+
       const { prospectId } = action.payload;
-      const p = (draftClassJson as any[]).map((row, i) => ({
-        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
-        pos: row.pos ?? row["POS"] ?? "UNK",
-      })).find((x) => x.id === prospectId);
+      const p = (draftClassJson as any[])
+        .map((row, idx) => ({
+          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
+          pos: row.pos ?? row["POS"] ?? "UNK",
+        }))
+        .find((x) => x.id === prospectId);
       if (!p) return state;
 
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      if (recap.focusedProspectIds.includes(String(prospectId))) {
+        return { ...state, uiToast: "Focus already completed for this prospect today." };
+      }
+
       const group = posToGroup(p.pos);
-      const costHours = 4;
+      const costHours = COMBINE_FOCUS_HOURS_COST;
+      const availableHours = Math.max(0, s.combine.hoursRemaining ?? 0);
+      const spend = Math.min(costHours, availableHours);
+      if (spend <= 0) return { ...state, uiToast: "No hours remaining." };
+
       const cur = s.allocation.byGroup[group] ?? 0;
       const usedTotal = Object.values(s.allocation.byGroup).reduce((a: number, b: number) => a + b, 0);
-      if (usedTotal + costHours > s.allocation.poolHours) {
+      if (usedTotal + spend > s.allocation.poolHours) {
         return { ...state, uiToast: "Not enough Combine Hours. Allocate more in Allocation screen." };
       }
 
@@ -3737,11 +3853,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const allocation = {
         ...s.allocation,
-        byGroup: { ...s.allocation.byGroup, [group]: cur + costHours },
+        byGroup: { ...s.allocation.byGroup, [group]: cur + spend },
       };
 
       addClarity({ profile, track: "TALENT", points: 10, gm });
       addClarity({ profile, track: "FIT", points: 8, gm });
+      profile.confidence = clamp100(profile.confidence + 4);
 
       tightenBand({
         profile,
@@ -3749,12 +3866,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         seed,
         windowKey: s.windowKey,
         actionKey: `COMBINE_FOCUS:${group}:D${day}`,
-        hoursOrPoints: costHours,
+        hoursOrPoints: spend,
         minWidth: 4,
       });
 
       revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
       revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+
+      const dayRecap = {
+        ...recap,
+        focusedProspectIds: [...recap.focusedProspectIds, String(prospectId)],
+        focusHoursSpent: recap.focusHoursSpent + spend,
+      };
 
       return {
         ...state,
@@ -3762,6 +3885,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           ...s,
           allocation,
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+          combine: {
+            ...s.combine,
+            hoursRemaining: Math.max(0, availableHours - spend),
+            recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
+          },
         },
       };
     }
@@ -3770,10 +3898,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const s = state.scoutingState;
       if (!s || s.windowId !== "COMBINE") return state;
 
-      if ((s.combine?.day ?? 1) !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
-      if (s.interviews.interviewsRemaining <= 0) return { ...state, uiToast: "No interview slots remaining." };
+      const day = s.combine?.day ?? 1;
+      if (day !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
+      if (s.interviews.interviewsRemaining <= 0) return { ...state, uiToast: "0 interviews left." };
 
       const { prospectId, category } = action.payload;
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      if (recap.interviewedProspectIds.includes(String(prospectId))) {
+        return { ...state, uiToast: "Interview already completed for this prospect today." };
+      }
+
       const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
       const seed = (k: string) => detRand2(state.saveSeed, `combine:int:${k}`);
 
@@ -3781,8 +3915,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const truth = s.trueProfiles[prospectId];
       if (!profile || !truth) return state;
 
-      addClarity({ profile, track: "CHAR", points: 16, gm });
-      addClarity({ profile, track: "FIT", points: category === "IQ" ? 12 : category === "LEADERSHIP" ? 8 : 6, gm });
+      if (category === "IQ") {
+        addClarity({ profile, track: "FIT", points: 16, gm });
+        addClarity({ profile, track: "CHAR", points: 8, gm });
+      } else if (category === "LEADERSHIP") {
+        addClarity({ profile, track: "CHAR", points: 18, gm });
+        addClarity({ profile, track: "FIT", points: 6, gm });
+      } else if (category === "STRESS") {
+        addClarity({ profile, track: "CHAR", points: 14, gm });
+        addClarity({ profile, track: "FIT", points: 10, gm });
+      } else {
+        addClarity({ profile, track: "FIT", points: 18, gm });
+        addClarity({ profile, track: "CHAR", points: 8, gm });
+      }
 
       if (!profile.revealed.leadershipTag && profile.clarity.CHAR >= 60) {
         let p = 0.2 + (gm.intel_network - 50) * 0.003;
@@ -3797,34 +3942,47 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
 
       const hist = s.interviews.history[prospectId] ?? [];
-      const outcome =
-        seed(`out:${s.windowKey}:${prospectId}:${category}`) < 0.15
-          ? "Concerning"
-          : seed(`out2:${s.windowKey}:${prospectId}:${category}`) < 0.45
-            ? "Mixed"
-            : "Positive";
+      const outcomeRoll = seed(`out:${s.windowKey}:${prospectId}:${category}`);
+      const outcome = outcomeRoll < 0.15 ? "Concerning" : outcomeRoll < 0.6 ? "Mixed" : "Positive";
+      const revealedAttr = COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[category];
+      profile.notes.character = `${revealedAttr}: ${outcome}`;
 
-      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome, windowKey: s.windowKey }] };
+      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome: `${revealedAttr} - ${outcome}`, windowKey: s.windowKey }] };
 
       const p = (draftClassJson as any[])
-        .map((row, i) => ({
-          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+        .map((row, idx) => ({
+          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
           name: row.name ?? row["Name"] ?? "Unknown",
         }))
         .find((x) => x.id === prospectId);
 
       const feed = [
         ...s.combine.feed,
-        { id: `int:${prospectId}:${Date.now()}`, day: 4, text: `${p?.name ?? prospectId} interview (${category}): ${outcome}` },
+        {
+          id: `int:${day}:${prospectId}:${category}`,
+          day,
+          prospectId,
+          text: `${p?.name ?? prospectId} interview (${category}) revealed ${revealedAttr}: ${outcome}.`,
+        },
       ];
+
+      const dayRecap = {
+        ...recap,
+        interviewedProspectIds: [...recap.interviewedProspectIds, String(prospectId)],
+        interviewsUsed: recap.interviewsUsed + 1,
+      };
 
       return {
         ...state,
         scoutingState: {
           ...s,
-          interviews: { ...s.interviews, interviewsRemaining: s.interviews.interviewsRemaining - 1, history },
+          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history },
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
-          combine: { ...s.combine, feed },
+          combine: {
+            ...s.combine,
+            feed,
+            recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
+          },
         },
       };
     }
@@ -4539,9 +4697,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return seasonRollover(state);
 
     case "PREDRAFT_TOGGLE_VISIT": {
-      const id = action.payload.prospectId;
+      const id = String(action.payload.prospectId);
       const cur = !!state.offseasonData.preDraft.visits[id];
       const nextOn = !cur;
+      const workouts = state.offseasonData.preDraft.workouts;
+      const visits = state.offseasonData.preDraft.visits;
+      const slotsUsed = Object.values(visits).filter(Boolean).length + Object.values(workouts).filter(Boolean).length;
+
+      if (nextOn && workouts[id]) return { ...state, uiToast: "Prospect already scheduled for workout." };
+      if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
 
       const nextReveals = { ...state.offseasonData.preDraft.reveals };
       if (nextOn) nextReveals[id] = genVisitReveal(state, id);
@@ -4560,14 +4724,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
     case "PREDRAFT_TOGGLE_WORKOUT": {
-      const cur = !!state.offseasonData.preDraft.workouts[action.payload.prospectId];
+      const id = String(action.payload.prospectId);
+      const cur = !!state.offseasonData.preDraft.workouts[id];
+      const nextOn = !cur;
+      const workouts = state.offseasonData.preDraft.workouts;
+      const visits = state.offseasonData.preDraft.visits;
+      const slotsUsed = Object.values(visits).filter(Boolean).length + Object.values(workouts).filter(Boolean).length;
+
+      if (nextOn && visits[id]) return { ...state, uiToast: "Prospect already scheduled for visit." };
+      if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
+
       return {
         ...state,
         offseasonData: {
           ...state.offseasonData,
           preDraft: {
             ...state.offseasonData.preDraft,
-            workouts: { ...state.offseasonData.preDraft.workouts, [action.payload.prospectId]: !cur },
+            workouts: { ...state.offseasonData.preDraft.workouts, [id]: nextOn },
           },
         },
       };
