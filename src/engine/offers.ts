@@ -3,6 +3,10 @@ import { interviewProfiles, type TeamInterviewProfile } from "@/data/interviewPr
 
 const BASE_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
 
+function withBase(offer: Omit<OfferItem, "base">): OfferItem {
+  return { ...offer, base: { years: offer.years, salary: offer.salary, autonomy: offer.autonomy } };
+}
+
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((total, value) => total + value, 0) / values.length;
@@ -55,29 +59,29 @@ export function generateOffer(teamId: string, score: number, profile: TeamInterv
   const normalized = tierAllowsNormalized(tier, baseNormalized);
 
   if (tier === "CONDITIONAL") {
-    return { teamId, years: 2, salary: 4_000_000, autonomy: 55, patience: 58, mediaNarrativeKey: "offer.conditional" };
+    return withBase({ teamId, years: 2, salary: 4_000_000, autonomy: 55, patience: 58, mediaNarrativeKey: "offer.conditional" });
   }
 
   if (normalized >= 1.45) {
-    return { teamId, years: 6, salary: 10_000_000, autonomy: 88, patience: 84, mediaNarrativeKey: "offer.elite_hire" };
+    return withBase({ teamId, years: 6, salary: 10_000_000, autonomy: 88, patience: 84, mediaNarrativeKey: "offer.elite_hire" });
   }
 
   if (normalized >= 1.25) {
-    return {
+    return withBase({
       teamId,
       years: 5,
       salary: 8_000_000,
       autonomy: 78,
       patience: 74,
       mediaNarrativeKey: "offer.strong_vote_of_confidence",
-    };
+    });
   }
 
   if (normalized >= 1.05) {
-    return { teamId, years: 4, salary: 6_000_000, autonomy: 68, patience: 64, mediaNarrativeKey: "offer.steady_build" };
+    return withBase({ teamId, years: 4, salary: 6_000_000, autonomy: 68, patience: 64, mediaNarrativeKey: "offer.steady_build" });
   }
 
-  return { teamId, years: 3, salary: 4_000_000, autonomy: 58, patience: 56, mediaNarrativeKey: "offer.prove_it" };
+  return withBase({ teamId, years: 3, salary: 4_000_000, autonomy: 58, patience: 56, mediaNarrativeKey: "offer.prove_it" });
 }
 
 export function generateOffers(state: GameState): OfferItem[] {

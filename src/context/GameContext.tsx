@@ -209,7 +209,25 @@ export type InterviewResult = {
 };
 
 export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number>; result?: InterviewResult };
-export type OfferItem = { teamId: string; years: number; salary: number; autonomy: number; patience: number; mediaNarrativeKey: string; score?: number };
+export type OfferNegotiationStatus = "NONE" | "PENDING" | "ACCEPTED" | "DECLINED" | "COUNTERED";
+export type OfferItem = {
+  teamId: string;
+  years: number;
+  salary: number;
+  autonomy: number;
+  patience: number;
+  mediaNarrativeKey: string;
+  score?: number;
+  base: { years: number; salary: number; autonomy: number };
+  negotiation?: {
+    status: OfferNegotiationStatus;
+    attempts?: number;
+    lastRequest?: { years: number; salary: number; autonomy: number };
+    lastChance?: number;
+    message?: string;
+    counter?: { years: number; salary: number; autonomy: number } | null;
+  };
+};
 export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 
@@ -2646,6 +2664,57 @@ function initDraftRosterCounts(state: GameState): Record<string, Record<string, 
   return out;
 }
 
+
+function offerChance(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  patience: number;
+}): number {
+  const { base, req, patience } = args;
+  const yearsDelta = req.years - base.years;
+  const salaryDeltaPct = (req.salary - base.salary) / Math.max(1, base.salary);
+  const autonomyDelta = req.autonomy - base.autonomy;
+
+  let p = 0.62 + clamp(patience, 0, 100) * 0.0018;
+  p -= Math.max(0, yearsDelta) * 0.08;
+  p += Math.max(0, -yearsDelta) * 0.03;
+  p -= Math.max(0, salaryDeltaPct) * 0.65;
+  p += Math.max(0, -salaryDeltaPct) * 0.25;
+  p -= Math.max(0, autonomyDelta) * 0.004;
+  p += Math.max(0, -autonomyDelta) * 0.0015;
+  return clamp(p, 0.05, 0.92);
+}
+
+function buildCounter(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  rng: () => number;
+}): { years: number; salary: number; autonomy: number } {
+  const { base, req, rng } = args;
+  const years = clamp(Math.round(base.years + (req.years - base.years) * 0.35 + (rng() < 0.25 ? 1 : 0)), 1, 6);
+  const salary = Math.round(base.salary + (req.salary - base.salary) * 0.25 + (rng() < 0.25 ? base.salary * 0.03 : 0));
+  const autonomy = clamp(Math.round(base.autonomy + (req.autonomy - base.autonomy) * 0.2), 0, 100);
+  return { years, salary, autonomy };
+}
+
+function patiencePenalty(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  attempts: number;
+}): number {
+  const { base, req, attempts } = args;
+  const yearsDelta = req.years - base.years;
+  const salaryDeltaPct = (req.salary - base.salary) / Math.max(1, base.salary);
+  const autonomyDelta = req.autonomy - base.autonomy;
+
+  const yearsCost = Math.max(0, yearsDelta) * 6;
+  const salaryCost = Math.max(0, salaryDeltaPct) * 40;
+  const autoCost = Math.max(0, autonomyDelta) * 0.25;
+  const attemptCost = Math.max(0, attempts - 1) * 4;
+  const baseCost = 3;
+  return clamp(Math.round(baseCost + yearsCost + salaryCost + autoCost + attemptCost), 0, 35);
+}
+
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "SET_COACH":
@@ -2781,20 +2850,80 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return applyFinances(next as GameState);
     }
     case "NEGOTIATE_OFFER": {
-      const { teamId, years, salary, autonomy } = action.payload;
-      return {
-        ...state,
-        offers: state.offers.map((offer) =>
-          offer.teamId === teamId
-            ? {
-                ...offer,
-                years: Math.max(1, Math.min(6, Math.floor(years))),
-                salary: Math.max(100_000, Math.floor(salary)),
-                autonomy: Math.max(0, Math.min(100, Math.floor(autonomy))),
-              }
-            : offer,
-        ),
+      const { teamId } = action.payload;
+      const offer = state.offers.find((o) => o.teamId === teamId);
+      if (!offer) return state;
+
+      const base = offer.base ?? { years: offer.years, salary: offer.salary, autonomy: offer.autonomy };
+      const req = {
+        years: clamp(Math.floor(action.payload.years), 1, 6),
+        salary: Math.max(100_000, Math.floor(action.payload.salary)),
+        autonomy: clamp(Math.floor(action.payload.autonomy), 0, 100),
       };
+
+      const chance = offerChance({ base, req, patience: offer.patience });
+      const seed = hashStr(`${state.saveSeed}|offer|${teamId}|${req.years}|${req.salary}|${req.autonomy}`);
+      const rng = mulberry32(seed);
+      const roll = rng();
+
+      let status: OfferNegotiationStatus = "DECLINED";
+      let message = "They declined your counter.";
+      let counter: { years: number; salary: number; autonomy: number } | null = null;
+
+      if (roll < chance) {
+        status = "ACCEPTED";
+        message = "They accepted your counter.";
+      } else {
+        const margin = roll - chance;
+        const counterProb = clamp(0.55 - margin * 1.5, 0, 0.55);
+        if (rng() < counterProb) {
+          status = "COUNTERED";
+          counter = buildCounter({ base, req, rng });
+          message = "They countered your proposal.";
+        }
+      }
+
+      const prevAttempts = offer.negotiation?.attempts ?? 0;
+      const attempts = prevAttempts + 1;
+      const penalty = patiencePenalty({ base, req, attempts });
+      const nextPatience = clamp(offer.patience - penalty, 0, 100);
+
+      const nextOffers = state.offers.map((o) => {
+        if (o.teamId !== teamId) return o;
+        if (status === "ACCEPTED") {
+          return {
+            ...o,
+            years: req.years,
+            salary: req.salary,
+            autonomy: req.autonomy,
+            base,
+            patience: nextPatience,
+            negotiation: {
+              status,
+              attempts,
+              lastRequest: req,
+              lastChance: chance,
+              message,
+              counter: null,
+            },
+          };
+        }
+        return {
+          ...o,
+          base,
+          patience: nextPatience,
+          negotiation: {
+            status,
+            attempts,
+            lastRequest: req,
+            lastChance: chance,
+            message,
+            counter,
+          },
+        };
+      });
+
+      return { ...state, offers: nextOffers };
     }
     case "COORD_ATTEMPT_HIRE": {
       const person = getPersonnelById(action.payload.personId);

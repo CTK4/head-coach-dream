@@ -7,6 +7,25 @@ import { HubPanel } from "@/components/franchise-hub/HubPanel";
 import { HUB_PILL } from "@/components/franchise-hub/theme";
 import { computeStreak, getLastGameForTeam, getNextGameForTeam } from "@/components/franchise-hub/userTeamSchedule";
 import { isRegularSeason } from "@/components/franchise-hub/seasonStatus";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { readSettings } from "@/lib/settings";
+
+
+function pillClass(kind: "unread" | "task" | "cap" | "scouting" | "info"): string {
+  switch (kind) {
+    case "unread":
+      return "bg-accent text-black";
+    case "task":
+      return "bg-amber-400 text-black";
+    case "cap":
+      return "bg-violet-500 text-white";
+    case "scouting":
+      return "bg-cyan-400 text-black";
+    case "info":
+    default:
+      return "bg-emerald-500 text-black";
+  }
+}
 
 export function ContextBar({ state }: { state: GameState }) {
   const teamId = state.acceptedOffer?.teamId;
@@ -24,7 +43,12 @@ export function ContextBar({ state }: { state: GameState }) {
     ["League News", "/hub/league-news"],
   ] as const;
   const unread = (state.hub.news ?? []).filter((n) => !state.hub.newsReadIds?.[n.id]).length;
-  const notifications = [{ label: "Hire Staff", count: 1 }, { label: "League News", count: unread }].filter((n) => n.count > 0);
+  const showTooltips = !!readSettings().showTooltips;
+
+  const notifications = [
+    { label: "Hire Staff", count: 1, hint: "Open staff roles", kind: "task" as const },
+    { label: "League News", count: unread, hint: "Unread news stories", kind: "unread" as const },
+  ].filter((n) => n.count > 0);
 
   const last = getLastGameForTeam(state.league, teamId);
   const next = getNextGameForTeam(state, state.league, teamId);
@@ -78,7 +102,30 @@ export function ContextBar({ state }: { state: GameState }) {
           {import.meta.env.DEV ? <Link to="/hub/draft-order-debug" className="block rounded border border-slate-300/20 bg-slate-900/60 px-2 py-1 text-xs text-slate-100">Draft Debug</Link> : null}
         </div>
       </HubPanel>
-      {notifications.length ? <HubPanel title="NOTIFICATIONS"><div className="space-y-1">{notifications.map((n) => <div key={n.label} className="flex justify-between rounded border border-slate-300/15 px-2 py-1 text-xs"><span>{n.label}</span><span>{n.count}</span></div>)}</div></HubPanel> : null}
+      {notifications.length ? (
+        <HubPanel title="NOTIFICATIONS">
+          <div className="space-y-1">
+            {notifications.map((n) =>
+              showTooltips ? (
+                <TooltipProvider key={n.label}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className={`flex justify-between rounded px-2 py-1 text-xs font-semibold ${pillClass(n.kind)}`}>
+                        <span>{n.label}</span><span>{n.count}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>{n.hint}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <div key={n.label} className={`flex justify-between rounded px-2 py-1 text-xs font-semibold ${pillClass(n.kind)}`} title={n.hint}>
+                  <span>{n.label}</span><span>{n.count}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </HubPanel>
+      ) : null}
     </aside>
   );
 }
