@@ -23,6 +23,7 @@ import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
+import { checkMilestones } from "@/engine/milestones";
 import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
@@ -83,10 +84,12 @@ import {
   submitUserTradeUpOffer,
   type DraftSimState,
 } from "@/engine/draftSim";
+import type { SeasonSummary } from "@/types/season";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
   | "OFFSEASON_HUB"
+  | "SEASON_AWARDS"
   | "ASSISTANT_HIRING"
   | "STAFF_CONSTRUCTION"
   | "ROSTER_REVIEW"
@@ -503,6 +506,18 @@ export type GameState = {
     volatility?: number;
     tenureYear: number;
     reputation?: CoachReputation;
+    perkPoints?: number;
+    unlockedPerkIds?: string[];
+    perkPointLog?: { source: string; amount: number; season: number }[];
+  };
+  lastSeasonSummary?: SeasonSummary;
+  seasonHistory: SeasonSummary[];
+  earnedMilestoneIds: string[];
+  seasonAwards?: {
+    season: number;
+    awarded: { source: string; amount: number }[];
+    totalPoints: number;
+    shown: boolean;
   };
   phase: GamePhase;
   careerStage: CareerStage;
@@ -722,6 +737,7 @@ export type GameAction =
   | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] } }
   | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
   | { type: "ADVANCE_SEASON" }
+  | { type: "DISMISS_SEASON_AWARDS" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" | "TEAM" } }
@@ -906,7 +922,9 @@ function createInitialState(): GameState {
   const saveSeed = Date.now();
 
   const base: GameState = {
-    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1 },
+    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
+    seasonHistory: [],
+    earnedMilestoneIds: [],
     phase: "CREATE",
     careerStage: "OFFSEASON_HUB",
     offseason: {
@@ -2002,6 +2020,95 @@ function seasonRollover(state: GameState): GameState {
     playerContractOverrides,
     finances: { ...state.finances, cash },
   });
+}
+
+function computeSeasonSummary(state: GameState): SeasonSummary {
+  const teamId = state.acceptedOffer?.teamId ?? "";
+  const standingRows = Object.entries(state.league.standings ?? {}).map(([id, row]) => ({
+    teamId: id,
+    w: Number(row?.w ?? 0),
+    l: Number(row?.l ?? 0),
+    pf: Number(row?.pf ?? 0),
+    pa: Number(row?.pa ?? 0),
+  }));
+  const byRecord = standingRows.slice().sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa) || b.pf - a.pf);
+  const byOffense = standingRows.slice().sort((a, b) => b.pf - a.pf);
+  const byDefense = standingRows.slice().sort((a, b) => a.pa - b.pa);
+
+  const rep = state.coach.reputation;
+  const team = getTeams().find((t) => t.teamId === teamId);
+  const divisionTeams = team ? getTeams().filter((t) => t.divisionId === team.divisionId).map((t) => t.teamId) : [];
+  const divisionRows = byRecord.filter((row) => divisionTeams.includes(row.teamId));
+  const divisionWinner = divisionRows[0]?.teamId === teamId;
+  const teamStanding = byRecord.find((row) => row.teamId === teamId);
+
+  const postseasonResult = state.league.postseason?.resultsByTeamId?.[teamId];
+  const playoffResult: SeasonSummary["playoffResult"] = postseasonResult?.isChampion
+    ? "champion"
+    : postseasonResult?.eliminatedIn === "SUPER_BOWL"
+      ? "superbowlLoss"
+      : postseasonResult?.madePlayoffs
+        ? "divisional"
+        : "missed";
+
+  const volatilityEvents = (state.memoryLog ?? []).filter((event) => String(event.type ?? "").toLowerCase().includes("volatility") && Number(event.season) === Number(state.season)).length;
+
+  return {
+    tenureYear: Number(state.coach.tenureYear ?? 1),
+    wins: Number(teamStanding?.w ?? 0),
+    losses: Number(teamStanding?.l ?? 0),
+    playoffResult,
+    finalStanding: Math.max(1, byRecord.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    divisionWinner,
+    offenseRank: Math.max(1, byOffense.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    defenseRank: Math.max(1, byDefense.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    specialTeamsRank: Math.max(1, Math.round(((byOffense.findIndex((row) => row.teamId === teamId) + 1 || 32) + (byDefense.findIndex((row) => row.teamId === teamId) + 1 || 32)) / 2)),
+    reputationSnapshot: {
+      leaguePrestige: Number(rep?.leaguePrestige ?? state.coach.repBaseline ?? 50),
+      offCred: Number(rep?.offCred ?? 50),
+      defCred: Number(rep?.defCred ?? 50),
+      leadershipTrust: Number(rep?.leadershipTrust ?? 50),
+      mediaRep: Number(rep?.mediaRep ?? 50),
+      playerRespect: Number(rep?.playerRespect ?? 50),
+    },
+    reputationDeltas: {
+      leaguePrestige: Number(rep?.leaguePrestige ?? 50) - Number(state.coach.repBaseline ?? 50),
+      offCred: Number(rep?.offCred ?? 50) - 50,
+      defCred: Number(rep?.defCred ?? 50) - 50,
+      leadershipTrust: Number(rep?.leadershipTrust ?? 50) - 50,
+      mediaRep: Number(rep?.mediaRep ?? 50) - 50,
+      playerRespect: Number(rep?.playerRespect ?? 50) - 50,
+    },
+    ownerConfidence: Number(state.owner.approval ?? 50),
+    gmRelationship: Number(state.coach.gmRelationship ?? 50),
+    lockerRoomCred: Number(state.coach.lockerRoomCred ?? 50),
+    volatilityEvents,
+    archetypeId: state.coach.archetypeId,
+  };
+}
+
+function applySeasonMilestoneAwards(state: GameState): GameState {
+  const summary = computeSeasonSummary(state);
+  const milestoneResult = checkMilestones(summary, new Set(state.earnedMilestoneIds ?? []));
+  const awardedWithSeason = milestoneResult.awarded.map((entry) => ({ ...entry, season: Number(state.coach.tenureYear ?? 1) }));
+
+  return {
+    ...state,
+    coach: {
+      ...state.coach,
+      perkPoints: (state.coach.perkPoints ?? 0) + milestoneResult.totalPoints,
+      perkPointLog: [...(state.coach.perkPointLog ?? []), ...awardedWithSeason],
+    },
+    earnedMilestoneIds: Array.from(milestoneResult.newEarnedIds),
+    lastSeasonSummary: summary,
+    seasonHistory: [...(state.seasonHistory ?? []), summary],
+    seasonAwards: {
+      season: state.season,
+      awarded: milestoneResult.awarded,
+      totalPoints: milestoneResult.totalPoints,
+      shown: false,
+    },
+  };
 }
 
 function rookieApyFromRank(rank: number): number {
@@ -4730,6 +4837,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "ADVANCE_SEASON":
       return seasonRollover(state);
 
+    case "DISMISS_SEASON_AWARDS":
+      return state.seasonAwards
+        ? { ...state, careerStage: "OFFSEASON_HUB", seasonAwards: { ...state.seasonAwards, shown: true } }
+        : { ...state, careerStage: "OFFSEASON_HUB" };
+
     case "PREDRAFT_TOGGLE_VISIT": {
       const id = String(action.payload.prospectId);
       const cur = !!state.offseasonData.preDraft.visits[id];
@@ -5486,6 +5598,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             season: Number(out.season ?? 2026),
             seed: Number(out.saveSeed ?? 1) + 99991,
           });
+          out = { ...out, league: { ...out.league, postseason } };
+          out = applySeasonMilestoneAwards(out);
           const nextSeason = Number(out.season ?? 2026) + 1;
           const teams = getTeams()
             .filter((t) => t.isActive)
@@ -5496,7 +5610,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...out,
             season: nextSeason,
             week: 0,
-            league: { ...out.league, postseason },
+            league: out.league,
             hub: {
               ...out.hub,
               schedule: nextSchedule,
@@ -5513,7 +5627,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 ...(out.hub.news ?? []),
               ],
             },
-            careerStage: "OFFSEASON_HUB",
+            careerStage: "SEASON_AWARDS",
           };
         }
       }
@@ -5587,6 +5701,10 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     ...oldState,
     saveSeed,
     careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
+    seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
+    earnedMilestoneIds: Array.isArray(oldState.earnedMilestoneIds) ? oldState.earnedMilestoneIds.map(String) : [],
+    seasonAwards: oldState.seasonAwards,
+    lastSeasonSummary: oldState.lastSeasonSummary,
     orgRoles: oldState.orgRoles ?? {},
     offseason:
       oldState.offseason ??

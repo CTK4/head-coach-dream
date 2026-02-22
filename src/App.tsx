@@ -53,6 +53,7 @@ import AssistantHiring from "./pages/hub/AssistantHiring";
 import Combine from "./pages/hub/Combine";
 import Tampering from "./pages/hub/Tampering";
 import PreDraft from "./pages/hub/PreDraft";
+import SkillTree from "@/pages/SkillTree";
 
 const queryClient = new QueryClient();
 
@@ -163,6 +164,7 @@ const App = () => (
                <Route path="/hub/combine" element={<Combine />} />
                <Route path="/hub/tampering" element={<Tampering />} />
                <Route path="/hub/pre-draft" element={<PreDraft />} />
+               <Route path="/skill-tree" element={<SkillTree />} />
 
                <Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} />
                <Route path="/contracts/cap-baseline" element={<Navigate to="/hub/cap-baseline" replace />} />

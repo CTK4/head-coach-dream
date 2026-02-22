@@ -10,6 +10,7 @@ import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
 import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
+import SeasonAwards from "@/pages/SeasonAwards";
 
 // Placeholder images - using simple colored gradients or specific placeholders from the list if available
 const IMAGES = {
@@ -23,6 +24,7 @@ const IMAGES = {
     resign: "/placeholders/depth_chart.png",
     trades: "/placeholders/strategy_meeting.png",
     injuryReport: "/placeholders/depth_chart.png",
+    development: "/placeholders/strategy_meeting.png",
 }
 
 
@@ -58,6 +60,10 @@ export default function Hub() {
   const showReSign = isReSignAllowed(state);
   const nextLabel = stageLabel(nextStage);
   const nextRoute = stageToRoute(nextStage);
+
+  if (state.careerStage === "SEASON_AWARDS") {
+    return <SeasonAwards />;
+  }
 
   function doAdvance() {
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
@@ -149,6 +155,15 @@ export default function Hub() {
                 {showTrades ? (
                   <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
                 ) : null}
+                <HubTile
+                    title="Coach Development"
+                    subtitle="Skill Tree"
+                    to="/skill-tree"
+                    imageUrl={IMAGES.development}
+                    badgeCount={Math.max(0, state.coach.perkPoints ?? 0)}
+                    badgeHint="Perk points available"
+                    badgeKind="info"
+                />
                 <HubTile
                     title="Injury Report"
                     subtitle="Health & Medical"
