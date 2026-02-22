@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { getPlayersByTeam, getTeams } from "@/data/leagueDb";
 import { mulberry32, hashSeed } from "@/engine/rng";
 import type { Injury, InjuryStatus, InjuryBodyArea, InjurySeverity } from "@/engine/injuryTypes";
+import { getRecurrenceRiskLevel } from "@/engine/injuryTypes";
 import { HubPanel } from "@/components/franchise-hub/HubPanel";
 import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -371,6 +372,15 @@ function InjuryDrawer({
                     <div className="text-slate-400 font-semibold">Total Recurrence</div>
                     <div className={`font-bold ${injury.recurrenceRisk >= 50 ? "text-red-300" : injury.recurrenceRisk >= 30 ? "text-orange-300" : "text-slate-100"}`}>
                       {injury.recurrenceRisk}%
+                    </div>
+                  </>
+                ) : null}
+                {injury.recurrenceMultiplier != null ? (
+                  <>
+                    <div className="text-slate-400">Recurrence Risk</div>
+                    <div className={`font-semibold ${injury.recurrenceMultiplier >= 1.5 ? "text-red-300" : injury.recurrenceMultiplier >= 1.2 ? "text-orange-300" : "text-emerald-300"}`}>
+                      {getRecurrenceRiskLevel(injury.recurrenceMultiplier)}
+                      {injury.chronic ? " (Chronic)" : ""}
                     </div>
                   </>
                 ) : null}

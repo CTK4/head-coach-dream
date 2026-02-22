@@ -1,6 +1,7 @@
 import { getTeamRosterPlayers } from "@/data/leagueDb";
 import type { GameState } from "../context/GameContext";
 import type { Injury, InjuryBodyArea, InjurySeverity, InjuryStatus } from "./injuryTypes";
+import { computeRecurrenceMultiplier, SOFT_TISSUE_TYPES } from "./injuryTypes";
 
 function fnv1a32(s: string): number {
   let h = 2166136261;
@@ -69,8 +70,8 @@ function durationWeeks(rng: () => number, def: InjuryDef, sev: InjurySeverity): 
   return a + Math.floor(rng() * (b - a + 1));
 }
 
-function shouldGenerateInjury(rng: () => number): boolean {
-  return rng() < 0.035;
+function shouldGenerateInjury(rng: () => number, recurrenceMultiplier = 1.0): boolean {
+  return rng() < 0.035 * recurrenceMultiplier;
 }
 
 function newInjuryId(seed: number, playerId: string, week: number): string {
@@ -121,12 +122,20 @@ export function resolveInjuries(state: GameState): GameState {
   for (const p of roster as any[]) {
     const playerId = String(p.playerId);
     if (byPlayer.has(playerId)) continue;
-    if (!shouldGenerateInjury(rng)) continue;
 
     const def = choose(rng, INJURY_DEFS);
+    const recMult = computeRecurrenceMultiplier(playerId, def.injuryType, currentWeek, existing);
+    if (!shouldGenerateInjury(rng, recMult)) continue;
+
     const sev = rollSeverity(rng);
     const weeks = durationWeeks(rng, def, sev);
     const expectedReturnWeek = sev === "SEASON_ENDING" ? undefined : currentWeek + weeks;
+
+    // Track chronic soft tissue injury flag
+    const priorSoftTissue = existing.filter(
+      (inj) => inj.playerId === playerId && SOFT_TISSUE_TYPES.has(inj.injuryType),
+    ).length;
+    const chronic = SOFT_TISSUE_TYPES.has(def.injuryType) && priorSoftTissue >= 1;
 
     additions.push({
       id: newInjuryId(seed, playerId, currentWeek),
@@ -144,6 +153,10 @@ export function resolveInjuries(state: GameState): GameState {
       rehabStage: "INITIAL",
       gamesMissed: 0,
       baseRisk: clamp(rng(), 0.05, 0.25),
+      occurredWeek: currentWeek,
+      recurrenceWindow: 8,
+      recurrenceMultiplier: 1.3,
+      chronic,
     });
   }
 
