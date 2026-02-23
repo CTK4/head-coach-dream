@@ -1,18 +1,21 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 type PlaceholderPlaybookProps = {
-  title: string;
-  system: string;
+  side: "Offense" | "Defense";
+  schemeId: string;
 };
 
-export default function PlaceholderPlaybook({ title, system }: PlaceholderPlaybookProps) {
+export default function PlaceholderPlaybook({ side, schemeId }: PlaceholderPlaybookProps) {
   return (
-    <div className="p-4 sm:p-6">
-      <div className="rounded-xl border border-dashed border-white/20 bg-white/5 p-4 sm:p-6">
-        <h3 className="text-sm font-semibold tracking-wide text-slate-100">{title}</h3>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Detailed diagrams for <span className="font-semibold text-slate-200">{system}</span> will be added in a
-          future update.
+    <Card className="m-4">
+      <CardHeader>
+        <CardTitle className="text-base">{side} Playbook Placeholder</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          Placeholder for <span className="font-mono text-slate-200">{schemeId}</span>. Paste your full playbook component into this file when ready.
         </p>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
