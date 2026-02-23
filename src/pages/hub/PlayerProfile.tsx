@@ -44,6 +44,7 @@ export default function PlayerProfile() {
   const contract = getContractSummaryForPlayer(state, playerId);
 
   const careerStats = state.playerCareerStatsById?.[playerId];
+  const careerSeasons = careerStats?.seasons ?? [];
 
   const offers = state.freeAgency.offersByPlayerId[playerId] ?? [];
   const hasUserOffer = offers.some((o) => o.isUser && o.status !== "WITHDRAWN");
@@ -103,13 +104,13 @@ export default function PlayerProfile() {
             <CardContent className="p-4">
               <Collapsible>
                 <CollapsibleTrigger asChild>
-                  <Button variant="outline" className="w-full justify-between">Career Stats <span>{(careerStats?.seasons ?? []).length} seasons</span></Button>
+                  <Button variant="outline" className="w-full justify-between">Career Stats <span>{careerSeasons.length} seasons</span></Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pt-3">
                   <Table>
                     <TableHeader><TableRow><TableHead>Season</TableHead><TableHead>Team</TableHead><TableHead>GP</TableHead><TableHead>Pass Yds</TableHead><TableHead>Rush Yds</TableHead><TableHead>Rec Yds</TableHead><TableHead>Sacks</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {(careerStats?.seasons ?? []).map((ss, idx) => (
+                      {careerSeasons.map((ss, idx) => (
                         <TableRow key={`${ss.season}-${idx}`}>
                           <TableCell>{ss.season}</TableCell><TableCell>{ss.teamId}</TableCell><TableCell>{ss.gamesPlayed}</TableCell><TableCell>{ss.passingYards ?? 0}</TableCell><TableCell>{ss.rushingYards ?? 0}</TableCell><TableCell>{ss.receivingYards ?? 0}</TableCell><TableCell>{ss.sacks ?? 0}</TableCell>
                         </TableRow>
