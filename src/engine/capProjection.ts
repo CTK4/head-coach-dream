@@ -106,6 +106,8 @@ export type YearProjection = {
   projectedCap: number;
   commitments: number;
   deadMoney: number;
+  projectedSpendNextYear: number;
+  availableCapSpace: number;
   /** Effective cap space = projectedCap − commitments − deadMoney */
   effectiveSpace: number;
   topHits: CapHitRow[];
@@ -146,8 +148,13 @@ export function buildCapProjection(
     }
 
     const deadMoney = sumDeadMoney(state, teamId, year);
-    const effectiveSpace = round50k(projectedCap - commitments - deadMoney);
+    const estimatedExtensions = allHits
+      .filter((h) => h.yearsRemaining <= 1)
+      .reduce((sum, h) => sum + Math.round(h.capHit * 0.2), 0);
+    const projectedSpendNextYear = round50k(commitments + estimatedExtensions);
+    const availableCapSpace = round50k(projectedCap - projectedSpendNextYear - deadMoney);
+    const effectiveSpace = availableCapSpace;
 
-    return { year, projectedCap, commitments, deadMoney, effectiveSpace, topHits };
+    return { year, projectedCap, commitments, deadMoney, projectedSpendNextYear, availableCapSpace, effectiveSpace, topHits };
   });
 }

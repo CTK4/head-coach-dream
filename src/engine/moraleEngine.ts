@@ -14,6 +14,8 @@ export type MoraleContext = {
   roleChanged?: boolean;
   strategyModeFit?: number;
   seed?: number;
+  playerRespect?: number;
+  lockerRoomCred?: number;
 };
 
 export type WeekStats = {
@@ -80,6 +82,12 @@ export function updateMorale(
   if (ctx.isContractYear) {
     modifiers.push({ label: "Contract year motivation", value: 5 });
   }
+
+  const respectImpact = clamp(((ctx.playerRespect ?? 50) - 50) * 0.08, -4, 4);
+  if (Math.abs(respectImpact) >= 1) modifiers.push({ label: "Coach respect", value: respectImpact });
+
+  const lockerImpact = clamp(((ctx.lockerRoomCred ?? 50) - 50) * 0.1, -5, 5);
+  if (Math.abs(lockerImpact) >= 1) modifiers.push({ label: "Locker room leadership", value: lockerImpact });
 
   // Strategy mode fit
   if (ctx.strategyModeFit != null) {

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // ──────────────────────────────────────────────────────────
 // Constants
@@ -143,6 +144,12 @@ export default function Development() {
   }
 
   // ── Player drawer ────────────────────────────────────────
+  const seasonDevDeltas = useMemo(() => {
+    const events = (state.memoryLog ?? []).filter((e) => e.type === "SEASON_DEVELOPMENT");
+    const latest = events.length ? (events[events.length - 1].payload as any) : null;
+    return (latest?.deltas ?? {}) as Record<string, number>;
+  }, [state.memoryLog]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedPlayer = useMemo(
     () => players.find((p) => p.playerId === selectedId) ?? null,
@@ -278,40 +285,35 @@ export default function Development() {
 
         {/* ── Player Progress ───────────────────────────── */}
         <TabsContent value="progress" className="p-4 space-y-2">
-          {players.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">No players found.</p>
-          ) : (
-            players.map((p) => {
-              const arrow = computeDevArrow(p);
-              const risk = computeDevRisk(p);
-              const moraleColor =
-                p.morale >= 80 ? "text-emerald-300" : p.morale >= 60 ? "text-slate-300" : "text-rose-400";
-              return (
-                <button
-                  key={p.playerId}
-                  onClick={() => setSelectedId(p.playerId)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.06]"
-                >
-                  <div className={`w-6 shrink-0 text-center text-xl font-bold ${DEV_ARROW_COLOR[arrow]}`}>{arrow}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{p.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {p.pos} · Age {p.age}
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    <div className="text-base font-extrabold text-emerald-300">{p.ovr}</div>
-                    <div className={`text-[10px] font-medium ${moraleColor}`}>M:{p.morale}</div>
-                  </div>
-                  {risk !== "LOW" ? (
-                    <Badge variant="outline" className={`shrink-0 px-1 py-0 text-[9px] ${RISK_CLASS[risk]}`}>
-                      {risk}
-                    </Badge>
-                  ) : null}
-                </button>
-              );
-            })
-          )}
+          <Card className="rounded-2xl border-white/10 bg-white/[0.04]">
+            <CardHeader className="pb-2"><CardTitle className="text-sm tracking-wider text-slate-300">SEASON DEVELOPMENT RESULTS</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Player</TableHead>
+                    <TableHead>Pos</TableHead>
+                    <TableHead>Projected</TableHead>
+                    <TableHead>Actual Δ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {players.map((p) => {
+                    const arrow = computeDevArrow(p, state.coach);
+                    const actual = Number(seasonDevDeltas[p.playerId] ?? 0);
+                    return (
+                      <TableRow key={p.playerId} onClick={() => setSelectedId(p.playerId)} className="cursor-pointer">
+                        <TableCell className="font-semibold">{p.name}</TableCell>
+                        <TableCell>{p.pos}</TableCell>
+                        <TableCell className={DEV_ARROW_COLOR[arrow]}>{arrow}</TableCell>
+                        <TableCell className={actual > 0 ? "text-emerald-300" : actual < 0 ? "text-rose-300" : "text-slate-300"}>{actual > 0 ? `+${actual}` : `${actual}`}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

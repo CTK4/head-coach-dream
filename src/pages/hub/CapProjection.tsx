@@ -23,6 +23,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { getPlayers } from "@/data/leagueDb";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -83,6 +85,34 @@ function SummaryCards({ proj }: { proj: YearProjection }) {
         </div>
       ))}
     </div>
+  );
+}
+
+
+function CapBreakdownChart({ proj }: { proj: YearProjection }) {
+  const data = [
+    { name: 'Committed', value: Math.round(proj.commitments / 1_000_000) },
+    { name: 'Dead', value: Math.round(proj.deadMoney / 1_000_000) },
+    { name: 'Next Yr Spend', value: Math.round(proj.projectedSpendNextYear / 1_000_000) },
+    { name: 'Space', value: Math.round(proj.availableCapSpace / 1_000_000) },
+  ];
+  return (
+    <Card className="bg-slate-900 border-white/10">
+      <CardHeader className="pb-2"><CardTitle className="text-sm text-slate-300">Cap Breakdown ({proj.year})</CardTitle></CardHeader>
+      <CardContent>
+        <ChartContainer
+          className="h-[220px] w-full"
+          config={{ committed: { label: 'Committed', color: '#38bdf8' }, dead: { label: 'Dead', color: '#f87171' }, next: { label: 'Next Yr Spend', color: '#fbbf24' }, space: { label: 'Space', color: '#34d399' } }}
+        >
+          <BarChart data={data}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="name" tickLine={false} axisLine={false} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar dataKey="value" fill="#38bdf8" radius={4} />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -509,6 +539,7 @@ export default function CapProjection() {
                 className="mt-4 space-y-4"
               >
                 <SummaryCards proj={proj} />
+                <CapBreakdownChart proj={proj} />
 
                 {/* ── Dead money note ── */}
                 {proj.deadMoney > 0 && (

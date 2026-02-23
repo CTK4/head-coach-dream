@@ -64,6 +64,37 @@ export type SideStats = {
 
 export type GameStats = { home: SideStats; away: SideStats };
 
+export type TeamBoxScore = {
+  teamId: string;
+  score: number;
+  passAttempts: number;
+  completions: number;
+  passYards: number;
+  rushAttempts: number;
+  rushYards: number;
+  turnovers: number;
+  sacks: number;
+  tds: number;
+};
+
+export type PlayerBoxScore = {
+  playerId: string;
+  side: Possession;
+  snaps: number;
+  passing: { attempts: number; completions: number; yards: number; tds: number; ints: number; sacksTaken: number };
+  rushing: { attempts: number; yards: number; tds: number };
+  receiving: { targets: number; receptions: number; yards: number; tds: number };
+};
+
+export type GameBoxScore = {
+  season: number;
+  week: number;
+  home: TeamBoxScore;
+  away: TeamBoxScore;
+  players: PlayerBoxScore[];
+  finalized: boolean;
+};
+
 // ─── Aggression / tempo ────────────────────────────────────────────────────
 export type AggressionLevel = "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
 export type TempoMode = "NORMAL" | "HURRY_UP";
@@ -115,6 +146,7 @@ export type GameSim = {
   tempo: TempoMode;
   /** Accumulated in-game stats */
   stats: GameStats;
+  boxScore?: GameBoxScore;
   /** Team ratings snapshot (set at game start) */
   homeRatings?: TeamGameRatings;
   awayRatings?: TeamGameRatings;
