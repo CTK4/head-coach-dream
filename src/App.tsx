@@ -54,6 +54,7 @@ import Combine from "./pages/hub/Combine";
 import Tampering from "./pages/hub/Tampering";
 import PreDraft from "./pages/hub/PreDraft";
 import SkillTree from "@/pages/SkillTree";
+import StatsPage from "./pages/hub/Stats";
 
 const queryClient = new QueryClient();
 
@@ -133,6 +134,7 @@ const App = () => (
               <Route path="/scouting/*" element={<Navigate to="/hub/scouting" replace />} />
               <Route path="/hub/offseason/*" element={<OffseasonRoutes />} />
               <Route path="/news" element={<LeagueNews />} />
+              <Route path="/hub/stats" element={<StatsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
               <Route path="/re-sign/*" element={<ReSignRoutes />} />

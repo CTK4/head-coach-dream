@@ -84,6 +84,18 @@ export type PlayerBoxScore = {
   passing: { attempts: number; completions: number; yards: number; tds: number; ints: number; sacksTaken: number };
   rushing: { attempts: number; yards: number; tds: number };
   receiving: { targets: number; receptions: number; yards: number; tds: number };
+  defense: { tackles: number; sacks: number; tfl: number; hurries: number; interceptionsDef: number; passDeflections: number; coverageGrade: number };
+  specialTeams: {
+    fieldGoalsMade: number;
+    fieldGoalAttempts: number;
+    fgMadeShort: number;
+    fgMadeMid: number;
+    fgMadeLong: number;
+    extraPointsMade: number;
+    punts: number;
+    puntYards: number;
+    puntsInside20: number;
+  };
 };
 
 export type GameBoxScore = {
