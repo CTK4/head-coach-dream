@@ -175,10 +175,17 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
 }
 
 export function getEffectivePlayers(state: GameState): any[] {
-  const base = getPlayers().map((p: any) => ({
-    ...p,
-    teamId: state.playerTeamOverrides[String(p.playerId)] ?? p.teamId,
-  }));
+  const base = getPlayers().map((p: any) => {
+    const playerId = String(p.playerId);
+    const delta = Number(state.playerAgingDeltasById?.[playerId] ?? 0);
+    const ageOffset = Number(state.playerAgeOffsetById?.[playerId] ?? 0);
+    return {
+      ...p,
+      overall: Math.max(40, Math.min(99, Number(p.overall ?? 60) + delta)),
+      age: Number(p.age ?? 22) + ageOffset,
+      teamId: state.playerTeamOverrides[playerId] ?? p.teamId,
+    };
+  });
 
   const rookies = (state.rookies ?? []).map((r: any) => ({
     playerId: r.playerId,

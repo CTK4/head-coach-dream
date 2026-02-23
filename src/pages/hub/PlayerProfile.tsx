@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -40,6 +42,8 @@ export default function PlayerProfile() {
   const isFA = !teamId || teamId.toUpperCase() === "FREE_AGENT" || String(p.status ?? "").toUpperCase() === "FREE_AGENT";
   const depth = getDepthSlotLabel(state, playerId);
   const contract = getContractSummaryForPlayer(state, playerId);
+
+  const careerStats = state.playerCareerStatsById?.[playerId];
 
   const offers = state.freeAgency.offersByPlayerId[playerId] ?? [];
   const hasUserOffer = offers.some((o) => o.isUser && o.status !== "WITHDRAWN");
@@ -95,6 +99,28 @@ export default function PlayerProfile() {
         </Card>
 
         <div className="mt-4 space-y-4">
+          <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
+            <CardContent className="p-4">
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">Career Stats <span>{(careerStats?.seasons ?? []).length} seasons</span></Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Season</TableHead><TableHead>Team</TableHead><TableHead>GP</TableHead><TableHead>Pass Yds</TableHead><TableHead>Rush Yds</TableHead><TableHead>Rec Yds</TableHead><TableHead>Sacks</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(careerStats?.seasons ?? []).map((ss, idx) => (
+                        <TableRow key={`${ss.season}-${idx}`}>
+                          <TableCell>{ss.season}</TableCell><TableCell>{ss.teamId}</TableCell><TableCell>{ss.gamesPlayed}</TableCell><TableCell>{ss.passingYards ?? 0}</TableCell><TableCell>{ss.rushingYards ?? 0}</TableCell><TableCell>{ss.receivingYards ?? 0}</TableCell><TableCell>{ss.sacks ?? 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+
           <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
             <CardHeader className="pb-2">
               <CardTitle className="text-base tracking-wide">CONTRACT</CardTitle>

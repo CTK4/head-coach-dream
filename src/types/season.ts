@@ -1,8 +1,10 @@
+export type PlayoffResult = "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion";
+
 export type SeasonSummary = {
   tenureYear: number;
   wins: number;
   losses: number;
-  playoffResult: "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion";
+  playoffResult: PlayoffResult;
   finalStanding: number;
   divisionWinner: boolean;
   offenseRank: number;

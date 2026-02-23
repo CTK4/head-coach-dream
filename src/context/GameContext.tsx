@@ -24,11 +24,22 @@ import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
-import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
+import {
+  initLeagueState,
+  initTeamStandings,
+  simulateWeek,
+  standingsToRecord,
+  type LeagueState,
+  type LeagueStatLeaders,
+  type WeekResult,
+} from "@/engine/leagueSim";
+import type { TeamStanding } from "@/engine/standings";
 import { checkMilestones } from "@/engine/milestones";
 import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { generateOffers } from "@/engine/offers";
-import { genFreeAgents } from "@/engine/offseasonGen";
+import { genFreeAgents, runLeagueAging } from "@/engine/offseasonGen";
+import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
+import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
 import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
@@ -88,6 +99,9 @@ import {
   type DraftSimState,
 } from "@/engine/draftSim";
 import type { SeasonSummary } from "@/types/season";
+import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
+import type { NewsItem as LeagueNewsItem } from "@/types/news";
+import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -258,6 +272,7 @@ export type OfferItem = {
 };
 export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
+export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
 const CURRENT_SAVE_VERSION = 3;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
@@ -500,6 +515,8 @@ export type GameState = {
     ageTier: string;
     hometown: string;
     archetypeId: string;
+    coachId?: string;
+    careerRecord?: CoachCareerRecord;
     hometownTeamId?: string;
     repBaseline?: number;
     autonomy?: number;
@@ -576,10 +593,22 @@ export type GameState = {
     regularSeasonWeek: number;
     schedule: LeagueSchedule | null;
   };
+  offseasonNews: LeagueNewsItem[];
+  newsHistory: LeagueNewsItem[];
+  retiredPlayers: RetiredPlayerRecord[];
+  playerAgingDeltasById: Record<string, number>;
+  playerAgeOffsetById: Record<string, number>;
   finances: TeamFinances;
   league: LeagueState;
+  currentStandings: TeamStanding[];
+  weeklyResults: WeekResult[];
+  leagueStatLeaders: LeagueStatLeaders;
   saveSeed: number;
   game: GameSim;
+  gameHistory: import("@/engine/gameSim").GameBoxScore[];
+  playerSeasonStatsById: Record<string, PlayerSeasonStats[]>;
+  playerCareerStatsById: Record<string, import("@/types/stats").PlayerCareerStats>;
+  leagueRecords: LeagueRecords;
   draft: DraftState;
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
@@ -740,7 +769,7 @@ export type GameAction =
   | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
   | { type: "ADD_NEWS_ITEM"; payload: { title: string; body?: string; category?: string } }
   | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
-  | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] } }
+  | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
   | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
   | { type: "ADVANCE_SEASON" }
   | { type: "DISMISS_SEASON_AWARDS" }
@@ -928,7 +957,7 @@ function createInitialState(): GameState {
   const saveSeed = Date.now();
 
   const base: GameState = {
-    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
+    coach: { name: "", ageTier: "32-35", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
     seasonHistory: [],
     earnedMilestoneIds: [],
     phase: "CREATE",
@@ -1003,6 +1032,11 @@ function createInitialState(): GameState {
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: defaultNews(2026), newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    offseasonNews: [],
+    newsHistory: [],
+    retiredPlayers: [],
+    playerAgingDeltasById: {},
+    playerAgeOffsetById: {},
     finances: {
       cap: 250_000_000,
       carryover: 0,
@@ -1016,8 +1050,15 @@ function createInitialState(): GameState {
       postJune1Sim: false,
     },
     league: initLeagueState(teams, saveSeed),
+    currentStandings: initTeamStandings(teams),
+    weeklyResults: [],
+    leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
     saveSeed,
     game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
+    gameHistory: [],
+    playerSeasonStatsById: {},
+    playerCareerStatsById: {},
+    leagueRecords: defaultLeagueRecords(),
     draft: {
       started: false,
       completed: false,
@@ -1637,6 +1678,71 @@ function computeFaInterest(state: GameState, p: any) {
   return clamp01(base);
 }
 
+function applyOffseasonAgingAndRetirement(state: GameState): GameState {
+  const alreadyProcessed = (state.memoryLog ?? []).some((e) => e.type === "LEAGUE_AGING" && Number(e.season) === Number(state.season));
+  if (alreadyProcessed) return state;
+
+  const teams = getTeams().filter((t) => t.isActive).map((t) => ({
+    teamId: String(t.teamId),
+    roster: getEffectivePlayersByTeam(state, String(t.teamId)).map((p: any) => ({
+      playerId: String(p.playerId),
+      fullName: String(p.fullName ?? p.name ?? "Unknown"),
+      pos: String(p.pos ?? "UNK"),
+      age: Number(p.age ?? 22),
+      overall: Number(p.overall ?? 60),
+    })),
+  }));
+
+  const { updatedTeams, retirees, agingDeltas } = runLeagueAging(teams);
+  const deltaById = { ...(state.playerAgingDeltasById ?? {}) };
+  const ageOffsetById = { ...(state.playerAgeOffsetById ?? {}) };
+  for (const d of agingDeltas) {
+    deltaById[d.playerId] = Number(deltaById[d.playerId] ?? 0) + Number(d.delta ?? 0);
+    ageOffsetById[d.playerId] = Number(ageOffsetById[d.playerId] ?? 0) + 1;
+  }
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  for (const r of retirees) playerTeamOverrides[String(r.playerId)] = "RETIRED";
+
+  const updatedById = new Map(updatedTeams.flatMap((t) => t.roster.map((p) => [String(p.playerId), p] as const)));
+  const rookies = state.rookies.map((r) => {
+    const aged = updatedById.get(String(r.playerId));
+    if (!aged) return r;
+    return { ...r, age: Number(aged.age ?? r.age), ovr: Number(aged.overall ?? r.ovr) };
+  });
+
+  const retiredPlayers = [
+    ...(state.retiredPlayers ?? []),
+    ...retirees.map((r) => ({
+      playerId: String(r.playerId),
+      name: String(r.fullName),
+      pos: String(r.pos ?? "UNK"),
+      age: Number(r.age ?? 0),
+      overall: Number(r.overall ?? 0),
+      season: Number(state.season),
+    })),
+  ];
+
+  const retirementNews = generateRetirementNews(retirees, {
+    week: 0,
+    season: Number(state.season),
+    userTeamId: String(state.acceptedOffer?.teamId ?? ""),
+  });
+
+  return {
+    ...state,
+    rookies,
+    playerTeamOverrides,
+    playerAgingDeltasById: deltaById,
+    playerAgeOffsetById: ageOffsetById,
+    retiredPlayers,
+    offseasonNews: [...retirementNews, ...(state.offseasonNews ?? [])].slice(0, 300),
+    newsHistory: appendNewsHistory(state.newsHistory ?? [], retirementNews),
+    hub: { ...state.hub, news: state.hub.news },
+    memoryLog: addMemoryEvent(state, "LEAGUE_AGING", { retirees: retirees.length, deltas: agingDeltas.length }),
+  };
+}
+
 function resetFaPhase(state: GameState): GameState {
   return {
     ...state,
@@ -1754,6 +1860,15 @@ function pushNews(state: GameState, line: string): GameState {
 function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
   const news = [makeNewsItem(item.title, { body: item.body, category: item.category }), ...(state.hub.news ?? [])].slice(0, 200);
   return { ...state, hub: { ...state.hub, news } };
+}
+
+function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number): LeagueNewsItem[] {
+  const context = { week: Number(week), season: Number(state.season), userTeamId: String(state.acceptedOffer?.teamId ?? "") };
+  const injuryNews = generateInjuryNews(state.injuries ?? [], context);
+  const transactionNews = generateTransactionNews((state.transactions ?? []).filter((t) => Number(t.week ?? week) === Number(week)).slice(0, 8), context);
+  const gameNews = generateGameResultNews(weekResult.allGameResults, context);
+  const milestoneNews = generateMilestoneNews(weekResult.statLeaders, context);
+  return appendNewsHistory(state.newsHistory ?? [], [...gameNews, ...injuryNews, ...transactionNews, ...milestoneNews]);
 }
 
 function ensureAccolades(state: GameState): GameState {
@@ -3155,7 +3270,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
       if (nextStage === "DRAFT") next = ensureDraftInitialized(next);
-      if (nextStage === "FREE_AGENCY") next = seedUserAutoFaOffersFromPriorities(resetFaPhase(clearResignOffers(next)));
+      if (nextStage === "FREE_AGENCY") next = seedUserAutoFaOffersFromPriorities(resetFaPhase(clearResignOffers(applyOffseasonAgingAndRetirement(next))));
       if (next.season !== state.season) {
         next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
         next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
@@ -3186,24 +3301,69 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
     case "EXECUTE_TRADE": {
-      const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds } = action.payload;
+      const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds, outgoingPicks = [], incomingPicks = [], valueDelta = 0 } = action.payload;
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
       const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
+
       const overrides = { ...(state.playerTeamOverrides ?? {}) };
       for (const pid of outgoingPlayerIds) overrides[String(pid)] = String(teamB);
       for (const pid of incomingPlayerIds) overrides[String(pid)] = String(teamA);
 
+      const nextSlots = (state.draft?.slots ?? []).map((slot: any) => {
+        let teamId = String(slot.teamId ?? "");
+        for (const p of outgoingPicks) {
+          if (Number(slot.round) === Number(p.round) && String(slot.originalTeamId) === String(p.originalTeamId) && teamId === String(teamA)) {
+            teamId = String(teamB);
+          }
+        }
+        for (const p of incomingPicks) {
+          if (Number(slot.round) === Number(p.round) && String(slot.originalTeamId) === String(p.originalTeamId) && teamId === String(teamB)) {
+            teamId = String(teamA);
+          }
+        }
+        return { ...slot, teamId };
+      });
+
+      const capDeltaA = tradeCapDelta(state, outgoingPlayerIds, incomingPlayerIds);
       const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
       const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
-      const next = { ...state, playerTeamOverrides: overrides } as GameState;
-      return addNews(next, {
-        title: "Trade Completed",
-        body: `${teamAName} traded ${outgoingPlayerIds.length} player(s) with ${teamBName} and received ${incomingPlayerIds.length} player(s).`,
-        category: "TRADES",
-      });
+      const syntheticTx = {
+        id: `TX_${Date.now()}`,
+        type: "TRADE" as const,
+        playerId: String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? "NONE"),
+        playerName: String(getPersonnelById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.fullName ?? "Multiple Players"),
+        playerPos: String(getPersonnelById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.pos ?? "UNK"),
+        fromTeamId: String(teamA),
+        toTeamId: String(teamB),
+        season: Number(state.season),
+        week: currentWeek,
+        june1Designation: "NONE" as const,
+        notes: `Players ${outgoingPlayerIds.length} for ${incomingPlayerIds.length}`,
+        deadCapThisYear: 0,
+        deadCapNextYear: 0,
+        remainingProration: 0,
+      };
+      const txNews = generateTransactionNews([syntheticTx], { week: currentWeek, season: Number(state.season), userTeamId: String(teamA) });
+      const gmRelationship = Math.max(0, Math.min(100, Number(state.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
+
+      return {
+        ...state,
+        playerTeamOverrides: overrides,
+        transactions: [...(state.transactions ?? []), syntheticTx],
+        draft: { ...state.draft, slots: nextSlots },
+        newsHistory: appendNewsHistory(state.newsHistory ?? [], txNews),
+        coach: { ...state.coach, gmRelationship },
+        finances: {
+          ...state.finances,
+          capCommitted: Math.max(0, Number(state.finances.capCommitted ?? 0) + Math.round(capDeltaA)),
+          capSpace: Math.max(0, Number(state.finances.capSpace ?? 0) - Math.round(capDeltaA)),
+        },
+        uiToast: `${teamAName} completed a trade with ${teamBName}.`,
+        tradeError: undefined,
+      };
     }
     case "EXTEND_PLAYER": {
       const { playerId, years, apy, signingBonus, guaranteedAtSigning } = action.payload;
@@ -3599,7 +3759,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
-      if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
+      if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(applyOffseasonAgingAndRetirement(next)));
       if (nextStep === "TRAINING_CAMP") next = applySeasonDevelopment(next);
       return next;
     }
@@ -5536,7 +5696,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const schedule = state.hub.schedule;
       if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
 
-      const league = simulateLeagueWeek({
+      const weekResult = simulateWeek({
         schedule,
         gameType: state.game.weekType,
         week: state.game.weekNumber,
@@ -5544,8 +5704,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         userAwayTeamId: state.game.awayTeamId,
         userScore: { homeScore: state.game.homeScore, awayScore: state.game.awayScore },
         seed: state.saveSeed,
-        league: state.league,
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
       });
+      const league = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType: state.game.weekType as GameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: Number(state.game.weekNumber) + 1,
+      };
 
       const hub =
         state.game.weekType === "PRESEASON"
@@ -5559,6 +5729,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           return {
             ...nextWithPractice,
             league,
+            currentStandings: weekResult.updatedStandings,
+            weeklyResults: [...state.weeklyResults, weekResult],
+            leagueStatLeaders: weekResult.statLeaders,
+            newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
             hub: { ...hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
             offseason: {
               ...nextWithPractice.offseason,
@@ -5571,9 +5745,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
+      const finalizedBox = (stepped.sim as any).boxScore;
       let nextState = {
         ...nextWithPractice,
         league,
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
+        gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
         hub,
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
@@ -5605,23 +5785,41 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const matchup = getTeamMatchup(weekSchedule, teamId);
       if (!matchup) return state;
 
-      const league = simulateLeagueWeek({
+      const weekResult = simulateWeek({
         schedule,
         gameType,
         week,
         userHomeTeamId: matchup.homeTeamId,
         userAwayTeamId: matchup.awayTeamId,
-        userScore: { homeScore: 0, awayScore: 0 },
         seed: state.saveSeed + week * 1013 + (gameType === "PRESEASON" ? 17 : 31),
-        league: state.league,
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
       });
+      const league = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: week + 1,
+      };
 
       const hub =
         gameType === "PRESEASON"
           ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
           : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
 
-      let out = { ...state, league, hub, playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}) };
+      let out = {
+        ...state,
+        league,
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, week),
+        hub,
+        playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
+      };
       const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
       if (!appliedAdvance.applied) return state;
       out = appliedAdvance.state;
@@ -5648,6 +5846,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           });
           out = { ...out, league: { ...out.league, postseason } };
           out = applySeasonMilestoneAwards(out);
+          const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
+          const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
+          const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
+          for (const ps of seasonStats) {
+            const pid = String((ps as any).playerId ?? "");
+            if (!pid) continue;
+            nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
+          }
+          const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
+          const careerById = { ...(out.playerCareerStatsById ?? {}) };
+          for (const ps of seasonStats) {
+            const pid = String((ps as any).playerId ?? "");
+            if (!pid) continue;
+            const cur = { playerId: pid, careerStats: careerById[pid] };
+            const updated = finalizeCareerStats(cur, ps);
+            careerById[pid] = updated.careerStats;
+          }
+          out = { ...out, coach: coachWithCareer, playerSeasonStatsById: nextSeasonStatsById, playerCareerStatsById: careerById, leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord) };
           const nextSeason = Number(out.season ?? 2026) + 1;
           const teams = getTeams()
             .filter((t) => t.isActive)
@@ -5802,6 +6018,11 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
       regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
     },
+    offseasonNews: [],
+    newsHistory: Array.isArray((oldState as any).newsHistory) ? (oldState as any).newsHistory : [],
+    retiredPlayers: Array.isArray((oldState as any).retiredPlayers) ? (oldState as any).retiredPlayers : [],
+    playerAgingDeltasById: { ...((oldState as any).playerAgingDeltasById ?? {}) },
+    playerAgeOffsetById: { ...((oldState as any).playerAgeOffsetById ?? {}) },
     finances:
       (oldState as any).finances ??
       {
@@ -5882,6 +6103,11 @@ function loadState(): GameState {
       coach: { ...initial.coach, ...migrated.coach },
       interviews: { ...initial.interviews, ...migrated.interviews },
       hub: { ...initial.hub, ...migrated.hub },
+      offseasonNews: Array.isArray((migrated as any).offseasonNews) ? (migrated as any).offseasonNews : [],
+      newsHistory: Array.isArray((migrated as any).newsHistory) ? (migrated as any).newsHistory : [],
+      retiredPlayers: Array.isArray((migrated as any).retiredPlayers) ? (migrated as any).retiredPlayers : [],
+      playerAgingDeltasById: { ...(initial.playerAgingDeltasById ?? {}), ...((migrated as any).playerAgingDeltasById ?? {}) },
+      playerAgeOffsetById: { ...(initial.playerAgeOffsetById ?? {}), ...((migrated as any).playerAgeOffsetById ?? {}) },
       finances: { ...initial.finances, ...(migrated as any).finances },
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
@@ -5944,6 +6170,10 @@ function loadState(): GameState {
       },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
+      gameHistory: Array.isArray((migrated as any).gameHistory) ? (migrated as any).gameHistory : [],
+      playerSeasonStatsById: { ...(initial.playerSeasonStatsById ?? {}), ...((migrated as any).playerSeasonStatsById ?? {}) },
+      playerCareerStatsById: { ...(initial.playerCareerStatsById ?? {}), ...((migrated as any).playerCareerStatsById ?? {}) },
+      leagueRecords: { ...defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
       draft: { ...initial.draft, ...migrated.draft },
       rookies: migrated.rookies ?? initial.rookies,
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },

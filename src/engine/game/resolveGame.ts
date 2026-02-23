@@ -37,6 +37,26 @@ function mkPlayer(side: "HOME" | "AWAY", idx: number, playerId: string, share: n
       yards: Math.max(0, Math.round(teamStats.passYards * receiveShare)),
       tds: Math.max(0, Math.round(teamStats.tds * (receiveShare * 0.45))),
     },
+    defense: {
+      tackles: Math.max(0, Math.round(3 + share * 7)),
+      sacks: Math.max(0, Number((teamStats.sacks * (idx === 0 ? 0.5 : idx === 1 ? 0.3 : 0.2)).toFixed(1))),
+      tfl: Math.max(0, Math.round(1 + share * 3)),
+      hurries: Math.max(0, Math.round(2 + share * 4)),
+      interceptionsDef: Math.max(0, Math.round(teamStats.turnovers * 0.2 * (idx === 0 ? 0.5 : 0.25))),
+      passDeflections: Math.max(0, Math.round(1 + share * 2)),
+      coverageGrade: Math.max(40, Math.min(95, Math.round(65 + share * 12))),
+    },
+    specialTeams: {
+      fieldGoalsMade: idx === 0 ? Math.max(0, Math.round(teamStats.score / 10)) : 0,
+      fieldGoalAttempts: idx === 0 ? Math.max(0, Math.round(teamStats.score / 9)) : 0,
+      fgMadeShort: idx === 0 ? Math.max(0, Math.round(teamStats.score / 18)) : 0,
+      fgMadeMid: idx === 0 ? Math.max(0, Math.round(teamStats.score / 22)) : 0,
+      fgMadeLong: idx === 0 ? Math.max(0, Math.round(teamStats.score / 30)) : 0,
+      extraPointsMade: idx === 0 ? Math.max(0, Math.round(teamStats.tds)) : 0,
+      punts: idx === 1 ? Math.max(0, Math.round((teamStats.passAttempts + teamStats.rushAttempts) / 20)) : 0,
+      puntYards: idx === 1 ? Math.max(0, Math.round((teamStats.passAttempts + teamStats.rushAttempts) / 20) * 44) : 0,
+      puntsInside20: idx === 1 ? Math.max(0, Math.round((teamStats.passAttempts + teamStats.rushAttempts) / 40)) : 0,
+    },
   };
 }
 
