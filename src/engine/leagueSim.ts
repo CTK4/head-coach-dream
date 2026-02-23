@@ -151,6 +151,17 @@ function topName(teamId: string, positions: string[]) {
   return String(top?.fullName ?? `${teamId} Starter`);
 }
 
+function topNames(teamId: string, positions: string[], count = 2) {
+  const picks = getTeamRosterPlayers(teamId)
+    .filter((p) => positions.includes(String(p.pos ?? "").toUpperCase()))
+    .sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0))
+    .slice(0, count)
+    .map((p, idx) => String(p?.fullName ?? `${teamId} ${idx === 0 ? "Starter" : "Backup"}`));
+
+  while (picks.length < count) picks.push(`${teamId} ${picks.length === 0 ? "Starter" : "Backup"}`);
+  return picks;
+}
+
 export function simulateAIGame(homeTeamId: string, awayTeamId: string, seed: number, week: number): AIGameResult {
   const rand = mulberry32(seed ^ hashMatchup({ homeTeamId, awayTeamId }));
   const homeRating = teamStrength(homeTeamId);
@@ -207,17 +218,31 @@ export function computeLeagueStatLeaders(results: AIGameResult[]): LeagueStatLea
     map.set(key, { ...row, value: Number((row.value + Number(cur?.value ?? 0)).toFixed(1)) });
   };
 
+  const addTeamYards = (
+    teamId: string,
+    passingYards: number,
+    rushingYards: number,
+    receivingLeader: { playerName: string; value: number },
+    sackLeader: { playerName: string; value: number },
+  ) => {
+    const [qb1, qb2] = topNames(teamId, ["QB"]);
+    const [rb1, rb2] = topNames(teamId, ["RB", "HB"]);
+    const [wr1, wr2] = topNames(teamId, ["WR", "TE"]);
+
+    add(pass, `${qb1}:${teamId}`, { playerName: qb1, teamId, value: Math.round(passingYards * 0.65) });
+    add(pass, `${qb2}:${teamId}`, { playerName: qb2, teamId, value: Math.round(passingYards * 0.25) });
+
+    add(rush, `${rb1}:${teamId}:r`, { playerName: rb1, teamId, value: Math.round(rushingYards * 0.65) });
+    add(rush, `${rb2}:${teamId}:r`, { playerName: rb2, teamId, value: Math.round(rushingYards * 0.25) });
+
+    add(recv, `${receivingLeader.playerName}:${teamId}`, { playerName: receivingLeader.playerName || wr1, teamId, value: Math.round(passingYards * 0.65) });
+    add(recv, `${wr2}:${teamId}`, { playerName: wr2, teamId, value: Math.round(passingYards * 0.25) });
+    add(sacks, `${sackLeader.playerName}:${teamId}`, { playerName: sackLeader.playerName, teamId, value: sackLeader.value });
+  };
+
   for (const g of results) {
-    add(pass, `${g.homeHeadline.playerName}:${g.homeTeamId}`, { playerName: g.homeHeadline.playerName, teamId: g.homeTeamId, value: g.homeHeadline.type === "PASS" ? g.homeHeadline.value : Math.round(g.homePassingYards * 0.65) });
-    add(pass, `${g.awayHeadline.playerName}:${g.awayTeamId}`, { playerName: g.awayHeadline.playerName, teamId: g.awayTeamId, value: g.awayHeadline.type === "PASS" ? g.awayHeadline.value : Math.round(g.awayPassingYards * 0.65) });
-
-    add(rush, `${g.homeHeadline.playerName}:${g.homeTeamId}:r`, { playerName: g.homeHeadline.type === "RUSH" ? g.homeHeadline.playerName : topName(g.homeTeamId, ["RB", "HB"]), teamId: g.homeTeamId, value: g.homeHeadline.type === "RUSH" ? g.homeHeadline.value : Math.round(g.homeRushingYards * 0.65) });
-    add(rush, `${g.awayHeadline.playerName}:${g.awayTeamId}:r`, { playerName: g.awayHeadline.type === "RUSH" ? g.awayHeadline.playerName : topName(g.awayTeamId, ["RB", "HB"]), teamId: g.awayTeamId, value: g.awayHeadline.type === "RUSH" ? g.awayHeadline.value : Math.round(g.awayRushingYards * 0.65) });
-
-    add(recv, `${g.homeReceivingLeader.playerName}:${g.homeTeamId}`, { playerName: g.homeReceivingLeader.playerName, teamId: g.homeTeamId, value: g.homeReceivingLeader.value });
-    add(recv, `${g.awayReceivingLeader.playerName}:${g.awayTeamId}`, { playerName: g.awayReceivingLeader.playerName, teamId: g.awayTeamId, value: g.awayReceivingLeader.value });
-    add(sacks, `${g.homeSackLeader.playerName}:${g.homeTeamId}`, { playerName: g.homeSackLeader.playerName, teamId: g.homeTeamId, value: g.homeSackLeader.value });
-    add(sacks, `${g.awaySackLeader.playerName}:${g.awayTeamId}`, { playerName: g.awaySackLeader.playerName, teamId: g.awayTeamId, value: g.awaySackLeader.value });
+    addTeamYards(g.homeTeamId, g.homePassingYards, g.homeRushingYards, g.homeReceivingLeader, g.homeSackLeader);
+    addTeamYards(g.awayTeamId, g.awayPassingYards, g.awayRushingYards, g.awayReceivingLeader, g.awaySackLeader);
   }
 
   const top = (map: Map<string, { playerName: string; teamId: string; value: number }>) => Array.from(map.values()).sort((a, b) => b.value - a.value).slice(0, 5);
