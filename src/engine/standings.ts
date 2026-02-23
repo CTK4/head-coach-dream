@@ -32,8 +32,12 @@ function resultForTeam(game: AIGameResult, teamId: string): "W" | "L" | "T" {
   return "T";
 }
 
+function divisionPct(s: TeamStanding) {
+  return pct(s.divisionRecord.w, s.divisionRecord.l, s.divisionRecord.t);
+}
+
 function sortConference(a: TeamStanding, b: TeamStanding) {
-  return b.winPct - a.winPct || (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) || b.pointsFor - a.pointsFor || a.teamName.localeCompare(b.teamName);
+  return b.winPct - a.winPct || divisionPct(b) - divisionPct(a) || (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) || b.pointsFor - a.pointsFor || a.teamName.localeCompare(b.teamName);
 }
 
 export function computeStandings(allGameResults: AIGameResult[], previousStandings: TeamStanding[]): TeamStanding[] {
