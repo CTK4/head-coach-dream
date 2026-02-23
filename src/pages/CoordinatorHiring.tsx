@@ -183,8 +183,15 @@ export default function CoordinatorHiring() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
-                  <Button size="sm" variant="outline" onClick={() => hire(p.personId, salary)} disabled={roleFilled || salary > remainingBudget}>
-                    Offer {money(salary)} {emergency ? "(Emergency)" : safety ? "(Safety)" : ""}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => hire(p.personId, salary)}
+                    disabled={roleFilled || salary > remainingBudget}
+                    title={`Send ${money(salary)} offer${emergency ? " (Emergency)" : safety ? " (Safety)" : ""}`}
+                    aria-label={`Send ${money(salary)} offer to ${String(p.fullName ?? "Coach")}${emergency ? " (Emergency)" : safety ? " (Safety)" : ""}`}
+                  >
+                    Send {money(salary)} {emergency ? "(Emergency)" : safety ? "(Safety)" : ""}
                   </Button>
                 </div>
               </div>
@@ -199,4 +206,3 @@ export default function CoordinatorHiring() {
 
   return wrapInShell ? <HubShell title="HIRE COORDINATORS">{content}</HubShell> : <div className="p-4 md:p-8">{content}</div>;
 }
-
