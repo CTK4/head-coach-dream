@@ -291,7 +291,13 @@ export default function AssistantHiring() {
                     </div>
                   </div>
                 </div>
-                <Button onClick={() => attemptHire(c.p.personId, c.salary)}>Offer {money(c.salary)}</Button>
+                <Button
+                  onClick={() => attemptHire(c.p.personId, c.salary)}
+                  title={`Send ${money(c.salary)} offer`}
+                  aria-label={`Send ${money(c.salary)} offer to ${String(c.p.fullName ?? "Coach")}`}
+                >
+                  Send {money(c.salary)}
+                </Button>
               </CardContent>
             </Card>
           ))}
