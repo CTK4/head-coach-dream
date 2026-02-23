@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { GameProvider, useGame } from "@/context/GameContext";
 import CreateCoach from "./pages/CreateCoach";
 import ChooseBackground from "./pages/ChooseBackground";
@@ -31,28 +31,14 @@ import InSeasonScouting from "@/pages/hub/scouting/InSeasonScouting";
 import { FreeAgencyRoutes, ProspectProfileScreen, ReSignRoutes, TradesRoutes } from "@/pages/hub/PhaseSubsystemRoutes";
 
 // Import other pages that might be needed or were present
-import Draft from "@/pages/hub/offseason/Draft";
 import DraftResults from "@/pages/hub/DraftResults";
 import FreeAgencyRecap from "@/pages/hub/FreeAgencyRecap";
-import TrainingCamp from "./pages/hub/TrainingCamp";
-import Cutdowns from "./pages/hub/Cutdowns";
 import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
 import Playcall from "./pages/Playcall";
-import PlayerProfile from "./pages/hub/PlayerProfile";
 import TradesPage from "./pages/hub/Trades";
 import ReSignPage from "./pages/hub/ReSign";
-import CapProjection from "@/pages/hub/CapProjection";
-import TagCenter from "./pages/hub/TagCenter";
-import DeadMoney from "./pages/hub/DeadMoney";
-import Development from "./pages/hub/Development";
-import InjuryReport from "./pages/hub/InjuryReport";
 import CapBaseline from "./pages/hub/CapBaseline";
-import RosterAudit from "./pages/hub/RosterAudit";
-import AssistantHiring from "./pages/hub/AssistantHiring";
-import Combine from "./pages/hub/Combine";
-import Tampering from "./pages/hub/Tampering";
-import PreDraft from "./pages/hub/PreDraft";
 import SkillTree from "@/pages/SkillTree";
 import StatsPage from "./pages/hub/Stats";
 
@@ -62,11 +48,11 @@ function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; req
   const { state } = useGame();
   if (!requiredPhase.includes(state.phase)) {
     const phaseRoutes: Record<string, string> = {
-      CREATE: "/",
-      BACKGROUND: "/background",
-      INTERVIEWS: "/interviews",
-      OFFERS: "/offers",
-      COORD_HIRING: "/coordinators",
+      CREATE: "/onboarding",
+      BACKGROUND: "/onboarding/background",
+      INTERVIEWS: "/onboarding/interviews",
+      OFFERS: "/onboarding/offers",
+      COORD_HIRING: "/onboarding/coordinators",
       HUB: "/hub",
     };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
@@ -78,15 +64,32 @@ function HubGate({ children }: { children: React.ReactNode }) {
   const { state } = useGame();
   if (state.phase !== "HUB") {
     const phaseRoutes: Record<string, string> = {
-      CREATE: "/",
-      BACKGROUND: "/background",
-      INTERVIEWS: "/interviews",
-      OFFERS: "/offers",
-      COORD_HIRING: "/coordinators",
+      CREATE: "/onboarding",
+      BACKGROUND: "/onboarding/background",
+      INTERVIEWS: "/onboarding/interviews",
+      OFFERS: "/onboarding/offers",
+      COORD_HIRING: "/onboarding/coordinators",
     };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
   return <>{children}</>;
+}
+
+function LegacyHubScoutingRedirect() {
+  const params = useParams();
+  const suffix = params["*"] ? `/${params["*"]}` : "";
+  return <Navigate to={`/scouting${suffix}`} replace />;
+}
+
+function LegacyHubOffseasonRedirect() {
+  const params = useParams();
+  const suffix = params["*"] ? `/${params["*"]}` : "";
+  return <Navigate to={`/offseason${suffix}`} replace />;
+}
+
+function LegacyHubPlayerRedirect() {
+  const { playerId } = useParams();
+  return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />;
 }
 
 // Scouting Routes Wrapper
@@ -99,7 +102,7 @@ function ScoutingRoutes() {
                 <Route path="combine" element={<ScoutingCombine />} />
                 <Route path="prospect/:prospectId" element={<ProspectProfileScreen />} />
                 <Route path="private-workouts" element={<PrivateWorkouts />} />
-                <Route path="workouts" element={<PrivateWorkouts />} />
+                <Route path="workouts" element={<Navigate to="/scouting/private-workouts" replace />} />
                 <Route path="interviews" element={<ScoutingInterviews />} />
                 <Route path="medical" element={<MedicalBoard />} />
                 <Route path="allocation" element={<ScoutAllocation />} />
@@ -117,11 +120,17 @@ const App = () => (
       <GameProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
-            <Route path="/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
-            <Route path="/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
-            <Route path="/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
-            <Route path="/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
+            <Route path="/onboarding" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
+            <Route path="/onboarding/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
+            <Route path="/onboarding/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
+            <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
+            <Route path="/onboarding/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
+
+            <Route path="/" element={<Navigate to="/onboarding" replace />} />
+            <Route path="/background" element={<Navigate to="/onboarding/background" replace />} />
+            <Route path="/interviews" element={<Navigate to="/onboarding/interviews" replace />} />
+            <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />
+            <Route path="/coordinators" element={<Navigate to="/onboarding/coordinators" replace />} />
 
             {/* Hub Routes wrapped in AppShell and HubGate */}
             <Route element={<HubGate><AppShell /></HubGate>}>
@@ -130,9 +139,10 @@ const App = () => (
               <Route path="/roster/*" element={<RosterRoutes />} />
               <Route path="/contracts/*" element={<ContractsRoutes />} />
               <Route path="/strategy/*" element={<StrategyRoutes />} />
-              <Route path="/hub/scouting/*" element={<ScoutingRoutes />} />
-              <Route path="/scouting/*" element={<Navigate to="/hub/scouting" replace />} />
-              <Route path="/hub/offseason/*" element={<OffseasonRoutes />} />
+              <Route path="/scouting/*" element={<ScoutingRoutes />} />
+              <Route path="/hub/scouting/*" element={<LegacyHubScoutingRedirect />} />
+              <Route path="/offseason/*" element={<OffseasonRoutes />} />
+              <Route path="/hub/offseason/*" element={<LegacyHubOffseasonRedirect />} />
               <Route path="/news" element={<LeagueNews />} />
               <Route path="/hub/stats" element={<StatsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
@@ -146,31 +156,31 @@ const App = () => (
               <Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
               
               {/* Other legacy/specific routes that might not fit the main buckets yet but need to be accessible */}
-               <Route path="/hub/draft" element={<Draft />} />
+               <Route path="/hub/draft" element={<Navigate to="/offseason/draft" replace />} />
                <Route path="/hub/draft-results" element={<DraftResults />} />
                <Route path="/hub/free-agency-recap" element={<FreeAgencyRecap />} />
-               <Route path="/hub/training-camp" element={<TrainingCamp />} />
-               <Route path="/hub/cutdowns" element={<Cutdowns />} />
+               <Route path="/hub/training-camp" element={<Navigate to="/offseason/training-camp" replace />} />
+               <Route path="/hub/cutdowns" element={<Navigate to="/offseason/cutdowns" replace />} />
                <Route path="/hub/preseason" element={<PreseasonWeek />} />
                <Route path="/hub/regular-season" element={<RegularSeason />} />
                <Route path="/hub/playcall" element={<Playcall />} />
-               <Route path="/hub/player/:playerId" element={<PlayerProfile />} />
-               <Route path="/hub/cap-projection" element={<CapProjection />} />
-               <Route path="/hub/tag-center" element={<TagCenter />} />
-               <Route path="/hub/dead-money" element={<DeadMoney />} />
-               <Route path="/hub/development" element={<Development />} />
-               <Route path="/hub/injury-report" element={<InjuryReport />} />
-               <Route path="/hub/cap-baseline" element={<CapBaseline />} />
-               <Route path="/hub/roster-audit" element={<RosterAudit />} />
-               <Route path="/hub/assistant-hiring" element={<AssistantHiring />} />
-               <Route path="/hub/combine" element={<Combine />} />
-               <Route path="/hub/tampering" element={<Tampering />} />
-               <Route path="/hub/pre-draft" element={<PreDraft />} />
+               <Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} />
+               <Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} />
+               <Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} />
+               <Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} />
+               <Route path="/hub/development" element={<Navigate to="/roster/development" replace />} />
+               <Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} />
+               <Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} />
+               <Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} />
+               <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
+               <Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} />
+               <Route path="/hub/tampering" element={<Navigate to="/offseason/tampering" replace />} />
+               <Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} />
                <Route path="/skill-tree" element={<SkillTree />} />
 
                <Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} />
-               <Route path="/contracts/cap-baseline" element={<Navigate to="/hub/cap-baseline" replace />} />
-               <Route path="/contracts/roster-audit" element={<Navigate to="/hub/roster-audit" replace />} />
+               <Route path="/contracts/cap-baseline" element={<CapBaseline />} />
+               <Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} />
                <Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
             </Route>
 

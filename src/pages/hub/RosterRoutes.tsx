@@ -12,10 +12,11 @@ export default function RosterRoutes() {
       <Route index element={<Navigate to="depth-chart" replace />} />
       <Route path="depth-chart" element={<DepthChart />} />
       <Route path="players" element={<RosterPlayers />} />
-      <Route path="injuries" element={<InjuryReport />} />
+      <Route path="injury-report" element={<InjuryReport />} />
+      <Route path="injuries" element={<Navigate to="/roster/injury-report" replace />} />
       <Route path="development" element={<Development />} />
       <Route path="player/:playerId" element={<PlayerProfile />} />
-      <Route path="needs" element={<RosterAudit />} />
+      <Route path="needs" element={<Navigate to="/roster/audit" replace />} />
       <Route path="audit" element={<RosterAudit />} />
       <Route path="*" element={<Navigate to="depth-chart" replace />} />
     </Routes>

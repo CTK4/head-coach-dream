@@ -74,7 +74,7 @@ const Offers = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-6 text-center">
             <p className="text-lg">No offers yet. Complete all interviews first.</p>
-            <Button onClick={() => navigate("/interviews")} className="mt-4">Back to Interviews</Button>
+            <Button onClick={() => navigate("/onboarding/interviews")} className="mt-4">Back to Interviews</Button>
           </CardContent>
         </Card>
       </div>
