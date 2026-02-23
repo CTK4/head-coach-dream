@@ -73,6 +73,8 @@ export function deriveTeamContext(opts: {
   capUsed?: number;
   winPct?: number;
   gmMode?: "REBUILD" | "RELOAD" | "CONTEND";
+  gmRelationship?: number;
+  leaguePrestige?: number;
 }): TeamContext {
   const capTotal = opts.capTotal ?? 200_000_000;
   const capUsed = opts.capUsed ?? 150_000_000;
@@ -104,7 +106,7 @@ export function decideTrade(opts: {
   userTeamId: string;
   partnerTeamId: string;
   pkg: TradePackage;
-  teamContext?: Partial<TeamContext>;
+  teamContext?: Partial<TeamContext> & { gmRelationship?: number; leaguePrestige?: number };
   hardRejectDeficitPct?: number;
   autoAcceptSurplusPct?: number;
 }): TradeDecision {
@@ -182,13 +184,18 @@ export function decideTrade(opts: {
     }
   }
 
+  const repRelationship = clamp(Number((ctx as any)?.gmRelationship ?? 50), 0, 100);
+  const repPrestige = clamp(Number((ctx as any)?.leaguePrestige ?? 50), 0, 100);
+  const repModifier = ((repRelationship - 50) * 0.012 + (repPrestige - 50) * 0.008) * Math.max(outgoingValue, incomingValue, 100);
+
   const tradeScore =
     incomingValue * needMultiplier
     - outgoingValue * lossMultiplier
     - redundancyPenalty
     - capPenalty
     + windowBonus
-    + pickBonus;
+    + pickBonus
+    + repModifier;
 
   const hardReject = opts.hardRejectDeficitPct ?? 0.18;
   const autoAccept = opts.autoAcceptSurplusPct ?? 0.12;

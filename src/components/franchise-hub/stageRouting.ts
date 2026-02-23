@@ -2,6 +2,8 @@ import type { CareerStage } from "@/context/GameContext";
 
 export const CAREER_STAGE_ORDER: CareerStage[] = [
   "OFFSEASON_HUB",
+  "SEASON_AWARDS",
+  "ASSISTANT_HIRING",
   "STAFF_CONSTRUCTION",
   "ROSTER_REVIEW",
   "RESIGN",
@@ -24,6 +26,10 @@ export function nextCareerStage(stage: CareerStage): CareerStage {
 
 export function stageToRoute(stage: CareerStage): string {
   switch (stage) {
+    case "SEASON_AWARDS":
+      return "/hub";
+    case "ASSISTANT_HIRING":
+      return "/staff/hire";
     case "STAFF_CONSTRUCTION":
       return "/hub/assistant-hiring";
     case "ROSTER_REVIEW":
@@ -54,7 +60,7 @@ export function stageToRoute(stage: CareerStage): string {
 }
 
 export function nextStageForNavigate(stage: CareerStage): CareerStage {
-  if (stage === "OFFSEASON_HUB") return "STAFF_CONSTRUCTION";
+  if (stage === "OFFSEASON_HUB") return "ASSISTANT_HIRING";
   return nextCareerStage(stage);
 }
 
@@ -62,6 +68,10 @@ export function stageLabel(stage: CareerStage): string {
   switch (stage) {
     case "OFFSEASON_HUB":
       return "Offseason Hub";
+    case "SEASON_AWARDS":
+      return "Season Awards";
+    case "ASSISTANT_HIRING":
+      return "Assistant Hiring";
     case "STAFF_CONSTRUCTION":
       return "Staff Construction";
     case "ROSTER_REVIEW":

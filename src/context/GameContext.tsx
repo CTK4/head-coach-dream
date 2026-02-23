@@ -36,6 +36,7 @@ import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
+import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
 import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import { getGmTraits } from "@/engine/gmScouting";
@@ -205,6 +206,8 @@ export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
 
 const CAREER_STAGE_ORDER: CareerStage[] = [
   "OFFSEASON_HUB",
+  "SEASON_AWARDS",
+  "ASSISTANT_HIRING",
   "STAFF_CONSTRUCTION",
   "ROSTER_REVIEW",
   "RESIGN",
@@ -2538,6 +2541,38 @@ function nextCareerStage(stage: CareerStage): CareerStage {
   return CAREER_STAGE_ORDER[idx + 1];
 }
 
+
+function applySeasonDevelopment(state: GameState): GameState {
+  const teamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
+  if (!teamId) return state;
+  const players = getEffectivePlayersByTeam(state, teamId);
+  if (!players.length) return state;
+
+  const deltas: Record<string, number> = {};
+  const nextDevXp = { ...(state.playerDevXpById ?? {}) };
+  const focusMap = state.trainingFocus?.posGroupFocus ?? {};
+
+  for (const p of players) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+    const pos = normalizePos(String((p as any).pos ?? "UNK")) as keyof typeof focusMap;
+    const delta = computeSeasonDevelopmentDelta({
+      age: (p as any).age,
+      overall: (p as any).overall,
+      dev: (p as any).dev,
+      practiceFocus: (focusMap[pos] ?? "NORMAL") as any,
+    }, state.coach);
+    deltas[playerId] = delta;
+    nextDevXp[playerId] = Number(nextDevXp[playerId] ?? 0) + delta;
+  }
+
+  return {
+    ...state,
+    playerDevXpById: nextDevXp,
+    memoryLog: addMemoryEvent(state, "SEASON_DEVELOPMENT", { season: state.season, deltas }),
+  };
+}
+
 function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
   return [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
 }
@@ -3565,6 +3600,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
       if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(next));
+      if (nextStep === "TRAINING_CAMP") next = applySeasonDevelopment(next);
       return next;
     }
     case "RESIGN_SET_DECISION":
@@ -4848,8 +4884,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "DISMISS_SEASON_AWARDS":
       return state.seasonAwards
-        ? { ...state, careerStage: "OFFSEASON_HUB", seasonAwards: { ...state.seasonAwards, shown: true } }
-        : { ...state, careerStage: "OFFSEASON_HUB" };
+        ? { ...state, careerStage: "ASSISTANT_HIRING", seasonAwards: { ...state.seasonAwards, shown: true } }
+        : { ...state, careerStage: "ASSISTANT_HIRING" };
 
     case "PREDRAFT_TOGGLE_VISIT": {
       const id = String(action.payload.prospectId);
