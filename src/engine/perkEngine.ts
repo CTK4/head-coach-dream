@@ -1,5 +1,6 @@
 import type { GameState } from "@/context/GameContext";
 import { getPerkNode, getSkillTreeNodes, type PerkNode, type PerkRequirement } from "@/data/skillTree";
+import { applyFlagsToContext as collectPerkFlags } from "@/engine/perkWiring";
 
 export type CoachPerkState = GameState["coach"];
 
@@ -41,4 +42,8 @@ export function unlockPerk(coach: CoachPerkState, nodeId: string): { coach: Coac
       unlockedPerkIds: [...(coach.unlockedPerkIds ?? []), node.id],
     },
   };
+}
+
+export function applyFlagsToContext(coach: CoachPerkState): string[] {
+  return collectPerkFlags(coach);
 }
