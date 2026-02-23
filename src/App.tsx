@@ -44,6 +44,7 @@ import StatsPage from "./pages/hub/Stats";
 import TeamStrategy from "./pages/hub/TeamStrategy";
 import OwnerRelations from "./pages/hub/OwnerRelations";
 import ActivityLog from "./pages/hub/ActivityLog";
+import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 
 const queryClient = new QueryClient();
 
@@ -190,6 +191,7 @@ const App = () => (
                <Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
             </Route>
 
+            <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
