@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import MedicalIcon from "/badges/Medical.svg";
+import { R2Image } from "@/components/ui/R2Image";
 
 function chipColorForMedical(level: string) {
   if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
@@ -86,7 +86,7 @@ export default function DraftResults() {
                         </div>
                         {rev ? (
                           <div className="mt-2 flex flex-wrap gap-1">
-                            {rev.medicalLevel ? <FlagChip className={chipColorForMedical(rev.medicalLevel)}><img src={MedicalIcon} className="h-3 w-3 opacity-90" alt="Medical" />{rev.medicalLevel}</FlagChip> : null}
+                            {rev.medicalLevel ? <FlagChip className={chipColorForMedical(rev.medicalLevel)}><R2Image kind="badges" filename="Medical.svg" fallbackSrc="/badges/Medical.svg" className="h-3 w-3 opacity-90" alt="Medical" />{rev.medicalLevel}</FlagChip> : null}
                             {rev.characterLevel ? <FlagChip className={chipColorForCharacter(rev.characterLevel)}>CHAR {rev.characterLevel}</FlagChip> : null}
                             {rev.symbols?.length ? <FlagChip className="bg-white/5 text-zinc-200 border-white/10">{rev.symbols.join(" ")}</FlagChip> : null}
                             {rev.footballTags?.includes("Gold: 1st") ? <FlagChip className="bg-yellow-500/15 text-yellow-100 border-yellow-500/20">Gold</FlagChip> : null}

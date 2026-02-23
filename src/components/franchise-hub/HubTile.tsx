@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
+import { R2Image, type R2ImageKind } from "@/components/ui/R2Image";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { readSettings } from "@/lib/settings";
 
@@ -29,11 +30,12 @@ export type HubTileProps = {
   badgeCount?: number;
   cornerBubbleCount?: number;
   imageUrl?: string;
+  imageR2?: { kind: R2ImageKind; filename: string; fallbackSrc: string };
   badgeHint?: string;
   badgeKind?: HubBadgeKind;
 };
 
-export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, badgeHint, badgeKind }: HubTileProps) {
+export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, imageR2, badgeHint, badgeKind }: HubTileProps) {
   const navigate = useNavigate();
   const showTooltips = !!readSettings().showTooltips;
 
@@ -46,7 +48,15 @@ export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, im
         ].join(" ")}
       >
         <div className="absolute inset-0 z-0">
-          {imageUrl ? (
+          {imageR2 ? (
+            <R2Image
+              kind={imageR2.kind}
+              filename={imageR2.filename}
+              fallbackSrc={imageR2.fallbackSrc}
+              alt=""
+              className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500"
+            />
+          ) : imageUrl ? (
             <img src={imageUrl} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-slate-800/30 via-slate-950/10 to-slate-900/40" />
