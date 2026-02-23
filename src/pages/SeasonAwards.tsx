@@ -4,15 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGame } from "@/context/GameContext";
-
-const ARCHETYPE_LABELS: Record<string, string> = {
-  oc_promoted: "Offensive Coordinator → HC",
-  dc_promoted: "Defensive Coordinator → HC",
-  stc_promoted: "Special Teams Coordinator → HC",
-  college_hc: "College Head Coach → HC",
-  assistant_grinder: "Assistant Coach → HC",
-  young_guru: "Young Guru → HC",
-};
+import { ARCHETYPE_LABELS, safeLabel } from "@/lib/displayLabels";
 
 const CATEGORY_ICON = (source: string) => {
   if (source.toLowerCase().includes("credibility") || source.toLowerCase().includes("culture") || source.toLowerCase().includes("identity")) return "◆";
@@ -84,7 +76,7 @@ export default function SeasonAwards() {
             <CardTitle className="text-3xl tracking-wide">SEASON {summary.tenureYear} COMPLETE</CardTitle>
             <p className="text-5xl font-extrabold text-indigo-200">{summary.wins} - {summary.losses}</p>
             <div className="flex justify-center"><Badge className={`border ${badge.className}`}>{badge.label}</Badge></div>
-            <p className="text-sm text-slate-300">{state.coach.name} · {ARCHETYPE_LABELS[state.coach.archetypeId] ?? state.coach.archetypeId}</p>
+            <p className="text-sm text-slate-300">{state.coach.name} · {ARCHETYPE_LABELS[state.coach.archetypeId] ?? safeLabel(state.coach.archetypeId)}</p>
           </CardHeader>
         </Card>
 

@@ -1,4 +1,5 @@
 import leagueDbJson from "@/data/leagueDB.json";
+import { normalizeCityState } from "@/lib/formatters";
 
 export type TeamRow = {
   teamId: string;
@@ -96,7 +97,7 @@ function normalizeTeamRow(t: any): TeamRow {
     teamId: String(t.teamId ?? ""),
     abbrev: t.abbrev != null ? String(t.abbrev) : undefined,
     name: String(t.name ?? ""),
-    region: t.region != null ? String(t.region) : undefined,
+    region: t.region != null ? normalizeCityState(String(t.region)) : undefined,
     conferenceId: t.conferenceId != null ? String(t.conferenceId) : undefined,
     divisionId: t.divisionId != null ? String(t.divisionId) : undefined,
     stadium: t.stadium != null ? String(t.stadium) : undefined,

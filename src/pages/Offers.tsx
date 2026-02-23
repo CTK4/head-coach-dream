@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import { OFFER_STRATEGY_LABELS, safeLabel } from "@/lib/displayLabels";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -97,7 +98,7 @@ const Offers = () => {
                       <h2 className="text-xl font-semibold">{team?.name ?? offer.teamId}</h2>
                       <p className="text-sm text-muted-foreground">{team?.city ?? team?.region ?? ""}</p>
                     </div>
-                    <Badge variant="secondary">{offer.mediaNarrativeKey}</Badge>
+                    <Badge variant="secondary">{OFFER_STRATEGY_LABELS[offer.mediaNarrativeKey] ?? safeLabel(offer.mediaNarrativeKey)}</Badge>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -191,7 +192,7 @@ const Offers = () => {
                 <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="font-semibold">Negotiation Result</div>
-                    <Badge variant="outline">{activeOffer.negotiation.status}</Badge>
+                    <Badge variant="outline">{safeLabel(activeOffer.negotiation.status)}</Badge>
                   </div>
                   <div className="text-sm text-slate-200">{activeOffer.negotiation.message ?? "—"}</div>
                   <div className="text-xs text-muted-foreground">Estimated chance: {Math.round((activeOffer.negotiation.lastChance ?? 0) * 100)}%</div>

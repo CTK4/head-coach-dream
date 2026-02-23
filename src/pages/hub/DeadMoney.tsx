@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { safeLabel } from "@/lib/displayLabels";
 
 function money(v: number): string {
   if (v === 0) return "$0";
@@ -183,7 +184,7 @@ export default function DeadMoney() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold truncate">{entry.playerName}</span>
                             <Badge variant="outline" className="text-xs">{entry.playerPos}</Badge>
-                            <Badge variant="secondary" className="text-xs">{TYPE_LABEL[entry.transactionType] ?? entry.transactionType}</Badge>
+                            <Badge variant="secondary" className="text-xs">{TYPE_LABEL[entry.transactionType] ?? safeLabel(entry.transactionType)}</Badge>
                             {entry.accelerationType !== "NONE" && (
                               <Badge
                                 variant={entry.accelerationType === "POST_JUNE_1" ? "destructive" : "outline"}
@@ -278,7 +279,7 @@ export default function DeadMoney() {
                       <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
                         <span>{drawerEntry.playerPos}</span>
                         <span>·</span>
-                        <span>{TYPE_LABEL[drawerEntry.transactionType] ?? drawerEntry.transactionType}</span>
+                        <span>{TYPE_LABEL[drawerEntry.transactionType] ?? safeLabel(drawerEntry.transactionType)}</span>
                         <span>·</span>
                         <span>{ACCEL_LABEL[drawerEntry.accelerationType]}</span>
                         <span>·</span>

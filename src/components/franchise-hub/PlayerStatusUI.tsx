@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { UtilityIcon } from "@/components/franchise-hub/UtilityIcon";
+import { DEV_TRAIT_LABELS, safeLabel } from "@/lib/displayLabels";
 
 export type PlayerStatusIconName =
   | "Calendar"
@@ -184,7 +185,7 @@ export function PlayerStatusIcons({ player, className = "" }: { player: PlayerAn
               <div className="text-sm font-semibold text-slate-100">{player?.name ?? "Player"}</div>
               <div className="mt-1 flex flex-wrap gap-2">
                 {player?.pos ? <Badge variant="outline">{String(player.pos)}</Badge> : null}
-                {player?.devTrait ? <Badge variant="outline">{String(player.devTrait)}</Badge> : null}
+                {player?.devTrait ? <Badge variant="outline">{DEV_TRAIT_LABELS[String(player.devTrait)] ?? safeLabel(String(player.devTrait))}</Badge> : null}
                 {player?.age ? <Badge variant="outline">Age {String(player.age)}</Badge> : null}
               </div>
             </div>
