@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTeamRosterPlayers, getContractById } from "@/data/leagueDb";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 
 function money(n: number): string {
   const v = Number(n || 0);
@@ -16,7 +17,8 @@ function money(n: number): string {
 
 export default function PlayerContracts() {
   const { state } = useGame();
-  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+  const teamId =
+    state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
 
   const rows = useMemo(() => {
     if (!teamId) return [];
@@ -44,7 +46,9 @@ export default function PlayerContracts() {
       <ScreenHeader title="PLAYER CONTRACTS" subtitle="Roster cap hits" />
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-slate-300">Tap a player for details and actions.</div>
+          <div className="text-sm text-slate-300">
+            Tap a player for details and actions.
+          </div>
           <Badge variant="outline">{rows.length}</Badge>
         </div>
 
@@ -57,16 +61,35 @@ export default function PlayerContracts() {
                   to={`/contracts/player/${r.playerId}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-white/5"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">
-                      {r.name} <span className="font-normal text-slate-400">({r.pos} {r.ovr})</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <PlayerAvatar
+                      playerId={r.playerId}
+                      name={r.name}
+                      pos={r.pos}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">
+                        {r.name}{" "}
+                        <span className="font-normal text-slate-400">
+                          ({r.pos} {r.ovr})
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Years left: {r.yearsLeft}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400">Years left: {r.yearsLeft}</div>
                   </div>
-                  <div className="tabular-nums text-sm font-semibold">{money(r.capHit)}</div>
+                  <div className="tabular-nums text-sm font-semibold">
+                    {money(r.capHit)}
+                  </div>
                 </Link>
               ))}
-              {rows.length === 0 ? <div className="p-4 text-sm text-slate-400">No roster found for this team.</div> : null}
+              {rows.length === 0 ? (
+                <div className="p-4 text-sm text-slate-400">
+                  No roster found for this team.
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>

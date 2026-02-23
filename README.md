@@ -71,3 +71,17 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Cloudflare R2 Assets
+
+This app can load static assets from Cloudflare R2 using Vite environment variables. All vars are optional; if omitted, the app falls back to the public default endpoints below.
+
+- `VITE_R2_AVATARS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/avatars`)
+- `VITE_R2_BADGES_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/badges`)
+- `VITE_R2_ICONS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/icons`)
+- `VITE_R2_PLACEHOLDERS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/placeholders`)
+- `VITE_R2_UTILITY_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/utility`)
+
+Even though defaults are built in, set these variables in Vercel for explicit configuration per environment.
+
+These R2 URLs are public endpoints. Do **not** commit binary asset files in PRs.
