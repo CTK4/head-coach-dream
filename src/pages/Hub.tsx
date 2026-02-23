@@ -12,20 +12,19 @@ import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
 import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 import SeasonAwards from "@/pages/SeasonAwards";
 
-// Placeholder images - using simple colored gradients or specific placeholders from the list if available
-const IMAGES = {
-    staff: "/placeholders/coach.png",
-    roster: "/placeholders/depth_chart.png",
-    strategy: "/placeholders/strategy_meeting.png",
-    contracts: "/placeholders/accounting.png",
-    scouting: "/placeholders/scout.png",
-    news: "/placeholders/news.png",
-    freeAgency: "/placeholders/accounting.png",
-    resign: "/placeholders/depth_chart.png",
-    trades: "/placeholders/strategy_meeting.png",
-    injuryReport: "/placeholders/depth_chart.png",
-    development: "/placeholders/strategy_meeting.png",
-}
+const TILE_IMAGES = {
+    staff: { kind: "placeholders", filename: "coach.png", fallbackSrc: "/placeholders/coach.png" },
+    roster: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    strategy: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    contracts: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    scouting: { kind: "placeholders", filename: "scout.png", fallbackSrc: "/placeholders/scout.png" },
+    news: { kind: "placeholders", filename: "news.png", fallbackSrc: "/placeholders/news.png" },
+    freeAgency: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    resign: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+} as const;
 
 
 function clampInt(n: number, min: number, max: number) {
@@ -99,7 +98,7 @@ export default function Hub() {
                 <HubTile
                     title="Hire Staff"
                     to="/staff"
-                    imageUrl={IMAGES.staff}
+                    imageR2={TILE_IMAGES.staff}
                     badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
                     badgeHint="Open staff roles"
                     badgeKind="task"
@@ -107,7 +106,7 @@ export default function Hub() {
                 <HubTile
                     title="Roster"
                     to="/roster"
-                    imageUrl={IMAGES.roster}
+                    imageR2={TILE_IMAGES.roster}
                     badgeCount={badgeCounts.roster}
                     badgeHint="Lineup tasks"
                     badgeKind="task"
@@ -115,7 +114,7 @@ export default function Hub() {
                 <HubTile
                     title="Franchise Strategy"
                     to="/strategy"
-                    imageUrl={IMAGES.strategy}
+                    imageR2={TILE_IMAGES.strategy}
                     badgeCount={badgeCounts.franchiseStrategy}
                     badgeHint="Strategy items"
                     badgeKind="info"
@@ -124,7 +123,7 @@ export default function Hub() {
                     title="Contracts & Cap"
                     subtitle="Management"
                     to="/contracts"
-                    imageUrl={IMAGES.contracts}
+                    imageR2={TILE_IMAGES.contracts}
                     badgeCount={badgeCounts.finances}
                     badgeHint="Cap items"
                     badgeKind="cap"
@@ -132,7 +131,7 @@ export default function Hub() {
                 <HubTile
                     title="Scouting"
                     to="/scouting"
-                    imageUrl={IMAGES.scouting}
+                    imageR2={TILE_IMAGES.scouting}
                     badgeCount={badgeCounts.scouting}
                     badgeHint="Scouting actions"
                     badgeKind="scouting"
@@ -140,26 +139,26 @@ export default function Hub() {
                 <HubTile
                     title="News"
                     to="/news"
-                    imageUrl={IMAGES.news}
+                    imageR2={TILE_IMAGES.news}
                     badgeCount={badgeCounts.leagueNewsUnread}
                     badgeHint="Unread news stories"
                     badgeKind="unread"
                     cornerBubbleCount={badgeCounts.leagueNewsUnread}
                 />
                 {state.careerStage === "FREE_AGENCY" ? (
-                  <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} badgeHint="Free agency actions" badgeKind="info" />
+                  <HubTile title="Free Agency" to="/free-agency" imageR2={TILE_IMAGES.freeAgency} badgeCount={1} badgeHint="Free agency actions" badgeKind="info" />
                 ) : null}
                 {showReSign ? (
-                  <HubTile title="Re-Sign" to="/hub/re-sign" imageUrl={IMAGES.resign} badgeCount={1} badgeHint="Re-sign actions" badgeKind="info" />
+                  <HubTile title="Re-Sign" to="/hub/re-sign" imageR2={TILE_IMAGES.resign} badgeCount={1} badgeHint="Re-sign actions" badgeKind="info" />
                 ) : null}
                 {showTrades ? (
-                  <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
+                  <HubTile title="Trades" to="/hub/trades" imageR2={TILE_IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
                 ) : null}
                 <HubTile
                     title="Coach Development"
                     subtitle="Skill Tree"
                     to="/skill-tree"
-                    imageUrl={IMAGES.development}
+                    imageR2={TILE_IMAGES.development}
                     badgeCount={Math.max(0, state.coach.perkPoints ?? 0)}
                     badgeHint="Perk points available"
                     badgeKind="info"
@@ -168,7 +167,7 @@ export default function Hub() {
                     title="Injury Report"
                     subtitle="Health & Medical"
                     to="/hub/injury-report"
-                    imageUrl={IMAGES.injuryReport}
+                    imageR2={TILE_IMAGES.injuryReport}
                     badgeCount={badgeCounts.leagueNews}
                     badgeHint="League updates"
                     badgeKind="info"
