@@ -13,6 +13,10 @@ export type Archetype = {
   lockerRoomCred: number;
   volatility?: number;
   reputationProfile: CoachReputation;
+  pathSummary: {
+    perks: string[];
+    downsides: string[];
+  };
 };
 
 export const ARCHETYPES: Archetype[] = [
@@ -40,6 +44,17 @@ export const ARCHETYPES: Archetype[] = [
       innovationPerception: 75,
       volatilityExpectation: "MED_HIGH",
     },
+    pathSummary: {
+      perks: [
+        "Offensive system installs quickly — players buy in faster",
+        "OC candidates actively seek you out",
+        "Early offensive results build owner confidence",
+      ],
+      downsides: [
+        "Defensive coordinators expect more autonomy — hard to override",
+        "Defensive credibility is capped early and takes years to earn",
+      ],
+    },
   },
   {
     id: "dc_promoted",
@@ -64,6 +79,17 @@ export const ARCHETYPES: Archetype[] = [
       riskTolerancePerception: 45,
       innovationPerception: 50,
       volatilityExpectation: "LOW_MED",
+    },
+    pathSummary: {
+      perks: [
+        "Defense is scheme-ready from day one",
+        "Veteran defensive players respect your background immediately",
+        "Elite DC candidates are easier to hire",
+      ],
+      downsides: [
+        "Offensive coordinators push back on play-calling involvement",
+        "Offensive credibility is capped early — takes time to earn trust",
+      ],
     },
   },
   {
@@ -90,6 +116,17 @@ export const ARCHETYPES: Archetype[] = [
       innovationPerception: 68,
       volatilityExpectation: "HIGH",
     },
+    pathSummary: {
+      perks: [
+        "Best developer in the league — young players grow faster under you",
+        "Recruiting pipeline brings in draft prospects with familiarity",
+        "Scheme is fully established from day one",
+      ],
+      downsides: [
+        "Veteran players are skeptical — locker room credibility takes time",
+        "Scheme translation penalty in year one as the roster adjusts",
+      ],
+    },
   },
   {
     id: "stc_promoted",
@@ -114,6 +151,17 @@ export const ARCHETYPES: Archetype[] = [
       riskTolerancePerception: 40,
       innovationPerception: 45,
       volatilityExpectation: "LOW",
+    },
+    pathSummary: {
+      perks: [
+        "Hidden player value — your scouting finds gems others miss",
+        "Elite special teams unit from the start",
+        "Underdog narrative drives media interest and fan support",
+      ],
+      downsides: [
+        "Legitimacy gap — coordinators and players question your authority early",
+        "League prestige starts lower and climbs slowly",
+      ],
     },
   },
   {
@@ -140,6 +188,17 @@ export const ARCHETYPES: Archetype[] = [
       innovationPerception: 72,
       volatilityExpectation: "VERY_HIGH",
     },
+    pathSummary: {
+      perks: [
+        "Deep GM relationships — trades and extensions go smoother",
+        "Strong staff network makes coordinator hiring easier",
+        "Owner gives you more time to prove yourself",
+      ],
+      downsides: [
+        "No established scheme identity — press and fans question your vision",
+        "Fanbase and media growth is slower without a signature style",
+      ],
+    },
   },
   {
     id: "young_guru",
@@ -164,6 +223,17 @@ export const ARCHETYPES: Archetype[] = [
       riskTolerancePerception: 85,
       innovationPerception: 95,
       volatilityExpectation: "EXTREME",
+    },
+    pathSummary: {
+      perks: [
+        "Innovation perception is high — media and fans are excited early",
+        "Young players are energized by your style",
+        "Scheme creates matchup problems that offset talent gaps",
+      ],
+      downsides: [
+        "Veterans are skeptical — older players need to see results first",
+        "Older assistants resist your staff culture; chemistry takes time",
+      ],
     },
   },
 ];

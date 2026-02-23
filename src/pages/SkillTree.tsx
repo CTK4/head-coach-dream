@@ -7,18 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useGame } from "@/context/GameContext";
 import { getAvailableNodes, unlockPerk } from "@/engine/perkEngine";
 import { getSkillTreeNodes, type PerkNode } from "@/data/skillTree";
+import { ARCHETYPE_LABELS, safeLabel } from "@/lib/displayLabels";
 import { cn } from "@/lib/utils";
 
 type NodeVisualState = "UNLOCKED" | "UNLOCKABLE" | "LOCKED" | "UNAFFORDABLE";
-
-const ARCHETYPE_LABELS: Record<string, string> = {
-  oc_promoted: "Offensive Coordinator → HC",
-  dc_promoted: "Defensive Coordinator → HC",
-  stc_promoted: "Special Teams Coordinator → HC",
-  college_hc: "College Head Coach → HC",
-  assistant_grinder: "Assistant Coach → HC",
-  young_guru: "Young Guru → HC",
-};
 
 const ARCHETYPE_BRANCH_LABELS: Record<string, string> = {
   oc_promoted: "Offensive Sovereignty",
@@ -126,7 +118,7 @@ export default function SkillTree() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
       <header className="mb-4 flex items-center justify-between gap-4 border-b border-slate-800 pb-3">
         <div>
-          <div className="text-lg font-semibold">{coach.name || "Unnamed Coach"} · {ARCHETYPE_LABELS[coach.archetypeId] ?? coach.archetypeId}</div>
+          <div className="text-lg font-semibold">{coach.name || "Unnamed Coach"} · {ARCHETYPE_LABELS[coach.archetypeId] ?? safeLabel(coach.archetypeId)}</div>
         </div>
         <h1 className="text-2xl font-bold tracking-wide">Coach Development</h1>
         <div className="flex items-center gap-3">
