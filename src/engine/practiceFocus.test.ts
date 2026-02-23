@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PRACTICE_PLAN, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity } from "@/engine/practiceFocus";
 import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, migrateSave } from "@/context/GameContext";
 import type { GameState } from "@/context/GameContext";
-import { getTeams } from "@/data/leagueDb";
+import { getTeams, getPlayers } from "@/data/leagueDb";
 
 function baselineState(teamId: string): GameState {
   const migrated = migrateSave({
@@ -48,7 +48,9 @@ describe("practice integration", () => {
   it("injured player skips devXP but still gets fatigue effect", () => {
     const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
     const state = baselineState(teamId);
-    const injuredPlayerId = Object.keys(state.playerFatigueById)[0];
+    const teamPlayer = getPlayers().find((p) => String(p.teamId) === teamId);
+    expect(teamPlayer, `No player found on team ${teamId}`).toBeDefined();
+    const injuredPlayerId = String(teamPlayer!.playerId);
     const seeded: GameState = {
       ...state,
       practicePlan: { primaryFocus: "Fundamentals", intensity: "High" },
@@ -65,7 +67,9 @@ describe("practice integration", () => {
   it("week advance practice application is atomic on throw", () => {
     const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
     const state = baselineState(teamId);
-    const failPlayerId = Object.keys(state.playerFatigueById)[0];
+    const teamPlayer = getPlayers().find((p) => String(p.teamId) === teamId);
+    expect(teamPlayer, `No player found on team ${teamId}`).toBeDefined();
+    const failPlayerId = String(teamPlayer!.playerId);
     const seeded: GameState = { ...state, practicePlan: { primaryFocus: "Install", intensity: "High" } };
 
     const out = applyPracticePlanForWeekAtomic(seeded, teamId, 3, failPlayerId);
