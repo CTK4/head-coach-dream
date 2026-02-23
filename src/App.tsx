@@ -41,6 +41,9 @@ import ReSignPage from "./pages/hub/ReSign";
 import CapBaseline from "./pages/hub/CapBaseline";
 import SkillTree from "@/pages/SkillTree";
 import StatsPage from "./pages/hub/Stats";
+import TeamStrategy from "./pages/hub/TeamStrategy";
+import OwnerRelations from "./pages/hub/OwnerRelations";
+import ActivityLog from "./pages/hub/ActivityLog";
 
 const queryClient = new QueryClient();
 
@@ -145,6 +148,9 @@ const App = () => (
               <Route path="/hub/offseason/*" element={<LegacyHubOffseasonRedirect />} />
               <Route path="/news" element={<LeagueNews />} />
               <Route path="/hub/stats" element={<StatsPage />} />
+              <Route path="/hub/activity" element={<ActivityLog />} />
+              <Route path="/hub/owner-relations" element={<OwnerRelations />} />
+              <Route path="/hub/team-strategy" element={<TeamStrategy />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
               <Route path="/re-sign/*" element={<ReSignRoutes />} />

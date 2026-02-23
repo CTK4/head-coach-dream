@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import GameLog from "@/components/GameLog/GameLog";
 import { adaptDriveLog } from "@/components/GameLog/adaptDriveLog";
+import PlayRibbon from "@/components/game/PlayRibbon";
 
 // ─── Play catalog ──────────────────────────────────────────────────────────
 
@@ -273,6 +274,8 @@ const Playcall = () => {
             {g.defLook && canShowPlay && <DefLookPanel look={g.defLook} />}
 
             {/* Last result + tags */}
+            <PlayRibbon latestPlay={g.lastPlayResult} />
+
             {g.lastResult && (
               <div className="pt-1 space-y-1">
                 <p className="text-sm font-medium">{g.lastResult}</p>

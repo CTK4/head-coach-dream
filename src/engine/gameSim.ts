@@ -128,8 +128,24 @@ export type DriveLogEntry = {
   playType: PlayType;
   result: string;
   resultTags: ResultTag[];
+  explanation?: PlayExplanation;
   homeScore: number;
   awayScore: number;
+};
+
+export type PlayExplanation = {
+  primaryFactor: string;
+  secondaryFactor?: string;
+  coachingNote?: string;
+};
+
+export type PlayResult = {
+  playId: string;
+  down: number;
+  distance: number;
+  yardsGained: number;
+  outcome: "SUCCESS" | "FAILURE" | "EXPLOSIVE" | "NEGATIVE";
+  explanation: PlayExplanation;
 };
 
 export type GameSim = {
@@ -177,7 +193,35 @@ export type GameSim = {
   coachArchetypeId?: string;
   coachTenureYear: number;
   coachUnlockedPerkIds?: string[];
+  lastPlayResult?: PlayResult;
 };
+
+const EXPLANATION_BANK: Record<"NEGATIVE" | "FAILURE" | "SUCCESS" | "EXPLOSIVE", string[]> = {
+  NEGATIVE: ["Coverage closed quickly and the window vanished", "Pressure won early and disrupted rhythm", "Backside pursuit erased the cutback lane"],
+  FAILURE: ["Timing route arrived a beat late", "Front fit held and gains were limited", "3rd down leverage forced a checkdown"],
+  SUCCESS: ["Personnel mismatch exploited in space", "Pocket stayed clean and progression stayed on schedule", "Second-level block sealed the lane"],
+  EXPLOSIVE: ["Coverage bust on the backside created open grass", "Tackle broken at the second level turned it into a chunk play", "Vertical stress forced a late safety rotation"],
+};
+
+function buildPlayExplanation(sim: GameSim, playType: PlayType, outcome: "SUCCESS" | "FAILURE" | "EXPLOSIVE" | "NEGATIVE", yards: number): PlayExplanation {
+  const bank = EXPLANATION_BANK[outcome];
+  const primaryFactor = bank[Math.floor(contextualRng(sim.seed, `explain-${sim.driveNumber}-${sim.playNumberInDrive + 1}`)() * bank.length)] ?? bank[0];
+  const lateGame = (sim.clock.quarter === 2 || sim.clock.quarter === 4) && sim.clock.timeRemainingSec <= 120;
+  const secondaryFactor = lateGame
+    ? "2-minute context increased defensive volatility"
+    : sim.down === 3
+      ? `3rd & ${sim.distance} leverage shaped the call`
+      : yards < 0
+        ? "Execution dipped at the point of attack"
+        : undefined;
+  const fatigueHit = Object.values(sim.playerFatigue ?? {}).some((v) => v >= 72);
+  const coachingNote = fatigueHit
+    ? "Fatigue affected execution on this snap"
+    : sim.coachArchetypeId && (playType === "DROPBACK" || playType === "QUICK_GAME") && (outcome === "SUCCESS" || outcome === "EXPLOSIVE")
+      ? "Your offensive system created this opening"
+      : undefined;
+  return { primaryFactor, secondaryFactor, coachingNote };
+}
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
 
@@ -751,6 +795,7 @@ function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
     awayScore: sim.awayScore,
     personnelPackage: sim.currentPersonnelPackage,
     defensivePackage: sim.selectedDefensivePackage,
+    explanation: sim.lastPlayResult?.explanation,
   };
   return { ...sim, playNumberInDrive: sim.playNumberInDrive + 1, driveLog: [entry, ...sim.driveLog] };
 }
@@ -1135,6 +1180,9 @@ function applySnapFatigue(sim: GameSim, playType: PlayType): GameSim {
 
 export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: PersonnelPackage = "11"): PlayResolution {
   const rng = mulberry32(sim.seed);
+  const downBefore = sim.down;
+  const distanceBefore = sim.distance;
+  const ballBefore = sim.ballOn;
   let s: GameSim = { ...sim, seed: sim.seed + 1 };
 
   s = quarterAdvanceIfNeeded(s);
@@ -1184,6 +1232,20 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = { ...s, defLook: nextLook };
 
   s = applySnapFatigue(s, playType);
+  const yardsGained = s.possession === sim.possession ? Number(s.ballOn - ballBefore) : 0;
+  const outcome: "SUCCESS" | "FAILURE" | "EXPLOSIVE" | "NEGATIVE" =
+    yardsGained >= 20 ? "EXPLOSIVE" : yardsGained >= 3 ? "SUCCESS" : yardsGained < 0 ? "NEGATIVE" : "FAILURE";
+  s = {
+    ...s,
+    lastPlayResult: {
+      playId: `${s.driveNumber}-${s.playNumberInDrive + 1}`,
+      down: Number(downBefore),
+      distance: Number(distanceBefore),
+      yardsGained,
+      outcome,
+      explanation: buildPlayExplanation(s, playType, outcome, yardsGained),
+    },
+  };
   s = pushLog(s, playType, s.lastResult ?? "");
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
 }

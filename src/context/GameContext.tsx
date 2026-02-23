@@ -102,6 +102,8 @@ import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
 import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
+import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
+import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -630,6 +632,10 @@ export type GameState = {
   playerMorale?: Record<string, number>;
   injuries?: Injury[];
   uiToast?: string;
+  feedbackQueue: FeedbackEvent[];
+  feedbackHistory: FeedbackEvent[];
+  pendingInjuryAlert?: Injury;
+  hotSeatStatus: HotSeatStatus;
   trainingFocus?: {
     posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
   };
@@ -822,6 +828,10 @@ export type GameAction =
   | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
   | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
   | { type: "INJURY_START_PRACTICE_WINDOW"; payload: { injuryId: string } }
+  | { type: "PUSH_FEEDBACK"; payload: { event: FeedbackEvent } }
+  | { type: "DISMISS_FEEDBACK"; payload: { id: string } }
+  | { type: "CLEAR_FEEDBACK_QUEUE" }
+  | { type: "CLEAR_PENDING_INJURY_ALERT" }
   | { type: "RESET" };
 
 
@@ -1087,6 +1097,10 @@ function createInitialState(): GameState {
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     transactions: [],
+    feedbackQueue: [],
+    feedbackHistory: [],
+    pendingInjuryAlert: undefined,
+    hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
   return ensureAccolades(bootstrapAccolades(base));
@@ -1349,7 +1363,22 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
 
   const p: any = (getPlayers() as any[]).find((x: any) => String(x.playerId) === String(playerId));
   next = pushNews(next, `Signed: ${String(p?.fullName ?? "Player")} (${String(p?.pos ?? "")}) agrees to terms.`);
-  return faPush(next, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(offer.aav / 1_000_000)}M/yr.`, playerId);
+  const faEvent = createFeedbackEvent("FA_SIGNED", {
+    playerName: String(p?.fullName ?? "Player"),
+    position: String(p?.pos ?? "UNK"),
+    years,
+    totalValue: `$${Math.round(totalCash / 1_000_000)}M`,
+    capHit: `$${Math.round((salaries[0] ?? 0) / 1_000_000)}M`,
+    playerIds: [String(playerId)],
+  });
+  const capEvent = createFeedbackEvent("CAP_CHANGE", {
+    playerName: String(p?.fullName ?? "Player"),
+    capDelta: Math.round(cashY1 / 1000),
+    remainingCap: Math.round((next.finances.capSpace ?? 0) / 1000),
+    playerIds: [String(playerId)],
+  });
+  const withFeedback = { ...next, feedbackQueue: [capEvent, faEvent, ...next.feedbackQueue].slice(0, 50) };
+  return faPush(withFeedback, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(offer.aav / 1_000_000)}M/yr.`, playerId);
 }
 
 function expireUserCounters(state: GameState): GameState {
@@ -3362,6 +3391,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           capSpace: Math.max(0, Number(state.finances.capSpace ?? 0) - Math.round(capDeltaA)),
         },
         uiToast: `${teamAName} completed a trade with ${teamBName}.`,
+        feedbackQueue: [createFeedbackEvent("TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` }), ...state.feedbackQueue].slice(0, 50),
         tradeError: undefined,
       };
     }
@@ -5332,6 +5362,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...nextState,
         rookies: [...nextState.rookies, rookie],
         rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
+        feedbackQueue: [createFeedbackEvent("DRAFT_SELECTION", { pickNumber: nextState.offseasonData.draft.picks.length + 1, playerName: rookie.name, position: rookie.pos, college: "Unknown", scoutingGrade: String(rookie.scoutOvr), tierLabel: `Dev ${rookie.scoutDev}` }), ...state.feedbackQueue].slice(0, 50),
       };
     }
 
@@ -5385,14 +5416,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (active[pid]) {
         delete active[pid];
         cuts[pid] = true;
-        return { ...state, rosterMgmt: { active, cuts, finalized: false } };
+        return { ...state, rosterMgmt: { active, cuts, finalized: false }, feedbackQueue: [createFeedbackEvent("ROSTER_CHANGE", { playerName: String(getPersonnelById(pid)?.fullName ?? "Player"), position: String(getPersonnelById(pid)?.pos ?? "UNK"), action: "waived" }), ...state.feedbackQueue].slice(0, 50) };
       }
 
       if (activeCount >= 53) return state;
 
       delete cuts[pid];
       active[pid] = true;
-      return { ...state, rosterMgmt: { active, cuts, finalized: false } };
+      return { ...state, rosterMgmt: { active, cuts, finalized: false }, feedbackQueue: [createFeedbackEvent("ROSTER_CHANGE", { playerName: String(getPersonnelById(pid)?.fullName ?? "Player"), position: String(getPersonnelById(pid)?.pos ?? "UNK"), action: "added to roster" }), ...state.feedbackQueue].slice(0, 50) };
     }
     case "FINALIZE_CUTS": {
       const teamId = state.acceptedOffer?.teamId;
@@ -5624,7 +5655,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const existing = state.injuries ?? [];
       const idx = existing.findIndex((i) => i.id === action.payload.id);
       const updated = idx >= 0 ? existing.map((i) => (i.id === action.payload.id ? action.payload : i)) : [...existing, action.payload];
-      return { ...state, injuries: updated };
+      const weeks = Number((action.payload as any).estWeeks ?? (action.payload as any).weeksOut ?? 0);
+      const severity = weeks >= 4 || String((action.payload as any).status ?? "").toUpperCase() === "OUT" ? "CRITICAL" : weeks >= 1 ? "WARNING" : "INFO";
+      const p = getPersonnelById(String(action.payload.playerId));
+      const event = createFeedbackEvent("INJURY_ALERT", {
+        playerName: String(p?.fullName ?? "Player"),
+        injuryType: String((action.payload as any).type ?? "Injury"),
+        estimatedWeeks: weeks,
+        severity,
+        playerIds: [String(action.payload.playerId)],
+      });
+      return { ...state, injuries: updated, pendingInjuryAlert: severity === "CRITICAL" ? action.payload : state.pendingInjuryAlert, feedbackQueue: severity === "CRITICAL" ? state.feedbackQueue : [event, ...state.feedbackQueue].slice(0, 50) };
     }
     case "INJURY_MOVE_TO_IR": {
       const injuries = (state.injuries ?? []).map((i) =>
@@ -5643,6 +5684,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         i.id === action.payload.injuryId ? { ...i, practiceStatus: "LIMITED" as const, rehabStage: "RETURN_TO_PLAY" as const } : i
       );
       return { ...state, injuries };
+    }
+    case "PUSH_FEEDBACK": {
+      const ev = action.payload.event;
+      return { ...state, feedbackQueue: [ev, ...state.feedbackQueue].slice(0, 50) };
+    }
+    case "DISMISS_FEEDBACK": {
+      const id = action.payload.id;
+      const ev = state.feedbackQueue.find((item) => item.id === id);
+      return {
+        ...state,
+        feedbackQueue: state.feedbackQueue.filter((item) => item.id !== id),
+        feedbackHistory: ev ? [ev, ...state.feedbackHistory].slice(0, 200) : state.feedbackHistory,
+      };
+    }
+    case "CLEAR_FEEDBACK_QUEUE": {
+      return {
+        ...state,
+        feedbackHistory: [...state.feedbackQueue, ...state.feedbackHistory].slice(0, 200),
+        feedbackQueue: [],
+      };
+    }
+    case "CLEAR_PENDING_INJURY_ALERT": {
+      return { ...state, pendingInjuryAlert: undefined };
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
@@ -5896,6 +5960,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
+      const nextHotSeat = computeHotSeatScore(out.coach, out);
+      if (nextHotSeat.level !== out.hotSeatStatus.level && (nextHotSeat.level === "HOT" || nextHotSeat.level === "CRITICAL")) {
+        out = gameReducer(out, {
+          type: "PUSH_FEEDBACK",
+          payload: {
+            event: createFeedbackEvent("HOT_SEAT", {
+              message: `${nextHotSeat.level}: ${nextHotSeat.primaryDriver}`,
+              severity: nextHotSeat.level === "CRITICAL" ? "CRITICAL" : "WARNING",
+            }),
+          },
+        });
+      }
+      out = { ...out, hotSeatStatus: nextHotSeat };
       return out;
     }
     case "RESET":
@@ -6201,6 +6278,10 @@ function loadState(): GameState {
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
       transactions: (migrated as any).transactions ?? [],
+      feedbackQueue: Array.isArray((migrated as any).feedbackQueue) ? (migrated as any).feedbackQueue : [],
+      feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
+      pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
+      hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
     };
     out = ensureAccolades(bootstrapAccolades(out));
     out = ensureLeagueGmMap(out);
