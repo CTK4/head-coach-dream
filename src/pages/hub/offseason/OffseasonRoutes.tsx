@@ -21,7 +21,8 @@ export default function OffseasonRoutes() {
       <Route path="draft" element={<Draft />} />
       <Route path="training-camp" element={<TrainingCamp />} />
       <Route path="preseason" element={<Preseason />} />
-      <Route path="cut-downs" element={<CutDowns />} />
+      <Route path="cutdowns" element={<CutDowns />} />
+      <Route path="cut-downs" element={<Navigate to="/offseason/cutdowns" replace />} />
       <Route path="*" element={<Navigate to="resigning" replace />} />
     </Routes>
   );

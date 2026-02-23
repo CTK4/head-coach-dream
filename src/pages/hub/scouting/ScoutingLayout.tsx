@@ -2,20 +2,20 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { label: "Home", to: "/hub/scouting" },
-  { label: "Big Board", to: "/hub/scouting/big-board" },
-  { label: "Combine", to: "/hub/scouting/combine" },
-  { label: "Workouts", to: "/hub/scouting/private-workouts" },
-  { label: "Interviews", to: "/hub/scouting/interviews" },
-  { label: "Medical", to: "/hub/scouting/medical" },
-  { label: "Allocation", to: "/hub/scouting/allocation" },
-  { label: "In-Season", to: "/hub/scouting/in-season" },
+  { label: "Home", to: "/scouting" },
+  { label: "Big Board", to: "/scouting/big-board" },
+  { label: "Combine", to: "/scouting/combine" },
+  { label: "Workouts", to: "/scouting/private-workouts" },
+  { label: "Interviews", to: "/scouting/interviews" },
+  { label: "Medical", to: "/scouting/medical" },
+  { label: "Allocation", to: "/scouting/allocation" },
+  { label: "In-Season", to: "/scouting/in-season" },
 ];
 
 export default function ScoutingLayout() {
   const nav = useNavigate();
   const loc = useLocation();
-  const isHome = loc.pathname === "/hub/scouting" || loc.pathname === "/hub/scouting/";
+  const isHome = loc.pathname === "/scouting" || loc.pathname === "/scouting/";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -24,7 +24,7 @@ export default function ScoutingLayout() {
           {!isHome && (
             <button
               className="rounded border border-white/10 px-3 py-1 text-sm"
-              onClick={() => nav("/hub/scouting")}
+              onClick={() => nav("/scouting")}
             >
               ←
             </button>
@@ -36,7 +36,7 @@ export default function ScoutingLayout() {
             <NavLink
               key={tab.to}
               to={tab.to}
-              end={tab.to === "/hub/scouting"}
+              end={tab.to === "/scouting"}
               className={({ isActive }) =>
                 cn(
                   "shrink-0 rounded border px-3 py-1 text-xs font-medium",

@@ -36,7 +36,7 @@ test("hub → roster depth chart renders player names (no placeholders)", async 
   expect(optionCount).toBeGreaterThan(3);
 });
 
-test("hub scouting tile routes to /hub/scouting", async ({ page }) => {
-  await page.goto("/hub/scouting");
+test("hub scouting tile routes to /scouting", async ({ page }) => {
+  await page.goto("/scouting");
   await expect(page.locator("body")).toBeVisible();
 });

@@ -265,7 +265,6 @@ export default function StrategyRoutes() {
       <Route path="identity" element={<IdentityScreen />} />
       <Route path="priorities" element={<PrioritiesScreen />} />
       <Route path="playbooks" element={<PlaybookScreen />} />
-      <Route path="tag" element={<Navigate to="/hub/tag-center" replace />} />
       <Route path="*" element={<Navigate to="/strategy" replace />} />
     </Routes>
   );

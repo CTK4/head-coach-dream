@@ -7,15 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const stepRoute: Record<string, string> = {
-  RESIGNING: "/hub/offseason/resigning",
-  COMBINE: "/hub/offseason/combine",
-  TAMPERING: "/hub/offseason/tampering",
-  FREE_AGENCY: "/hub/offseason/free-agency",
-  PRE_DRAFT: "/hub/offseason/pre-draft",
-  DRAFT: "/hub/offseason/draft",
-  TRAINING_CAMP: "/hub/offseason/training-camp",
-  PRESEASON: "/hub/offseason/preseason",
-  CUT_DOWNS: "/hub/offseason/cut-downs",
+  RESIGNING: "/offseason/resigning",
+  COMBINE: "/offseason/combine",
+  TAMPERING: "/offseason/tampering",
+  FREE_AGENCY: "/offseason/free-agency",
+  PRE_DRAFT: "/offseason/pre-draft",
+  DRAFT: "/offseason/draft",
+  TRAINING_CAMP: "/offseason/training-camp",
+  PRESEASON: "/offseason/preseason",
+  CUT_DOWNS: "/offseason/cutdowns",
 };
 
 export default function Offseason() {
