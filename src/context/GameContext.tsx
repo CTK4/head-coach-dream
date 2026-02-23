@@ -16,10 +16,12 @@ import {
   setPersonnelTeamAndContract,
 } from "@/data/leagueDb";
 import type { CoachReputation } from "@/engine/reputation";
-import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost, enforceArchetypeReputationCaps } from "@/engine/reputation";
+import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost, enforceArchetypeReputationCaps, applyPerkReputationBonuses } from "@/engine/reputation";
 import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
 import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
 import { isOfferAccepted } from "@/engine/coachAcceptance";
+import { applyFlagsToContext } from "@/engine/perkEngine";
+import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { initLeagueState, simulateLeagueWeek, type LeagueState } from "@/engine/leagueSim";
@@ -543,6 +545,7 @@ export type GameState = {
   week?: number;
   saveVersion: number;
   memoryLog: MemoryEvent[];
+  contextFlags?: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
   owner: { approval: number; budgetBreaches: number; financialRating: number; jobSecurity: number };
   staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
@@ -1622,6 +1625,7 @@ function computeFaInterest(state: GameState, p: any) {
     base += clamp01((rep.mediaRep - 55) / 450) * 0.05;
   }
   base += needsBoostForPos(state, pos);
+  base += getPerkFaInterestModifier(state.coach, pos);
   const traits = getArchetypeTraits(state.coach.archetypeId);
   if (traits?.faInterestModifiers?.[pos as keyof typeof traits.faInterestModifiers] != null) {
     base += Number(traits.faInterestModifiers[pos as keyof typeof traits.faInterestModifiers]) / 100;
@@ -3071,9 +3075,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         : nextCoach.archetypeId === "dc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
           ? Math.max(65, Number(nextCoach.coordDeferenceLevel ?? 65))
           : nextCoach.coordDeferenceLevel;
-      const rep = nextCoach.reputation
-        ? enforceArchetypeReputationCaps(nextCoach.reputation, { archetypeId: nextCoach.archetypeId, tenureYear: nextCoach.tenureYear })
-        : nextCoach.reputation;
+      const repBase = nextCoach.reputation ? applyPerkReputationBonuses(nextCoach) : nextCoach.reputation;
+      const rep = repBase
+        ? enforceArchetypeReputationCaps(repBase, { archetypeId: nextCoach.archetypeId, tenureYear: nextCoach.tenureYear, coach: nextCoach })
+        : repBase;
 
       return {
         ...state,
@@ -3313,6 +3318,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const traits = getArchetypeTraits(state.coach.archetypeId);
       const hireMod = Number(traits?.hiringAcceptanceModifiers?.[action.payload.role as "OC" | "DC" | "STC"] ?? 0);
       const offeredWithArchetype = Math.round(offered * (1 + hireMod / 100));
+      const perkHireMod = getPerkHiringModifier(state.coach, String(action.payload.role));
       const accepted = isOfferAccepted({
         season: state.season,
         teamId: String(teamId),
@@ -3322,6 +3328,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         expectedSalary: expected,
         offeredSalary: offeredWithArchetype,
         isCoordinator: true,
+        hiringModifier: perkHireMod,
       });
 
       if (!accepted) {
@@ -3412,6 +3419,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const roleKey = String(action.payload.role).includes("QB") ? "QB" : undefined;
       const hireMod = Number((roleKey ? traits?.hiringAcceptanceModifiers?.[roleKey] : 0) ?? 0);
       const offeredWithArchetype = Math.round(offered * (1 + hireMod / 100));
+      const perkHireMod = getPerkHiringModifier(state.coach, String(action.payload.role));
       const accepted = isOfferAccepted({
         season: state.season,
         teamId: String(teamId),
@@ -3421,6 +3429,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         expectedSalary: expected,
         offeredSalary: offeredWithArchetype,
         isCoordinator: false,
+        hiringModifier: perkHireMod,
       });
 
       if (!accepted) {
@@ -5452,6 +5461,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const trackedPlayers = { HOME: buildTrackedPlayers(teamId), AWAY: buildTrackedPlayers(action.payload.opponentTeamId) };
       return {
         ...base,
+        contextFlags: applyFlagsToContext(base.coach),
         game: initGameSim({
           homeTeamId: teamId,
           awayTeamId: action.payload.opponentTeamId,
@@ -5465,6 +5475,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           practiceExecutionBonus: base.weeklyFamiliarityBonus,
           coachArchetypeId: base.coach.archetypeId,
           coachTenureYear: base.coach.tenureYear,
+          coachUnlockedPerkIds: base.coach.unlockedPerkIds,
         }),
       };
     }
@@ -5519,7 +5530,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
             },
             careerStage: "REGULAR_SEASON",
-            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear }),
+            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
           };
         }
       }
@@ -5528,7 +5539,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...nextWithPractice,
         league,
         hub,
-        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear }),
+        contextFlags: applyFlagsToContext(nextWithPractice.coach),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
       if (state.game.weekType === "REGULAR_SEASON") {
         nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
@@ -5541,7 +5553,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "EXIT_GAME":
       return {
         ...state,
-        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: state.saveSeed + 555, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear }),
+        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: state.saveSeed + 555, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
     case "ADVANCE_WEEK": {
       const schedule = state.hub.schedule;

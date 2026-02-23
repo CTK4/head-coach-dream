@@ -1,5 +1,6 @@
 import type { CoachReputation } from "@/engine/reputation";
 import { applyRejectionPenalty, computeHrs, ownerPatienceToStability, volatilityTo100, clamp100 } from "@/engine/reputation";
+import { getPerkHiringModifier, type CoachPerkCarrier } from "@/engine/perkWiring";
 
 export type AssistantTier = "A" | "B" | "C" | "D";
 export type RoleFocus = "OFF" | "DEF" | "ST" | "GEN";
@@ -85,8 +86,9 @@ export function computeStaffAcceptance(args: {
   teamOutlook: number;
   roleFocus: RoleFocus;
   kind: StaffKind;
+  coach?: CoachPerkCarrier;
 }): StaffAcceptance {
-  const { saveSeed, rep, staffRep, personId, schemeCompat, offerQuality, teamOutlook, roleFocus, kind } = args;
+  const { saveSeed, rep, staffRep, personId, schemeCompat, offerQuality, teamOutlook, roleFocus, kind, coach } = args;
   if (!rep) return { accept: true, score: 99, tier: "D", threshold: 0 };
 
   const hrs = computeHrs(rep);
@@ -109,6 +111,8 @@ export function computeStaffAcceptance(args: {
     ? { hrs: 0.38, outlook: 0.18, offer: 0.18, org: 0.1, scheme: 0.07, cred: 0.16 }
     : { hrs: 0.4, outlook: 0.2, offer: 0.15, org: 0.1, scheme: 0.08, cred: 0.12 };
 
+  const perkHireMod = getPerkHiringModifier(coach, roleFocus);
+
   const score =
     w.hrs * hrs +
     w.outlook * teamOutlook +
@@ -119,7 +123,8 @@ export function computeStaffAcceptance(args: {
     0.15 * egoPenalty -
     0.1 * careerRisk -
     autonomyPenalty -
-    credPenalty;
+    credPenalty +
+    perkHireMod * 100;
 
   return { accept: score >= threshold, score: clamp100(score), tier, threshold };
 }

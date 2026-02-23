@@ -1,3 +1,5 @@
+import { getPerkCapLift, getPerkReputationDeltas } from "@/engine/perkWiring";
+
 export type VolatilityExpectation = "LOW" | "LOW_MED" | "MED_HIGH" | "HIGH" | "VERY_HIGH" | "EXTREME";
 
 type ReputationCapContext = {
@@ -5,6 +7,7 @@ type ReputationCapContext = {
   tenureYear?: number;
   top10OffenseAchieved?: boolean;
   top10DefenseAchieved?: boolean;
+  coach?: { unlockedPerkIds?: string[] };
 };
 
 export type CoachReputation = {
@@ -80,18 +83,48 @@ export function applyArchetypeDeltas(rep: CoachReputation, startingDeltas: Parti
   return next;
 }
 
+export function applyPerkReputationBonuses(coach: { reputation?: CoachReputation; unlockedPerkIds?: string[] }): CoachReputation {
+  const rep = coach.reputation;
+  if (!rep) {
+    return {
+      leaguePrestige: 50,
+      offCred: 50,
+      defCred: 50,
+      leadershipTrust: 50,
+      mediaRep: 50,
+      playerRespect: 50,
+      ownerPatienceMult: 1,
+      autonomyLevel: 50,
+      riskTolerancePerception: 50,
+      innovationPerception: 50,
+      volatilityExpectation: "MED_HIGH",
+    };
+  }
+  const deltas = getPerkReputationDeltas(coach);
+  const next: CoachReputation = { ...rep };
+  for (const [key, delta] of Object.entries(deltas)) {
+    if (typeof delta !== "number") continue;
+    if (key === "ownerPatienceMult") {
+      next.ownerPatienceMult = Math.max(0.5, Math.min(1.5, Number(next.ownerPatienceMult ?? 1) + delta));
+      continue;
+    }
+    if (key in next) (next as any)[key] = clamp100(Number((next as any)[key] ?? 0) + delta);
+  }
+  return next;
+}
+
 export function enforceArchetypeReputationCaps(rep: CoachReputation, ctx: ReputationCapContext): CoachReputation {
   const tenureYear = Number(ctx.tenureYear ?? 1);
   const next = { ...rep };
 
   if (ctx.archetypeId === "oc_promoted" && (tenureYear < 3 || !ctx.top10DefenseAchieved)) {
-    next.defCred = Math.min(next.defCred, 65);
+    next.defCred = Math.min(next.defCred, getPerkCapLift(ctx.coach, "defCred", 65));
   }
   if (ctx.archetypeId === "dc_promoted" && (tenureYear < 3 || !ctx.top10OffenseAchieved)) {
-    next.offCred = Math.min(next.offCred, 65);
+    next.offCred = Math.min(next.offCred, getPerkCapLift(ctx.coach, "offCred", 65));
   }
   if (ctx.archetypeId === "young_guru" && tenureYear < 4) {
-    next.defCred = Math.min(next.defCred, 55);
+    next.defCred = Math.min(next.defCred, getPerkCapLift(ctx.coach, "defCred", 55));
   }
 
   return {

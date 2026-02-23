@@ -5,6 +5,7 @@ import { getDefensiveReaction, getMatchupModifier, selectDefensivePackageFromRol
 import { rng as contextualRng } from "@/engine/rng";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
+import { resolvePerkModifiers } from "@/engine/perkWiring";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -131,6 +132,7 @@ export type GameSim = {
   practiceExecutionBonus: number;
   coachArchetypeId?: string;
   coachTenureYear: number;
+  coachUnlockedPerkIds?: string[];
 };
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
@@ -482,7 +484,11 @@ function resolveWithPAS(
   );
   const pasComp = computePAS(playType, look, sim, matchup);
   const passivePas = ((passive.offensiveExecutionBonus ?? 0) + (passive.closeGameExecutionBonus ?? 0)) / 40;
-  const pas = pasComp.pas + passivePas;
+  const perkPas = resolvePerkModifiers(
+    { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear, unlockedPerkIds: sim.coachUnlockedPerkIds },
+    { playType, aggression, quarter: Number(sim.clock.quarter ?? 1), timeRemainingSec: sim.clock.timeRemainingSec }
+  );
+  const pas = pasComp.pas + passivePas + perkPas;
 
   // Aggression modifier
   const aggMod = aggression === "AGGRESSIVE" ? 0.2 : aggression === "CONSERVATIVE" ? -0.15 : 0;
@@ -1053,6 +1059,7 @@ export function initGameSim(params: {
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
+    coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],
   };
 }
 

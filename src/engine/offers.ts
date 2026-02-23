@@ -1,5 +1,6 @@
 import type { GameState, InterviewResult, OfferItem, OfferTier } from "@/context/GameContext";
 import { interviewProfiles, type TeamInterviewProfile } from "@/data/interviewProfiles";
+import { getPerkHiringModifier } from "@/engine/perkWiring";
 
 const BASE_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
 
@@ -30,7 +31,8 @@ function isPerfectBirmingham(result: InterviewResult) {
 export function computeTeamScore(
   _teamId: string,
   interviewResult: InterviewResult | undefined,
-  profile: TeamInterviewProfile
+  profile: TeamInterviewProfile,
+  perkModifier = 0
 ): number {
   if (!interviewResult) return 0;
 
@@ -44,7 +46,7 @@ export function computeTeamScore(
   const modifier = interviewResult.autonomyDelta * 0.2 + interviewResult.leashDelta * 0.1;
   const floor = computeOfferThreshold(profile) * 0.5;
 
-  return Math.max(floor, baseScore + modifier);
+  return Math.max(floor, baseScore + modifier + perkModifier * 10);
 }
 
 function tierAllowsNormalized(tier: OfferTier, normalized: number): number {
@@ -96,7 +98,8 @@ export function generateOffers(state: GameState): OfferItem[] {
 
     if (teamId === "BIRMINGHAM_VULCANS" && !isPerfectBirmingham(result)) return [];
 
-    const score = computeTeamScore(teamId, result, profile);
+    const perkMod = getPerkHiringModifier(state.coach, "HC");
+    const score = computeTeamScore(teamId, result, profile, perkMod);
     const threshold = computeOfferThreshold(profile);
 
     if (teamId !== "MILWAUKEE_NORTHSHORE" && score < threshold) return [];
