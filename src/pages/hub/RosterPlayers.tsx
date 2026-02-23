@@ -6,10 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { moraleChipColor } from "@/engine/morale";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 
 export default function RosterPlayers() {
   const { state } = useGame();
-  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
+  const teamId =
+    state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
 
   const rows = useMemo(() => {
     if (!teamId) return [];
@@ -30,7 +32,9 @@ export default function RosterPlayers() {
       <ScreenHeader title="ROSTER" subtitle="Players" />
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-slate-300">Tap a player to view profile.</div>
+          <div className="text-sm text-slate-300">
+            Tap a player to view profile.
+          </div>
           <Badge variant="outline">{rows.length}</Badge>
         </div>
         <Card>
@@ -42,11 +46,23 @@ export default function RosterPlayers() {
                   to={`/roster/player/${r.playerId}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-white/5"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{r.name}</div>
-                    <div className="text-xs text-slate-400">{r.pos} • OVR {r.ovr} • Age {r.age}</div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <PlayerAvatar
+                      playerId={r.playerId}
+                      name={r.name}
+                      pos={r.pos}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{r.name}</div>
+                      <div className="text-xs text-slate-400">
+                        {r.pos} • OVR {r.ovr} • Age {r.age}
+                      </div>
+                    </div>
                   </div>
-                  <div className={`text-xs px-2 py-0.5 rounded-full border ${moraleChipColor(r.morale)}`}>
+                  <div
+                    className={`text-xs px-2 py-0.5 rounded-full border ${moraleChipColor(r.morale)}`}
+                  >
                     M {r.morale}
                   </div>
                 </Link>
