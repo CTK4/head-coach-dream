@@ -1,6 +1,8 @@
 import { Outlet } from "react-router-dom";
 import { BottomNav } from "./BottomNav";
 import { useDesignTokens } from "@/design/useDesignTokens";
+import FeedbackToast from "@/components/feedback/FeedbackToast";
+import InjuryAlertController from "@/components/feedback/InjuryAlertController";
 
 export function AppShell() {
   const style = useDesignTokens();
@@ -10,6 +12,8 @@ export function AppShell() {
       <div className="flex-1 pb-24">
         <Outlet />
       </div>
+      <FeedbackToast />
+      <InjuryAlertController />
       <BottomNav />
     </div>
   );
