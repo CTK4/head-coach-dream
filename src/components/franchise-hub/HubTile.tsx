@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { readSettings } from "@/lib/settings";
+import { HUB_TILE_FALLBACK_IMAGE } from "@/components/franchise-hub/tileImages";
 
 export type HubBadgeKind = "unread" | "task" | "cap" | "scouting" | "info";
 
@@ -38,10 +39,10 @@ export type HubTileProps = {
 export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, badgeHint, badgeKind, imageObjectPosition }: HubTileProps) {
   const navigate = useNavigate();
   const showTooltips = !!readSettings().showTooltips;
-  const [imageHidden, setImageHidden] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>(imageUrl);
 
   useEffect(() => {
-    setImageHidden(false);
+    setCurrentImageUrl(imageUrl);
   }, [imageUrl]);
 
   return (
@@ -53,13 +54,19 @@ export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, im
         ].join(" ")}
       >
         <div className="absolute inset-0 z-0">
-          {imageUrl && !imageHidden ? (
+          {currentImageUrl ? (
             <img
-              src={imageUrl}
+              src={currentImageUrl}
               alt=""
               className="absolute inset-0 h-full w-full object-cover opacity-60 transition-opacity duration-500 group-hover:opacity-70"
               style={{ objectPosition: imageObjectPosition ?? "50% 50%" }}
-              onError={() => setImageHidden(true)}
+              onError={() => {
+                if (currentImageUrl !== HUB_TILE_FALLBACK_IMAGE) {
+                  setCurrentImageUrl(HUB_TILE_FALLBACK_IMAGE);
+                } else {
+                  setCurrentImageUrl(undefined);
+                }
+              }}
               loading="lazy"
               decoding="async"
             />
