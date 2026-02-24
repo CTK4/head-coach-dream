@@ -46,6 +46,7 @@ import OwnerRelations from "./pages/hub/OwnerRelations";
 import ActivityLog from "./pages/hub/ActivityLog";
 import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 import FrontOffice from "@/pages/hub/FrontOffice";
+import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
 
 const queryClient = new QueryClient();
 
@@ -123,6 +124,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <GameProvider>
+        <OfferResultModalHost />
         <BrowserRouter>
           <Routes>
             <Route path="/onboarding" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
