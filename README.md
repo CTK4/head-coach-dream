@@ -74,14 +74,27 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 ## Cloudflare R2 Assets
 
-This app can load static assets from Cloudflare R2 using Vite environment variables. All vars are optional; if omitted, the app falls back to the public default endpoints below.
+This app can load static assets from Cloudflare R2 using Vite environment variables.
 
-- `VITE_R2_AVATARS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/avatars`)
-- `VITE_R2_BADGES_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/badges`)
-- `VITE_R2_ICONS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/icons`)
-- `VITE_R2_PLACEHOLDERS_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/placeholders`)
-- `VITE_R2_UTILITY_BASE_URL` (default: `https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/utility`)
+A Worker is included at `workers/r2-assets` that publicly serves five R2 buckets with these routes:
 
-Even though defaults are built in, set these variables in Vercel for explicit configuration per environment.
+- `/avatars/<key>`
+- `/badges/<key>`
+- `/icons/<key>`
+- `/placeholders/<key>`
+- `/utility/<key>`
 
-These R2 URLs are public endpoints. Do **not** commit binary asset files in PRs.
+Set these environment variables in your frontend deployment to your Worker base URL:
+
+- `VITE_R2_AVATARS_BASE_URL=https://<worker-host>/avatars`
+- `VITE_R2_BADGES_BASE_URL=https://<worker-host>/badges`
+- `VITE_R2_ICONS_BASE_URL=https://<worker-host>/icons`
+- `VITE_R2_PLACEHOLDERS_BASE_URL=https://<worker-host>/placeholders`
+- `VITE_R2_UTILITY_BASE_URL=https://<worker-host>/utility`
+
+Where `<worker-host>` is either:
+
+- `https://<worker-name>.<subdomain>.workers.dev` (workers.dev)
+- `https://assets.example.com` (custom domain)
+
+The Worker preserves object content headers via `writeHttpMetadata`, returns `404` for missing keys/routes, and sets cache policy `public, max-age=31536000, immutable`.
