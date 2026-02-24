@@ -39,19 +39,38 @@ function scale(raw: number): number {
 export function computeTeamGameRatings(teamId: string): TeamGameRatings {
   const players = getPlayersByTeam(teamId);
 
-  const byPos = (groups: string[]): number[] =>
-    players
-      .filter((p) => groups.some((g) => (p.pos ?? "").toUpperCase().startsWith(g)))
-      .map((p) => Number(p.overall ?? DEFAULT_OVR))
-      .filter(Number.isFinite);
+  // Build per-group overalls in a single pass over the roster.
+  const groups = {
+    qb: [] as number[],
+    ol: [] as number[],
+    wr: [] as number[],
+    rb: [] as number[],
+    dl: [] as number[],
+    lb: [] as number[],
+    db: [] as number[],
+  };
 
-  const qbOvr = scale(avg(byPos(["QB"])));
-  const olOvr = scale(avg(byPos(["OL", "OT", "OG", "C"])));
-  const wrOvr = scale(avg(byPos(["WR", "TE"])));
-  const rbOvr = scale(avg(byPos(["RB", "FB"])));
-  const dlOvr = scale(avg(byPos(["DL", "DT", "DE", "EDGE", "NT"])));
-  const lbOvr = scale(avg(byPos(["LB", "ILB", "OLB", "MLB"])));
-  const dbOvr = scale(avg(byPos(["CB", "S", "SS", "FS", "DB"])));
+  for (const p of players) {
+    const pos = (p.pos ?? "").toUpperCase();
+    const ovr = Number(p.overall ?? DEFAULT_OVR);
+    if (!Number.isFinite(ovr)) continue;
+    if (pos.startsWith("QB")) groups.qb.push(ovr);
+    else if (pos.startsWith("OLB")) groups.lb.push(ovr);  // before "OL"
+    else if (pos.startsWith("OT") || pos.startsWith("OG") || pos === "OL" || pos === "C") groups.ol.push(ovr);
+    else if (pos.startsWith("WR") || pos.startsWith("TE")) groups.wr.push(ovr);
+    else if (pos.startsWith("RB") || pos.startsWith("FB")) groups.rb.push(ovr);
+    else if (pos.startsWith("EDGE") || pos.startsWith("DL") || pos.startsWith("DT") || pos.startsWith("DE") || pos.startsWith("NT")) groups.dl.push(ovr);
+    else if (pos.startsWith("ILB") || pos.startsWith("MLB") || pos.startsWith("LB")) groups.lb.push(ovr);
+    else if (pos.startsWith("CB") || pos.startsWith("SS") || pos.startsWith("FS") || pos.startsWith("DB") || pos === "S") groups.db.push(ovr);
+  }
+
+  const qbOvr = scale(avg(groups.qb));
+  const olOvr = scale(avg(groups.ol));
+  const wrOvr = scale(avg(groups.wr));
+  const rbOvr = scale(avg(groups.rb));
+  const dlOvr = scale(avg(groups.dl));
+  const lbOvr = scale(avg(groups.lb));
+  const dbOvr = scale(avg(groups.db));
 
   return {
     qbProcessing: qbOvr,
