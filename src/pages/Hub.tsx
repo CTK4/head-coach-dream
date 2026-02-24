@@ -118,7 +118,7 @@ export default function Hub() {
   ];
 
   return (
-    <section className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
+    <div className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 
@@ -159,6 +159,6 @@ export default function Hub() {
           </div>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   );
 }
