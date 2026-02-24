@@ -24,6 +24,7 @@ const TILE_IMAGES = {
     trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
     injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
     development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    frontOffice: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
 } as const;
 
 
@@ -127,6 +128,15 @@ export default function Hub() {
                     badgeCount={badgeCounts.finances}
                     badgeHint="Cap items"
                     badgeKind="cap"
+                />
+                <HubTile
+                    title="Front Office"
+                    subtitle="Owner & GM"
+                    to="/hub/front-office"
+                    imageR2={TILE_IMAGES.frontOffice}
+                    badgeCount={1}
+                    badgeHint="Org insights"
+                    badgeKind="info"
                 />
                 <HubTile
                     title="Scouting"
