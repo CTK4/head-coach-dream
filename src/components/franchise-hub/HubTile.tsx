@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { R2Image, type R2ImageKind } from "@/components/ui/R2Image";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { readSettings } from "@/lib/settings";
 
@@ -30,14 +30,19 @@ export type HubTileProps = {
   badgeCount?: number;
   cornerBubbleCount?: number;
   imageUrl?: string;
-  imageR2?: { kind: R2ImageKind; filename: string; fallbackSrc: string };
   badgeHint?: string;
   badgeKind?: HubBadgeKind;
+  imageObjectPosition?: string;
 };
 
-export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, imageR2, badgeHint, badgeKind }: HubTileProps) {
+export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, badgeHint, badgeKind, imageObjectPosition }: HubTileProps) {
   const navigate = useNavigate();
   const showTooltips = !!readSettings().showTooltips;
+  const [imageHidden, setImageHidden] = useState(false);
+
+  useEffect(() => {
+    setImageHidden(false);
+  }, [imageUrl]);
 
   return (
     <button type="button" onClick={() => navigate(to)} className="relative w-full text-left group" aria-label={`Open ${title}`}>
@@ -48,19 +53,18 @@ export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, im
         ].join(" ")}
       >
         <div className="absolute inset-0 z-0">
-          {imageR2 ? (
-            <R2Image
-              kind={imageR2.kind}
-              filename={imageR2.filename}
-              fallbackSrc={imageR2.fallbackSrc}
+          {imageUrl && !imageHidden ? (
+            <img
+              src={imageUrl}
               alt=""
-              className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500"
+              className="absolute inset-0 h-full w-full object-cover opacity-60 transition-opacity duration-500 group-hover:opacity-70"
+              style={{ objectPosition: imageObjectPosition ?? "50% 50%" }}
+              onError={() => setImageHidden(true)}
+              loading="lazy"
+              decoding="async"
             />
-          ) : imageUrl ? (
-            <img src={imageUrl} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-slate-800/30 via-slate-950/10 to-slate-900/40" />
-          )}
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-800/30 via-slate-950/10 to-slate-900/40" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent" />
         </div>
 

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { buildAvatarCandidates, getInitials } from "@/lib/r2Assets";
+import { getInitials } from "@/lib/r2Assets";
+import { useEffect, useState } from "react";
 
 type PlayerAvatarProps = {
   playerId: string;
@@ -8,7 +8,6 @@ type PlayerAvatarProps = {
   pos?: string;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
-  loading?: "eager" | "lazy";
 };
 
 const SIZE_CLASS: Record<NonNullable<PlayerAvatarProps["size"]>, string> = {
@@ -30,22 +29,15 @@ function posTint(pos?: string): string {
   return "bg-slate-500/20 text-slate-100";
 }
 
-export function PlayerAvatar({
-  playerId,
-  name,
-  pos,
-  size = "md",
-  className,
-  loading = "lazy",
-}: PlayerAvatarProps) {
-  const candidates = useMemo(() => buildAvatarCandidates(playerId), [playerId]);
-  const [idx, setIdx] = useState(0);
+export function PlayerAvatar({ playerId, name, pos, size = "md", className }: PlayerAvatarProps) {
+  const [missing, setMissing] = useState(false);
+  const avatarSrc = `/avatars/${playerId}.png`;
 
   useEffect(() => {
-    setIdx(0);
+    setMissing(false);
   }, [playerId]);
 
-  if (idx >= candidates.length) {
+  if (missing) {
     return (
       <div
         className={cn(
@@ -64,16 +56,12 @@ export function PlayerAvatar({
 
   return (
     <img
-      src={candidates[idx]}
+      src={avatarSrc}
       alt={name ? `${name} avatar` : `${playerId} avatar`}
-      className={cn(
-        "shrink-0 rounded-full border border-white/20 object-cover bg-white/5",
-        SIZE_CLASS[size],
-        className,
-      )}
-      loading={loading}
+      className={cn("shrink-0 rounded-full border border-white/20 bg-white/5 object-cover", SIZE_CLASS[size], className)}
+      loading="lazy"
       decoding="async"
-      onError={() => setIdx((v) => v + 1)}
+      onError={() => setMissing(true)}
     />
   );
 }

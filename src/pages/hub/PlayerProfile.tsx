@@ -91,7 +91,6 @@ export default function PlayerProfile() {
                 name={name}
                 pos={pos}
                 size="lg"
-                loading="eager"
                 className="border-white/15"
               />
 

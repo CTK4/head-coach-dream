@@ -182,6 +182,7 @@ const App = () => (
                <Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} />
                <Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} />
                <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
+               <Route path="/hub/hall-of-fame" element={<HallOfFame />} />
                <Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} />
                <Route path="/hub/tampering" element={<Navigate to="/offseason/tampering" replace />} />
                <Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} />
