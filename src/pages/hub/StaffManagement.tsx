@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
+import { Avatar } from "@/components/common/Avatar";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -47,8 +48,9 @@ export default function StaffManagement() {
         return {
           ...s,
           pid,
-          name: String((p as any)?.fullName ?? "Coach"),
-          rep: Number((p as any)?.reputation ?? 0),
+          name: String(p?.fullName ?? "Coach"),
+          rep: Number(p?.reputation ?? 0),
+          avatarUrl: p?.avatarUrl,
           salary,
           remainingYears,
           total,
@@ -92,12 +94,15 @@ export default function StaffManagement() {
         <CardContent className="p-4 space-y-2">
           {rows.map((r) => (
             <div key={r.pid} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-medium truncate">
-                  {r.name} <span className="text-muted-foreground">— {r.label}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Rep {r.rep} · Salary {money(r.salary)} · Remaining {r.remainingYears}y · Buyout {money(r.total)} ({r.chunks.map(money).join(" + ")})
+              <div className="min-w-0 flex items-center gap-3">
+                <Avatar entity={{ type: "personnel", id: r.pid, name: r.name, avatarUrl: r.avatarUrl }} size={40} />
+                <div className="min-w-0">
+                  <div className="font-medium truncate">
+                    {r.name} <span className="text-muted-foreground">— {r.label}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Rep {r.rep} · Salary {money(r.salary)} · Remaining {r.remainingYears}y · Buyout {money(r.total)} ({r.chunks.map(money).join(" + ")})
+                  </div>
                 </div>
               </div>
               <Button

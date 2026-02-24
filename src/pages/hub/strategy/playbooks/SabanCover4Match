@@ -1,0 +1,697 @@
+/* ════════════════════════════════════════════════════════════════════════
+   SABAN COVER 4 MATCH — DEFENSIVE CORE 40 (UI DATA)
+
+   System Identity (Saban/Alabama-style Quarters Match)
+   - Split-safety base (2-high 75–85%)
+   - Pattern-match quarters rules + automatic 3x1 answers (Special/Solo/Stubbie/Poach)
+   - Mint/Tite front as primary structure (4i-0-4i)
+   - Sim pressure > true blitz; pressures preserve match integrity
+   - “Star” (nickel hybrid) is featured: force, bracket, and pressure tool
+
+   Categories mapped to your UI:
+     pass         => Base Quarters + Trips Adjustments + C1 changeups
+     run          => Mint front package + Nickel Fire (5-man)
+     pa           => Simulated pressure (creepers/exchange)
+     situational  => Drop-8 / Dime / Red Zone
+
+   Tokens (since defense icons may not exist):
+     DL  => "OL"
+     LB  => "FB"
+     S   => "TE"
+     CB  => "WR"
+     STAR (nickel) => "TE" (positioned as overhang)
+
+   NOTE: Diagrams are schematic and intentionally simplified.
+   ════════════════════════════════════════════════════════════════════════ */
+
+export const DEF_SABAN_C4_MATCH_CORE40 = [
+/* ═══ I. BASE QUARTERS STRUCTURE (1-7) ══════════════════════════════════ */
+/* 1 */
+{
+  id:1, name:"QTRS_Base_MOD", label:"Quarters Base (MOD) – match outside on demand", cat:"pass",
+  sk:[
+    // Mint-ish shell shown but can be any 4-2-5
+    {x:70,y:LOS,t:"OL"},{x:92,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:108,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+    {x:44,y:58,t:"TE"},  // STAR (overhang)
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"}, // 2-high
+  ],
+  rt:[
+    // Quarters: corners + safeties divide deep
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+    // STAR + LBs match/relate
+    {d:P([44,58],[56,56],[68,54]), c:CLR.pass,w:1.5,a:true,dsh:true},
+    {d:P([84,74],[84,58]), c:CLR.pass,w:1.3,a:true,dsh:true},
+    {d:P([116,74],[116,58]), c:CLR.pass,w:1.3,a:true,dsh:true},
+  ],
+},
+
+/* 2 */
+{
+  id:2, name:"QTRS_Press", label:"Quarters Press – collide vertical, tight leverage", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},{x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+  ],
+  rt:[
+    // press then carry quarters landmarks
+    {d:CB([20,LOS],[24,64],[24,44],[24,28]), c:CLR.pass,w:2.1,a:true},
+    {d:CB([180,LOS],[176,64],[176,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([44,58],[56,56],[68,54]), c:CLR.pass,w:1.4,a:true,dsh:true},
+  ],
+},
+
+/* 3 */
+{
+  id:3, name:"QTRS_Off", label:"Quarters Off – soft cushion read", cat:"pass",
+  sk:[
+    {x:24,y:60,t:"WR"},{x:176,y:60,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},{x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+  ],
+  rt:[
+    {d:P([24,60],[24,40],[24,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([176,60],[176,40],[176,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([44,58],[58,56],[72,56]), c:CLR.pass,w:1.4,a:true,dsh:true},
+  ],
+},
+
+/* 4 */
+{
+  id:4, name:"QTRS_SeamRead", label:"Quarters Seam Read – safety reads #2 release", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    // seam-read safeties “hold then drive”
+    {d:CB([70,34],[66,30],[60,24]), c:CLR.pass,w:2.1,a:true},
+    {d:CB([130,34],[134,30],[140,24]), c:CLR.pass,w:2.1,a:true},
+    {d:P([44,58],[58,56],[72,56]), c:CLR.pass,w:1.5,a:true,dsh:true},
+  ],
+},
+
+/* 5 */
+{
+  id:5, name:"QTRS_Lock_1", label:"Quarters Lock #1 – corner man on outside WR", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    // lock boundary X (visual short man)
+    {d:P([20,LOS],[20,34]), c:CLR.pass,w:2.2,a:true},
+    // rest quarters
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([44,58],[58,56],[72,56]), c:CLR.pass,w:1.4,a:true,dsh:true},
+  ],
+},
+
+/* 6 */
+{
+  id:6, name:"QTRS_MEG_Boundary", label:"Quarters MEG Boundary – man everywhere he goes backside", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"}, // backside X
+    {x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    {d:P([20,LOS],[20,36]), c:CLR.pass,w:2.2,a:true}, // MEG
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+  ],
+},
+
+/* 7 */
+{
+  id:7, name:"QTRS_PoachAlert", label:"Quarters Poach Alert – weak safety robs #3 vertical", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:110,y:44,t:"TE"}, // poach path marker
+  ],
+  rt:[
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    // weak safety poach inside vertical
+    {d:CB([70,34],[84,30],[98,28]), c:CLR.pass,w:2.2,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+  ],
+},
+
+/* ═══ II. TRIPS ADJUSTMENTS (8-14) ═════════════════════════════════════ */
+/* 8 */
+{
+  id:8, name:"Trips_Special", label:"Special (3-Strong Match) – trips safety match", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:180,y:LOS,t:"WR"},{x:20,y:LOS,t:"WR"},
+    {x:150,y:58,t:"TE"}, // strong trips rotation landmark
+    {x:44,y:58,t:"TE"},  // STAR
+  ],
+  rt:[
+    // Strong safety drives to trips match zone
+    {d:CB([130,34],[140,40],[150,48],[156,56]), c:CLR.pass,w:2.1,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([44,58],[58,56],[72,56]), c:CLR.pass,w:1.4,a:true,dsh:true},
+  ],
+},
+
+/* 9 */
+{
+  id:9, name:"Trips_Solo", label:"Solo – lock backside X, weak safety middle", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"}, // backside X
+    {x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:100,y:30,t:"TE"}, // weak safety “middle”
+  ],
+  rt:[
+    {d:P([20,LOS],[20,36]), c:CLR.pass,w:2.2,a:true}, // backside lock
+    {d:P([100,30],[100,18]), c:CLR.pass,w:2.2,a:true,dsh:true}, // middle helper
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.0,a:true},
+  ],
+},
+
+/* 10 */
+{
+  id:10, name:"Trips_Stubbie", label:"Stubbie – inside-out bracket on slot", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:156,y:62,t:"TE"}, // STAR bracket
+    {x:144,y:50,t:"TE"}, // safety bracket
+    {x:180,y:LOS,t:"WR"},
+  ],
+  rt:[
+    {d:P([156,62],[150,56],[144,50]), c:CLR.pass,w:1.9,a:true,dsh:true},
+    {d:P([144,50],[140,40],[136,32]), c:CLR.pass,w:1.9,a:true,dsh:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.0,a:true},
+  ],
+},
+
+/* 11 */
+{
+  id:11, name:"Trips_Poach_3x1", label:"Poach (3x1) – weak safety cuts #3", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:110,y:42,t:"TE"}, // poach track
+  ],
+  rt:[
+    {d:CB([70,34],[84,30],[98,28]), c:CLR.pass,w:2.2,a:true,dsh:true}, // poach
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.1,a:true},
+  ],
+},
+
+/* 12 */
+{
+  id:12, name:"Trips_Stress", label:"Stress – safety carries seam hard", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:130,y:38,t:"TE"}, // seam carry marker
+  ],
+  rt:[
+    {d:CB([130,34],[128,26],[126,20]), c:CLR.pass,w:2.3,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.1,a:true},
+  ],
+},
+
+/* 13 */
+{
+  id:13, name:"Trips_BoxPoach", label:"Box Poach – bracket #2 + rob #3", cat:"pass",
+  sk:[
+    {x:156,y:62,t:"TE"},{x:144,y:50,t:"TE"}, // box bracket
+    {x:70,y:34,t:"TE"}, // poach
+  ],
+  rt:[
+    {d:P([156,62],[150,56],[144,50]), c:CLR.pass,w:1.9,a:true,dsh:true},
+    {d:P([144,50],[140,44]), c:CLR.pass,w:1.9,a:true,dsh:true},
+    {d:CB([70,34],[84,30],[98,28]), c:CLR.pass,w:2.2,a:true,dsh:true},
+  ],
+},
+
+/* 14 */
+{
+  id:14, name:"Trips_PushCheck", label:"Push Check – slide coverage strength late", cat:"pass",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:88,y:40,t:"TE"}, // late slide marker
+  ],
+  rt:[
+    {d:CB([130,34],[118,34],[106,32]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:CB([70,34],[82,34],[94,32]), c:CLR.pass,w:2.0,a:true,dsh:true},
+  ],
+},
+
+/* ═══ III. MINT FRONT PACKAGE (15-19) ═════════════════════════════════= */
+/* 15 */
+{
+  id:15, name:"Mint_Qtrs_Base", label:"Mint Quarters Base – 4i-0-4i structure", cat:"run",
+  sk:[
+    // 4i-0-4i + edges
+    {x:70,y:LOS,t:"OL"},{x:92,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:108,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+    {x:44,y:58,t:"TE"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:P([92,LOS],[92,LOS-12]), c:CLR.run,w:2.3,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.3,a:true},
+    {d:P([108,LOS],[108,LOS-12]), c:CLR.run,w:2.3,a:true},
+    // keep quarters shell
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 16 */
+{
+  id:16, name:"Mint_Match_Press", label:"Mint Match Press", cat:"run",
+  sk:[
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:70,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    {d:CB([20,LOS],[24,64],[24,44],[24,28]), c:CLR.pass,w:2.1,a:true},
+    {d:CB([180,LOS],[176,64],[176,44],[176,28]), c:CLR.pass,w:2.1,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.2,a:true},
+  ],
+},
+
+/* 17 */
+{
+  id:17, name:"Mint_Special", label:"Mint Special", cat:"run",
+  sk:[
+    {x:70,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:130,y:34,t:"TE"},{x:70,y:34,t:"TE"},
+    {x:150,y:58,t:"TE"},{x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    {d:CB([130,34],[140,40],[150,48],[156,56]), c:CLR.pass,w:2.1,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.2,a:true},
+  ],
+},
+
+/* 18 */
+{
+  id:18, name:"Mint_Poach", label:"Mint Poach", cat:"run",
+  sk:[
+    {x:70,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:110,y:42,t:"TE"},
+  ],
+  rt:[
+    {d:CB([70,34],[84,30],[98,28]), c:CLR.pass,w:2.2,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.2,a:true},
+  ],
+},
+
+/* 19 */
+{
+  id:19, name:"Mint_Spill_Run", label:"Mint Spill Front (run emphasis)", cat:"run",
+  sk:[
+    {x:70,y:LOS,t:"OL"},{x:92,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:108,y:LOS,t:"OL"},{x:130,y:LOS,t:"OL"},
+    {x:44,y:58,t:"TE"}, {x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+  ],
+  rt:[
+    {d:CB([70,LOS],[56,62],[44,52],[34,46]), c:CLR.run,w:2.4,a:true}, // spill edge
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.3,a:true},
+    {d:P([44,58],[34,62],[24,70]), c:CLR.run,w:1.8,a:true,dsh:true}, // STAR force/fit
+  ],
+},
+
+/* ═══ IV. SIMULATED PRESSURE (20-25) ═══════════════════════════════════ */
+/* 20 */
+{
+  id:20, name:"Nickel_Sim_Strong", label:"Nickel Sim Strong – Drop DE, bring Star", cat:"pa",
+  sk:[
+    {x:130,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:70,y:LOS,t:"OL"},
+    {x:44,y:58,t:"TE"}, // STAR
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([44,58],[54,54],[66,48],[78,40]), c:CLR.run,w:2.5,a:true}, // STAR rush
+    {d:CB([130,LOS],[122,58],[120,48],[118,44]), c:CLR.pass,w:2.0,a:true,dsh:true}, // drop end
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 21 */
+{
+  id:21, name:"Mike_Mug_Sim", label:"Mike Mug Sim – Show A-gap, rush 4", cat:"pa",
+  sk:[
+    {x:84,y:74,t:"FB"},{x:100,y:74,t:"FB"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:P([84,74],[84,62]), c:CLR.pa,w:1.6,a:true,dsh:true},
+    {d:P([100,74],[100,62]), c:CLR.pa,w:1.6,a:true,dsh:true},
+    {d:CB([84,74],[82,66],[80,58],[78,50]), c:CLR.run,w:2.3,a:true},
+    {d:CB([100,74],[102,66],[104,58],[106,50]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 22 */
+{
+  id:22, name:"Boundary_Creeper", label:"Boundary Creeper – Replace rush weak", cat:"pa",
+  sk:[
+    {x:36,y:62,t:"TE"}, // creeper
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([36,62],[32,58],[26,52],[20,44]), c:CLR.run,w:2.5,a:true},
+    {d:CB([70,LOS],[74,58],[76,48],[78,44]), c:CLR.pass,w:2.0,a:true,dsh:true}, // drop edge
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 23 */
+{
+  id:23, name:"Tackle_Drop_Sim", label:"Tackle Drop Sim – Interior peel to hook", cat:"pa",
+  sk:[
+    {x:100,y:LOS,t:"OL"},
+    {x:116,y:74,t:"FB"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([100,LOS],[104,58],[100,52],[92,48]), c:CLR.pass,w:2.0,a:true,dsh:true}, // peel
+    {d:CB([116,74],[128,70],[146,60],[164,46]), c:CLR.run,w:2.4,a:true}, // replace rusher
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 24 */
+{
+  id:24, name:"Star_Insert_Sim", label:"Star Insert Sim – Blitz look, drop OLB", cat:"pa",
+  sk:[
+    {x:44,y:58,t:"TE"}, // STAR
+    {x:84,y:74,t:"FB"}, // OLB/LB dropping
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([44,58],[52,54],[64,46],[76,40]), c:CLR.run,w:2.4,a:true}, // insert
+    {d:CB([84,74],[84,58],[84,48]), c:CLR.pass,w:1.9,a:true,dsh:true}, // drop
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 25 */
+{
+  id:25, name:"Cross_Sim_Exchange", label:"Cross Sim Exchange – OLB loop, DE drop", cat:"pa",
+  sk:[
+    {x:116,y:74,t:"FB"}, // looping LB
+    {x:130,y:LOS,t:"OL"}, // dropping edge
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([116,74],[110,70],[102,60],[94,48]), c:CLR.run,w:2.5,a:true}, // loop
+    {d:CB([130,LOS],[124,58],[122,48],[120,44]), c:CLR.pass,w:2.0,a:true,dsh:true}, // drop edge
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* ═══ V. NICKEL FIRE (26-30) ═══════════════════════════════════════════ */
+/* 26 */
+{
+  id:26, name:"Star_Fire_Quarters", label:"Star Fire Quarters – nickel edge pressure", cat:"run",
+  sk:[
+    {x:44,y:58,t:"TE"}, // STAR
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+  ],
+  rt:[
+    {d:CB([44,58],[36,54],[28,48],[20,40]), c:CLR.run,w:2.7,a:true},
+    // keep quarters landmarks (simplified)
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 27 */
+{
+  id:27, name:"Field_Fire_Match", label:"Field Fire Match – 5-man with match integrity", cat:"run",
+  sk:[
+    {x:156,y:62,t:"TE"}, // field pressure piece
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+  ],
+  rt:[
+    {d:CB([156,62],[166,58],[176,52],[184,44]), c:CLR.run,w:2.7,a:true},
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:1.7,a:true,dsh:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:1.7,a:true,dsh:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.7,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.7,a:true,dsh:true},
+  ],
+},
+
+/* 28 */
+{
+  id:28, name:"Boundary_Cat_Match", label:"Boundary Cat Match", cat:"run",
+  sk:[
+    {x:36,y:62,t:"TE"}, // cat
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([36,62],[32,58],[26,52],[20,44]), c:CLR.run,w:2.8,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 29 */
+{
+  id:29, name:"CrossDog_Quarters", label:"Cross Dog Quarters", cat:"run",
+  sk:[
+    {x:84,y:74,t:"FB"},{x:116,y:74,t:"FB"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:CB([84,74],[78,68],[74,58],[70,48]), c:CLR.run,w:2.6,a:true},
+    {d:CB([116,74],[108,68],[102,58],[96,48]), c:CLR.run,w:2.6,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* 30 */
+{
+  id:30, name:"Mint_Fire_Interior", label:"Mint Fire (5-man interior)", cat:"run",
+  sk:[
+    {x:92,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:108,y:LOS,t:"OL"},
+    {x:84,y:74,t:"FB"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:P([92,LOS],[92,LOS-12]), c:CLR.run,w:2.4,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.4,a:true},
+    {d:P([108,LOS],[108,LOS-12]), c:CLR.run,w:2.4,a:true},
+    {d:CB([84,74],[84,62],[84,52],[84,44]), c:CLR.run,w:2.6,a:true}, // add-on
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.6,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.6,a:true,dsh:true},
+  ],
+},
+
+/* ═══ VI. C1 CHANGEUPS (31-33) ═════════════════════════════════════════ */
+/* 31 */
+{
+  id:31, name:"C1_Robber", label:"C1 Robber – low hole safety", cat:"pass",
+  sk:[
+    {x:100,y:32,t:"TE"}, // post
+    {x:76,y:54,t:"TE"},  // robber
+    {x:44,y:58,t:"TE"},  // STAR man
+  ],
+  rt:[
+    {d:P([100,32],[100,18]), c:CLR.pass,w:2.2,a:true},
+    {d:P([76,54],[88,52],[100,54]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([44,58],[52,52]), c:CLR.pass,w:1.7,a:true},
+  ],
+},
+
+/* 32 */
+{
+  id:32, name:"C1_Double_X", label:"C1 Double X – bracket outside WR", cat:"pass",
+  sk:[
+    {x:20,y:LOS,t:"WR"},
+    {x:32,y:54,t:"TE"},{x:52,y:44,t:"TE"}, // bracket
+    {x:100,y:32,t:"TE"},
+  ],
+  rt:[
+    {d:P([32,54],[26,52],[20,50]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([52,44],[40,44],[28,46]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([100,32],[100,18]), c:CLR.pass,w:2.2,a:true},
+  ],
+},
+
+/* 33 */
+{
+  id:33, name:"C1_Star_Lock", label:"C1 Star Lock – nickel man, zone elsewhere", cat:"pass",
+  sk:[
+    {x:44,y:58,t:"TE"}, // STAR
+    {x:100,y:32,t:"TE"},
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+  ],
+  rt:[
+    {d:P([44,58],[56,56]), c:CLR.pass,w:1.8,a:true}, // man visual
+    {d:P([100,32],[100,18]), c:CLR.pass,w:2.2,a:true},
+    // keep 2-high look behind it (swap rules in engine)
+    {d:P([70,34],[58,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+
+/* ═══ VII. 3RD DOWN & DROP-8 (34-36) ═══════════════════════════════════ */
+/* 34 */
+{
+  id:34, name:"Drop8_Quarters", label:"Drop-8 Quarters – 3-man rush", cat:"situational",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:60,y:58,t:"FB"},{x:84,y:58,t:"FB"},{x:108,y:58,t:"FB"},{x:140,y:58,t:"FB"},
+  ],
+  rt:[
+    {d:P([20,LOS],[22,44],[24,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([180,LOS],[178,44],[176,28]), c:CLR.pass,w:2.0,a:true},
+    {d:P([70,34],[58,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+    {d:P([84,58],[84,44]), c:CLR.pass,w:1.5,a:true,dsh:true},
+    {d:P([108,58],[108,44]), c:CLR.pass,w:1.5,a:true,dsh:true},
+  ],
+},
+
+/* 35 */
+{
+  id:35, name:"Drop8_Poach_Cloud", label:"Drop-8 Poach Cloud", cat:"situational",
+  sk:[
+    {x:32,y:54,t:"TE"}, {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:110,y:42,t:"TE"}, // poach marker
+  ],
+  rt:[
+    {d:P([32,54],[34,56],[38,58]), c:CLR.pass,w:1.6,a:false,dsh:true}, // cloud squat marker
+    {d:CB([70,34],[84,30],[98,28]), c:CLR.pass,w:2.2,a:true,dsh:true}, // poach
+    {d:P([130,34],[142,22]), c:CLR.pass,w:2.0,a:true},
+  ],
+},
+
+/* 36 */
+{
+  id:36, name:"Dime_2Man_Bracket", label:"Dime 2-Man Bracket", cat:"situational",
+  sk:[
+    {x:70,y:34,t:"TE"},{x:130,y:34,t:"TE"},
+    {x:44,y:58,t:"TE"},{x:156,y:58,t:"TE"}, // bracket-ish helpers
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+  ],
+  rt:[
+    {d:P([70,34],[52,18]), c:CLR.pass,w:2.2,a:true},
+    {d:P([130,34],[148,18]), c:CLR.pass,w:2.2,a:true},
+    {d:P([20,LOS],[20,30]), c:CLR.pass,w:2.0,a:true},
+    {d:P([180,LOS],[180,30]), c:CLR.pass,w:2.0,a:true},
+    {d:P([44,58],[56,56]), c:CLR.pass,w:1.6,a:true,dsh:true},
+    {d:P([156,58],[144,56]), c:CLR.pass,w:1.6,a:true,dsh:true},
+  ],
+},
+
+/* ═══ VIII. RED ZONE PACKAGE (37-40) ═══════════════════════════════════ */
+/* 37 */
+{
+  id:37, name:"Red_Match_Clamp", label:"Red Match Clamp – tight quarters spacing", cat:"situational",
+  sk:[
+    {x:20,y:LOS,t:"WR"},{x:180,y:LOS,t:"WR"},
+    {x:70,y:40,t:"TE"},{x:130,y:40,t:"TE"},
+    {x:44,y:58,t:"TE"},
+  ],
+  rt:[
+    {d:P([20,LOS],[22,46],[24,32]), c:CLR.pass,w:2.0,a:true},
+    {d:P([180,LOS],[178,46],[176,32]), c:CLR.pass,w:2.0,a:true},
+    {d:P([70,40],[58,26]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,40],[142,26]), c:CLR.pass,w:2.0,a:true},
+    {d:P([44,58],[58,56],[72,56]), c:CLR.pass,w:1.5,a:true,dsh:true},
+  ],
+},
+
+/* 38 */
+{
+  id:38, name:"Red_Solo_Lock", label:"Red Solo Lock", cat:"situational",
+  sk:[
+    {x:20,y:LOS,t:"WR"}, // backside X
+    {x:100,y:34,t:"TE"},
+    {x:70,y:40,t:"TE"},{x:130,y:40,t:"TE"},
+  ],
+  rt:[
+    {d:P([20,LOS],[20,38]), c:CLR.pass,w:2.2,a:true}, // lock X
+    {d:P([100,34],[100,22]), c:CLR.pass,w:2.0,a:true,dsh:true}, // middle helper
+    {d:P([70,40],[58,26]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,40],[142,26]), c:CLR.pass,w:2.0,a:true},
+  ],
+},
+
+/* 39 */
+{
+  id:39, name:"Red_Star_Bracket", label:"Red Star Bracket – double slot/primary", cat:"situational",
+  sk:[
+    {x:156,y:62,t:"TE"},{x:144,y:50,t:"TE"},
+    {x:70,y:40,t:"TE"},{x:130,y:40,t:"TE"},
+  ],
+  rt:[
+    {d:P([156,62],[150,56],[144,50]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([144,50],[140,40],[136,32]), c:CLR.pass,w:2.0,a:true,dsh:true},
+    {d:P([70,40],[58,26]), c:CLR.pass,w:2.0,a:true},
+    {d:P([130,40],[142,26]), c:CLR.pass,w:2.0,a:true},
+  ],
+},
+
+/* 40 */
+{
+  id:40, name:"Red_Fire_Match", label:"Red Fire Match – 5-man pressure w/ match integrity", cat:"situational",
+  sk:[
+    {x:44,y:58,t:"TE"}, // STAR add-on
+    {x:92,y:LOS,t:"OL"},{x:100,y:LOS,t:"OL"},{x:108,y:LOS,t:"OL"},
+    {x:70,y:40,t:"TE"},{x:130,y:40,t:"TE"},
+  ],
+  rt:[
+    {d:CB([44,58],[36,54],[28,48],[20,40]), c:CLR.run,w:2.8,a:true},
+    {d:P([92,LOS],[92,LOS-12]), c:CLR.run,w:2.4,a:true},
+    {d:P([100,LOS],[100,LOS-12]), c:CLR.run,w:2.4,a:true},
+    {d:P([108,LOS],[108,LOS-12]), c:CLR.run,w:2.4,a:true},
+    // condensed quarters landmarks
+    {d:P([70,40],[58,26]), c:CLR.pass,w:1.8,a:true,dsh:true},
+    {d:P([130,40],[142,26]), c:CLR.pass,w:1.8,a:true,dsh:true},
+  ],
+},
+];

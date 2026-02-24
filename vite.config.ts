@@ -18,4 +18,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    // Exclude Playwright e2e specs; those run via `npm run test:ui`
+    exclude: ["tests/**", "node_modules/**"],
+  },
 }));

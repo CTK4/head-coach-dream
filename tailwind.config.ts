@@ -14,6 +14,11 @@ export default {
     },
     extend: {
       colors: {
+        surface: {
+          background: "var(--surface-bg)",
+          panel: "var(--surface-panel)",
+          elevated: "var(--surface-elevated)",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -36,7 +41,7 @@ export default {
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "var(--accent-color)",
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {

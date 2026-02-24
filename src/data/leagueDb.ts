@@ -1,4 +1,5 @@
 import leagueDbJson from "@/data/leagueDB.json";
+import { normalizeCityState } from "@/lib/formatters";
 
 export type TeamRow = {
   teamId: string;
@@ -39,6 +40,7 @@ export type PersonnelRow = {
   reputation?: number;
   contractId?: string;
   scheme?: string;
+  avatarUrl?: string;
   [key: string]: unknown;
 };
 
@@ -59,12 +61,116 @@ export type ContractRow = {
   [key: string]: unknown;
 };
 
+export type TeamFinancesRow = {
+  teamId: string;
+  season: number;
+  capSpace: number;
+  cash: number;
+  revenue?: number;
+  expenses?: number;
+  notes?: string | null;
+};
+
 const root = leagueDbJson as Record<string, unknown[]>;
 
-const teams: TeamRow[] = (root.Teams ?? []) as TeamRow[];
-const players: PlayerRow[] = (root.Players ?? []) as PlayerRow[];
-const personnel: PersonnelRow[] = (root.Personnel ?? []) as PersonnelRow[];
-const contracts: ContractRow[] = (root.Contracts ?? []) as ContractRow[];
+function coerceNumber(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const cleaned = value.trim().replace(/\$/g, "").replace(/,/g, "").replace(/\s+/g, "");
+    if (cleaned.length === 0) return undefined;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+function coerceInt(value: unknown): number | undefined {
+  const n = coerceNumber(value);
+  if (n == null) return undefined;
+  return Math.trunc(n);
+}
+
+function normalizeTeamRow(t: any): TeamRow {
+  return {
+    ...t,
+    teamId: String(t.teamId ?? ""),
+    abbrev: t.abbrev != null ? String(t.abbrev) : undefined,
+    name: String(t.name ?? ""),
+    region: t.region != null ? normalizeCityState(String(t.region)) : undefined,
+    conferenceId: t.conferenceId != null ? String(t.conferenceId) : undefined,
+    divisionId: t.divisionId != null ? String(t.divisionId) : undefined,
+    stadium: t.stadium != null ? String(t.stadium) : undefined,
+    logoKey: t.logoKey != null ? String(t.logoKey) : undefined,
+    isActive: t.isActive != null ? Boolean(t.isActive) : undefined,
+  };
+}
+
+function normalizePlayerRow(p: any): PlayerRow {
+  return {
+    ...p,
+    playerId: String(p.playerId ?? ""),
+    fullName: String(p.fullName ?? p.name ?? ""),
+    pos: p.pos != null ? String(p.pos) : undefined,
+    teamId: p.teamId != null ? String(p.teamId) : undefined,
+    status: p.status != null ? String(p.status) : undefined,
+    age: coerceInt(p.age),
+    overall: coerceInt(p.overall ?? p.ovr),
+    potential: coerceInt(p.potential),
+    college: p.college != null ? String(p.college) : undefined,
+    contractId: p.contractId != null ? String(p.contractId) : undefined,
+    Archetype: p.Archetype != null ? String(p.Archetype) : undefined,
+    Traits: p.Traits != null ? String(p.Traits) : undefined,
+  };
+}
+
+function normalizePersonnelRow(p: any): PersonnelRow {
+  return {
+    ...p,
+    personId: String(p.personId ?? ""),
+    fullName: String(p.fullName ?? p.name ?? ""),
+    role: p.role != null ? String(p.role) : undefined,
+    teamId: p.teamId != null ? String(p.teamId) : undefined,
+    status: p.status != null ? String(p.status) : undefined,
+    age: coerceInt(p.age),
+    reputation: coerceNumber(p.reputation) ?? 55,
+    contractId: p.contractId != null ? String(p.contractId) : undefined,
+    scheme: p.scheme != null ? String(p.scheme) : undefined,
+  };
+}
+
+function normalizeContractRow(c: any): ContractRow {
+  return {
+    ...c,
+    contractId: String(c.contractId ?? ""),
+    entityType: String(c.entityType ?? ""),
+    personId: String(c.personId ?? ""),
+    teamId: c.teamId != null ? String(c.teamId) : undefined,
+    startSeason: coerceInt(c.startSeason),
+    endSeason: coerceInt(c.endSeason),
+    salaryY1: coerceNumber(c.salaryY1) ?? 0,
+    salaryY2: coerceNumber(c.salaryY2) ?? 0,
+    salaryY3: coerceNumber(c.salaryY3) ?? 0,
+    salaryY4: coerceNumber(c.salaryY4) ?? 0,
+    guaranteed: c.guaranteed == null ? null : coerceNumber(c.guaranteed) ?? 0,
+    isExpired: c.isExpired != null ? Boolean(c.isExpired) : undefined,
+    notes: c.notes != null ? String(c.notes) : null,
+  };
+}
+
+const teams: TeamRow[] = ((root.Teams ?? []) as any[]).map(normalizeTeamRow);
+const players: PlayerRow[] = ((root.Players ?? []) as any[]).map(normalizePlayerRow);
+const personnel: PersonnelRow[] = ((root.Personnel ?? []) as any[]).map(normalizePersonnelRow);
+const contracts: ContractRow[] = ((root.Contracts ?? []) as any[]).map(normalizeContractRow);
+const teamFinances: TeamFinancesRow[] = ((root.TeamFinances ?? []) as any[]).map((row) => ({
+  teamId: String(row.teamId ?? ""),
+  season: coerceInt(row.season) ?? 0,
+  capSpace: coerceNumber(row.capSpace) ?? 0,
+  cash: coerceNumber(row.cash) ?? 0,
+  revenue: coerceNumber(row.revenue),
+  expenses: coerceNumber(row.expenses),
+  notes: row.notes != null ? String(row.notes) : null,
+}));
 
 const teamsById = new Map(teams.map((team) => [team.teamId, team]));
 const playersById = new Map(players.map((player) => [player.playerId, player]));
@@ -75,40 +181,8 @@ export type PositionCoachRole = "QB_COACH" | "OL_COACH" | "DL_COACH" | "LB_COACH
 
 export const AUTO_ACCEPT_COACH_REP_MAX = 50;
 
-function isFreeAgentPersonnel(person: PersonnelRow): boolean {
-  const status = String(person.status ?? "").toUpperCase();
-  const teamId = String(person.teamId ?? "").toUpperCase();
-  return status === "FREE_AGENT" || !teamId || teamId === "FREE_AGENT";
-}
-
-function coachAutoAccept(person: PersonnelRow): boolean {
-  return String(person.status ?? "").toUpperCase() === "FREE_AGENT" && Number(person.reputation ?? 0) <= AUTO_ACCEPT_COACH_REP_MAX;
-}
-
-export function isCoachInterested(args: {
-  coach: PersonnelRow;
-  role: PersonnelRow["role"];
-  hcHrs: number;
-  teamOutlook: number;
-  orgPrestige: number;
-  schemeCompat: number;
-  contractOffer: number;
-  egoPenalty: number;
-  careerRisk: number;
-  tierThreshold: number;
-}): boolean {
-  if (coachAutoAccept(args.coach)) return true;
-
-  const acceptanceScore =
-    0.4 * args.hcHrs +
-    0.2 * args.teamOutlook +
-    0.15 * args.contractOffer +
-    0.1 * args.orgPrestige +
-    0.1 * args.schemeCompat -
-    0.15 * args.egoPenalty -
-    0.1 * args.careerRisk;
-
-  return acceptanceScore >= args.tierThreshold;
+function isFreeAgentPersonnel(person: PersonnelRow) {
+  return String(person.teamId ?? "") === "FREE_AGENT" && String(person.status ?? "ACTIVE").toUpperCase() !== "RETIRED";
 }
 
 export function getTeams(): TeamRow[] {
@@ -116,37 +190,30 @@ export function getTeams(): TeamRow[] {
 }
 
 export function getTeamById(teamId: string): TeamRow | undefined {
-  return teamsById.get(teamId);
-}
-
-export function getPersonnelById(personId: string): PersonnelRow | undefined {
-  return personnelById.get(personId);
+  return teamsById.get(String(teamId));
 }
 
 export function getPlayerById(playerId: string): PlayerRow | undefined {
-  return playersById.get(playerId);
+  return playersById.get(String(playerId));
 }
 
-export function getLeagueCities(): string[] {
-  return Array.from(
-    new Set(
-      teams
-        .map((team) => team.region?.trim())
-        .filter((region): region is string => Boolean(region))
-    )
-  ).sort((a, b) => a.localeCompare(b));
+export function getPlayers(): PlayerRow[] {
+  return players;
 }
 
 export function getPlayersByTeam(teamId: string): PlayerRow[] {
-  return players.filter((player) => player.teamId === teamId);
+  const t = String(teamId);
+  return players.filter((p) => String(p.teamId ?? "") === t);
 }
 
 export function getTeamRosterPlayers(teamId: string): PlayerRow[] {
   return getPlayersByTeam(teamId);
 }
 
-export function getPlayers(): PlayerRow[] {
-  return players;
+export function getLeagueCities(): string[] {
+  return Array.from(new Set(teams.map((team) => team.region?.trim()).filter((region): region is string => Boolean(region)))).sort((a, b) =>
+    a.localeCompare(b)
+  );
 }
 
 export function getFreeAgents(): PlayerRow[] {
@@ -155,6 +222,10 @@ export function getFreeAgents(): PlayerRow[] {
     const status = String(p.status ?? "").toUpperCase();
     return teamId === "FREE_AGENT" || status === "FREE_AGENT" || !teamId;
   });
+}
+
+export function getPersonnelById(personId: string): PersonnelRow | undefined {
+  return personnelById.get(String(personId));
 }
 
 export function getPersonnel(): PersonnelRow[] {
@@ -166,48 +237,53 @@ export function getAllPersonnel(): PersonnelRow[] {
 }
 
 export function getOwnerByTeam(teamId: string): PersonnelRow | undefined {
-  return personnel.find(
-    (person) => person.teamId === teamId && String(person.role ?? "").toUpperCase() === "OWNER"
-  );
+  return personnel.find((person) => person.teamId === teamId && String(person.role ?? "").toUpperCase() === "OWNER");
 }
 
 export function getPersonnelFreeAgents(): PersonnelRow[] {
   return personnel.filter(isFreeAgentPersonnel);
 }
 
-export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRow[] {
-  const roleMap: Record<string, string> = {
-    OC: "OFF_COORDINATOR",
-    DC: "DEF_COORDINATOR",
-    STC: "ST_COORDINATOR",
-  };
+export function coachAutoAccept(person: PersonnelRow): boolean {
+  return Number(person.reputation ?? 0) <= AUTO_ACCEPT_COACH_REP_MAX;
+}
 
+export function getCoordinatorFreeAgents(role: "OC" | "DC" | "STC"): PersonnelRow[] {
+  const targetRole = role === "OC" ? "OFF_COORDINATOR" : role === "DC" ? "DEF_COORDINATOR" : "ST_COORDINATOR";
   return getPersonnelFreeAgents()
-    .filter((person) => String(person.role ?? "").toUpperCase() === roleMap[role])
-    .filter((person) => {
-      if (coachAutoAccept(person)) return true;
-      return true;
-    });
+    .filter((person) => String(person.role ?? "").toUpperCase() === targetRole)
+    .filter((person) => coachAutoAccept(person));
 }
 
 export function getCoordinatorCandidates(role: "OC" | "DC" | "STC"): PersonnelRow[] {
   return getCoordinatorFreeAgents(role);
 }
 
+export function getCoordinatorFreeAgentsAll(role: "OC" | "DC" | "STC"): PersonnelRow[] {
+  const targetRole = role === "OC" ? "OFF_COORDINATOR" : role === "DC" ? "DEF_COORDINATOR" : "ST_COORDINATOR";
+  return getPersonnelFreeAgents().filter((person) => String(person.role ?? "").toUpperCase() === targetRole);
+}
+
 export function getAssistantHeadCoachCandidates(): PersonnelRow[] {
   const pool = getAllPersonnel()
-    .filter((p) => String(p.teamId ?? "") === "FREE_AGENT")
-    .filter((p) => String(p.status ?? "ACTIVE").toUpperCase() !== "RETIRED");
-
-  return pool
+    .filter(isFreeAgentPersonnel)
     .filter((p) => {
       const role = String(p.role ?? "").toUpperCase();
       if (role.includes("COORDINATOR")) return false;
       if (role === "HEAD_COACH" || role === "OWNER" || role === "GENERAL_MANAGER") return false;
       return true;
-    })
+    });
+
+  return pool.filter((p) => coachAutoAccept(p));
+}
+
+export function getAssistantHeadCoachCandidatesAll(): PersonnelRow[] {
+  return getAllPersonnel()
+    .filter(isFreeAgentPersonnel)
     .filter((p) => {
-      if (coachAutoAccept(p)) return true;
+      const role = String(p.role ?? "").toUpperCase();
+      if (role.includes("COORDINATOR")) return false;
+      if (role === "HEAD_COACH" || role === "OWNER" || role === "GENERAL_MANAGER") return false;
       return true;
     });
 }
@@ -215,29 +291,11 @@ export function getAssistantHeadCoachCandidates(): PersonnelRow[] {
 export function getPositionCoachCandidates(role: PositionCoachRole): PersonnelRow[] {
   return getPersonnelFreeAgents()
     .filter((person) => String(person.role ?? "").toUpperCase() === role)
-    .filter((person) => {
-      if (coachAutoAccept(person)) return true;
-      return true;
-    });
-}
-
-export function getCoordinatorFreeAgentsAll(role: "OC" | "DC" | "STC"): PersonnelRow[] {
-  const targetRole = role === "OC" ? "OFF_COORDINATOR" : role === "DC" ? "DEF_COORDINATOR" : "ST_COORDINATOR";
-  return personnel
-    .filter((p) => String(p.role ?? "").toUpperCase() === targetRole)
-    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
-}
-
-export function getAssistantHeadCoachCandidatesAll(): PersonnelRow[] {
-  return personnel
-    .filter((p) => String(p.role ?? "").toUpperCase() === "ASSISTANT_HC")
-    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
+    .filter((person) => coachAutoAccept(person));
 }
 
 export function getPositionCoachCandidatesAll(role: PositionCoachRole): PersonnelRow[] {
-  return personnel
-    .filter((p) => String(p.role ?? "").toUpperCase() === role)
-    .filter((p) => String(p.status ?? "").toUpperCase() === "FREE_AGENT");
+  return getPersonnelFreeAgents().filter((person) => String(person.role ?? "").toUpperCase() === role);
 }
 
 export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
@@ -248,8 +306,12 @@ export function normalizeCoordRole(role: string): "OC" | "DC" | "STC" | null {
   return null;
 }
 
+export function getContracts(): ContractRow[] {
+  return contracts;
+}
+
 export function getContractById(contractId: string): ContractRow | undefined {
-  return contractsById.get(contractId);
+  return contractsById.get(String(contractId));
 }
 
 export function getPlayerContract(playerId: string): ContractRow | undefined {
@@ -266,10 +328,6 @@ export function getPlayerSeasonStats(playerId: string, season: number): Record<s
 export function getPlayerAwards(playerId: string): Record<string, unknown>[] {
   const rows = (root.PlayerAwards ?? []) as Record<string, unknown>[];
   return rows.filter((r) => String(r.playerId) === String(playerId));
-}
-
-export function getContracts(): ContractRow[] {
-  return contracts;
 }
 
 export function upsertContract(row: ContractRow): ContractRow {
@@ -329,7 +387,6 @@ export function setPersonnelTeamAndContract(args: {
   return { contractId };
 }
 
-
 export function expireContract(contractId: string, endSeason?: number): boolean {
   const c = contractsById.get(contractId);
   if (!c) return false;
@@ -383,4 +440,8 @@ export function getTeamSummary(teamId: string) {
     capSpace,
     playerCount: teamPlayers.length,
   };
+}
+
+export function getTeamFinancesRow(teamId: string, season: number): TeamFinancesRow | undefined {
+  return teamFinances.find((row) => String(row.teamId) === String(teamId) && Number(row.season) === Number(season));
 }

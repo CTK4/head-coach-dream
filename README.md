@@ -71,3 +71,30 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## Cloudflare R2 Assets
+
+This app can load static assets from Cloudflare R2 using Vite environment variables.
+
+A Worker is included at `workers/r2-assets` that publicly serves five R2 buckets with these routes:
+
+- `/avatars/<key>`
+- `/badges/<key>`
+- `/icons/<key>`
+- `/placeholders/<key>`
+- `/utility/<key>`
+
+Set these environment variables in your frontend deployment to your Worker base URL:
+
+- `VITE_R2_AVATARS_BASE_URL=https://<worker-host>/avatars`
+- `VITE_R2_BADGES_BASE_URL=https://<worker-host>/badges`
+- `VITE_R2_ICONS_BASE_URL=https://<worker-host>/icons`
+- `VITE_R2_PLACEHOLDERS_BASE_URL=https://<worker-host>/placeholders`
+- `VITE_R2_UTILITY_BASE_URL=https://<worker-host>/utility`
+
+Where `<worker-host>` is either:
+
+- `https://<worker-name>.<subdomain>.workers.dev` (workers.dev)
+- `https://assets.example.com` (custom domain)
+
+The Worker preserves object content headers via `writeHttpMetadata`, returns `404` for missing keys/routes, and sets cache policy `public, max-age=31536000, immutable`.

@@ -22,6 +22,10 @@ const SLOT_TEMPLATES: Record<string, string[]> = {
   P: ["P"],
 };
 
+const SLOT_TO_GROUP: Map<string, string> = new Map(
+  Object.entries(SLOT_TEMPLATES).flatMap(([group, slots]) => slots.map((slot) => [slot, group]))
+);
+
 function orderedSlots(): string[] {
   const out: string[] = [];
   for (const g of GROUP_ORDER) out.push(...(SLOT_TEMPLATES[g] ?? []));
@@ -29,10 +33,7 @@ function orderedSlots(): string[] {
 }
 
 function slotGroup(slot: string): string | null {
-  for (const [g, slots] of Object.entries(SLOT_TEMPLATES)) {
-    if (slots.includes(slot)) return g;
-  }
-  return null;
+  return SLOT_TO_GROUP.get(slot) ?? null;
 }
 
 export function eligiblePositionsForSlot(slot: string): string[] {

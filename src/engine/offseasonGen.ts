@@ -1,5 +1,6 @@
 import { mulberry32, tri } from "@/engine/rand";
 import type { FreeAgentOffer, Prospect, ScoutingCombineResult } from "@/engine/offseasonData";
+import { getSeasonalAgingDelta, shouldRetire, type AgingPlayer } from "@/engine/playerAging";
 
 function pick<T>(rng: () => number, items: T[]): T {
   return items[Math.floor(rng() * items.length)]!;
@@ -12,6 +13,11 @@ function id(prefix: string, n: number): string {
 const FIRST = ["Jalen", "Marcus", "Eli", "Dante", "Noah", "Caleb", "Trey", "Mason", "Isaiah", "Jordan", "Derrick", "Lamar", "CJ", "Aiden"];
 const LAST = ["Reed", "Johnson", "Carter", "Hayes", "Wilson", "Morgan", "Bennett", "Brooks", "Pierce", "Foster", "Coleman", "Sutton", "Hughes", "Sanders"];
 const POS = ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"] as const;
+
+export type AgingTeam<TPlayer extends AgingPlayer = AgingPlayer> = {
+  teamId: string;
+  roster: TPlayer[];
+};
 
 export function genCombine(seed: number, count = 40): ScoutingCombineResult[] {
   const rng = mulberry32(seed ^ 0xabcddcba);
@@ -41,11 +47,12 @@ export function genFreeAgents(seed: number, count = 25): FreeAgentOffer[] {
   return out.sort((a, b) => b.interest - a.interest);
 }
 
-export function genProspects(seed: number, count = 120): Prospect[] {
+export function genProspects(seed: number, count = 120, targetClassSize = 256): Prospect[] {
+  const size = Math.max(count, targetClassSize);
   const rng = mulberry32(seed ^ 0x5bd1e995);
   const out: Prospect[] = [];
   const arch = ["Technician", "Explosive", "Power", "FieldGeneral", "BallHawk", "Mauler", "PassRush", "CoverLB"];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < size; i++) {
     const pos = pick(rng, [...POS]);
     const grade = Math.round(tri(rng, 50, 72, 95));
     const ras = Math.round(tri(rng, 35, 70, 99));
@@ -53,4 +60,31 @@ export function genProspects(seed: number, count = 120): Prospect[] {
     out.push({ id: id("P", i + 1), name: `${pick(rng, FIRST)} ${pick(rng, LAST)}`, pos, archetype: pick(rng, arch), grade, ras, interview });
   }
   return out.sort((a, b) => b.grade - a.grade);
+}
+
+export function runLeagueAging<TPlayer extends AgingPlayer, TTeam extends AgingTeam<TPlayer>>(allTeams: TTeam[]): {
+  updatedTeams: TTeam[];
+  retirees: TPlayer[];
+  agingDeltas: { playerId: string; delta: number }[];
+} {
+  const retirees: TPlayer[] = [];
+  const agingDeltas: { playerId: string; delta: number }[] = [];
+
+  const updatedTeams = allTeams.map((team) => {
+    const roster: TPlayer[] = [];
+    for (const player of team.roster) {
+      const delta = getSeasonalAgingDelta(player);
+      const aged: TPlayer = {
+        ...player,
+        age: Number(player.age ?? 0) + 1,
+        overall: Math.max(40, Math.min(99, Number(player.overall ?? 0) + delta)),
+      };
+      agingDeltas.push({ playerId: aged.playerId, delta });
+      if (shouldRetire(aged)) retirees.push(aged);
+      else roster.push(aged);
+    }
+    return { ...team, roster };
+  }) as TTeam[];
+
+  return { updatedTeams, retirees, agingDeltas };
 }

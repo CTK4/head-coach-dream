@@ -110,7 +110,7 @@ const Interviews = () => {
   useEffect(() => {
     if (state.interviews.completedCount === 3 && state.offers.length === 0) {
       dispatch({ type: "GENERATE_OFFERS" });
-      navigate("/offers");
+      navigate("/onboarding/offers");
     }
   }, [dispatch, navigate, state.interviews.completedCount, state.offers.length]);
 

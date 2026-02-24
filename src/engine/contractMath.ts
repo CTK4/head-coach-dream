@@ -1,5 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
-import { getContracts, getPlayers } from "@/data/leagueDb";
+import { getContractById, getPlayerById } from "@/data/leagueDb";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 
 export type CapYearRow = { season: number; salary: number; bonus: number; capHit: number };
@@ -15,7 +15,7 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 function isRookieHeuristic(state: GameState, playerId: string): boolean {
-  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   const age = Number(p?.age ?? 0);
   const o = state.playerContractOverrides?.[playerId] as PlayerContractOverride | undefined;
   if (!o) return false;
@@ -43,9 +43,9 @@ function buildOverrideCapRows(state: GameState, o: PlayerContractOverride, seaso
 }
 
 function buildBaseCapRows(state: GameState, playerId: string, seasons: number) {
-  const p = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   if (!p?.contractId) return null;
-  const c = getContracts().find((x: any) => x.contractId === p.contractId);
+  const c = getContractById(p.contractId);
   if (!c) return null;
 
   const start = Number(c.startSeason ?? state.season);
@@ -115,6 +115,36 @@ export function computeCutProjection(state: GameState, playerId: string, postJun
   const deadNextYear = postJune1 ? Math.max(0, round50k(deadTotal - deadThisYear)) : 0;
   const savingsThisYear = round50k(capHitNow - deadThisYear);
   return { deadThisYear, deadNextYear, savingsThisYear };
+}
+
+/** Convenience selector – returns the same shape as getContractSummaryForPlayer. */
+export function getContract(state: GameState, playerId: string) {
+  return getContractSummaryForPlayer(state, playerId);
+}
+
+/** Return the cap hit for a specific season year from the contract summary. */
+export function computeCapHitByYear(state: GameState, playerId: string, year: number): number {
+  const summary = getContractSummaryForPlayer(state, playerId);
+  return round50k(summary?.capHitBySeason?.[year] ?? 0);
+}
+
+/**
+ * Compute dead-cap and savings for a hypothetical cut.
+ * designation = "pre" → Pre-June 1 (all dead cap accelerates into current year)
+ * designation = "post" → Post-June 1 (dead cap split across current + next year)
+ * year is used to look up the cap hit for the relevant season when computing savings.
+ */
+export function computeDeadCap(
+  state: GameState,
+  playerId: string,
+  year: number,
+  designation: "pre" | "post",
+): { deadThisYear: number; deadNextYear: number; savings: number } {
+  const postJune1 = designation === "post";
+  const proj = computeCutProjection(state, playerId, postJune1);
+  const capHit = computeCapHitByYear(state, playerId, year);
+  const savingsThisYear = round50k(capHit - proj.deadThisYear);
+  return { deadThisYear: proj.deadThisYear, deadNextYear: proj.deadNextYear, savings: savingsThisYear };
 }
 
 export function getRestructureEligibility(state: GameState, playerId: string): RestructureEligibility {

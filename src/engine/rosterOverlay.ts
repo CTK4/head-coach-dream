@@ -1,5 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
-import { getPlayers, getContracts } from "@/data/leagueDb";
+import { getPlayerById, getContractById, getPlayers } from "@/data/leagueDb";
 
 export function normalizePos(pos: string): string {
   const p = String(pos ?? "").toUpperCase();
@@ -27,6 +27,18 @@ const SLOT_TEMPLATES: Record<string, string[]> = {
   K: ["K"],
   P: ["P"],
 };
+
+function parseMoney(value: unknown, fallback = 0): number {
+  if (value == null) return fallback;
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  if (typeof value === "string") {
+    const cleaned = value.trim().replace(/\$/g, "").replace(/,/g, "").replace(/\s+/g, "");
+    if (!cleaned) return fallback;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  return fallback;
+}
 
 function round50k(v: number): number {
   return Math.round(v / 50_000) * 50_000;
@@ -60,9 +72,9 @@ function buildCapHitBySeason(
 export function capHitForOverride(o: PlayerContractOverride, season: number): number {
   const years = Math.max(1, o.endSeason - o.startSeason + 1);
   const idx = season - o.startSeason;
-  const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
-  const bonus = o.prorationBySeason?.[season] ?? (o.signingBonus > 0 ? round50k(o.signingBonus / years) : 0);
-  return round50k(Number(salary ?? 0) + Number(bonus ?? 0));
+  const salary = parseMoney(o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))], 0);
+  const bonus = o.prorationBySeason?.[season] ?? (o.signingBonus > 0 ? round50k(parseMoney(o.signingBonus, 0) / years) : 0);
+  return round50k(salary + parseMoney(bonus, 0));
 }
 
 export function getContractSummaryForPlayer(state: GameState, playerId: string) {
@@ -73,20 +85,29 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
     const endSeason = o.endSeason;
     const years = Math.max(1, endSeason - startSeason + 1);
     const idx = Math.max(0, Math.min(o.salaries.length - 1, state.season - startSeason));
-    const salary = Number(o.salaries[idx] ?? 0);
+    const salary = parseMoney(o.salaries[idx], 0);
 
-    const fallbackProrationPerYear = o.signingBonus > 0 ? round50k(o.signingBonus / years) : 0;
-    const capHitBySeason = buildCapHitBySeason(startSeason, endSeason, o.salaries, o.prorationBySeason, fallbackProrationPerYear);
-    const capHit = round50k(capHitBySeason[state.season] ?? 0);
+    const signingBonus = parseMoney(o.signingBonus, 0);
+    const fallbackProrationPerYear = signingBonus > 0 ? round50k(signingBonus / years) : 0;
 
+    const capHitBySeason = buildCapHitBySeason(
+      startSeason,
+      endSeason,
+      o.salaries.map((x) => parseMoney(x, 0)),
+      o.prorationBySeason,
+      fallbackProrationPerYear,
+    );
+
+    const capHit = round50k(parseMoney(capHitBySeason[state.season], 0));
     const yearsRemaining = Math.max(0, endSeason - state.season + 1);
-    const totalValue = o.salaries.reduce((a, b) => a + (Number(b) || 0), 0) + Number(o.signingBonus ?? 0);
+
+    const totalValue = o.salaries.reduce((a, b) => a + parseMoney(b, 0), 0) + signingBonus;
 
     const bonusRemaining = o.prorationBySeason
       ? sumObj(o.prorationBySeason, state.season, endSeason)
-      : Math.max(0, Number(o.signingBonus ?? 0) - fallbackProrationPerYear * Math.max(0, state.season - startSeason));
+      : Math.max(0, signingBonus - fallbackProrationPerYear * Math.max(0, state.season - startSeason));
 
-    const deadCapIfCutNow = round50k(bonusRemaining);
+    const deadCapIfCutNow = round50k(parseMoney(bonusRemaining, 0));
     const prorationPerYear = o.prorationBySeason
       ? round50k(sumObj(o.prorationBySeason, state.season, endSeason) / Math.max(1, yearsRemaining))
       : fallbackProrationPerYear;
@@ -100,30 +121,38 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
       proration: prorationPerYear,
       capHit,
       capHitBySeason,
-      signingBonus: Number(o.signingBonus ?? 0),
+      signingBonus,
       prorationPerYear,
       total: totalValue,
       totalValue,
       deadCapIfCutNow,
       isOverride: true,
       depthSlotLabel,
+      apy: years > 0 ? round50k(totalValue / years) : 0,
     };
   }
 
-  const p = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const p = getPlayerById(playerId);
   if (!p?.contractId) return null;
-  const c = getContracts().find((x: any) => x.contractId === p.contractId);
+  const c = getContractById(p.contractId);
   if (!c) return null;
 
-  const startSeason = Number(c.startSeason ?? state.season);
-  const endSeason = Number(c.endSeason ?? startSeason);
+  const startSeason = parseMoney(c.startSeason, state.season);
+  const endSeason = parseMoney(c.endSeason, startSeason);
   const years = Math.max(1, endSeason - startSeason + 1);
   const idx = Math.max(0, Math.min(3, state.season - startSeason));
-  const salByIdx = [Number(c.salaryY1 ?? 0), Number(c.salaryY2 ?? 0), Number(c.salaryY3 ?? 0), Number(c.salaryY4 ?? 0)];
-  const salary = Number(salByIdx[idx] ?? 0);
+  const salByIdx = [
+    parseMoney((c as any).salaryY1, 0),
+    parseMoney((c as any).salaryY2, 0),
+    parseMoney((c as any).salaryY3, 0),
+    parseMoney((c as any).salaryY4, 0),
+  ];
+
+  const salary = parseMoney(salByIdx[idx], 0);
   const capHitBySeason: Record<number, number> = {};
   for (let i = 0; i < years; i++) capHitBySeason[startSeason + i] = round50k(salByIdx[Math.min(i, salByIdx.length - 1)] ?? 0);
   const yearsRemaining = Math.max(0, endSeason - state.season + 1);
+  const totalValue = round50k(salByIdx.reduce((a, b) => a + parseMoney(b, 0), 0));
 
   return {
     startSeason,
@@ -134,26 +163,54 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
     proration: 0,
     capHit: round50k(salary),
     capHitBySeason,
-    total: round50k(salByIdx.reduce((a, b) => a + Number(b || 0), 0)),
-    totalValue: round50k(salByIdx.reduce((a, b) => a + Number(b || 0), 0)),
+    total: totalValue,
+    totalValue,
     signingBonus: 0,
     prorationPerYear: 0,
     deadCapIfCutNow: 0,
     isOverride: false,
     depthSlotLabel,
+    apy: years > 0 ? round50k(totalValue / years) : 0,
   };
 }
 
 export function getEffectivePlayers(state: GameState): any[] {
-  return getPlayers().map((p: any) => ({ ...p, teamId: state.playerTeamOverrides[String(p.playerId)] ?? p.teamId }));
+  const base = getPlayers().map((p: any) => {
+    const playerId = String(p.playerId);
+    const delta = Number(state.playerAgingDeltasById?.[playerId] ?? 0);
+    const ageOffset = Number(state.playerAgeOffsetById?.[playerId] ?? 0);
+    return {
+      ...p,
+      overall: Math.max(40, Math.min(99, Number(p.overall ?? 60) + delta)),
+      age: Number(p.age ?? 22) + ageOffset,
+      teamId: state.playerTeamOverrides[playerId] ?? p.teamId,
+    };
+  });
+
+  const rookies = (state.rookies ?? []).map((r: any) => ({
+    playerId: r.playerId,
+    fullName: r.name,
+    name: r.name,
+    pos: String(r.pos ?? "UNK"),
+    overall: Number(r.ovr ?? 60),
+    age: Number(r.age ?? 22),
+    teamId: state.playerTeamOverrides[String(r.playerId)] ?? String(r.teamId ?? ""),
+    status: "ACTIVE",
+    isRookie: true,
+  }));
+
+  return [...base, ...rookies];
 }
+
 export function getEffectivePlayersByTeam(state: GameState, teamId: string): any[] {
   const t = String(teamId);
   return getEffectivePlayers(state).filter((p: any) => String(p.teamId ?? "") === t);
 }
+
 export function getEffectivePlayer(state: GameState, playerId: string): any | undefined {
   return getEffectivePlayers(state).find((p: any) => String(p.playerId) === String(playerId));
 }
+
 export function getEffectiveFreeAgents(state: GameState): any[] {
   return getEffectivePlayers(state).filter((p: any) => {
     const teamId = String(p.teamId ?? "").toUpperCase();
@@ -171,7 +228,6 @@ function bestByPos(players: any[], posList: string[]) {
 
 export function buildDepthSlotsForTeam(state: GameState, teamId: string): Record<string, string> {
   const roster = getEffectivePlayersByTeam(state, teamId);
-  const used = new Set<string>();
   const slots: Record<string, string> = {};
 
   const fill = (key: string, list: any[]) => {
@@ -180,7 +236,6 @@ export function buildDepthSlotsForTeam(state: GameState, teamId: string): Record
       const p = list[i];
       if (!p) continue;
       slots[slot] = String(p.playerId);
-      used.add(String(p.playerId));
     }
   };
 
@@ -200,7 +255,7 @@ export function buildDepthSlotsForTeam(state: GameState, teamId: string): Record
 }
 
 export function getDepthSlotLabel(state: GameState, playerId: string): string | null {
-  const base = getPlayers().find((p: any) => String(p.playerId) === String(playerId));
+  const base = getPlayerById(playerId);
   const teamId = state.playerTeamOverrides[playerId] ?? base?.teamId;
   if (!teamId || String(teamId).toUpperCase() === "FREE_AGENT") return null;
 
@@ -212,6 +267,7 @@ export function getDepthSlotLabel(state: GameState, playerId: string): string | 
 
   const p = getEffectivePlayer(state, playerId);
   if (!p) return null;
+
   const group = normalizePos(String(p.pos ?? "UNK"));
   const roster = getEffectivePlayersByTeam(state, String(teamId))
     .filter((x: any) => normalizePos(String(x.pos ?? "UNK")) === group)

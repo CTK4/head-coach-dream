@@ -1,94 +1,164 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getTeamById } from "@/data/leagueDb";
-import { FranchiseHubHeader } from "@/components/franchise-hub/FranchiseHubHeader";
-import { FranchiseHubInfoRow } from "@/components/franchise-hub/FranchiseHubInfoRow";
-import { FranchiseHubTabs } from "@/components/franchise-hub/FranchiseHubTabs";
-import { HubTile } from "@/components/franchise-hub/HubTile";
-import { AdvancePhaseBar } from "@/components/franchise-hub/AdvancePhaseBar";
-import { computeOverallPickNumber } from "@/components/franchise-hub/draftOrder";
-import { hubTheme } from "@/components/franchise-hub/theme";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
+import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
+import { readSettings } from "@/lib/settings";
+import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
+import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
+import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
+import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
+import SeasonAwards from "@/pages/SeasonAwards";
 
-const stageTabs = [
-  { label: "HIRE STAFF", to: "/hub/assistant-hiring" },
-  { label: "ROSTER REVIEW", to: "/hub/roster-audit" },
-  { label: "COMBINE", to: "/hub/combine" },
-  { label: "PRE-DRAFT", to: "/hub/pre-draft" },
-  { label: "DRAFT", to: "/hub/draft" },
-];
+const TILE_IMAGES = {
+    staff: { kind: "placeholders", filename: "coach.png", fallbackSrc: "/placeholders/coach.png" },
+    roster: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    strategy: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    contracts: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    scouting: { kind: "placeholders", filename: "scout.png", fallbackSrc: "/placeholders/scout.png" },
+    news: { kind: "placeholders", filename: "news.png", fallbackSrc: "/placeholders/news.png" },
+    freeAgency: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    resign: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    frontOffice: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+} as const;
 
-const Hub = () => {
+type HubTileConfig = {
+  title: string;
+  subtitle?: string;
+  to: string;
+  imageUrl: string;
+  badgeCount?: number;
+  badgeHint?: string;
+  badgeKind?: HubBadgeKind;
+  cornerBubbleCount?: number;
+  imageObjectPosition?: string;
+};
+
+function clampInt(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+export default function Hub() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const teamId = state.acceptedOffer?.teamId;
-  const team = teamId ? getTeamById(teamId) : undefined;
+  const badgeCounts = useMemo(() => {
+    const hub = state.hub;
+    const unread = (hub.news ?? []).filter((x: any) => !hub.newsReadIds?.[String(x?.id)]).length;
 
-  const capRoomLabel = useMemo(() => {
-    const capRoom = Math.max(0, state.finances.capSpace);
-    return `$${(capRoom / 1_000_000).toFixed(1)}M`;
-  }, [state.finances.capSpace]);
+    return {
+      newsUnread: clampInt(unread, 0, 99),
+    };
+  }, [state.hub]);
 
-  const overallPick = useMemo(() => {
-    if (!teamId) return null;
-    return computeOverallPickNumber(state.league, teamId);
-  }, [state.league, teamId]);
+  const nextStage = nextStageForNavigate(state.careerStage);
+  const showTrades = isTradesAllowed(state);
+  const showReSign = isReSignAllowed(state);
+  const nextLabel = stageLabel(nextStage);
+  const nextRoute = stageToRoute(nextStage);
 
-  if (!teamId || !team) {
-    return (
-      <div className="rounded-lg border border-slate-200/20 bg-slate-900/80 p-6 text-center text-slate-100">
-        No team assigned. Please complete the hiring process.
-      </div>
-    );
+  if (state.careerStage === "SEASON_AWARDS") {
+    return <SeasonAwards />;
   }
 
-  const logoAlt = `${team.region ?? ""} ${team.name} logo`.trim();
-  const nextStage = nextStageForNavigate(state.careerStage);
+  function doAdvance() {
+    dispatch({ type: "ADVANCE_CAREER_STAGE" });
+    navigate(nextRoute);
+  }
 
-  const tiles = [
-    { title: "HIRE STAFF", subtitle: "3 Positions Open", cta: "DECISION NEEDED", to: "/hub/assistant-hiring", badgeCount: 1 },
-    { title: "FRANCHISE STRATEGY", subtitle: "Build the blueprint", cta: "PLAN FUTURE", to: "/hub/staff-management", badgeCount: 1 },
-    { title: "SCOUTING", subtitle: "Update your board", cta: "BEGIN SCOUTING", to: "/hub/pre-draft", badgeCount: 2 },
-    { title: "ROSTER", subtitle: "Depth and roles", cta: "MANAGE TEAM", to: "/hub/roster", badgeCount: 1 },
-    { title: "CONTRACTS & CAP MANAGEMENT", subtitle: "Financial outlook", cta: "VIEW FINANCES", to: "/hub/finances", badgeCount: 1 },
+  function onAdvanceClick() {
+    const settings = readSettings();
+    if (settings.confirmAutoAdvance) setConfirmOpen(true);
+    else doAdvance();
+  }
+
+  let advanceText = "ADVANCE PHASE";
+  if (state.careerStage === "FREE_AGENCY") advanceText = "ADVANCE FA DAY";
+  else if (state.careerStage === "COMBINE") advanceText = "ADVANCE COMBINE DAY";
+  else if (state.careerStage === "DRAFT") advanceText = "ADVANCE PICK";
+  else if (state.careerStage === "REGULAR_SEASON") advanceText = "ADVANCE WEEK";
+  else if (state.careerStage === "RESIGN") advanceText = "ADVANCE RE-SIGN DAY";
+  else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
+
+  const optionalTiles: HubTileConfig[] = [
+    ...(state.careerStage === "FREE_AGENCY" ? [{ title: "Free Agency", to: "/free-agency", imageUrl: TILE_IMAGES.freeAgency }] : []),
+    ...(showReSign ? [{ title: "Re-Sign", to: "/hub/re-sign", imageUrl: TILE_IMAGES.resign }] : []),
+    ...(showTrades ? [{ title: "Trades", to: "/hub/trades", imageUrl: TILE_IMAGES.trades }] : []),
+  ];
+
+  const mainTiles: HubTileConfig[] = [
     {
-      title: "LEAGUE NEWS",
-      subtitle: "Headlines around the league",
-      cta: "VIEW HEADLINES",
-      to: "/hub/league-news",
-      badgeCount: Math.max(1, Math.min(9, state.hub.news.length)),
-      notificationCount: Math.min(9, state.hub.news.length),
+      title: "Staff",
+      to: "/staff",
+      imageUrl: TILE_IMAGES.staff,
+      imageObjectPosition: "50% 65%",
     },
+    { title: "Roster", to: "/roster", imageUrl: TILE_IMAGES.roster },
+    { title: "Franchise Strategy", to: "/strategy", imageUrl: TILE_IMAGES.strategy },
+    { title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: TILE_IMAGES.contracts },
+    { title: "Scouting", to: "/scouting", imageUrl: TILE_IMAGES.scouting },
+    {
+      title: "News",
+      to: "/news",
+      imageUrl: TILE_IMAGES.news,
+      badgeCount: badgeCounts.newsUnread,
+      badgeHint: "Unread news stories",
+      badgeKind: "unread",
+      cornerBubbleCount: badgeCounts.newsUnread,
+    },
+    { title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: TILE_IMAGES.coachOffice },
+    { title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: TILE_IMAGES.injuryReport },
+    { title: "Hall of Fame", to: "/hub/hall-of-fame", imageUrl: TILE_IMAGES.hallOfFame },
   ];
 
   return (
-    <section className={`relative p-2 md:p-4 ${hubTheme.pageBackground} ${hubTheme.pageTexture} ${hubTheme.pageVignette}`}>
-      <div className={`mx-auto max-w-5xl p-4 md:p-6 ${hubTheme.frame}`}>
-        <FranchiseHubHeader season={state.season} logoSrc={`/icons/${team.logoKey}.png`} logoAlt={logoAlt} />
+    <div className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 
-        <div className="mt-3 space-y-4">
-          <FranchiseHubInfoRow capRoomLabel={capRoomLabel} pickNumber={overallPick} />
-          <FranchiseHubTabs tabs={stageTabs} />
+      <div className={`relative z-10 mx-auto max-w-7xl space-y-6 p-4 md:p-6 ${HUB_FRAME}`}>
+        <FranchiseHeader />
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {tiles.map((tile) => (
-              <HubTile key={tile.title} {...tile} />
-            ))}
-          </div>
-
-          <AdvancePhaseBar
-            nextLabel={stageLabel(nextStage)}
-            onAdvance={() => {
-              dispatch({ type: "ADVANCE_CAREER_STAGE" });
-              navigate(stageToRoute(nextStage));
-            }}
-          />
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
+          {optionalTiles.map((tile) => (
+            <HubTile key={tile.title} {...tile} />
+          ))}
+          {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
+          {mainTiles.map((tile) => (
+            <HubTile key={tile.title} {...tile} />
+          ))}
         </div>
-      </div>
-    </section>
-  );
-};
 
-export default Hub;
+        <HubPhaseQuickLinks />
+
+        <Button
+          onClick={onAdvanceClick}
+          className="w-full border border-blue-500/30 bg-gradient-to-r from-blue-900 to-slate-900 py-6 text-lg font-bold tracking-widest shadow-lg transition-all hover:from-blue-800 hover:to-slate-800"
+        >
+          {advanceText}
+        </Button>
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+          <DialogHeader>
+            <DialogTitle>Advance?</DialogTitle>
+            <DialogDescription className="text-slate-200/70">Next: {nextLabel}.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={doAdvance}>Advance</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

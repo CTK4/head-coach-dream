@@ -19,5 +19,5 @@ export function advanceWeek(state: GameState): GameState {
   next = updateStaffTrust(next);
   next = updateMedia(next);
   next = updateOwner(next);
-  return { ...next, currentWeek: next.currentWeek + 1 };
+  return { ...next, week: (next.week ?? 0) + 1 };
 }

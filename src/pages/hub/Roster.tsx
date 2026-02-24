@@ -1,25 +1,26 @@
 import { useMemo } from "react";
 import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
+import { HubPanel } from "@/components/franchise-hub/HubPanel";
+import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
 export default function Roster() {
   const { state, dispatch } = useGame();
-  const teamId = state.acceptedOffer?.teamId;
+  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
 
   const canReset = useMemo(() => !!teamId, [teamId]);
 
   return (
-    <div className="p-4 md:p-8 space-y-4">
+    <HubPanel title="ROSTER">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xl font-semibold">Roster</div>
-        <Button
-          variant="secondary"
-          disabled={!canReset}
-          onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}
-        >
-          Reset to Best
-        </Button>
+        <div className="text-sm text-slate-300">Manage your lineup and restore best-fit starters.</div>
+        {canReset ? (
+          <Button variant="secondary" disabled={!canReset} onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>
+            Reset to Best
+          </Button>
+        ) : null}
       </div>
-    </div>
+      {!teamId ? <HubEmptyState title="Roster not loaded" description="Assign a team to continue." /> : null}
+    </HubPanel>
   );
 }

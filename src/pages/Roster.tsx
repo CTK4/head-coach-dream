@@ -1,115 +1,103 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getEffectivePlayersByTeam, getDepthSlotLabel } from "@/engine/rosterOverlay";
+import { getDepthSlotLabel, getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const POS_GROUPS: Record<string, string[]> = {
   Offense: ["QB", "RB", "WR", "TE", "OT", "OG", "C", "OL", "FB", "HB"],
-  Defense: ["DE", "DT", "DL", "LB", "OLB", "ILB", "MLB", "CB", "S", "FS", "SS", "DB"],
+  Defense: ["DE", "DT", "DL", "LB", "OLB", "ILB", "MLB", "CB", "S", "FS", "SS", "DB", "EDGE"],
   "Special Teams": ["K", "P", "LS", "KR", "PR"],
 };
 
-function getGroup(pos: string): string {
-  const p = (pos ?? "").toUpperCase();
+function getGroup(pos: string): keyof typeof POS_GROUPS {
+  const p = String(pos ?? "").toUpperCase();
   for (const [group, positions] of Object.entries(POS_GROUPS)) {
-    if (positions.includes(p)) return group;
+    if (positions.includes(p)) return group as keyof typeof POS_GROUPS;
   }
   return "Offense";
 }
 
-const Roster = () => {
+export default function Roster() {
   const { state, dispatch } = useGame();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState("Offense");
+  const [tab, setTab] = useState<keyof typeof POS_GROUPS>("Offense");
 
-  const teamId = state.acceptedOffer?.teamId;
+  const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
   if (!teamId) return null;
 
-  const allPlayers = getEffectivePlayersByTeam(state, teamId);
-  const filtered = allPlayers.filter((p) => getGroup(p.pos ?? "") === tab);
-  const sorted = [...filtered].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
+  const { allPlayers, sorted } = useMemo(() => {
+    const all = getEffectivePlayersByTeam(state, String(teamId));
+    const filtered = all.filter((p) => getGroup(String(p.pos ?? "")) === tab);
+    const s = [...filtered].sort((a, b) => Number(b.overall ?? b.ovr ?? 0) - Number(a.overall ?? a.ovr ?? 0));
+    return { allPlayers: all, sorted: s };
+  }, [state, teamId, tab]);
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">Roster</h1>
-            <p className="text-sm text-muted-foreground">{allPlayers.length} players</p>
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="space-y-1">
+            <div className="text-2xl font-bold">Manage Team</div>
+            <div className="text-sm text-muted-foreground">{allPlayers.length} players</div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              disabled={!teamId}
-              onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}
-            >
-              Reset to Best
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/hub")}>← Hub</Button>
+          <Button variant="secondary" onClick={() => dispatch({ type: "RESET_DEPTH_CHART_BEST" })}>
+            Reset to Best
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-3">
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(POS_GROUPS) as Array<keyof typeof POS_GROUPS>).map((group) => (
+              <Button key={group} variant={tab === group ? "default" : "secondary"} size="sm" onClick={() => setTab(group)}>
+                {group}
+              </Button>
+            ))}
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="flex gap-2 mb-4">
-          {Object.keys(POS_GROUPS).map((group) => (
-            <Button
-              key={group}
-              variant={tab === group ? "default" : "secondary"}
-              size="sm"
-              onClick={() => setTab(group)}
-            >
-              {group}
-            </Button>
-          ))}
-        </div>
+      <div className="space-y-2">
+        {sorted.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground">No players in this group</CardContent>
+          </Card>
+        ) : (
+          sorted.map((player) => {
+            const depthSlot = getDepthSlotLabel(state, String(player.playerId));
+            const locked = depthSlot ? Boolean(state.depthChart.lockedBySlot[depthSlot]) : false;
+            const ovr = player.overall ?? player.ovr;
 
-        <ScrollArea className="h-[70vh]">
-          <div className="space-y-2 pr-4">
-            {sorted.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No players in this group</p>
-            ) : (
-              sorted.map((player) => {
-                const depthSlot = getDepthSlotLabel(state, String(player.playerId));
-                const locked = depthSlot ? !!state.depthChart.lockedBySlot[depthSlot] : false;
+            return (
+              <Card key={player.playerId}>
+                <CardContent className="flex items-center justify-between gap-3 p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Badge variant="outline" className="w-10 shrink-0 justify-center text-xs font-mono">
+                      {player.pos ?? "—"}
+                    </Badge>
+                    {depthSlot ? (
+                      <Badge variant="outline" className="shrink-0 text-xs">
+                        {depthSlot}
+                      </Badge>
+                    ) : null}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{player.fullName ?? player.name ?? "Unknown Player"}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        OVR {ovr ?? "—"} • Age {player.age ?? "—"} • {player.college ?? "Unknown"}
+                        {depthSlot ? ` • ${locked ? "Locked" : "Unlocked"}` : ""}
+                      </p>
+                    </div>
+                  </div>
 
-                return (
-                  <Card key={player.playerId}>
-                    <CardContent className="flex items-center justify-between p-3">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="w-10 justify-center text-xs font-mono">
-                          {player.pos}
-                        </Badge>
-                        {depthSlot ? (
-                          <Badge variant="outline" className="text-xs">
-                            {depthSlot}
-                          </Badge>
-                        ) : null}
-                        <div>
-                          <p className="font-medium text-sm">{player.fullName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Age {player.age ?? "?"} • {player.college ?? "Unknown"}
-                            {depthSlot ? ` • ${depthSlot}${locked ? " • Locked" : ""}` : ""}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={`text-xs ${(player.overall ?? 0) >= 80 ? "bg-primary" : (player.overall ?? 0) >= 70 ? "bg-accent" : "bg-secondary"} text-primary-foreground`}>
-                          {player.overall ?? "?"}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
+                  <Badge className="shrink-0 text-xs">{ovr ?? "—"}</Badge>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
     </div>
   );
-};
-
-export default Roster;
+}

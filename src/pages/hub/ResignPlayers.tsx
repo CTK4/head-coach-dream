@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getPlayers, getContracts } from "@/data/leagueDb";
-import { getDepthSlotLabel } from "@/engine/rosterOverlay";
+import { getPlayers } from "@/data/leagueDb";
+import { getDepthSlotLabel, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,33 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import type { ResignOffer } from "@/engine/offseasonData";
+
+type PlayerRow = {
+  playerId: string;
+  fullName: string;
+  pos: string;
+  age: number;
+  overall: number;
+};
 
 function money(n: number) {
   const m = n / 1_000_000;
   const abs = Math.abs(m);
   const s = abs >= 10 ? `${Math.round(m)}M` : `${Math.round(m * 10) / 10}M`;
   return `$${s}`;
+}
+
+function cloneOffer(offer: ResignOffer): ResignOffer {
+  return {
+    years: Number(offer.years ?? 2),
+    apy: Number(offer.apy ?? 0),
+    guaranteesPct: Number(offer.guaranteesPct ?? 0.5),
+    discountPct: Number(offer.discountPct ?? 0),
+    createdFrom: offer.createdFrom ?? "RESIGN_SCREEN",
+    rejectedCount: Number(offer.rejectedCount ?? 0),
+  };
 }
 
 export default function ResignPlayers() {
@@ -25,29 +46,59 @@ export default function ResignPlayers() {
   if (!teamId) return null;
 
   const [openId, setOpenId] = useState<string | null>(null);
+  const [draftOffer, setDraftOffer] = useState<ResignOffer | null>(null);
 
   const expiring = useMemo(() => {
-    const players = getPlayers().filter((p: any) => String(state.playerTeamOverrides[String(p.playerId)] ?? p.teamId) === String(teamId));
-    const contracts = getContracts();
+    const players = getPlayers().filter((p) => String(state.playerTeamOverrides[String(p.playerId)] ?? p.teamId) === String(teamId));
     return players
-      .map((p: any) => {
-        const c = contracts.find((x: any) => x.contractId === p.contractId);
-        const end = Number(c?.endSeason ?? state.season);
-        return { p, end };
+      .map((p) => {
+        const summary = getContractSummaryForPlayer(state, String(p.playerId));
+        return { p, end: Number(summary?.endSeason ?? -1) };
       })
-      .filter((r) => r.end <= state.season)
+      .filter((r) => r.end === Number(state.season))
       .sort((a, b) => Number(b.p.overall ?? 0) - Number(a.p.overall ?? 0));
   }, [state, teamId]);
 
   const focus = useMemo(() => {
     if (!openId) return null;
-    const p: any = getPlayers().find((x: any) => String(x.playerId) === String(openId));
+    const p = getPlayers().find((x) => String(x.playerId) === String(openId));
     if (!p) return null;
     const market = projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 0), Number(p.age ?? 26));
-    const decision: any = state.offseasonData.resigning.decisions?.[String(openId)];
+    const decision = state.offseasonData.resigning.decisions?.[String(openId)];
     const offer = decision?.offer ?? null;
-    return { p, market, decision, offer };
+    return { p: p as PlayerRow, market, decision, offer };
   }, [state, openId]);
+
+  useEffect(() => {
+    if (!focus?.offer) {
+      setDraftOffer(null);
+      return;
+    }
+    setDraftOffer(cloneOffer(focus.offer));
+  }, [focus?.offer]);
+
+  useEffect(() => {
+    if (!openId) return;
+    const stillExpiring = expiring.some((x) => String(x.p.playerId) === String(openId));
+    if (!stillExpiring) {
+      setOpenId(null);
+      setDraftOffer(null);
+    }
+  }, [expiring, openId]);
+
+  const pushOfferDraft = () => {
+    if (!openId || !draftOffer) return;
+    dispatch({
+      type: "RESIGN_SET_DECISION",
+      payload: {
+        playerId: String(openId),
+        decision: {
+          action: "RESIGN",
+          offer: cloneOffer(draftOffer),
+        },
+      },
+    });
+  };
 
   return (
     <Card>
@@ -61,14 +112,14 @@ export default function ResignPlayers() {
       </CardHeader>
 
       <CardContent>
-        <div className="text-sm text-muted-foreground mb-3">Make an offer. If accepted, contract updates immediately. If rejected, try again.</div>
+        <div className="text-sm text-muted-foreground mb-3">Make an offer. If accepted, contract updates immediately. If rejected, create a new offer.</div>
 
         <ScrollArea className="h-[60vh] pr-3">
           <div className="space-y-2">
             {expiring.length === 0 ? <div className="text-sm text-muted-foreground">No expiring contracts.</div> : null}
             {expiring.map(({ p }) => {
               const depth = getDepthSlotLabel(state, String(p.playerId));
-              const decision: any = state.offseasonData.resigning.decisions?.[String(p.playerId)];
+              const decision = state.offseasonData.resigning.decisions?.[String(p.playerId)];
               const offer = decision?.offer;
 
               return (
@@ -114,7 +165,7 @@ export default function ResignPlayers() {
       <Dialog open={!!openId} onOpenChange={(v) => !v && setOpenId(null)}>
         <DialogContent className="max-w-xl rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Offer</DialogTitle>
+            <DialogTitle>Offer Dashboard</DialogTitle>
           </DialogHeader>
 
           {!focus ? null : (
@@ -124,28 +175,52 @@ export default function ResignPlayers() {
               </div>
               <div className="text-xs text-muted-foreground">Market projection: {money(focus.market)}/yr</div>
 
-              <div className="rounded-xl border p-3 space-y-1">
-                {focus.offer ? (
+              <div className="rounded-xl border p-3 space-y-2">
+                {draftOffer ? (
                   <>
+                    <div className="text-sm font-medium">Current offer</div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Years</span>
-                      <span className="font-semibold tabular-nums">{focus.offer.years}</span>
+                      <span className="font-semibold tabular-nums">{draftOffer.years}</span>
                     </div>
+                    <Slider
+                      value={[draftOffer.years]}
+                      min={2}
+                      max={5}
+                      step={1}
+                      onValueChange={(v) => setDraftOffer((cur) => (cur ? { ...cur, years: v[0] ?? cur.years } : cur))}
+                    />
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">APY</span>
-                      <span className="font-semibold tabular-nums">{money(focus.offer.apy)}</span>
+                      <span className="font-semibold tabular-nums">{money(draftOffer.apy)}</span>
                     </div>
+                    <Slider
+                      value={[draftOffer.apy]}
+                      min={Math.max(500_000, Math.round(focus.market * 0.6))}
+                      max={Math.max(1_000_000, Math.round(focus.market * 1.6))}
+                      step={50_000}
+                      onValueChange={(v) => setDraftOffer((cur) => (cur ? { ...cur, apy: Math.round(v[0] ?? cur.apy) } : cur))}
+                    />
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Guarantees</span>
-                      <span className="font-semibold tabular-nums">{Math.round(Number(focus.offer.guaranteesPct ?? 0) * 100)}%</span>
+                      <span className="font-semibold tabular-nums">{Math.round(draftOffer.guaranteesPct * 100)}%</span>
                     </div>
+                    <Slider
+                      value={[Math.round(draftOffer.guaranteesPct * 100)]}
+                      min={30}
+                      max={90}
+                      step={1}
+                      onValueChange={(v) =>
+                        setDraftOffer((cur) => (cur ? { ...cur, guaranteesPct: (v[0] ?? Math.round(cur.guaranteesPct * 100)) / 100 } : cur))
+                      }
+                    />
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Early discount</span>
-                      <span className="tabular-nums">{Math.round(Number(focus.offer.discountPct ?? 0) * 100)}%</span>
+                      <span>Discount</span>
+                      <span className="tabular-nums">{Math.round(Number(draftOffer.discountPct ?? 0) * 100)}%</span>
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Rejected</span>
-                      <span className="tabular-nums">{Number(focus.offer.rejectedCount ?? 0)}x</span>
+                      <span className="tabular-nums">{Number(draftOffer.rejectedCount ?? 0)}x</span>
                     </div>
                   </>
                 ) : (
@@ -161,19 +236,25 @@ export default function ResignPlayers() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => dispatch({ type: "RESIGN_MAKE_OFFER", payload: { playerId: String(openId), createdFrom: "RESIGN_SCREEN" } })}
+                  onClick={() => {
+                    setOpenId(String(openId));
+                    if (focus.offer) {
+                      setDraftOffer(cloneOffer(focus.offer));
+                    }
+                  }}
                 >
                   New Offer
                 </Button>
-                <Button variant="destructive" onClick={() => dispatch({ type: "RESIGN_REJECT_OFFER", payload: { playerId: String(openId) } })}>
-                  Rejected
+                <Button variant="secondary" onClick={pushOfferDraft} disabled={!draftOffer}>
+                  Save Offer
                 </Button>
-                <Button onClick={() => dispatch({ type: "RESIGN_ACCEPT_OFFER", payload: { playerId: String(openId) } })}>Accepted</Button>
+                <Button variant="destructive" onClick={() => dispatch({ type: "RESIGN_REJECT_OFFER", payload: { playerId: String(openId) } })}>
+                  Decline
+                </Button>
+                <Button onClick={() => draftOffer && dispatch({ type: "RESIGN_SUBMIT_OFFER", payload: { playerId: String(openId), offer: cloneOffer(draftOffer) } })} disabled={!draftOffer}>Submit Offer</Button>
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Rejecting bumps price and reduces the early discount on the next offer.
-              </div>
+              <div className="text-xs text-muted-foreground">New Offer loads the existing offer into this dashboard for edits. Decline clears the active offer.</div>
             </div>
           )}
         </DialogContent>
