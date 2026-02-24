@@ -12,7 +12,6 @@ export type OfferDecisionResult = {
   interestBefore: number;
   interestAfter: number;
   deltaInterest: number;
-  recovery: number;
 };
 
 type OfferDecisionParams = {
@@ -139,6 +138,5 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
     interestBefore,
     interestAfter,
     deltaInterest: interestAfter - interestBefore,
-    recovery,
   };
 }
