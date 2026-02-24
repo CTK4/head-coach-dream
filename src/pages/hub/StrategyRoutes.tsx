@@ -36,7 +36,7 @@ function StrategyHome() {
                   onClick={() => dispatch({ type: "SET_GM_MODE", payload: { gmMode: m.value } })}
                   className={`rounded-lg border px-3 py-3 text-left transition ${
                     gmMode === m.value
-                      ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
+                      ? "border-blue-400/50 bg-blue-500/15 text-blue-100"
                       : "border-white/10 bg-white/5 text-slate-300"
                   }`}
                 >
