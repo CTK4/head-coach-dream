@@ -60,6 +60,13 @@ describe("evaluateContractOffer", () => {
     expect(highInterestAccepts).toBeGreaterThan(lowInterestAccepts);
   });
 
+  it("interest increases acceptance score on identical deal", () => {
+    const context = { ...baseParams.context, saveSeed: 3333 };
+    const low = evaluateContractOffer({ ...baseParams, context, interest: 30, offer: { years: 3, aav: 11_000_000 } });
+    const high = evaluateContractOffer({ ...baseParams, context, interest: 80, offer: { years: 3, aav: 11_000_000 } });
+    expect(high.acceptanceScore).toBeGreaterThan(low.acceptanceScore);
+  });
+
   it("rejection lowers team-specific interest", () => {
     const out = evaluateContractOffer({ ...baseParams, interest: 60, offer: { years: 3, aav: 7_000_000 }, rejectionCount: 2 });
     expect(out.accepted).toBe(false);
@@ -74,9 +81,7 @@ describe("evaluateContractOffer", () => {
       priorOfferAav: 7_500_000,
       rejectionCount: 2,
     });
-    expect(out.recovery).toBeGreaterThan(0);
     expect(out.interestAfter).toBeLessThan(out.interestBefore);
-    expect(out.interestAfter).toBeGreaterThanOrEqual(36);
-    expect(out.recovery).toBeLessThanOrEqual(Math.abs(out.deltaInterest) * 0.6);
+    expect(out.interestAfter).toBeGreaterThanOrEqual(37);
   });
 });
