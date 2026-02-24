@@ -30,25 +30,34 @@ describe("evaluateContractOffer", () => {
   });
 
   it("accepts strong offers frequently", () => {
-    const probe = evaluateContractOffer({ ...baseParams, offer: { years: 3, aav: 10_000_000 }, interest: 62 });
-    const strongAav = Math.round(probe.askAav * 1.25);
+    const probe = evaluateContractOffer({ ...baseParams, offer: { years: 3, aav: 10_000_000 }, interest: 55 });
+    const strongAav = Math.round(probe.askAav * 1.1);
     let accepts = 0;
     for (let i = 0; i < 20; i++) {
       const result = evaluateContractOffer({
         ...baseParams,
         context: { ...baseParams.context, saveSeed: 2000 + i },
         offer: { years: 3, aav: strongAav },
-        interest: 62,
+        interest: 55,
       });
       if (result.accepted) accepts += 1;
     }
     expect(accepts).toBeGreaterThanOrEqual(16);
   });
 
-  it("interest affects acceptance score", () => {
-    const low = evaluateContractOffer({ ...baseParams, interest: 20, offer: { years: 3, aav: 11_000_000 } });
-    const high = evaluateContractOffer({ ...baseParams, interest: 90, offer: { years: 3, aav: 11_000_000 } });
-    expect(high.acceptanceScore).toBeGreaterThan(low.acceptanceScore);
+  it("interest 30 rejects more often than interest 80 for same offer", () => {
+    const probe = evaluateContractOffer({ ...baseParams, interest: 55, offer: { years: 3, aav: 10_000_000 } });
+    const fairAav = Math.round(probe.askAav * 1.08);
+    let lowInterestAccepts = 0;
+    let highInterestAccepts = 0;
+    for (let i = 0; i < 20; i++) {
+      const context = { ...baseParams.context, saveSeed: 3000 + i };
+      const low = evaluateContractOffer({ ...baseParams, context, interest: 30, offer: { years: 3, aav: fairAav } });
+      const high = evaluateContractOffer({ ...baseParams, context, interest: 80, offer: { years: 3, aav: fairAav } });
+      if (low.accepted) lowInterestAccepts += 1;
+      if (high.accepted) highInterestAccepts += 1;
+    }
+    expect(highInterestAccepts).toBeGreaterThan(lowInterestAccepts);
   });
 
   it("rejection lowers team-specific interest", () => {
@@ -65,7 +74,9 @@ describe("evaluateContractOffer", () => {
       priorOfferAav: 7_500_000,
       rejectionCount: 2,
     });
+    expect(out.recovery).toBeGreaterThan(0);
+    expect(out.interestAfter).toBeLessThan(out.interestBefore);
     expect(out.interestAfter).toBeGreaterThanOrEqual(36);
-    expect(out.deltaInterest).toBeGreaterThan(-16);
+    expect(out.recovery).toBeLessThanOrEqual(Math.abs(out.deltaInterest) * 0.6);
   });
 });
