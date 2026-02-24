@@ -48,6 +48,7 @@ import ActivityLog from "./pages/hub/ActivityLog";
 import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 import FrontOffice from "@/pages/hub/FrontOffice";
 import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
+import InterviewRunner from "@/pages/InterviewRunner";
 
 const queryClient = new QueryClient();
 
@@ -198,6 +199,7 @@ const App = () => (
             </Route>
 
             <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
+            <Route path="/interview/:teamId" element={<InterviewRunner />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
