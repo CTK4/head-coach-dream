@@ -251,7 +251,7 @@ export default function ResignPlayers() {
                 <Button variant="destructive" onClick={() => dispatch({ type: "RESIGN_REJECT_OFFER", payload: { playerId: String(openId) } })}>
                   Decline
                 </Button>
-                <Button onClick={() => dispatch({ type: "RESIGN_ACCEPT_OFFER", payload: { playerId: String(openId) } })}>Accept</Button>
+                <Button onClick={() => draftOffer && dispatch({ type: "RESIGN_SUBMIT_OFFER", payload: { playerId: String(openId), offer: cloneOffer(draftOffer) } })} disabled={!draftOffer}>Submit Offer</Button>
               </div>
 
               <div className="text-xs text-muted-foreground">New Offer loads the existing offer into this dashboard for edits. Decline clears the active offer.</div>

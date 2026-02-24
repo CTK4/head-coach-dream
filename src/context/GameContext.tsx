@@ -62,6 +62,7 @@ import { detRand as detRand2 } from "@/engine/scouting/rng";
 import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
+import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
 import {
   COMBINE_DEFAULT_HOURS,
@@ -276,7 +277,7 @@ export type MemoryEvent = { type: string; season: number; week?: number; payload
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
-const CURRENT_SAVE_VERSION = 3;
+const CURRENT_SAVE_VERSION = 4;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = draftClassJson as DraftRow[];
@@ -511,6 +512,14 @@ export type PendingTradeOffer = {
   status: "PENDING" | "CANCELLED" | "ACCEPTED";
 };
 
+export type OfferResultModalState = {
+  open: boolean;
+  title: string;
+  message: string;
+  variant: "success" | "danger";
+  ts: number;
+};
+
 export type GameState = {
   coach: {
     name: string;
@@ -558,6 +567,13 @@ export type GameState = {
     ui: { mode: "NONE" | "PLAYER" | "SHORTLIST"; playerId?: string };
   };
   freeAgency: FreeAgencyState;
+  contracts: {
+    playerTeamInterestById: Record<string, Record<string, number>>;
+  };
+  resign: {
+    lastOfferAavByPlayerId: Record<string, number>;
+    rejectionCountByPlayerId: Record<string, number>;
+  };
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
@@ -632,6 +648,9 @@ export type GameState = {
   playerMorale?: Record<string, number>;
   injuries?: Injury[];
   uiToast?: string;
+  ui: {
+    offerResultModal?: OfferResultModalState;
+  };
   feedbackQueue: FeedbackEvent[];
   feedbackHistory: FeedbackEvent[];
   pendingInjuryAlert?: Injury;
@@ -718,7 +737,10 @@ export type GameAction =
   | { type: "RESIGN_DRAFT_FROM_AUDIT"; payload: { playerId: string } }
   | { type: "RESIGN_REJECT_OFFER"; payload: { playerId: string } }
   | { type: "RESIGN_ACCEPT_OFFER"; payload: { playerId: string } }
+  | { type: "RESIGN_SUBMIT_OFFER"; payload: { playerId: string; offer: ResignOffer } }
   | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
+  | { type: "SHOW_OFFER_RESULT_MODAL"; payload: { title: string; message: string; variant: "success" | "danger" } }
+  | { type: "HIDE_OFFER_RESULT_MODAL" }
   | { type: "TAG_APPLY"; payload: TagApplied }
   | { type: "TAG_REMOVE" }
   | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
@@ -1021,6 +1043,8 @@ function createInitialState(): GameState {
       pendingCounterTeamByPlayerId: {},
       cpuTickedOnOpen: false,
     },
+    contracts: { playerTeamInterestById: {} },
+    resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     offers: [],
     season: 2026,
     week: 1,
@@ -1100,6 +1124,7 @@ function createInitialState(): GameState {
     feedbackQueue: [],
     feedbackHistory: [],
     pendingInjuryAlert: undefined,
+    ui: {},
     hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
@@ -2167,6 +2192,7 @@ function seasonRollover(state: GameState): GameState {
       pendingCounterTeamByPlayerId: {},
       cpuTickedOnOpen: false,
     },
+    resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     playerTeamOverrides,
     playerContractOverrides,
     finances: { ...state.finances, cash },
@@ -3818,6 +3844,83 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       decisions[String(playerId)] = { action: "RESIGN", offer };
 
       return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "RESIGN_SUBMIT_OFFER": {
+      const { playerId, offer } = action.payload;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
+      const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+      if (!p) return state;
+
+      const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+      const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+      const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+      const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+      const decision = evaluateContractOffer({
+        player: {
+          id: String(playerId),
+          age: Number(p.age ?? 26),
+          overall: Number(p.overall ?? p.ovr ?? 60),
+          position: String(p.pos ?? "UNK"),
+        },
+        offer: { years: Number(offer.years ?? 2), aav: Number(offer.apy ?? 0), guarantees: Number(offer.guaranteesPct ?? 0) },
+        context: { saveSeed: Number(state.saveSeed ?? 1), season: Number(state.season ?? 2026), week: Number(state.week ?? 1), teamId: String(teamId), phase: "RESIGN" },
+        interest: interestBefore,
+        priorOfferAav,
+        rejectionCount,
+      });
+
+      const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+      contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+      const resign = {
+        lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+        rejectionCountByPlayerId: {
+          ...state.resign.rejectionCountByPlayerId,
+          [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+        },
+      };
+
+      const modal = {
+        open: true,
+        title: decision.accepted ? "Offer Accepted" : "Offer Rejected",
+        message: decision.reason,
+        variant: decision.accepted ? "success" as const : "danger" as const,
+        ts: Date.now(),
+      };
+
+      if (!decision.accepted) {
+        return {
+          ...state,
+          contracts: { playerTeamInterestById: contractsByPlayer },
+          resign,
+          ui: { ...state.ui, offerResultModal: modal },
+        };
+      }
+
+      const ovr = contractOverrideFromOffer(state, offer);
+      const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      delete decisions[String(playerId)];
+
+      const morale = { ...(state.playerMorale ?? {}) };
+      const curMorale = Number(morale[String(playerId)] ?? 60);
+      morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+      let next = applyFinances({
+        ...state,
+        playerContractOverrides,
+        playerMorale: morale,
+        offseasonData: { ...state.offseasonData, resigning: { decisions } },
+        contracts: { playerTeamInterestById: contractsByPlayer },
+        resign,
+        ui: { ...state.ui, offerResultModal: modal },
+      });
+
+      if (isNewsworthyRecommit(p)) {
+        next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+      }
+      return next;
     }
     case "RESIGN_REJECT_OFFER": {
       const { playerId } = action.payload;
@@ -5975,6 +6078,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       out = { ...out, hotSeatStatus: nextHotSeat };
       return out;
     }
+    case "SHOW_OFFER_RESULT_MODAL": {
+      const { title, message, variant } = action.payload;
+      return { ...state, ui: { ...state.ui, offerResultModal: { open: true, title, message, variant, ts: Date.now() } } };
+    }
+    case "HIDE_OFFER_RESULT_MODAL": {
+      return { ...state, ui: { ...state.ui, offerResultModal: undefined } };
+    }
     case "RESET":
       return createInitialState();
     default:
@@ -6143,6 +6253,9 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     depthChart: nextDepthChart,
     leagueDepthCharts: (oldState as any).leagueDepthCharts ?? {},
     playerAccolades: (oldState as any).playerAccolades ?? {},
+    contracts: (oldState as any).contracts ?? { playerTeamInterestById: {} },
+    resign: (oldState as any).resign ?? { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
+    ui: (oldState as any).ui ?? {},
   };
   s = ensureAccolades(bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
@@ -6245,6 +6358,17 @@ function loadState(): GameState {
         offersByPlayerId: { ...initial.freeAgency.offersByPlayerId, ...(migrated.freeAgency?.offersByPlayerId ?? {}) },
         signingsByPlayerId: { ...initial.freeAgency.signingsByPlayerId, ...(migrated.freeAgency?.signingsByPlayerId ?? {}) },
       },
+      contracts: {
+        ...initial.contracts,
+        ...(migrated as any).contracts,
+        playerTeamInterestById: { ...initial.contracts.playerTeamInterestById, ...((migrated as any).contracts?.playerTeamInterestById ?? {}) },
+      },
+      resign: {
+        ...initial.resign,
+        ...(migrated as any).resign,
+        lastOfferAavByPlayerId: { ...initial.resign.lastOfferAavByPlayerId, ...((migrated as any).resign?.lastOfferAavByPlayerId ?? {}) },
+        rejectionCountByPlayerId: { ...initial.resign.rejectionCountByPlayerId, ...((migrated as any).resign?.rejectionCountByPlayerId ?? {}) },
+      },
       league: migrated.league ?? initial.league,
       game: { ...initial.game, ...migrated.game },
       gameHistory: Array.isArray((migrated as any).gameHistory) ? (migrated as any).gameHistory : [],
@@ -6281,6 +6405,7 @@ function loadState(): GameState {
       feedbackQueue: Array.isArray((migrated as any).feedbackQueue) ? (migrated as any).feedbackQueue : [],
       feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
       pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
+      ui: { ...initial.ui, ...((migrated as any).ui ?? {}) },
       hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
     };
     out = ensureAccolades(bootstrapAccolades(out));
