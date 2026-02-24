@@ -89,6 +89,7 @@ export default function Hub() {
     },
     { id: "roster", title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
     { id: "strategy", title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "strategy", title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: HUB_TILE_IMAGES.strategy },
     { id: "contracts", title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
     { id: "scouting", title: "Scouting", to: "/scouting", imageUrl: HUB_TILE_IMAGES.scouting },
     {
@@ -116,11 +117,11 @@ export default function Hub() {
 
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           {optionalTiles.map((tile) => (
-            <HubTile key={tile.id} {...tile} />
+            <HubTile key={`${tile.id}-${tile.to}`} {...tile} />
           ))}
           {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
           {mainTiles.map((tile) => (
-            <HubTile key={tile.id} {...tile} />
+            <HubTile key={`${tile.id}-${tile.to}`} {...tile} />
           ))}
         </div>
 

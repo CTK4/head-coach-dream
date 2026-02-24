@@ -39,7 +39,7 @@ export function BottomNav() {
             to={item.route}
             className={cn(
               "flex flex-col items-center gap-1 min-w-[64px]",
-              isActive(item.route) ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
+              isActive(item.route) ? "text-blue-400" : "text-slate-400 hover:text-slate-200"
             )}
           >
             <item.icon className="h-6 w-6" />
