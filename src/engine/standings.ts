@@ -40,6 +40,15 @@ function sortConference(a: TeamStanding, b: TeamStanding) {
   return b.winPct - a.winPct || divisionPct(b) - divisionPct(a) || (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) || b.pointsFor - a.pointsFor || a.teamName.localeCompare(b.teamName);
 }
 
+function currentStreak(lastFive: Array<"W" | "L" | "T">, res: "W" | "L" | "T"): string {
+  let count = 0;
+  for (let i = lastFive.length - 1; i >= 0; i--) {
+    if (lastFive[i] !== res) break;
+    count++;
+  }
+  return `${res}${count}`;
+}
+
 export function computeStandings(allGameResults: AIGameResult[], previousStandings: TeamStanding[]): TeamStanding[] {
   const byId = new Map(previousStandings.map((s) => [s.teamId, { ...s, divisionRecord: { ...s.divisionRecord }, lastFive: [...(s.lastFive ?? [])] }]));
 
@@ -85,8 +94,8 @@ export function computeStandings(allGameResults: AIGameResult[], previousStandin
 
     home.lastFive = [...home.lastFive, homeRes].slice(-5);
     away.lastFive = [...away.lastFive, awayRes].slice(-5);
-    home.streak = `${homeRes}${home.lastFive.slice().reverse().findIndex((r) => r !== homeRes) === -1 ? home.lastFive.length : home.lastFive.length - home.lastFive.slice().reverse().findIndex((r) => r !== homeRes)}`;
-    away.streak = `${awayRes}${away.lastFive.slice().reverse().findIndex((r) => r !== awayRes) === -1 ? away.lastFive.length : away.lastFive.length - away.lastFive.slice().reverse().findIndex((r) => r !== awayRes)}`;
+    home.streak = currentStreak(home.lastFive, homeRes);
+    away.streak = currentStreak(away.lastFive, awayRes);
 
     home.winPct = pct(home.wins, home.losses, home.ties);
     away.winPct = pct(away.wins, away.losses, away.ties);

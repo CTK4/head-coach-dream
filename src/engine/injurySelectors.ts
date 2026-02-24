@@ -20,12 +20,13 @@ export type InjurySummaryCounts = {
 
 export function selectInjurySummaryCounts(state: GameState, teamId?: string): InjurySummaryCounts {
   const injuries = teamId ? selectInjuriesByTeam(state, teamId) : selectLeagueInjuries(state);
-  return {
-    total: injuries.length,
-    out: injuries.filter((i) => i.status === "OUT").length,
-    doubtful: injuries.filter((i) => i.status === "DOUBTFUL").length,
-    questionable: injuries.filter((i) => i.status === "QUESTIONABLE").length,
-    ir: injuries.filter((i) => i.status === "IR").length,
-    pup: injuries.filter((i) => i.status === "PUP").length,
-  };
+  const counts: InjurySummaryCounts = { total: injuries.length, out: 0, doubtful: 0, questionable: 0, ir: 0, pup: 0 };
+  for (const i of injuries) {
+    if (i.status === "OUT") counts.out++;
+    else if (i.status === "DOUBTFUL") counts.doubtful++;
+    else if (i.status === "QUESTIONABLE") counts.questionable++;
+    else if (i.status === "IR") counts.ir++;
+    else if (i.status === "PUP") counts.pup++;
+  }
+  return counts;
 }
