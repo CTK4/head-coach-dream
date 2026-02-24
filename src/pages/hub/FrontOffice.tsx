@@ -51,7 +51,7 @@ export default function FrontOffice() {
         <Card className="border-white/10 bg-[#13131A]">
           <CardHeader><CardTitle>Owner Profile</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-center justify-between"><div className="font-semibold">{owner?.fullName ?? "Team Owner"}</div><Badge className="bg-blue-500/20 text-blue-200">HANDS_OFF</Badge></div>
+            <div className="flex items-center justify-between"><div className="font-semibold">{owner?.fullName ?? "Team Owner"}</div><Badge className="bg-blue-500/20 text-white">HANDS_OFF</Badge></div>
             <div className="text-xs">Confidence in Coaching Staff: {ownerConfidence}</div>
             <div className="h-2 rounded bg-[#252535]"><div className={`h-2 rounded ${meterColor(ownerConfidence)}`} style={{ width: `${ownerConfidence}%` }} /></div>
             <div className="flex gap-2"><Badge variant="secondary">WINNING</Badge><Badge variant="secondary">REVENUE</Badge><Badge variant="secondary">YOUTH</Badge></div>
@@ -63,7 +63,7 @@ export default function FrontOffice() {
         <Card className="border-white/10 bg-[#13131A]">
           <CardHeader><CardTitle>GM Profile</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-center justify-between"><div className="font-semibold">{gm?.fullName ?? "General Manager"}</div><Badge className="bg-blue-500/20 text-blue-200">HYBRID</Badge></div>
+            <div className="flex items-center justify-between"><div className="font-semibold">{gm?.fullName ?? "General Manager"}</div><Badge className="bg-blue-500/20 text-white">HYBRID</Badge></div>
             <div className="text-xs">GM Relationship: {gmRelationship}</div>
             <div className="h-2 rounded bg-[#252535]"><div className={`h-2 rounded ${meterColor(gmRelationship)}`} style={{ width: `${gmRelationship}%` }} /></div>
             <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground"><div>Draft Emphasis: MEDIUM</div><div>FA Aggression: SELECTIVE</div><div>Collaboration: Adaptive</div></div>

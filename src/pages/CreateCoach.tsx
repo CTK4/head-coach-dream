@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const AGE_TIERS = ["32-35", "36-39", "40-43", "44-47", "48-51", "52-55"] as const;
+const COACH_AGES = Array.from({ length: 24 }, (_, index) => String(32 + index));
 
 const LEAGUE_CITIES = getLeagueCities();
 
@@ -18,7 +18,7 @@ function findHometownTeamId(hometown: string): string | undefined {
 const CreateCoach = () => {
   const { state, dispatch } = useGame();
   const [name, setName] = useState(state.coach.name);
-  const [ageTier, setAgeTier] = useState(state.coach.ageTier || AGE_TIERS[0]);
+  const [ageTier, setAgeTier] = useState(state.coach.ageTier || COACH_AGES[0]);
   const [hometown, setHometown] = useState(state.coach.hometown);
 
   const handleContinue = () => {
@@ -50,14 +50,14 @@ const CreateCoach = () => {
             <Input id="name" placeholder="Coach Name" value={name} onChange={(e) => setName(e.target.value)} className="bg-secondary" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="age-tier">Age Tier</Label>
+            <Label htmlFor="age-tier">Age</Label>
             <Select value={ageTier} onValueChange={setAgeTier}>
               <SelectTrigger id="age-tier" className="bg-secondary">
-                <SelectValue placeholder="Select age tier" />
+                <SelectValue placeholder="Select age" />
               </SelectTrigger>
               <SelectContent>
-                {AGE_TIERS.map((tier) => (
-                  <SelectItem key={tier} value={tier}>{tier}</SelectItem>
+                {COACH_AGES.map((age) => (
+                  <SelectItem key={age} value={age}>{age}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

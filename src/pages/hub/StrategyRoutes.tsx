@@ -251,7 +251,7 @@ function PrioritiesScreen() {
                   key={p}
                   onClick={() => toggle(p)}
                   className={`rounded-lg border px-3 py-2 text-xs ${
-                    priorities.includes(p) ? "border-blue-400/40 bg-blue-500/10 text-blue-100" : "border-white/10 bg-white/5"
+                    priorities.includes(p) ? "border-blue-400/40 bg-blue-500/10 text-white" : "border-white/10 bg-white/5"
                   }`}
                 >
                   {p}
