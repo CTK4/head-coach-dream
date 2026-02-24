@@ -8,26 +8,13 @@ import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
 import { readSettings } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
+import { HUB_TILE_IMAGES, type HubTileId } from "@/components/franchise-hub/tileImages";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
 import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 import SeasonAwards from "@/pages/SeasonAwards";
 
-const TILE_IMAGES = {
-    staff: { kind: "placeholders", filename: "coach.png", fallbackSrc: "/placeholders/coach.png" },
-    roster: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
-    strategy: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
-    contracts: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
-    scouting: { kind: "placeholders", filename: "scout.png", fallbackSrc: "/placeholders/scout.png" },
-    news: { kind: "placeholders", filename: "news.png", fallbackSrc: "/placeholders/news.png" },
-    freeAgency: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
-    resign: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
-    trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
-    injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
-    development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
-    frontOffice: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
-} as const;
-
 type HubTileConfig = {
+  id: HubTileId;
   title: string;
   subtitle?: string;
   to: string;
@@ -87,34 +74,36 @@ export default function Hub() {
   else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
 
   const optionalTiles: HubTileConfig[] = [
-    ...(state.careerStage === "FREE_AGENCY" ? [{ title: "Free Agency", to: "/free-agency", imageUrl: TILE_IMAGES.freeAgency }] : []),
-    ...(showReSign ? [{ title: "Re-Sign", to: "/hub/re-sign", imageUrl: TILE_IMAGES.resign }] : []),
-    ...(showTrades ? [{ title: "Trades", to: "/hub/trades", imageUrl: TILE_IMAGES.trades }] : []),
+    ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts", title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
+    ...(showReSign ? [{ id: "roster", title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
+    ...(showTrades ? [{ id: "strategy", title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
   ];
 
   const mainTiles: HubTileConfig[] = [
     {
       title: "Staff",
       to: "/staff",
-      imageUrl: TILE_IMAGES.staff,
+      id: "staff",
+      imageUrl: HUB_TILE_IMAGES.staff,
       imageObjectPosition: "50% 65%",
     },
-    { title: "Roster", to: "/roster", imageUrl: TILE_IMAGES.roster },
-    { title: "Franchise Strategy", to: "/strategy", imageUrl: TILE_IMAGES.strategy },
-    { title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: TILE_IMAGES.contracts },
-    { title: "Scouting", to: "/scouting", imageUrl: TILE_IMAGES.scouting },
+    { id: "roster", title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
+    { id: "strategy", title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "contracts", title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
+    { id: "scouting", title: "Scouting", to: "/scouting", imageUrl: HUB_TILE_IMAGES.scouting },
     {
+      id: "news",
       title: "News",
       to: "/news",
-      imageUrl: TILE_IMAGES.news,
+      imageUrl: HUB_TILE_IMAGES.news,
       badgeCount: badgeCounts.newsUnread,
       badgeHint: "Unread news stories",
       badgeKind: "unread",
       cornerBubbleCount: badgeCounts.newsUnread,
     },
-    { title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: TILE_IMAGES.coachOffice },
-    { title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: TILE_IMAGES.injuryReport },
-    { title: "Hall of Fame", to: "/hub/hall-of-fame", imageUrl: TILE_IMAGES.hallOfFame },
+    { id: "coachs_office", title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: HUB_TILE_IMAGES.coachs_office },
+    { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
+    { id: "hall_of_fame", title: "Hall of Fame", to: "/hub/hall-of-fame", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
   ];
 
   return (
@@ -127,11 +116,11 @@ export default function Hub() {
 
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           {optionalTiles.map((tile) => (
-            <HubTile key={tile.title} {...tile} />
+            <HubTile key={tile.id} {...tile} />
           ))}
           {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
           {mainTiles.map((tile) => (
-            <HubTile key={tile.title} {...tile} />
+            <HubTile key={tile.id} {...tile} />
           ))}
         </div>
 
