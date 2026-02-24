@@ -4,7 +4,7 @@ import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
-import { HubTile } from "@/components/franchise-hub/HubTile";
+import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
 import { readSettings } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
@@ -22,14 +22,28 @@ const TILE_IMAGES = {
     freeAgency: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
     resign: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
     trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
-    injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
-    development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    injuryReport: "https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/placeholders/Injury_Report.jpeg",
+    coachOffice: "https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/placeholders/Coach_Office.jpeg",
+    hallOfFame: "https://8532ca36b3a7421a198490db596a2600.r2.cloudflarestorage.com/placeholders/Hall_of_Fame.jpeg",
 } as const;
 
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+type HubTileConfig = {
+  title: string;
+  subtitle?: string;
+  to: string;
+  imageUrl?: string;
+  imageR2?: { kind: "placeholders"; filename: string; fallbackSrc: string };
+  badgeCount?: number;
+  badgeHint?: string;
+  badgeKind?: HubBadgeKind;
+  cornerBubbleCount?: number;
+  imagePosition?: string;
+};
 
 export default function Hub() {
   const { state, dispatch } = useGame();
@@ -38,21 +52,27 @@ export default function Hub() {
 
   const badgeCounts = useMemo(() => {
     const hub = (state as any).hub;
-    const b = hub?.badges;
     const unread = (hub?.news ?? []).filter((x: any) => !hub?.newsReadIds?.[String(x?.id)]).length;
+    const openStaffRoles = Object.values(state.assistantStaff ?? {}).filter((value) => !value).length;
+    const activeInjuries = (state.injuries ?? []).filter((injury) => injury.status !== "RECOVERED").length;
+    const scoutingState = state.scoutingState;
+    const scoutingActions = scoutingState
+      ? clampInt(
+        Number(scoutingState.interviews?.interviewsRemaining ?? 0)
+          + Number(scoutingState.visits?.privateWorkoutsRemaining ?? 0)
+          + Number(scoutingState.visits?.top30Remaining ?? 0),
+        0,
+        99,
+      )
+      : 0;
+
     return {
-      hireStaff: clampInt(b?.hireStaff ?? 1, 0, 99),
-      franchiseStrategy: clampInt(b?.franchiseStrategy ?? 1, 0, 99),
-      scouting: clampInt(b?.scouting ?? 2, 0, 99),
-      roster: clampInt(b?.roster ?? 1, 0, 99),
-      finances: clampInt(b?.finances ?? 1, 0, 99),
-      leagueNews: clampInt(b?.leagueNews ?? 4, 0, 99),
       leagueNewsUnread: clampInt(unread, 0, 99),
+      staff: clampInt(openStaffRoles, 0, 99),
+      scouting: scoutingActions,
+      injuryReport: clampInt(activeInjuries, 0, 99),
     };
   }, [state]);
-
-  const assistantOpen = Object.values(state.assistantStaff ?? {}).filter((value) => !value).length;
-  // const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
   
   const nextStage = nextStageForNavigate(state.careerStage);
   const showTrades = isTradesAllowed(state);
@@ -84,6 +104,55 @@ export default function Hub() {
   else if (state.careerStage === "RESIGN") advanceText = "ADVANCE RE-SIGN DAY";
   else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
 
+  const optionalTiles: HubTileConfig[] = [
+    ...(state.careerStage === "FREE_AGENCY" ? [{ title: "Free Agency", to: "/free-agency", imageR2: TILE_IMAGES.freeAgency }] : []),
+    ...(showReSign ? [{ title: "Re-Sign", to: "/hub/re-sign", imageR2: TILE_IMAGES.resign }] : []),
+    ...(showTrades ? [{ title: "Trades", to: "/hub/trades", imageR2: TILE_IMAGES.trades }] : []),
+  ];
+
+  const mainTiles: HubTileConfig[] = [
+    {
+      title: "Staff",
+      to: "/staff",
+      imageR2: TILE_IMAGES.staff,
+      badgeCount: badgeCounts.staff,
+      badgeHint: "Open staff roles",
+      badgeKind: "task",
+      imagePosition: "center 65%",
+    },
+    { title: "Roster", to: "/roster", imageR2: TILE_IMAGES.roster },
+    { title: "Franchise Strategy", to: "/strategy", imageR2: TILE_IMAGES.strategy },
+    { title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageR2: TILE_IMAGES.contracts },
+    {
+      title: "Scouting",
+      to: "/scouting",
+      imageR2: TILE_IMAGES.scouting,
+      badgeCount: badgeCounts.scouting,
+      badgeHint: "Scouting actions",
+      badgeKind: "scouting",
+    },
+    {
+      title: "News",
+      to: "/news",
+      imageR2: TILE_IMAGES.news,
+      badgeCount: badgeCounts.leagueNewsUnread,
+      badgeHint: "Unread news stories",
+      badgeKind: "unread",
+      cornerBubbleCount: badgeCounts.leagueNewsUnread,
+    },
+    { title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: TILE_IMAGES.coachOffice },
+    {
+      title: "Injury Report",
+      subtitle: "Health & Medical",
+      to: "/hub/injury-report",
+      imageUrl: TILE_IMAGES.injuryReport,
+      badgeCount: badgeCounts.injuryReport,
+      badgeHint: "Active injuries",
+      badgeKind: "info",
+    },
+    { title: "Hall of Fame", to: "/hub/hall-of-fame", imageUrl: TILE_IMAGES.hallOfFame },
+  ];
+
 
   return (
     <section className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
@@ -95,83 +164,13 @@ export default function Hub() {
             <FranchiseHeader />
 
             <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <HubTile
-                    title="Hire Staff"
-                    to="/staff"
-                    imageR2={TILE_IMAGES.staff}
-                    badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
-                    badgeHint="Open staff roles"
-                    badgeKind="task"
-                />
-                <HubTile
-                    title="Roster"
-                    to="/roster"
-                    imageR2={TILE_IMAGES.roster}
-                    badgeCount={badgeCounts.roster}
-                    badgeHint="Lineup tasks"
-                    badgeKind="task"
-                />
-                <HubTile
-                    title="Franchise Strategy"
-                    to="/strategy"
-                    imageR2={TILE_IMAGES.strategy}
-                    badgeCount={badgeCounts.franchiseStrategy}
-                    badgeHint="Strategy items"
-                    badgeKind="info"
-                />
-                <HubTile
-                    title="Contracts & Cap"
-                    subtitle="Management"
-                    to="/contracts"
-                    imageR2={TILE_IMAGES.contracts}
-                    badgeCount={badgeCounts.finances}
-                    badgeHint="Cap items"
-                    badgeKind="cap"
-                />
-                <HubTile
-                    title="Scouting"
-                    to="/scouting"
-                    imageR2={TILE_IMAGES.scouting}
-                    badgeCount={badgeCounts.scouting}
-                    badgeHint="Scouting actions"
-                    badgeKind="scouting"
-                />
-                <HubTile
-                    title="News"
-                    to="/news"
-                    imageR2={TILE_IMAGES.news}
-                    badgeCount={badgeCounts.leagueNewsUnread}
-                    badgeHint="Unread news stories"
-                    badgeKind="unread"
-                    cornerBubbleCount={badgeCounts.leagueNewsUnread}
-                />
-                {state.careerStage === "FREE_AGENCY" ? (
-                  <HubTile title="Free Agency" to="/free-agency" imageR2={TILE_IMAGES.freeAgency} badgeCount={1} badgeHint="Free agency actions" badgeKind="info" />
-                ) : null}
-                {showReSign ? (
-                  <HubTile title="Re-Sign" to="/hub/re-sign" imageR2={TILE_IMAGES.resign} badgeCount={1} badgeHint="Re-sign actions" badgeKind="info" />
-                ) : null}
-                {showTrades ? (
-                  <HubTile title="Trades" to="/hub/trades" imageR2={TILE_IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
-                ) : null}
-                <HubTile
-                    title="Coach Development"
-                    subtitle="Skill Tree"
-                    to="/skill-tree"
-                    imageR2={TILE_IMAGES.development}
-                    badgeCount={Math.max(0, state.coach.perkPoints ?? 0)}
-                    badgeHint="Perk points available"
-                    badgeKind="info"
-                />
-                <HubTile
-                    title="Injury Report"
-                    subtitle="Health & Medical"
-                    to="/hub/injury-report"
-                    imageR2={TILE_IMAGES.injuryReport}
-                    badgeCount={badgeCounts.leagueNews}
-                    badgeHint="League updates"
-                    badgeKind="info"
-                />
+                {optionalTiles.map((tile) => (
+                  <HubTile key={tile.title} {...tile} />
+                ))}
+                {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
+                {mainTiles.map((tile) => (
+                  <HubTile key={tile.title} {...tile} />
+                ))}
             </div>
 
             <HubPhaseQuickLinks />

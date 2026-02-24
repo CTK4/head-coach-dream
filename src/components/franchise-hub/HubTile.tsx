@@ -33,9 +33,10 @@ export type HubTileProps = {
   imageR2?: { kind: R2ImageKind; filename: string; fallbackSrc: string };
   badgeHint?: string;
   badgeKind?: HubBadgeKind;
+  imagePosition?: string;
 };
 
-export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, imageR2, badgeHint, badgeKind }: HubTileProps) {
+export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, imageR2, badgeHint, badgeKind, imagePosition }: HubTileProps) {
   const navigate = useNavigate();
   const showTooltips = !!readSettings().showTooltips;
 
@@ -55,9 +56,10 @@ export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, im
               fallbackSrc={imageR2.fallbackSrc}
               alt=""
               className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500"
+              style={imagePosition ? { objectPosition: imagePosition } : undefined}
             />
           ) : imageUrl ? (
-            <img src={imageUrl} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" />
+            <img src={imageUrl} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-70 transition-opacity duration-500" style={imagePosition ? { objectPosition: imagePosition } : undefined} />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-slate-800/30 via-slate-950/10 to-slate-900/40" />
           )}
