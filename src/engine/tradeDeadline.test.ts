@@ -35,7 +35,7 @@ describe("engine enforcement", () => {
     const s = migrateSave({ saveVersion: 1, saveSeed: 1, season: 2026, acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"] }) as GameState;
     return {
       ...s,
-      coach: s.coach ?? ({ name: "", ageTier: "32-35", hometown: "", archetypeId: "", tenureYear: 1 } as GameState["coach"]),
+      coach: s.coach ?? ({ name: "", ageTier: "32", hometown: "", archetypeId: "", tenureYear: 1 } as GameState["coach"]),
       acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"],
       playerTeamOverrides: s.playerTeamOverrides ?? {},
       playerContractOverrides: s.playerContractOverrides ?? {},

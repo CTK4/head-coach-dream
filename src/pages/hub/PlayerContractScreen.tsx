@@ -272,7 +272,7 @@ export default function PlayerContractScreen() {
           variant="outline"
           className={`flex-1 rounded-xl text-xs ${
             restructureElig.eligible
-              ? "border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
+              ? "border-blue-500/40 text-white hover:bg-blue-500/10"
               : "border-white/15"
           }`}
           disabled={!restructureElig.eligible}

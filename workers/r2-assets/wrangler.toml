@@ -1,0 +1,23 @@
+name = "head-coach-r2-public-assets"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[r2_buckets]]
+binding = "AVATARS"
+bucket_name = "avatars"
+
+[[r2_buckets]]
+binding = "BADGES"
+bucket_name = "badges"
+
+[[r2_buckets]]
+binding = "ICONS"
+bucket_name = "icons"
+
+[[r2_buckets]]
+binding = "PLACEHOLDERS"
+bucket_name = "placeholders"
+
+[[r2_buckets]]
+binding = "UTILITY"
+bucket_name = "utility"

@@ -13,18 +13,18 @@ import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 import SeasonAwards from "@/pages/SeasonAwards";
 
 const TILE_IMAGES = {
-  staff: "/placeholders/coach.png",
-  roster: "/placeholders/depth_chart.png",
-  strategy: "/placeholders/strategy_meeting.png",
-  contracts: "/placeholders/accounting.png",
-  scouting: "/placeholders/scout.png",
-  news: "/placeholders/news.png",
-  freeAgency: "/placeholders/accounting.png",
-  resign: "/placeholders/depth_chart.png",
-  trades: "/placeholders/strategy_meeting.png",
-  injuryReport: "/placeholders/Injury_Report.png",
-  coachOffice: "/placeholders/Coach_Office.jpeg",
-  hallOfFame: "/placeholders/Hall_of_Fame.jpeg",
+    staff: { kind: "placeholders", filename: "coach.png", fallbackSrc: "/placeholders/coach.png" },
+    roster: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    strategy: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    contracts: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    scouting: { kind: "placeholders", filename: "scout.png", fallbackSrc: "/placeholders/scout.png" },
+    news: { kind: "placeholders", filename: "news.png", fallbackSrc: "/placeholders/news.png" },
+    freeAgency: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
+    resign: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    trades: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    injuryReport: { kind: "placeholders", filename: "depth_chart.png", fallbackSrc: "/placeholders/depth_chart.png" },
+    development: { kind: "placeholders", filename: "strategy_meeting.png", fallbackSrc: "/placeholders/strategy_meeting.png" },
+    frontOffice: { kind: "placeholders", filename: "accounting.png", fallbackSrc: "/placeholders/accounting.png" },
 } as const;
 
 type HubTileConfig = {
@@ -133,6 +133,110 @@ export default function Hub() {
           {mainTiles.map((tile) => (
             <HubTile key={tile.title} {...tile} />
           ))}
+        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
+        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
+
+        <div className={`relative z-10 mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME} space-y-6`}>
+            
+            <FranchiseHeader />
+
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
+                <HubTile
+                    title="Hire Staff"
+                    to="/staff"
+                    imageR2={TILE_IMAGES.staff}
+                    badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
+                    badgeHint="Open staff roles"
+                    badgeKind="task"
+                />
+                <HubTile
+                    title="Roster"
+                    to="/roster"
+                    imageR2={TILE_IMAGES.roster}
+                    badgeCount={badgeCounts.roster}
+                    badgeHint="Lineup tasks"
+                    badgeKind="task"
+                />
+                <HubTile
+                    title="Franchise Strategy"
+                    to="/strategy"
+                    imageR2={TILE_IMAGES.strategy}
+                    badgeCount={badgeCounts.franchiseStrategy}
+                    badgeHint="Strategy items"
+                    badgeKind="info"
+                />
+                <HubTile
+                    title="Contracts & Cap"
+                    subtitle="Management"
+                    to="/contracts"
+                    imageR2={TILE_IMAGES.contracts}
+                    badgeCount={badgeCounts.finances}
+                    badgeHint="Cap items"
+                    badgeKind="cap"
+                />
+                <HubTile
+                    title="Front Office"
+                    subtitle="Owner & GM"
+                    to="/hub/front-office"
+                    imageR2={TILE_IMAGES.frontOffice}
+                    badgeCount={1}
+                    badgeHint="Org insights"
+                    badgeKind="info"
+                />
+                <HubTile
+                    title="Scouting"
+                    to="/scouting"
+                    imageR2={TILE_IMAGES.scouting}
+                    badgeCount={badgeCounts.scouting}
+                    badgeHint="Scouting actions"
+                    badgeKind="scouting"
+                />
+                <HubTile
+                    title="News"
+                    to="/news"
+                    imageR2={TILE_IMAGES.news}
+                    badgeCount={badgeCounts.leagueNewsUnread}
+                    badgeHint="Unread news stories"
+                    badgeKind="unread"
+                    cornerBubbleCount={badgeCounts.leagueNewsUnread}
+                />
+                {state.careerStage === "FREE_AGENCY" ? (
+                  <HubTile title="Free Agency" to="/free-agency" imageR2={TILE_IMAGES.freeAgency} badgeCount={1} badgeHint="Free agency actions" badgeKind="info" />
+                ) : null}
+                {showReSign ? (
+                  <HubTile title="Re-Sign" to="/hub/re-sign" imageR2={TILE_IMAGES.resign} badgeCount={1} badgeHint="Re-sign actions" badgeKind="info" />
+                ) : null}
+                {showTrades ? (
+                  <HubTile title="Trades" to="/hub/trades" imageR2={TILE_IMAGES.trades} badgeCount={1} badgeHint="Trade opportunities" badgeKind="info" />
+                ) : null}
+                <HubTile
+                    title="Coach Development"
+                    subtitle="Skill Tree"
+                    to="/skill-tree"
+                    imageR2={TILE_IMAGES.development}
+                    badgeCount={Math.max(0, state.coach.perkPoints ?? 0)}
+                    badgeHint="Perk points available"
+                    badgeKind="info"
+                />
+                <HubTile
+                    title="Injury Report"
+                    subtitle="Health & Medical"
+                    to="/hub/injury-report"
+                    imageR2={TILE_IMAGES.injuryReport}
+                    badgeCount={badgeCounts.leagueNews}
+                    badgeHint="League updates"
+                    badgeKind="info"
+                />
+            </div>
+
+            <HubPhaseQuickLinks />
+
+            <Button 
+                onClick={onAdvanceClick} 
+                className="w-full py-6 text-lg font-bold tracking-widest bg-gradient-to-r from-blue-900 to-slate-900 border border-blue-500/30 hover:from-blue-800 hover:to-slate-800 transition-all shadow-lg"
+            >
+                {advanceText}
+            </Button>
         </div>
 
         <HubPhaseQuickLinks />

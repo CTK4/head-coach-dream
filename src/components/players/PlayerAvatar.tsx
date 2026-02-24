@@ -19,9 +19,12 @@ const SIZE_CLASS: Record<NonNullable<PlayerAvatarProps["size"]>, string> = {
 
 function posTint(pos?: string): string {
   const key = String(pos ?? "UNK").toUpperCase();
-  if (["QB", "RB", "WR", "TE"].includes(key)) return "bg-blue-500/20 text-blue-100";
-  if (["LT", "LG", "C", "RG", "RT", "OL"].includes(key)) return "bg-amber-500/20 text-amber-100";
-  if (["EDGE", "DT", "DL", "LB", "CB", "FS", "SS", "S"].includes(key)) return "bg-emerald-500/20 text-emerald-100";
+  if (["QB", "RB", "WR", "TE"].includes(key))
+    return "bg-blue-500/20 text-white";
+  if (["LT", "LG", "C", "RG", "RT", "OL"].includes(key))
+    return "bg-amber-500/20 text-amber-100";
+  if (["EDGE", "DT", "DL", "LB", "CB", "FS", "SS", "S"].includes(key))
+    return "bg-emerald-500/20 text-emerald-100";
   if (["K", "P"].includes(key)) return "bg-violet-500/20 text-violet-100";
   return "bg-slate-500/20 text-slate-100";
 }

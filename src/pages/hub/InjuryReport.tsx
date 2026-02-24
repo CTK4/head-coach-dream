@@ -27,7 +27,7 @@ const STATUS_COLOR: Record<InjuryStatus, string> = {
   DOUBTFUL: "bg-orange-500/20 border-orange-400/40 text-orange-200",
   QUESTIONABLE: "bg-yellow-500/20 border-yellow-400/40 text-yellow-200",
   IR: "bg-purple-500/20 border-purple-400/40 text-purple-200",
-  PUP: "bg-blue-500/20 border-blue-400/40 text-blue-200",
+  PUP: "bg-blue-500/20 border-blue-400/40 text-white",
   DAY_TO_DAY: "bg-slate-500/20 border-slate-400/40 text-slate-200",
 };
 
@@ -41,7 +41,7 @@ const SEVERITY_COLOR: Record<InjurySeverity, string> = {
 const BADGE_COLORS: Record<string, string> = {
   NEW: "bg-emerald-500/20 border-emerald-400/40 text-emerald-200",
   WORSENED: "bg-red-500/20 border-red-400/40 text-red-200",
-  RETURNING: "bg-blue-500/20 border-blue-400/40 text-blue-200",
+  RETURNING: "bg-blue-500/20 border-blue-400/40 text-white",
 };
 
 // ─── Dev mock data ─────────────────────────────────────────────────────────────
@@ -251,9 +251,9 @@ function MedicalStaffBanner({ rating }: { rating?: number }) {
     <div className="flex items-center gap-3 rounded-lg border border-blue-300/20 bg-blue-950/30 px-3 py-2">
       <Shield className="h-4 w-4 text-blue-300 shrink-0" aria-hidden="true" />
       <div className="flex-1 min-w-0">
-        <span className="text-xs font-semibold text-blue-200">Medical Staff Influence</span>
+        <span className="text-xs font-semibold text-white">Medical Staff Influence</span>
         {rating != null ? (
-          <span className="ml-2 text-xs text-slate-300">Rating: <span className="font-bold text-blue-200">{rating}/100</span></span>
+          <span className="ml-2 text-xs text-slate-300">Rating: <span className="font-bold text-white">{rating}/100</span></span>
         ) : (
           <span className="ml-2 text-[10px] text-slate-400 italic">Rating data unavailable</span>
         )}

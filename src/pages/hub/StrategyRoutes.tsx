@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Layers } from "lucide-react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { useGame, type GmMode, type PriorityPos } from "@/context/GameContext";
@@ -50,7 +51,7 @@ function StrategyHome() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <Link to="identity" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
             <div className="font-semibold">Team Identity</div>
             <div className="text-xs text-slate-400">Offense/Defense style & tempo</div>
@@ -58,6 +59,15 @@ function StrategyHome() {
           <Link to="priorities" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
             <div className="font-semibold">Draft / FA Priorities</div>
             <div className="text-xs text-slate-400">Set position targets</div>
+          </Link>
+          <Link to="playbooks" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold">Playbook</div>
+                <div className="text-xs text-slate-400">Offensive and defensive scheme, formation packages</div>
+              </div>
+              <Layers className="h-4 w-4 text-blue-400" />
+            </div>
           </Link>
         </div>
 
@@ -241,7 +251,7 @@ function PrioritiesScreen() {
                   key={p}
                   onClick={() => toggle(p)}
                   className={`rounded-lg border px-3 py-2 text-xs ${
-                    priorities.includes(p) ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5"
+                    priorities.includes(p) ? "border-blue-400/40 bg-blue-500/10 text-white" : "border-white/10 bg-white/5"
                   }`}
                 >
                   {p}

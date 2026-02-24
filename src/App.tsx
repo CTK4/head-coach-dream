@@ -45,7 +45,7 @@ import TeamStrategy from "./pages/hub/TeamStrategy";
 import OwnerRelations from "./pages/hub/OwnerRelations";
 import ActivityLog from "./pages/hub/ActivityLog";
 import PressFeedbackDemo from "./pages/PressFeedbackDemo";
-import HallOfFame from "@/pages/hub/HallOfFame";
+import FrontOffice from "@/pages/hub/FrontOffice";
 
 const queryClient = new QueryClient();
 
@@ -153,6 +153,7 @@ const App = () => (
               <Route path="/hub/activity" element={<ActivityLog />} />
               <Route path="/hub/owner-relations" element={<OwnerRelations />} />
               <Route path="/hub/team-strategy" element={<TeamStrategy />} />
+              <Route path="/hub/front-office" element={<FrontOffice />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
               <Route path="/re-sign/*" element={<ReSignRoutes />} />
