@@ -12,6 +12,7 @@ export type OfferDecisionResult = {
   interestBefore: number;
   interestAfter: number;
   deltaInterest: number;
+  recovery: number;
 };
 
 type OfferDecisionParams = {
@@ -107,7 +108,7 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   if (params.priorOfferAav && params.priorOfferAav > 0 && offerAav >= params.priorOfferAav * 1.1) {
     const improvementPct = (offerAav - params.priorOfferAav) / params.priorOfferAav;
     recovery = clamp(improvementPct * 40, 3, 10);
-    if (!accepted) recovery = Math.min(recovery, Math.abs(deltaInterest) * 0.6);
+    recovery = Math.min(recovery, Math.abs(deltaInterest) * 0.6);
   }
 
   const interestBefore = clamp(params.interest, 0, 100);
@@ -138,5 +139,6 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
     interestBefore,
     interestAfter,
     deltaInterest: interestAfter - interestBefore,
+    recovery,
   };
 }
