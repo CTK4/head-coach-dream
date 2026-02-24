@@ -15,9 +15,9 @@ const CATEGORY_ICON = (source: string) => {
 function playoffBadge(result: string): { label: string; className: string } {
   if (result === "champion") return { label: "CHAMPION 🏆", className: "bg-amber-400/20 text-amber-200 border-amber-400/50" };
   if (result === "superbowlLoss") return { label: "SUPER BOWL", className: "bg-slate-300/20 text-slate-100 border-slate-300/50" };
-  if (result === "conference") return { label: "CONFERENCE", className: "bg-blue-400/20 text-blue-200 border-blue-400/50" };
-  if (result === "divisional") return { label: "DIVISIONAL", className: "bg-blue-400/20 text-blue-200 border-blue-400/50" };
-  if (result === "wildCard") return { label: "WILD CARD", className: "bg-blue-400/20 text-blue-200 border-blue-400/50" };
+  if (result === "conference") return { label: "CONFERENCE", className: "bg-blue-400/20 text-white border-blue-400/50" };
+  if (result === "divisional") return { label: "DIVISIONAL", className: "bg-blue-400/20 text-white border-blue-400/50" };
+  if (result === "wildCard") return { label: "WILD CARD", className: "bg-blue-400/20 text-white border-blue-400/50" };
   return { label: "MISSED PLAYOFFS", className: "bg-slate-500/20 text-slate-300 border-slate-500/40" };
 }
 

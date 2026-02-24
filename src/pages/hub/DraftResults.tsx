@@ -15,7 +15,7 @@ function chipColorForMedical(level: string) {
   return "bg-zinc-200/10 text-zinc-200 border-zinc-200/20";
 }
 function chipColorForCharacter(level: string) {
-  if (level === "BLUE") return "bg-blue-500/20 text-blue-200 border-blue-500/25";
+  if (level === "BLUE") return "bg-blue-500/20 text-white border-blue-500/25";
   if (level === "GREEN") return "bg-emerald-500/20 text-emerald-200 border-emerald-500/25";
   if (level === "YELLOW") return "bg-yellow-500/20 text-yellow-200 border-yellow-500/25";
   if (level === "ORANGE") return "bg-orange-500/20 text-orange-200 border-orange-500/25";
