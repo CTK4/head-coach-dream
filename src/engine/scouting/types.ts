@@ -71,6 +71,7 @@ export type VisitState = {
 export type InterviewState = {
   interviewsRemaining: number;
   history: Record<string, { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string }[]>;
+  modelARevealByProspectId: Record<string, { characterRevealPct: number; intelligenceRevealPct: number }>;
 };
 
 export type MedicalBoardState = {

@@ -8,6 +8,7 @@ import {
 } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
+import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -69,6 +70,11 @@ export default function ScoutingCombine() {
   const used = Object.values(scouting.allocation.byGroup).reduce((a, b) => a + b, 0);
   const remaining = Math.max(0, scouting.combine.hoursRemaining ?? COMBINE_DEFAULT_HOURS);
   const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_SLOTS);
+
+  const formatRange = (trueScore: number, revealPct: number) => {
+    const [low, high] = getDeterministicRevealRange({ trueScore, revealPct });
+    return low === high ? `${low}` : `${low}–${high}`;
+  };
 
   return (
     <div className="space-y-3 p-4">
@@ -144,11 +150,20 @@ export default function ScoutingCombine() {
           </div>
         </div>
         <div className="mt-1 text-xs opacity-70">{interviewEnabled ? `${interviewsRemaining} interviews left` : "Interviews open on Day 4."}</div>
+        {/* STUB — Phase N: Model B focus interviews are intentionally disabled until follow-up design work lands. */}
+        <button className="mt-2 rounded border border-white/10 px-3 py-1 text-xs text-white/40" disabled>
+          Advanced Interview (Coming Soon)
+        </button>
 
         <div className="mt-3 space-y-2">
           {topList.map(({ id, p, s }) => {
             const alreadyInterviewedToday = recap.interviewedProspectIds.includes(id);
             const interviewDisabled = !interviewEnabled || interviewsRemaining <= 0 || alreadyInterviewedToday;
+            const reveal = scouting.interviews.modelARevealByProspectId?.[id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+            const trueCharacterScore = scouting.trueProfiles[id]?.trueAttributes?.character ?? 50;
+            const trueIntelligenceScore = scouting.trueProfiles[id]?.trueAttributes?.intelligence ?? 50;
+            const charRange = formatRange(trueCharacterScore, reveal.characterRevealPct);
+            const iqRange = formatRange(trueIntelligenceScore, reveal.intelligenceRevealPct);
             return (
               <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
                 <div className="min-w-0">
@@ -156,7 +171,17 @@ export default function ScoutingCombine() {
                     <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
                     <span className="opacity-70">{getPositionLabel(p.pos)}</span>
                   </div>
-                  <div className="text-xs opacity-70">Char {s.clarity.CHAR}% • Fit {s.clarity.FIT}% • Leadership: {s.revealed.leadershipTag ?? "—"}</div>
+                  <div className="mt-1 text-xs opacity-80">
+                    <div className="mb-1">Character Reveal: {reveal.characterRevealPct}%</div>
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-emerald-400" style={{ width: `${reveal.characterRevealPct}%` }} /></div>
+                  </div>
+                  <div className="mt-1 text-xs opacity-80">
+                    <div className="mb-1">Football IQ Reveal: {reveal.intelligenceRevealPct}%</div>
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
+                  </div>
+                  <div className="mt-1 text-xs opacity-70">
+                    Character: {charRange} • Football IQ: {iqRange} • Leadership: {s.revealed.leadershipTag ?? "—"}
+                  </div>
                 </div>
                 <button
                   className={`rounded border px-3 py-2 ${interviewDisabled ? "cursor-not-allowed border-white/10 text-white/40" : "border-amber-500 text-amber-200"}`}
