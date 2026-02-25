@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Resigning from "./Resigning";
 import Combine from "./Combine";
 import FreeAgency from "./FreeAgency";
+import Tampering from "./Tampering";
 import PreDraft from "./PreDraft";
 import Draft from "./Draft";
 import TrainingCamp from "./TrainingCamp";
@@ -14,8 +15,8 @@ export default function OffseasonRoutes() {
       <Route index element={<Navigate to="resigning" replace />} />
       <Route path="resigning" element={<Resigning />} />
       <Route path="combine" element={<Combine />} />
-      <Route path="tampering" element={<Navigate to="/offseason/free-agency" replace />} />
-      <Route path="free-agency" element={<FreeAgency />} />
+      <Route path="tampering" element={<Tampering />} />
+      <Route path="free-agency" element={<Navigate to="/free-agency" replace />} />
       <Route path="pre-draft" element={<PreDraft />} />
       <Route path="draft" element={<Draft />} />
       <Route path="training-camp" element={<TrainingCamp />} />
