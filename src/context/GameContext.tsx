@@ -173,7 +173,7 @@ export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
   tagCenter: { applied?: TagApplied };
   rosterAudit: { cutDesignations: Record<string, "NONE" | "POST_JUNE_1"> };
-  combine: { results: Record<string, any>; generated: boolean };
+  combine: { prospects: Prospect[]; results: Record<string, any>; generated: boolean };
   scouting: {
     windowId: ScoutingWindowId;
     budget: { total: number; spent: number; remaining: number; carryIn: number };
@@ -314,6 +314,31 @@ function draftBoard(): Prospect[] {
   const rows = DRAFT_ROWS.slice();
   rows.sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999));
   return rows.map(toProspect);
+}
+
+function ensureOffseasonCombineData(state: GameState): GameState {
+  const combine = state.offseasonData.combine;
+  const prospects = draftBoard().slice(0, 220);
+  const resultKeys = Object.keys(combine.results ?? {});
+
+  if (combine.generated && combine.prospects.length > 0 && resultKeys.length > 0) return state;
+
+  const nextProspects = combine.prospects.length
+    ? combine.prospects
+    : resultKeys.length
+      ? prospects.filter((p) => resultKeys.includes(p.id))
+      : prospects;
+  const nextResults = resultKeys.length
+    ? combine.results
+    : Object.fromEntries(prospects.map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, k), p)]));
+
+  return {
+    ...state,
+    offseasonData: {
+      ...state.offseasonData,
+      combine: { prospects: nextProspects, results: nextResults, generated: true },
+    },
+  };
 }
 
 // GM mode draft scoring constants
@@ -1076,7 +1101,7 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
       rosterAudit: { cutDesignations: {} },
-      combine: { results: {}, generated: false },
+      combine: { prospects: [], results: {}, generated: false },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -4052,6 +4077,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "OFFSEASON_SET_STEP": {
       const stepId = action.payload.stepId;
+      if (stepId === "COMBINE") {
+        const next = ensureOffseasonCombineData(state);
+        return { ...next, offseason: { ...next.offseason, stepId } };
+      }
       if (stepId === "PRE_DRAFT" && !state.offseasonData.preDraft.board.length) {
         return {
           ...state,
@@ -4087,6 +4116,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               : state.careerStage;
 
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      if (nextStep === "COMBINE") next = ensureOffseasonCombineData(next);
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
@@ -4913,8 +4943,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "COMBINE_GENERATE": {
-      const results = Object.fromEntries(draftBoard().slice(0, 220).map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, k), p)]));
-      return { ...state, offseasonData: { ...state.offseasonData, combine: { results, generated: true } } };
+      return ensureOffseasonCombineData(state);
     }
     case "TAMPERING_ADD_OFFER":
       return {
@@ -6591,7 +6620,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
         rosterAudit: { cutDesignations: {} },
-        combine: { results: {}, generated: false },
+        combine: { prospects: [], results: {}, generated: false },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
