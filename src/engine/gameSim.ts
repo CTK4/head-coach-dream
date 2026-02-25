@@ -43,6 +43,29 @@ export type DefensiveLook = {
   blitz: DefBlitz;
 };
 
+export type SituationBucket = "EARLY_DOWN" | "3RD_SHORT" | "3RD_MEDIUM" | "3RD_8_PLUS" | "4TH_DOWN" | "RED_ZONE";
+
+export type DefensiveCallSignature = `${DefensivePackage}:${DefShell}:${DefBox}:${DefBlitz}`;
+
+export type DefensiveCallRecord = {
+  snap: number;
+  down: 1 | 2 | 3 | 4;
+  distance: number;
+  ballOn: number;
+  defensivePackage: DefensivePackage;
+  look: DefensiveLook;
+  callSignature: DefensiveCallSignature;
+  situationBucket: SituationBucket;
+  pressureLook: boolean;
+};
+
+export type SituationWindowCount = {
+  total: number;
+  pressureLooks: number;
+  blitzLikely: number;
+  callsBySignature: Record<DefensiveCallSignature, number>;
+};
+
 // ─── Result ribbons ────────────────────────────────────────────────────────
 export type ResultTagKind = "PRESSURE" | "COVERAGE" | "BOX" | "MISMATCH" | "EXECUTION" | "MISTAKE" | "SITUATION";
 export type ResultTag = { kind: ResultTagKind; text: string };
@@ -109,10 +132,25 @@ export type GameBoxScore = {
 
 // ─── Aggression / tempo ────────────────────────────────────────────────────
 export type AggressionLevel = "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
-export type TempoMode = "NORMAL" | "HURRY_UP";
+export type TempoMode = "NORMAL" | "HURRY_UP" | "MILK";
+
+export type PlayEvaluation = {
+  playType: PlayType;
+  expectedSuccessProbability: number;
+  yards: { low: number; median: number; high: number };
+  pressureRisk: number;
+  turnoverVariance: number;
+  clockImpactSec: number;
+  explosiveChance: number;
+  boxAdvantage: number;
+  confidence: number;
+  risk: number;
+  score: number;
+};
 
 /** Baseline overall rating used when no real team data is available */
 const DEFAULT_RATING = 68;
+const SITUATION_WINDOW_SIZE = 12;
 
 export type DriveLogEntry = {
   personnelPackage?: PersonnelPackage;
@@ -189,6 +227,10 @@ export type GameSim = {
   currentPersonnelPackage: PersonnelPackage;
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
   selectedDefensivePackage?: DefensivePackage;
+  defensiveCallRecords: DefensiveCallRecord[];
+  recentDefensiveCalls: DefensiveCallRecord[];
+  situationWindowCounts: Partial<Record<SituationBucket, SituationWindowCount>>;
+  observedSnaps: number;
   practiceExecutionBonus: number;
   coachArchetypeId?: string;
   coachTenureYear: number;
@@ -224,6 +266,55 @@ function buildPlayExplanation(sim: GameSim, playType: PlayType, outcome: "SUCCES
 }
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
+
+function getSituationBucket(sim: Pick<GameSim, "down" | "distance" | "ballOn">): SituationBucket {
+  if (sim.ballOn >= 80) return "RED_ZONE";
+  if (sim.down === 4) return "4TH_DOWN";
+  if (sim.down === 3 && sim.distance >= 8) return "3RD_8_PLUS";
+  if (sim.down === 3 && sim.distance >= 4) return "3RD_MEDIUM";
+  if (sim.down === 3) return "3RD_SHORT";
+  return "EARLY_DOWN";
+}
+
+function isPressureLook(look: DefensiveLook): boolean {
+  return look.blitz === "LIKELY" || (look.blitz === "POSSIBLE" && look.shell === "SINGLE_HIGH");
+}
+
+function buildDefensiveCallSignature(defensivePackage: DefensivePackage, look: DefensiveLook): DefensiveCallSignature {
+  return `${defensivePackage}:${look.shell}:${look.box}:${look.blitz}`;
+}
+
+function rebuildSituationWindowCounts(records: DefensiveCallRecord[]): Partial<Record<SituationBucket, SituationWindowCount>> {
+  const counts: Partial<Record<SituationBucket, SituationWindowCount>> = {};
+  for (const record of records) {
+    const bucketCount = counts[record.situationBucket] ?? { total: 0, pressureLooks: 0, blitzLikely: 0, callsBySignature: {} as Record<DefensiveCallSignature, number> };
+    bucketCount.total += 1;
+    if (record.pressureLook) bucketCount.pressureLooks += 1;
+    if (record.look.blitz === "LIKELY") bucketCount.blitzLikely += 1;
+    bucketCount.callsBySignature[record.callSignature] = (bucketCount.callsBySignature[record.callSignature] ?? 0) + 1;
+    counts[record.situationBucket] = bucketCount;
+  }
+  return counts;
+}
+
+function recordDefensiveCall(sim: GameSim, record: DefensiveCallRecord): GameSim {
+  const previousRecords = sim.defensiveCallRecords ?? [];
+  const defensiveCallRecords = [...previousRecords, record];
+  const maxRecords = SITUATION_WINDOW_SIZE + 3; // keep enough for situation window + recent calls
+  const trimmedDefensiveCallRecords =
+    defensiveCallRecords.length > maxRecords
+      ? defensiveCallRecords.slice(-maxRecords)
+      : defensiveCallRecords;
+  const recentDefensiveCalls = trimmedDefensiveCallRecords.slice(-3).reverse();
+  const windowRecords = trimmedDefensiveCallRecords.slice(-SITUATION_WINDOW_SIZE);
+  return {
+    ...sim,
+    defensiveCallRecords: trimmedDefensiveCallRecords,
+    recentDefensiveCalls,
+    situationWindowCounts: rebuildSituationWindowCounts(windowRecords),
+    observedSnaps: (sim.observedSnaps ?? 0) + 1,
+  };
+}
 
 
 export function resolveArchetypePassives(coach: { archetypeId?: string; tenureYear?: number }, gameContext: { sim: GameSim; playType: PlayType; aggression: AggressionLevel }): PassiveResolution {
@@ -418,6 +509,79 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
   return { pas, cvl, me, sf };
 }
 
+function getTempoModifiers(tempo: TempoMode): { success: number; explosive: number; pressure: number; turnover: number; clockSec: number } {
+  if (tempo === "HURRY_UP") return { success: -0.03, explosive: 0.03, pressure: 0.05, turnover: 0.03, clockSec: 8 };
+  if (tempo === "MILK") return { success: 0.02, explosive: -0.02, pressure: -0.03, turnover: -0.02, clockSec: -9 };
+  return { success: 0, explosive: 0, pressure: 0, turnover: 0, clockSec: 0 };
+}
+
+function getAggressionModifiers(aggression: AggressionLevel): { success: number; explosive: number; pressure: number; turnover: number } {
+  if (aggression === "AGGRESSIVE") return { success: -0.01, explosive: 0.06, pressure: 0.04, turnover: 0.05 };
+  if (aggression === "CONSERVATIVE") return { success: 0.03, explosive: -0.03, pressure: -0.03, turnover: -0.04 };
+  return { success: 0, explosive: 0, pressure: 0, turnover: 0 };
+}
+
+export function evaluatePlayConcept(
+  sim: GameSim,
+  playType: PlayType,
+  opts: { look?: DefensiveLook; aggression?: AggressionLevel; tempo?: TempoMode; personnelPackage?: PersonnelPackage } = {}
+): PlayEvaluation {
+  const look = opts.look ?? sim.defLook ?? computeDefensiveLook(sim, contextualRng(sim.seed, `eval-look-${playType}`));
+  const aggression = opts.aggression ?? sim.aggression;
+  const tempo = opts.tempo ?? sim.tempo;
+  const personnelPackage = opts.personnelPackage ?? sim.currentPersonnelPackage;
+  const matchup = getMatchupModifier(personnelPackage, sim.selectedDefensivePackage ?? "Nickel");
+  const pasComp = computePAS(playType, look, sim, matchup);
+  const tempoMod = getTempoModifiers(tempo);
+  const aggMod = getAggressionModifiers(aggression);
+  const pas = pasComp.pas;
+
+  const isRun = isRunPlay(playType);
+  const expectedSuccessProbability = clamp(sigmoid(2.5 * pas + 0.2) + tempoMod.success + aggMod.success, 0.15, 0.9);
+  const explosiveChance = clamp(0.08 + 0.18 * pas + tempoMod.explosive + aggMod.explosive, 0.01, 0.45);
+  const pressureRiskBase = isRun
+    ? 0.08 + (look.box === "HEAVY" ? 0.08 : look.box === "LIGHT" ? -0.02 : 0)
+    : 0.14 + (look.blitz === "LIKELY" ? 0.13 : look.blitz === "POSSIBLE" ? 0.07 : 0);
+  const pressureRisk = clamp(pressureRiskBase + (0.5 - expectedSuccessProbability) * 0.18 + tempoMod.pressure + aggMod.pressure, 0.03, 0.6);
+  const turnoverVariance = clamp((isRun ? 0.03 : 0.055) + pressureRisk * 0.18 + tempoMod.turnover + aggMod.turnover, 0.01, 0.25);
+
+  const runMedian = 2 + pas * 4.2 + expectedSuccessProbability * 2.5;
+  const passMedian = 4 + pas * 5 + expectedSuccessProbability * 4;
+  const median = isRun ? runMedian : passMedian;
+  const volatility = (isRun ? 4.5 : 8.2) + explosiveChance * 13;
+  const low = Math.round(clamp(median - volatility * 0.75, -8, 40));
+  const medianRounded = Math.round(clamp(median, -3, 45));
+  const high = Math.round(clamp(median + volatility, 1, 55));
+  const clockImpactSec = Math.round((isRun ? -5 : 2) + tempoMod.clockSec + (playType === "SCREEN" ? 2 : 0));
+
+  const boxAdvantage = clamp((look.box === "LIGHT" && isRun ? 1 : look.box === "HEAVY" && isRun ? -1 : 0) + pasComp.cvl * 0.6, -1, 1);
+  const confidence = clamp(expectedSuccessProbability - turnoverVariance * 0.5, 0, 1);
+  const risk = clamp(pressureRisk * 0.6 + turnoverVariance * 0.8 - expectedSuccessProbability * 0.3, 0, 1);
+  const score = confidence * 0.52 + explosiveChance * 0.28 + (medianRounded / 18) * 0.2 - risk * 0.28;
+
+  return {
+    playType,
+    expectedSuccessProbability,
+    yards: { low, median: medianRounded, high },
+    pressureRisk,
+    turnoverVariance,
+    clockImpactSec,
+    explosiveChance,
+    boxAdvantage,
+    confidence,
+    risk,
+    score,
+  };
+}
+
+export function evaluatePlayConcepts(
+  sim: GameSim,
+  playTypes: PlayType[],
+  opts: { look?: DefensiveLook; aggression?: AggressionLevel; tempo?: TempoMode; personnelPackage?: PersonnelPackage } = {}
+): PlayEvaluation[] {
+  return playTypes.map((playType) => evaluatePlayConcept(sim, playType, opts)).sort((a, b) => b.score - a.score);
+}
+
 /** Generate the next defensive look based on game situation. */
 export function computeDefensiveLook(sim: GameSim, rng: () => number): DefensiveLook {
   const { down, distance, ballOn, clock } = sim;
@@ -578,13 +742,14 @@ function resolveWithPAS(
   );
   const pas = pasComp.pas + passivePas + perkPas;
 
-  // Aggression modifier
+  // Aggression + tempo modifiers
   const aggMod = aggression === "AGGRESSIVE" ? 0.2 : aggression === "CONSERVATIVE" ? -0.15 : 0;
+  const tempoMod = sim.tempo === "HURRY_UP" ? 0.08 : sim.tempo === "MILK" ? -0.06 : 0;
 
   // Core probabilities
-  const pSuccess = clamp(sigmoid(2.5 * pas + 0.2), 0.25, 0.82);
-  const pExplosive = clamp(0.08 + 0.18 * (pas + aggMod), 0.02, 0.32);
-  const pNegative = clamp(0.12 - 0.15 * pas + 0.08 * (aggMod > 0 ? aggMod : 0), 0.04, 0.38);
+  const pSuccess = clamp(sigmoid(2.5 * pas + 0.2) - Math.max(tempoMod, 0) * 0.1 + Math.max(-tempoMod, 0) * 0.06, 0.25, 0.82);
+  const pExplosive = clamp(0.08 + 0.18 * (pas + aggMod) + Math.max(tempoMod, 0) * 0.1, 0.02, 0.34);
+  const pNegative = clamp(0.12 - 0.15 * pas + 0.08 * (aggMod > 0 ? aggMod : 0) + Math.max(tempoMod, 0) * 0.08, 0.04, 0.42);
 
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
@@ -621,7 +786,7 @@ function resolveWithPAS(
     }
   } else if (isPass) {
     // Sack probability (tied to blitz + pass rush)
-    const sackBase = look.blitz === "LIKELY" ? 0.16 : look.blitz === "POSSIBLE" ? 0.1 : 0.07;
+    const sackBase = (look.blitz === "LIKELY" ? 0.16 : look.blitz === "POSSIBLE" ? 0.1 : 0.07) + Math.max(tempoMod, 0) * 0.05;
     const sackProb = clamp(sackBase - 0.08 * pas, 0.03, 0.22);
     if (roll1 < sackProb) {
       sack = true;
@@ -629,7 +794,7 @@ function resolveWithPAS(
       outcomeLabel = "negative";
     } else {
       // Incompletion
-      const baseInc = playType === "DROPBACK" || playType === "DEEP_PASS" ? 0.42 : playType === "PLAY_ACTION" ? 0.28 : 0.3;
+      const baseInc = (playType === "DROPBACK" || playType === "DEEP_PASS" ? 0.42 : playType === "PLAY_ACTION" ? 0.28 : 0.3) + Math.max(tempoMod, 0) * 0.05;
       const incProb = clamp(baseInc - 0.18 * pSuccess + 0.1 * (1 - pSuccess), 0.12, 0.58);
       if (roll1 < sackProb + incProb) {
         incomplete = true;
@@ -1145,6 +1310,10 @@ export function initGameSim(params: {
     trackedPlayers: params.trackedPlayers ?? { HOME: {}, AWAY: {} },
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
+    defensiveCallRecords: [],
+    recentDefensiveCalls: [],
+    situationWindowCounts: {},
+    observedSnaps: 0,
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
@@ -1226,6 +1395,18 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = { ...s, clock: { ...s.clock, clockRunning: status.running, restartMode: status.restart, playClockLen: 40 } };
 
   if (s.clock.timeRemainingSec === 0) s = quarterAdvanceIfNeeded(s);
+
+  s = recordDefensiveCall(s, {
+    snap: (s.observedSnaps ?? 0) + 1,
+    down: downBefore,
+    distance: distanceBefore,
+    ballOn: ballBefore,
+    defensivePackage: selectedDefensivePackage,
+    look,
+    callSignature: buildDefensiveCallSignature(selectedDefensivePackage, look),
+    situationBucket: getSituationBucket({ down: downBefore, distance: distanceBefore, ballOn: ballBefore }),
+    pressureLook: isPressureLook(look),
+  });
 
   // Generate the next snap's defensive look after the play
   const nextLook = computeDefensiveLook(s, mulberry32(s.seed + 13));
