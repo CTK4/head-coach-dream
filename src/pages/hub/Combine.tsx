@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useGame, getDraftClass } from "@/context/GameContext";
 import { IntelMeters } from "@/components/IntelMeters";
 import { ProspectProfileModal } from "@/components/ProspectProfileModal";
+import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
 
-const POS_TABS = ["Top", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"];
+const POS_TABS = ["Top", "QB", "RB", "WR", "TE", "OL", "DT", "EDGE", "LB", "CB", "S"];
 
 const toProspect = (r: Record<string, any>, idx: number) => ({
   id: String(r["Player ID"] ?? `DC_${idx + 1}`),
@@ -31,7 +32,7 @@ export default function Combine() {
 
   const prospects = useMemo(() => {
     let list = [...draftClass];
-    if (tab !== "Top") list = list.filter((p) => p.pos === tab);
+    if (tab !== "Top") list = list.filter((p) => normalizeScoutingDraftPosition(p.pos) === tab);
     return list.sort((a, b) => (combine[b.id]?.ras ?? -1) - (combine[a.id]?.ras ?? -1));
   }, [draftClass, tab, combine]);
 
