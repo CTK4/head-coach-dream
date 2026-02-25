@@ -104,6 +104,7 @@ export const POSITION_LABELS: Record<string, string> = {
   OT: "OT",
   IOL: "IOL",
   DL: "DL",
+  DT: "DT",
   EDGE: "EDGE",
   LB: "LB",
   CB: "CB",

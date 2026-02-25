@@ -75,8 +75,9 @@ import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
 import {
-  COMBINE_DEFAULT_HOURS,
-  COMBINE_DEFAULT_INTERVIEW_SLOTS,
+  COMBINE_DAY_COUNT,
+  COMBINE_DAY_POSITION_BUCKETS,
+  COMBINE_DEFAULT_INTERVIEW_TOKENS,
   COMBINE_FEED_MAX_PER_DAY,
   COMBINE_FEED_TEMPLATES,
   COMBINE_FOCUS_HOURS_COST,
@@ -301,7 +302,7 @@ export type MemoryEvent = { type: string; season: number; week?: number; payload
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
-const CURRENT_SAVE_VERSION = 4;
+const CURRENT_SAVE_VERSION = 5;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = draftClassJson as DraftRow[];
@@ -863,7 +864,7 @@ export type GameAction =
   | { type: "SCOUT_PIN"; payload: { prospectId: string } }
   | { type: "SCOUT_SPEND"; payload: { prospectId: string; action: "FILM_QUICK" | "FILM_DEEP" | "REQUEST_MED" | "BACKGROUND" } }
   | { type: "SCOUT_COMBINE_GENERATE" }
-  | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 | 5 } }
+  | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 } }
   | { type: "SCOUT_COMBINE_FOCUS"; payload: { prospectId: string } }
   | { type: "SCOUT_COMBINE_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
@@ -2526,6 +2527,35 @@ function rookieDevFromTier(row: Record<string, unknown>): number {
   return Math.max(40, Math.min(90, Math.round(x)));
 }
 
+function resolveDraftUncertainty(args: {
+  saveSeed: number;
+  season: number;
+  prospectId: string;
+  baseOvr: number;
+  baseDev: number;
+  characterRevealPct: number;
+  intelligenceRevealPct: number;
+}) {
+  const cReveal = clamp100(args.characterRevealPct);
+  const iReveal = clamp100(args.intelligenceRevealPct);
+  const bustUncertainty = 1 - cReveal / 100;
+  const installUncertainty = 1 - iReveal / 100;
+  const seedKey = `draft:uncertainty:${args.season}:${args.prospectId}`;
+
+  const bustRoll = detRand2(args.saveSeed, `${seedKey}:bust`);
+  const bustNoise = (detRand2(args.saveSeed, `${seedKey}:bust:noise`) - 0.5) * 8 * bustUncertainty;
+  const bustPenalty = bustRoll < 0.2 * bustUncertainty ? Math.round(8 * bustUncertainty) : 0;
+
+  const installRoll = detRand2(args.saveSeed, `${seedKey}:install`);
+  const installNoise = (detRand2(args.saveSeed, `${seedKey}:install:noise`) - 0.5) * 6 * installUncertainty;
+  const installPenalty = installRoll < 0.25 * installUncertainty ? Math.round(7 * installUncertainty) : 0;
+
+  return {
+    ovr: Math.max(45, Math.min(99, Math.round(args.baseOvr + bustNoise - bustPenalty))),
+    dev: Math.max(35, Math.min(95, Math.round(args.baseDev + installNoise - installPenalty))),
+  };
+}
+
 function rookieContractFromApy(startSeason: number, apy: number): RookieContract {
   const y1 = moneyRound(apy);
   const y2 = moneyRound(apy * 1.05);
@@ -3402,6 +3432,38 @@ function posToGroup(pos: string) {
 
 
 type CombineFeedCategory = keyof typeof COMBINE_FEED_TEMPLATES;
+
+function normalizeCombinePosition(pos: string): string {
+  const p = String(pos || "").toUpperCase();
+  if (["DE", "OLB"].includes(p)) return "EDGE";
+  if (["DT", "NT"].includes(p)) return "DT";
+  if (["ILB", "MLB"].includes(p)) return "LB";
+  if (["FS", "SS"].includes(p)) return "S";
+  if (["G"].includes(p)) return "OG";
+  if (["T"].includes(p)) return "OT";
+  return p;
+}
+
+function combineDayForPosition(pos: string): 1 | 2 | 3 | 4 {
+  const normalized = normalizeCombinePosition(pos);
+  for (const [day, bucket] of Object.entries(COMBINE_DAY_POSITION_BUCKETS)) {
+    if (bucket.positions.includes(normalized as any)) return Number(day) as 1 | 2 | 3 | 4;
+  }
+  return 2;
+}
+
+function defaultCombineDays() {
+  return {
+    1: { dayIndex: 1 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[1].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    2: { dayIndex: 2 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[2].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    3: { dayIndex: 3 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[3].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    4: { dayIndex: 4 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[4].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+  };
+}
+
+function defaultCombineProspectState() {
+  return { characterRevealPct: 0, intelligenceRevealPct: 0, interviewCount: 0, notes: [] as string[] };
+}
 
 function defaultCombineRecap() {
   return {
@@ -4437,11 +4499,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       for (const p of draftClass) {
         const medR = seed(`true:med:${p.id}`);
         const charR = seed(`true:char:${p.id}`);
+        const trueCharacterScore = Math.round(40 + seed(`true:charScore:${p.id}`) * 59);
+        const trueIntelligenceScore = Math.round(40 + seed(`true:iqScore:${p.id}`) * 59);
         const medTier = medR < 0.62 ? "GREEN" : medR < 0.82 ? "YELLOW" : medR < 0.93 ? "ORANGE" : medR < 0.985 ? "RED" : "BLACK";
         const charTier = charR < 0.08 ? "BLUE" : charR < 0.72 ? "GREEN" : charR < 0.86 ? "YELLOW" : charR < 0.94 ? "ORANGE" : charR < 0.985 ? "RED" : "BLACK";
 
         trueProfiles[p.id] = {
           trueOVR: Math.round(p.grade),
+          trueAttributes: { character: trueCharacterScore, intelligence: trueIntelligenceScore },
           trueMedical: { tier: medTier as any, recurrence01: Math.round(seed(`true:rec:${p.id}`) * 100) / 100, degenerative: seed(`true:deg:${p.id}`) < 0.06 },
           trueCharacter: {
             tier: charTier as any,
@@ -4482,11 +4547,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           scoutProfiles,
           myBoardOrder: draftClass.map((p) => String(p.id)),
           bigBoard: { tiers, tierByProspectId: tierBy },
-          combine: { generated: false, day: 1, hoursRemaining: COMBINE_DEFAULT_HOURS, resultsByProspectId: {}, feed: [], recapByDay: {} },
+          combine: { generated: false, day: 1, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
-          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {}, modelARevealByProspectId: {} },
           medical: { requests: {} },
-          allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_HOURS : 20, byGroup: {} },
+          allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_INTERVIEW_TOKENS : 20, byGroup: {} },
           inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
         },
       };
@@ -4606,7 +4672,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const feed: { id: string; day: number; text: string; prospectId?: string }[] = [];
       const recapByDay = { ...s.combine.recapByDay };
 
-      for (let day = 1; day <= 5; day++) {
+      for (let day = 1; day <= COMBINE_DAY_COUNT; day++) {
         recapByDay[day] = recapByDay[day] ?? defaultCombineRecap();
       }
 
@@ -4631,25 +4697,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const ras = Math.round(clamp01(1 - (forty - 4.3) / 1.0) * 100) / 10;
         results[id] = { forty, shuttle, vert, bench, ras };
 
-        for (let day = 1; day <= 5; day++) {
-          const entry = buildCombineFeedEntry({
-            saveSeed: state.saveSeed,
-            day,
-            prospectId: id,
-            name: draftProspect.name,
-            pos: draftProspect.pos,
-            ras,
-            forty,
-            medicalTier: s.trueProfiles[id]?.trueMedical?.tier,
-          });
-          feed.push({ id: entry.id, day: entry.day, text: entry.text, prospectId: id });
+        const day = combineDayForPosition(draftProspect.pos);
+        const entry = buildCombineFeedEntry({
+          saveSeed: state.saveSeed,
+          day,
+          prospectId: id,
+          name: draftProspect.name,
+          pos: draftProspect.pos,
+          ras,
+          forty,
+          medicalTier: s.trueProfiles[id]?.trueMedical?.tier,
+        });
+        feed.push({ id: entry.id, day: entry.day, text: entry.text, prospectId: id });
 
-          const recap = recapByDay[day] ?? defaultCombineRecap();
-          if (entry.category === "STANDOUT" || entry.category === "SOLID") recap.risers = [...recap.risers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
-          if (entry.category === "POOR") recap.fallers = [...recap.fallers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
-          if (entry.category === "INJURY" || entry.category === "BUZZ_CORRECTION") recap.flags = [...recap.flags, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
-          recapByDay[day] = recap;
-        }
+        const recap = recapByDay[day] ?? defaultCombineRecap();
+        if (entry.category === "STANDOUT" || entry.category === "SOLID") recap.risers = [...recap.risers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        if (entry.category === "POOR") recap.fallers = [...recap.fallers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        if (entry.category === "INJURY" || entry.category === "BUZZ_CORRECTION") recap.flags = [...recap.flags, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        recapByDay[day] = recap;
       }
 
       return {
@@ -4662,7 +4727,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             resultsByProspectId: results,
             feed,
             recapByDay,
-            hoursRemaining: Number.isFinite(s.combine.hoursRemaining) ? Math.max(0, s.combine.hoursRemaining) : COMBINE_DEFAULT_HOURS,
+            days: defaultCombineDays(),
+            prospects: s.combine.prospects ?? {},
           },
         },
       };
@@ -4671,7 +4737,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "SCOUT_COMBINE_SET_DAY": {
       const s = state.scoutingState;
       if (!s) return state;
-      return { ...state, scoutingState: { ...s, combine: { ...s.combine, day: action.payload.day } } };
+      const nextDay = clamp(action.payload.day, 1, COMBINE_DAY_COUNT) as 1 | 2 | 3 | 4;
+      const baseDays = s.combine.days ?? defaultCombineDays();
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            day: nextDay,
+            days: {
+              ...baseDays,
+              [nextDay]: { ...(baseDays[nextDay] ?? defaultCombineDays()[nextDay]), dayIndex: nextDay, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+            },
+          },
+        },
+      };
     }
 
     case "SCOUT_COMBINE_FOCUS": {
@@ -4683,9 +4764,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, uiToast: "Focus Drill is only available on Combine Day 2 and Day 3." };
       }
 
-      if ((s.combine.hoursRemaining ?? 0) <= 0) {
-        return { ...state, uiToast: "No hours remaining." };
-      }
 
       const { prospectId } = action.payload;
       const p = (draftClassJson as any[])
@@ -4703,12 +4781,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const group = posToGroup(p.pos);
       const costHours = COMBINE_FOCUS_HOURS_COST;
-      const availableHours = Math.max(0, s.combine.hoursRemaining ?? 0);
-      const spend = Math.min(costHours, availableHours);
-      if (spend <= 0) return { ...state, uiToast: "No hours remaining." };
-
       const cur = s.allocation.byGroup[group] ?? 0;
       const usedTotal = Object.values(s.allocation.byGroup).reduce((a: number, b: number) => a + b, 0);
+      const availableHours = Math.max(0, s.allocation.poolHours - usedTotal);
+      const spend = Math.min(costHours, availableHours);
+      if (spend <= 0) return { ...state, uiToast: "No focus tokens remaining." };
       if (usedTotal + spend > s.allocation.poolHours) {
         return { ...state, uiToast: "Not enough Combine Hours. Allocate more in Allocation screen." };
       }
@@ -4756,7 +4833,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
           combine: {
             ...s.combine,
-            hoursRemaining: Math.max(0, availableHours - spend),
             recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
           },
         },
@@ -4769,7 +4845,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const day = s.combine?.day ?? 1;
       if (day !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
-      if (s.interviews.interviewsRemaining <= 0) return { ...state, uiToast: "0 interviews left." };
+      const combineDays = s.combine.days ?? defaultCombineDays();
+      const interviewsRemaining = combineDays[day]?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS;
+      if (interviewsRemaining <= 0) return { ...state, uiToast: "0 interviews left." };
 
       const { prospectId, category } = action.payload;
       const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
@@ -4782,6 +4860,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const profile = { ...s.scoutProfiles[prospectId] };
       const truth = s.trueProfiles[prospectId];
+      const combineProspect = { ...(s.combine.prospects?.[prospectId] ?? defaultCombineProspectState()) };
       if (!profile || !truth) return state;
 
       if (category === "IQ") {
@@ -4810,11 +4889,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
 
+      const currentReveal = s.interviews.modelARevealByProspectId[prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const charGain = 10 + Math.floor(seed(`modelA:char:${s.windowKey}:${prospectId}:${category}`) * 9);
+      const iqGain = 8 + Math.floor(seed(`modelA:iq:${s.windowKey}:${prospectId}:${category}`) * 8);
+      const modelARevealByProspectId = {
+        ...s.interviews.modelARevealByProspectId,
+        [prospectId]: {
+          characterRevealPct: clamp100(currentReveal.characterRevealPct + charGain),
+          intelligenceRevealPct: clamp100(currentReveal.intelligenceRevealPct + iqGain),
+        },
+      };
+
       const hist = s.interviews.history[prospectId] ?? [];
       const outcomeRoll = seed(`out:${s.windowKey}:${prospectId}:${category}`);
       const outcome = outcomeRoll < 0.15 ? "Concerning" : outcomeRoll < 0.6 ? "Mixed" : "Positive";
       const revealedAttr = COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[category];
       profile.notes.character = `${revealedAttr}: ${outcome}`;
+      combineProspect.interviewCount += 1;
+      combineProspect.characterRevealPct = Math.min(100, combineProspect.characterRevealPct + (category === "LEADERSHIP" ? 28 : 20));
+      combineProspect.intelligenceRevealPct = Math.min(100, combineProspect.intelligenceRevealPct + (category === "IQ" ? 32 : 14));
+      combineProspect.notes = [...combineProspect.notes, `${category}: ${outcome}`].slice(-6);
 
       const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome: `${revealedAttr} - ${outcome}`, windowKey: s.windowKey }] };
 
@@ -4845,11 +4939,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         scoutingState: {
           ...s,
-          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history },
+          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, interviewsRemaining - 1), history },
+          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history, modelARevealByProspectId },
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
           combine: {
             ...s.combine,
             feed,
+            days: {
+              ...combineDays,
+              [day]: { ...(combineDays[day] ?? defaultCombineDays()[day]), dayIndex: day as 1 | 2 | 3 | 4, interviewsRemaining: Math.max(0, interviewsRemaining - 1) },
+            },
+            prospects: { ...(s.combine.prospects ?? {}), [prospectId]: combineProspect },
             recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
           },
         },
@@ -5861,6 +5961,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const p = getDraftClassFromSim().find((x) => x.prospectId === String(action.payload.prospectId));
       if (!p || state.draft.takenProspectIds[p.prospectId]) return state;
 
+      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const draftProjection = resolveDraftUncertainty({
+        saveSeed: state.saveSeed,
+        season: state.season,
+        prospectId: p.prospectId,
+        baseOvr: rookieOvrFromRank(p.rank),
+        baseDev: rookieDevFromTier({ DraftTier: p.tier }),
+        characterRevealPct: reveal.characterRevealPct,
+        intelligenceRevealPct: reveal.intelligenceRevealPct,
+      });
+
       const idx = state.rookies.length + 1;
       const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
       const rookie: RookiePlayer = {
@@ -5869,12 +5980,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         name: p.name,
         pos: p.pos,
         age: p.age,
-        ovr: rookieOvrFromRank(p.rank),
-        dev: rookieDevFromTier({ DraftTier: p.tier }),
+        ovr: draftProjection.ovr,
+        dev: draftProjection.dev,
         apy: rookieApyFromRank(p.rank),
         teamId: state.draft.userTeamId,
-        scoutOvr: rookieOvrFromRank(p.rank),
-        scoutDev: rookieDevFromTier({ DraftTier: p.tier }),
+        scoutOvr: draftProjection.ovr,
+        scoutDev: draftProjection.dev,
         scoutConf: 80,
       };
 
@@ -5933,6 +6044,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const row = getProspectRow(p.id);
       const rank = row ? Number(row["Rank"] ?? 200) : 200;
+      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const draftProjection = resolveDraftUncertainty({
+        saveSeed: state.saveSeed,
+        season: state.season,
+        prospectId: p.id,
+        baseOvr: rookieOvrFromRank(rank),
+        baseDev: rookieDevFromTier(row ?? {}),
+        characterRevealPct: reveal.characterRevealPct,
+        intelligenceRevealPct: reveal.intelligenceRevealPct,
+      });
       const idx = nextState.rookies.length + 1;
       const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
       const rookie: RookiePlayer = {
@@ -5941,12 +6062,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
         pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : String(p.pos ?? "UNK").toUpperCase(),
         age: row ? Number(row["Age"] ?? 22) : 22,
-        ovr: rookieOvrFromRank(rank),
-        dev: rookieDevFromTier(row ?? {}),
+        ovr: draftProjection.ovr,
+        dev: draftProjection.dev,
         apy: rookieApyFromRank(rank),
         teamId: String(state.acceptedOffer?.teamId ?? ""),
-        scoutOvr: rookieOvrFromRank(rank),
-        scoutDev: rookieDevFromTier(row ?? {}),
+        scoutOvr: draftProjection.ovr,
+        scoutDev: draftProjection.dev,
         scoutConf: 50,
       };
       const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
@@ -6775,6 +6896,51 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     resign: (oldState as any).resign ?? { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     ui: (oldState as any).ui ?? {},
   };
+  const scoutingState = (s as any).scoutingState;
+  if (scoutingState?.combine) {
+    const legacyDay = Number(scoutingState.combine.day ?? 1);
+    const normalizedDay = clamp(legacyDay, 1, COMBINE_DAY_COUNT) as 1 | 2 | 3 | 4;
+    const legacyInterviews = Number(scoutingState.interviews?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
+    const nextDays = defaultCombineDays();
+    const savedDays = scoutingState.combine.days ?? {};
+    for (let d = 1; d <= COMBINE_DAY_COUNT; d++) {
+      const saved = savedDays[d] ?? savedDays[String(d)] ?? {};
+      nextDays[d as 1 | 2 | 3 | 4] = {
+        dayIndex: d as 1 | 2 | 3 | 4,
+        categoryKey: String(saved.categoryKey ?? nextDays[d as 1 | 2 | 3 | 4].categoryKey),
+        interviewsRemaining: clamp(Number(saved.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS), 0, COMBINE_DEFAULT_INTERVIEW_TOKENS),
+      };
+    }
+    if (!scoutingState.combine.days) {
+      nextDays[normalizedDay].interviewsRemaining = clamp(legacyInterviews, 0, COMBINE_DEFAULT_INTERVIEW_TOKENS);
+    }
+
+    const legacyProspects = scoutingState.combine.prospects ?? {};
+    const prospects: Record<string, { characterRevealPct: number; intelligenceRevealPct: number; interviewCount: number; notes: string[] }> = {};
+    for (const [prospectId, raw] of Object.entries<any>(legacyProspects)) {
+      prospects[String(prospectId)] = {
+        characterRevealPct: clamp(Number((raw as any)?.characterRevealPct ?? 0), 0, 100),
+        intelligenceRevealPct: clamp(Number((raw as any)?.intelligenceRevealPct ?? 0), 0, 100),
+        interviewCount: Math.max(0, Number((raw as any)?.interviewCount ?? 0) || 0),
+        notes: Array.isArray((raw as any)?.notes) ? (raw as any).notes.map(String) : [],
+      };
+    }
+
+    scoutingState.combine = {
+      ...scoutingState.combine,
+      day: normalizedDay,
+      days: nextDays,
+      prospects,
+      recapByDay: Object.fromEntries(
+        Object.entries(scoutingState.combine.recapByDay ?? {}).filter(([k]) => {
+          const day = Number(k);
+          return Number.isFinite(day) && day >= 1 && day <= COMBINE_DAY_COUNT;
+        }),
+      ),
+    };
+    delete scoutingState.combine.hoursRemaining;
+  }
+
   s = ensureAccolades(bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
 }

@@ -8,6 +8,8 @@ import {
   resolveInstallFamiliarity,
 } from "@/engine/practiceFocus";
 import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, migrateSave } from "@/context/GameContext";
+import { DEFAULT_PRACTICE_PLAN, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity } from "@/engine/practiceFocus";
+import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, gameReducer, migrateSave } from "@/context/GameContext";
 import type { GameState } from "@/context/GameContext";
 import { getTeams, getPlayers } from "@/data/leagueDb";
 
@@ -81,5 +83,51 @@ describe("practice integration", () => {
   it("migration defaults missing practicePlan", () => {
     const migrated = migrateSave({ saveVersion: 1, saveSeed: 1, season: 2026 });
     expect((migrated as GameState).practicePlan).toEqual(DEFAULT_PRACTICE_PLAN);
+  });
+
+
+
+  it("applied practice familiarity carries into game sim bonus", () => {
+    const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
+    const opponent = getTeams().find((t) => t.teamId !== teamId)?.teamId ?? "ATLANTA_APEX";
+    const seeded: GameState = {
+      ...baselineState(teamId),
+      acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"],
+      weeklyFamiliarityBonus: 0,
+      practicePlan: { primaryFocus: "Install", intensity: "High" },
+      playerFamiliarityById: {},
+    };
+
+    const withPractice = applyPracticePlanForWeek(seeded, teamId, 3).nextState;
+    expect(withPractice.weeklyFamiliarityBonus).toBeGreaterThan(0);
+
+    const started = gameReducer(withPractice, {
+      type: "START_GAME",
+      payload: { opponentTeamId: opponent, weekType: "REGULAR_SEASON", weekNumber: 3 },
+    });
+
+    expect(started.game.practiceExecutionBonus).toBe(withPractice.weeklyFamiliarityBonus);
+    expect(started.game.practiceExecutionBonus).toBeGreaterThan(0);
+  });
+
+  it("combine reveal data persists through draft init", () => {
+    const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
+    const seeded = baselineState(teamId);
+    const prospectId = Object.keys(seeded.offseasonData.combine.results)[0];
+    expect(prospectId).toBeDefined();
+
+    const before = seeded.offseasonData.combine.results[prospectId];
+    expect(before).toBeDefined();
+
+    const drafted = gameReducer({ ...seeded, careerStage: "DRAFT" }, { type: "DRAFT_INIT" });
+
+    expect(drafted.offseasonData.combine.results[prospectId]).toEqual(before);
+  });
+  it("default plan applies when no explicit selection exists", () => {
+    const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
+    const state = baselineState(teamId);
+    const seeded: GameState = { ...state, practicePlan: DEFAULT_PRACTICE_PLAN, practicePlanConfirmed: false };
+    const result = applyPracticePlanForWeek(seeded, teamId, 3).nextState;
+    expect(result.practicePlan).toEqual(DEFAULT_PRACTICE_PLAN);
   });
 });

@@ -59,6 +59,27 @@ describe("PAS engine + defensive look", () => {
     expect(["NONE", "POSSIBLE", "LIKELY"]).toContain(look.blitz);
   });
 
+
+
+  it("defensive look responds to down-and-distance game state", () => {
+    const shortYardage = {
+      ...initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 77 }),
+      down: 1 as const,
+      distance: 2,
+      ballOn: 50,
+    };
+    const thirdAndLong = {
+      ...shortYardage,
+      down: 3 as const,
+      distance: 11,
+    };
+
+    const heavyLook = computeDefensiveLook(shortYardage, () => 0.01);
+    const longYardageLook = computeDefensiveLook(thirdAndLong, () => 0.01);
+
+    expect(heavyLook.box).toBe("HEAVY");
+    expect(longYardageLook.shell).toBe("TWO_HIGH");
+  });
   it("stepPlay with granular play types produces result tags in driveLog", () => {
     let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 7 });
     sim = stepPlay(sim, "INSIDE_ZONE").sim;
@@ -93,5 +114,39 @@ describe("PAS engine + defensive look", () => {
     sim = stepPlay(sim, "QUICK_GAME").sim;
     expect(sim.defLook).toBeDefined();
     expect(sim.defLook?.shell).toBeDefined();
+  });
+});
+
+
+describe("defensive tendency window + confidence", () => {
+  it("keeps only last 3 defensive calls while counting rolling situation tendencies", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 101 });
+    for (let i = 0; i < 6; i++) {
+      sim = { ...sim, down: 3, distance: 8, ballOn: 45 };
+      sim = stepPlay(sim, "QUICK_GAME").sim;
+    }
+
+    expect(sim.defensiveCallRecords.length).toBe(6);
+    expect(Object.keys(sim.situationWindowCounts["3RD_8_PLUS"]?.callsBySignature ?? {}).length).toBeGreaterThan(0);
+    expect(sim.recentDefensiveCalls.length).toBe(3);
+    expect(sim.recentDefensiveCalls[0].snap).toBe(6);
+
+    const bucket = sim.situationWindowCounts["3RD_8_PLUS"];
+    expect(bucket?.total).toBeGreaterThan(0);
+    expect((bucket?.pressureLooks ?? 0) / (bucket?.total ?? 1)).toBeGreaterThanOrEqual(0);
+    expect((bucket?.pressureLooks ?? 0) / (bucket?.total ?? 1)).toBeLessThanOrEqual(1);
+  });
+
+  it("increments observed snaps and confidence can progress toward full", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 202 });
+    for (let i = 0; i < 14; i++) {
+      sim = stepPlay(sim, i % 2 === 0 ? "INSIDE_ZONE" : "DROPBACK").sim;
+    }
+
+    expect(sim.observedSnaps).toBe(14);
+    const rollingTotal = Object.values(sim.situationWindowCounts).reduce((sum, bucket) => sum + (bucket?.total ?? 0), 0);
+    expect(rollingTotal).toBe(12);
+    const confidencePct = Math.min(100, Math.round((sim.observedSnaps / 12) * 100));
+    expect(confidencePct).toBe(100);
   });
 });
