@@ -2490,6 +2490,35 @@ function rookieDevFromTier(row: Record<string, unknown>): number {
   return Math.max(40, Math.min(90, Math.round(x)));
 }
 
+function resolveDraftUncertainty(args: {
+  saveSeed: number;
+  season: number;
+  prospectId: string;
+  baseOvr: number;
+  baseDev: number;
+  characterRevealPct: number;
+  intelligenceRevealPct: number;
+}) {
+  const cReveal = clamp100(args.characterRevealPct);
+  const iReveal = clamp100(args.intelligenceRevealPct);
+  const bustUncertainty = 1 - cReveal / 100;
+  const installUncertainty = 1 - iReveal / 100;
+  const seedKey = `draft:uncertainty:${args.season}:${args.prospectId}`;
+
+  const bustRoll = detRand2(args.saveSeed, `${seedKey}:bust`);
+  const bustNoise = (detRand2(args.saveSeed, `${seedKey}:bust:noise`) - 0.5) * 8 * bustUncertainty;
+  const bustPenalty = bustRoll < 0.2 * bustUncertainty ? Math.round(8 * bustUncertainty) : 0;
+
+  const installRoll = detRand2(args.saveSeed, `${seedKey}:install`);
+  const installNoise = (detRand2(args.saveSeed, `${seedKey}:install:noise`) - 0.5) * 6 * installUncertainty;
+  const installPenalty = installRoll < 0.25 * installUncertainty ? Math.round(7 * installUncertainty) : 0;
+
+  return {
+    ovr: Math.max(45, Math.min(99, Math.round(args.baseOvr + bustNoise - bustPenalty))),
+    dev: Math.max(35, Math.min(95, Math.round(args.baseDev + installNoise - installPenalty))),
+  };
+}
+
 function rookieContractFromApy(startSeason: number, apy: number): RookieContract {
   const y1 = moneyRound(apy);
   const y2 = moneyRound(apy * 1.05);
@@ -4401,11 +4430,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       for (const p of draftClass) {
         const medR = seed(`true:med:${p.id}`);
         const charR = seed(`true:char:${p.id}`);
+        const trueCharacterScore = Math.round(40 + seed(`true:charScore:${p.id}`) * 59);
+        const trueIntelligenceScore = Math.round(40 + seed(`true:iqScore:${p.id}`) * 59);
         const medTier = medR < 0.62 ? "GREEN" : medR < 0.82 ? "YELLOW" : medR < 0.93 ? "ORANGE" : medR < 0.985 ? "RED" : "BLACK";
         const charTier = charR < 0.08 ? "BLUE" : charR < 0.72 ? "GREEN" : charR < 0.86 ? "YELLOW" : charR < 0.94 ? "ORANGE" : charR < 0.985 ? "RED" : "BLACK";
 
         trueProfiles[p.id] = {
           trueOVR: Math.round(p.grade),
+          trueAttributes: { character: trueCharacterScore, intelligence: trueIntelligenceScore },
           trueMedical: { tier: medTier as any, recurrence01: Math.round(seed(`true:rec:${p.id}`) * 100) / 100, degenerative: seed(`true:deg:${p.id}`) < 0.06 },
           trueCharacter: {
             tier: charTier as any,
@@ -4448,7 +4480,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           bigBoard: { tiers, tierByProspectId: tierBy },
           combine: { generated: false, day: 1, hoursRemaining: COMBINE_DEFAULT_HOURS, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
-          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {}, modelARevealByProspectId: {} },
           medical: { requests: {} },
           allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_HOURS : 20, byGroup: {} },
           inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
@@ -4774,6 +4806,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
 
+      const currentReveal = s.interviews.modelARevealByProspectId[prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const charGain = 10 + Math.floor(seed(`modelA:char:${s.windowKey}:${prospectId}:${category}`) * 9);
+      const iqGain = 8 + Math.floor(seed(`modelA:iq:${s.windowKey}:${prospectId}:${category}`) * 8);
+      const modelARevealByProspectId = {
+        ...s.interviews.modelARevealByProspectId,
+        [prospectId]: {
+          characterRevealPct: clamp100(currentReveal.characterRevealPct + charGain),
+          intelligenceRevealPct: clamp100(currentReveal.intelligenceRevealPct + iqGain),
+        },
+      };
+
       const hist = s.interviews.history[prospectId] ?? [];
       const outcomeRoll = seed(`out:${s.windowKey}:${prospectId}:${category}`);
       const outcome = outcomeRoll < 0.15 ? "Concerning" : outcomeRoll < 0.6 ? "Mixed" : "Positive";
@@ -4809,7 +4852,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         scoutingState: {
           ...s,
-          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history },
+          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history, modelARevealByProspectId },
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
           combine: {
             ...s.combine,
@@ -5825,6 +5868,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const p = getDraftClassFromSim().find((x) => x.prospectId === String(action.payload.prospectId));
       if (!p || state.draft.takenProspectIds[p.prospectId]) return state;
 
+      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const draftProjection = resolveDraftUncertainty({
+        saveSeed: state.saveSeed,
+        season: state.season,
+        prospectId: p.prospectId,
+        baseOvr: rookieOvrFromRank(p.rank),
+        baseDev: rookieDevFromTier({ DraftTier: p.tier }),
+        characterRevealPct: reveal.characterRevealPct,
+        intelligenceRevealPct: reveal.intelligenceRevealPct,
+      });
+
       const idx = state.rookies.length + 1;
       const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
       const rookie: RookiePlayer = {
@@ -5833,12 +5887,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         name: p.name,
         pos: p.pos,
         age: p.age,
-        ovr: rookieOvrFromRank(p.rank),
-        dev: rookieDevFromTier({ DraftTier: p.tier }),
+        ovr: draftProjection.ovr,
+        dev: draftProjection.dev,
         apy: rookieApyFromRank(p.rank),
         teamId: state.draft.userTeamId,
-        scoutOvr: rookieOvrFromRank(p.rank),
-        scoutDev: rookieDevFromTier({ DraftTier: p.tier }),
+        scoutOvr: draftProjection.ovr,
+        scoutDev: draftProjection.dev,
         scoutConf: 80,
       };
 
@@ -5897,6 +5951,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const row = getProspectRow(p.id);
       const rank = row ? Number(row["Rank"] ?? 200) : 200;
+      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const draftProjection = resolveDraftUncertainty({
+        saveSeed: state.saveSeed,
+        season: state.season,
+        prospectId: p.id,
+        baseOvr: rookieOvrFromRank(rank),
+        baseDev: rookieDevFromTier(row ?? {}),
+        characterRevealPct: reveal.characterRevealPct,
+        intelligenceRevealPct: reveal.intelligenceRevealPct,
+      });
       const idx = nextState.rookies.length + 1;
       const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
       const rookie: RookiePlayer = {
@@ -5905,12 +5969,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
         pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : String(p.pos ?? "UNK").toUpperCase(),
         age: row ? Number(row["Age"] ?? 22) : 22,
-        ovr: rookieOvrFromRank(rank),
-        dev: rookieDevFromTier(row ?? {}),
+        ovr: draftProjection.ovr,
+        dev: draftProjection.dev,
         apy: rookieApyFromRank(rank),
         teamId: String(state.acceptedOffer?.teamId ?? ""),
-        scoutOvr: rookieOvrFromRank(rank),
-        scoutDev: rookieDevFromTier(row ?? {}),
+        scoutOvr: draftProjection.ovr,
+        scoutDev: draftProjection.dev,
         scoutConf: 50,
       };
       const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
