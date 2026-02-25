@@ -104,6 +104,7 @@ export type ScoutingState = {
 
   trueProfiles: Record<string, ProspectTrueProfile>;
   scoutProfiles: Record<string, ProspectScoutProfile>;
+  myBoardOrder: string[];
   bigBoard: BigBoardState;
   combine: CombineState;
   visits: VisitState;
