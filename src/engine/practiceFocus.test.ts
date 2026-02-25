@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_PRACTICE_PLAN,
+  PRACTICE_POINTS_BUDGET,
+  getEffectPreview,
+  getPracticeEffect,
+  migratePracticePlan,
+  resolveInstallFamiliarity,
+} from "@/engine/practiceFocus";
+import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, migrateSave } from "@/context/GameContext";
 import { DEFAULT_PRACTICE_PLAN, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity } from "@/engine/practiceFocus";
 import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, gameReducer, migrateSave } from "@/context/GameContext";
 import type { GameState } from "@/context/GameContext";
 import { getTeams, getPlayers } from "@/data/leagueDb";
 
 function baselineState(teamId: string): GameState {
-  const migrated = migrateSave({
-    saveVersion: 1,
-    saveSeed: 123,
-    season: 2026,
-    week: 3,
-    acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"],
-  });
+  const migrated = migrateSave({ saveVersion: 1, saveSeed: 123, season: 2026, week: 3, acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"] });
   return {
     ...(migrated as GameState),
     playerTeamOverrides: (migrated as GameState).playerTeamOverrides ?? {},
@@ -25,21 +28,21 @@ function baselineState(teamId: string): GameState {
   } as GameState;
 }
 
-describe("practice focus constants + preview", () => {
-  it("recovery focus is strongest fatigue reduction", () => {
-    expect(getPracticeEffect({ primaryFocus: "Recovery", intensity: "High" }).fatigueBase).toBeLessThan(
-      getPracticeEffect({ primaryFocus: "Conditioning", intensity: "High" }).fatigueBase,
-    );
+describe("practice allocation model", () => {
+  it("migrates legacy focus/intensity saves into allocation budget", () => {
+    const plan = migratePracticePlan({ primaryFocus: "Install", intensity: "High" });
+    expect(plan.weeklyBudget).toBe(PRACTICE_POINTS_BUDGET);
+    expect(plan.allocation.schemeInstall).toBeGreaterThan(plan.allocation.fundamentals);
   });
 
-  it("preview matches configured ranges", () => {
-    const preview = getEffectPreview({ primaryFocus: "Install", intensity: "Normal" });
-    expect(preview.familiarityRange).toEqual([2, 4]);
-    expect(preview.fatigueRange).toEqual([5, 5]);
+  it("preview exposes scheme and retention effects", () => {
+    const preview = getEffectPreview(DEFAULT_PRACTICE_PLAN);
+    expect(preview.schemeConceptBonus).toBeGreaterThan(0);
+    expect(preview.lateGameRetentionBonus).toBeGreaterThan(0);
   });
 
-  it("install focus measurably grants familiarity", () => {
-    const gain = resolveInstallFamiliarity(99, 4, "P1", getPracticeEffect({ primaryFocus: "Install", intensity: "High" }).familiarityGain);
+  it("install allocation grants measurable familiarity", () => {
+    const gain = resolveInstallFamiliarity(99, 4, "P1", getPracticeEffect(DEFAULT_PRACTICE_PLAN).familiarityGain);
     expect(gain).toBeGreaterThan(0);
   });
 });
@@ -53,14 +56,14 @@ describe("practice integration", () => {
     const injuredPlayerId = String(teamPlayer!.playerId);
     const seeded: GameState = {
       ...state,
-      practicePlan: { primaryFocus: "Fundamentals", intensity: "High" },
+      practicePlan: { ...DEFAULT_PRACTICE_PLAN, allocation: { fundamentals: 4, schemeInstall: 1, conditioning: 1 } },
       injuries: [{ id: "i1", playerId: injuredPlayerId, teamId, injuryType: "Test", bodyArea: "OTHER", severity: "MINOR", status: "OUT", startWeek: 1, isSeasonEnding: false }],
     };
 
     const beforeFatigue = seeded.playerFatigueById[injuredPlayerId].fatigue;
     const result = applyPracticePlanForWeek(seeded, teamId, 3).nextState;
 
-    expect(result.playerFatigueById[injuredPlayerId].fatigue).toBe(beforeFatigue + 3);
+    expect(result.playerFatigueById[injuredPlayerId].fatigue).toBeLessThan(beforeFatigue);
     expect(result.playerDevXpById[injuredPlayerId] ?? 0).toBe(0);
   });
 
@@ -70,7 +73,7 @@ describe("practice integration", () => {
     const teamPlayer = getPlayers().find((p) => String(p.teamId) === teamId);
     expect(teamPlayer, `No player found on team ${teamId}`).toBeDefined();
     const failPlayerId = String(teamPlayer!.playerId);
-    const seeded: GameState = { ...state, practicePlan: { primaryFocus: "Install", intensity: "High" } };
+    const seeded: GameState = { ...state, practicePlan: DEFAULT_PRACTICE_PLAN };
 
     const out = applyPracticePlanForWeekAtomic(seeded, teamId, 3, failPlayerId);
     expect(out.applied).toBe(false);
