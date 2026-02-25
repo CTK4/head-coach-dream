@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
-import { recommendFourthDown } from "@/engine/gameSim";
+import { evaluatePlayConcepts, recommendFourthDown } from "@/engine/gameSim";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
 import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
@@ -36,6 +36,8 @@ const SPECIAL_PLAYS: PlayDef[] = [
   { id: "SPIKE", label: "Spike", icon: "⏱️", desc: "Stop clock (incomplete)" },
   { id: "KNEEL", label: "Kneel", icon: "🧎", desc: "Bleed time safely" },
 ];
+
+const PLAYBOOK: PlayDef[] = [...RUN_PLAYS, ...PASS_PLAYS, ...SPECIAL_PLAYS];
 
 // ─── Utility ────────────────────────────────────────────────────────────────
 
@@ -122,18 +124,46 @@ function ResultRibbon({ tags }: { tags: ResultTag[] }) {
   );
 }
 
-function PlayCard({ play, onClick }: { play: PlayDef; onClick: () => void }) {
+function compactPct(v: number): string {
+  return `${Math.round(v * 100)}%`;
+}
+
+function gradeFromScore(score: number): string {
+  if (score >= 0.62) return "A";
+  if (score >= 0.5) return "B";
+  if (score >= 0.4) return "C";
+  return "D";
+}
+
+function FieldPreview({ ballOn, distance, selectedPlay, defensiveLook }: { ballOn: number; distance: number; selectedPlay?: PlayType; defensiveLook?: DefensiveLook }) {
+  const width = 360;
+  const xForYardline = (yard: number) => 20 + Math.max(0, Math.min(100, yard)) * 3.2;
+  const losX = xForYardline(ballOn);
+  const firstDownX = xForYardline(Math.min(100, ballOn + distance));
+  const stem = selectedPlay ? (selectedPlay.includes("ZONE") || selectedPlay === "POWER" ? "RUN" : selectedPlay === "PUNT" || selectedPlay === "FG" ? "SPECIAL" : "PASS") : "PASS";
+  const path = stem === "RUN"
+    ? `M ${losX} 64 C ${losX + 18} 58, ${losX + 26} 44, ${losX + 44} 40`
+    : stem === "SPECIAL"
+      ? `M ${losX} 64 C ${losX + 22} 46, ${losX + 48} 30, ${losX + 86} 18`
+      : `M ${losX} 64 C ${losX + 20} 58, ${losX + 34} 34, ${losX + 64} 28`;
+
   return (
-    <Card className="cursor-pointer hover:border-primary transition-colors" onClick={onClick}>
-      <CardContent className="p-4 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-sm flex items-center gap-1">
-            <span>{play.icon}</span>
-            <span>{play.label}</span>
-          </span>
-          <Badge variant="outline" className="text-xs">{play.id.replace(/_/g, " ")}</Badge>
+    <Card>
+      <CardContent className="p-3 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Zone 3 · Field Preview</p>
+        <svg viewBox={`0 0 ${width} 84`} className="w-full rounded border bg-emerald-950/90">
+          <rect x="20" y="14" width="320" height="56" rx="6" fill="#14532d" />
+          <line x1={losX} x2={losX} y1={16} y2={68} stroke="#f8fafc" strokeWidth="2" />
+          <line x1={firstDownX} x2={firstDownX} y1={16} y2={68} stroke="#facc15" strokeWidth="2" strokeDasharray="4 3" />
+          <path d={path} stroke="#38bdf8" strokeWidth="3" fill="none" />
+          <circle cx={losX} cy="64" r="3.5" fill="#f8fafc" />
+        </svg>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant="outline">LOS {ballOn}</Badge>
+          <Badge variant="outline">Line to gain {Math.min(100, ballOn + distance)}</Badge>
+          <Badge variant="secondary">{selectedPlay ? selectedPlay.replace(/_/g, " ") : "Select play"}</Badge>
+          {defensiveLook ? <Badge variant="outline">Leverage: {boxLabel(defensiveLook.box)} · {shellLabel(defensiveLook.shell)}</Badge> : null}
         </div>
-        <p className="text-xs text-muted-foreground">{play.desc}</p>
       </CardContent>
     </Card>
   );
@@ -201,6 +231,7 @@ const Playcall = () => {
   const [aggression, setAggression] = useState<AggressionLevel>("NORMAL");
   const [tempo, setTempo] = useState<TempoMode>("NORMAL");
   const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
+  const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
 
   const teamId = state.acceptedOffer?.teamId;
   const g = state.game;
@@ -217,10 +248,23 @@ const Playcall = () => {
     [g]
   );
 
+  const rankedCards = useMemo(() => {
+    const evaluations = evaluatePlayConcepts(g, PLAYBOOK.map((p) => p.id), { aggression, tempo, personnelPackage, look: g.defLook });
+    return evaluations
+      .map((evaluation) => ({
+        evaluation,
+        play: PLAYBOOK.find((p) => p.id === evaluation.playType) ?? PLAYBOOK[0],
+      }))
+      .sort((a, b) => b.evaluation.score - a.evaluation.score);
+  }, [g, aggression, tempo, personnelPackage]);
+
   const handlePlay = (playType: PlayType) => {
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
+    setSelectedPlayId(null);
     force((x) => x + 1);
   };
+
+  const selectedCard = rankedCards.find((c) => c.play.id === selectedPlayId) ?? rankedCards[0];
 
   const exit = () => {
     dispatch({ type: "EXIT_GAME" });
@@ -341,6 +385,8 @@ const Playcall = () => {
 
         {canShowPlay ? (
           <>
+            <FieldPreview ballOn={g.ballOn} distance={g.distance} selectedPlay={selectedCard?.play.id} defensiveLook={g.defLook} />
+
             {/* ── Aggression / Tempo toggles ── */}
             <Card>
               <CardContent className="p-4 space-y-3">
@@ -348,10 +394,10 @@ const Playcall = () => {
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Aggression</p>
                     <div className="flex gap-1">
-                      {(["CONSERVATIVE", "NORMAL", "AGGRESSIVE"] as AggressionLevel[]).map((a) => (
+                      {(["AGGRESSIVE", "NORMAL", "CONSERVATIVE"] as AggressionLevel[]).map((a) => (
                         <Button key={a} size="sm" variant={aggression === a ? "default" : "outline"}
                           onClick={() => setAggression(a)}>
-                          {a === "CONSERVATIVE" ? "Conserv." : a === "AGGRESSIVE" ? "Aggress." : "Normal"}
+                          {a === "CONSERVATIVE" ? "Conservative" : a === "AGGRESSIVE" ? "Aggressive" : "Balanced"}
                         </Button>
                       ))}
                     </div>
@@ -359,10 +405,10 @@ const Playcall = () => {
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tempo</p>
                     <div className="flex gap-1">
-                      {(["NORMAL", "HURRY_UP"] as TempoMode[]).map((t) => (
+                      {(["NORMAL", "MILK", "HURRY_UP"] as TempoMode[]).map((t) => (
                         <Button key={t} size="sm" variant={tempo === t ? "default" : "outline"}
                           onClick={() => setTempo(t)}>
-                          {t === "HURRY_UP" ? "Hurry-Up" : "Normal"}
+                          {t === "HURRY_UP" ? "Hurry" : t === "MILK" ? "Milk" : "Normal"}
                         </Button>
                       ))}
                     </div>
@@ -371,25 +417,50 @@ const Playcall = () => {
               </CardContent>
             </Card>
 
-            {/* ── Play call grid ── */}
+            {/* ── Zone 5 ranked card grid ── */}
             <div className="space-y-3">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Run Plays</p>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  {RUN_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {rankedCards.map(({ play, evaluation }) => {
+                  const isSelected = selectedPlayId === play.id;
+                  const lock = evaluation.score >= 0.62;
+                  const variance = evaluation.risk >= 0.45;
+                  const todayStat = play.id === "INSIDE_ZONE" || play.id === "OUTSIDE_ZONE" || play.id === "POWER"
+                    ? `${g.stats.home.rushYards} rush yds`
+                    : `${g.stats.home.passYards} pass yds`;
+                  return (
+                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => setSelectedPlayId(play.id)}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold flex items-center gap-1">{play.icon} {play.label}</span>
+                          <Badge variant="outline" className="text-[10px]">{play.id.includes("PASS") || play.id === "SCREEN" || play.id === "QUICK_GAME" ? "PASS" : play.id === "PUNT" || play.id === "FG" ? "SPECIAL" : "RUN"}</Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant={evaluation.boxAdvantage >= 0 ? "secondary" : "destructive"} className="text-[10px]">Box {evaluation.boxAdvantage >= 0 ? "Adv" : "Stress"}</Badge>
+                          <Badge variant="outline" className="text-[10px]">Explosive {compactPct(evaluation.explosiveChance)}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{todayStat}</Badge>
+                        </div>
+                        <div className="h-1.5 w-full rounded bg-muted overflow-hidden">
+                          <div className="h-1.5 bg-primary" style={{ width: `${Math.round(evaluation.score * 100)}%` }} />
+                        </div>
+                        <div className="flex flex-wrap gap-1 text-[10px]">
+                          <Badge variant="secondary">Grade {gradeFromScore(evaluation.score)}</Badge>
+                          <Badge variant="outline">Conf {compactPct(evaluation.confidence)}</Badge>
+                          <Badge variant={evaluation.risk > 0.38 ? "destructive" : "outline"}>Risk {compactPct(evaluation.risk)}</Badge>
+                          {lock ? <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">LOCK</Badge> : null}
+                          {variance ? <Badge variant="destructive">VARIANCE</Badge> : null}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Yards {evaluation.yards.low}/{evaluation.yards.median}/{evaluation.yards.high} · Success {compactPct(evaluation.expectedSuccessProbability)}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between rounded border p-3">
+                <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
+                <Button size="sm" disabled={!selectedCard} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
               </div>
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pass Plays</p>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  {PASS_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Specials</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {SPECIAL_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
+                <p className="text-xs text-muted-foreground">Recommended stem updates instantly from card selection. Two-tap flow: select then confirm.</p>
               </div>
             </div>
           </>
@@ -420,4 +491,3 @@ const Playcall = () => {
 };
 
 export default Playcall;
-

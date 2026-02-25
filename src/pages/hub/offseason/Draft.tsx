@@ -162,7 +162,7 @@ export default function Draft() {
               <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">
-                    {p.name} ({p.pos})
+                    {p.name} ({getPositionLabel(p.pos)})
                   </div>
                   <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
                 </div>
@@ -205,7 +205,7 @@ export default function Draft() {
             {sim.selections.map((pick) => (
               <div key={`${pick.overall}-${pick.prospectId}`} className="rounded border px-3 py-2">
                 <div className="font-semibold text-sm">
-                  {pick.overall}. {pick.name} ({pick.pos})
+                  {pick.overall}. {pick.name} ({getPositionLabel(pick.pos)})
                 </div>
                 <div className="text-xs text-slate-500">
                   R{pick.round}P{pick.pickInRound} · Team {pick.teamId} · Rank #{pick.rank}
@@ -239,7 +239,7 @@ export default function Draft() {
             <div className="space-y-2">
               {myCompletedPicks.map(({ slot, selection }) => (
                 <div key={slot.overall} className="rounded border px-3 py-2 text-sm">
-                  O{slot.overall} · {selection?.name} ({selection?.pos})
+                  O{slot.overall} · {selection?.name} ({selection ? getPositionLabel(selection.pos) : ""})
                 </div>
               ))}
             </div>
