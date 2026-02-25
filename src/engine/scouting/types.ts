@@ -55,11 +55,25 @@ export type CombineDayRecap = {
 
 export type CombineState = {
   generated: boolean;
-  day: 1 | 2 | 3 | 4 | 5;
-  hoursRemaining: number;
+  day: 1 | 2 | 3 | 4;
+  days: Record<1 | 2 | 3 | 4, CombineDay>;
+  prospects: Record<string, CombineProspectState>;
   resultsByProspectId: Record<string, CombineResult>;
   feed: { id: string; day: number; text: string; prospectId?: string }[];
   recapByDay: Record<number, CombineDayRecap>;
+};
+
+export type CombineDay = {
+  dayIndex: 1 | 2 | 3 | 4;
+  categoryKey: string;
+  interviewsRemaining: number;
+};
+
+export type CombineProspectState = {
+  characterRevealPct: number;
+  intelligenceRevealPct: number;
+  interviewCount: number;
+  notes: string[];
 };
 
 export type VisitState = {

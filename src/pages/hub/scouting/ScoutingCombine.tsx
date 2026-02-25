@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDraftClass, useGame } from "@/context/GameContext";
+import {
+  COMBINE_DEFAULT_INTERVIEW_TOKENS,
+  COMBINE_FOCUS_HOURS_COST,
+  COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
+} from "@/engine/scouting/combineConstants";
 import { COMBINE_DEFAULT_INTERVIEW_SLOTS } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
 
+const DAYS = [
+  { day: 1 as const, label: "Day 1" },
+  { day: 2 as const, label: "Day 2" },
+  { day: 3 as const, label: "Day 3" },
+  { day: 4 as const, label: "Day 4" },
 type TabId = "ALL" | "SHORTLIST" | "NOTES";
 type CombineProspectState = { notes: string };
 
@@ -93,6 +103,23 @@ export default function ScoutingCombine() {
 
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
 
+  const day = scouting.combine.day;
+  const focusEnabled = day === 2 || day === 3;
+  const interviewEnabled = day === 4;
+  const feed = scouting.combine.feed.filter((f) => f.day === day).slice(-12).reverse();
+  const recap =
+    scouting.combine.recapByDay[day] ?? {
+      risers: [],
+      fallers: [],
+      flags: [],
+      focusedProspectIds: [],
+      interviewedProspectIds: [],
+      focusHoursSpent: 0,
+      interviewsUsed: 0,
+    };
+  const used = Object.values(scouting.allocation.byGroup).reduce((a, b) => a + b, 0);
+  const remaining = Math.max(0, scouting.allocation.poolHours - used);
+  const interviewsRemaining = Math.max(0, scouting.combine.days?.[day]?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
   const currentDay = Math.min(scouting.combine.day, 4);
   const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_SLOTS);
 
@@ -146,6 +173,13 @@ export default function ScoutingCombine() {
   };
 
   return (
+    <div className="space-y-3 p-4">
+      <div className="sticky top-[52px] z-20 rounded-lg border border-white/10 bg-black/40 p-3 backdrop-blur">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold">Combine</div>
+          <div className="text-xs opacity-70">
+            Focus Tokens: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews: {interviewEnabled ? `${interviewsRemaining} left` : "OFF"}
+          </div>
     <div className="space-y-3 p-3 pb-24 sm:p-4">
       <div className="sticky top-[52px] z-20 rounded-lg border border-white/10 bg-black/70 p-3 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
@@ -169,6 +203,15 @@ export default function ScoutingCombine() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <div className="font-semibold">Focus Drill</div>
+        <div className="mt-1 text-xs opacity-70">Spend focus tokens to tighten confidence (by position group).</div>
+        {!focusEnabled ? <div className="mt-2 text-xs text-amber-300/80">Focus drill opens on Day 2 and Day 3.</div> : null}
+        {remaining <= 0 ? <div className="mt-2 text-xs text-rose-300/80">No focus tokens remaining.</div> : null}
+        <div className="mt-3 space-y-2">
+          {topList.map(({ id, p, s }) => {
+            const alreadyFocusedToday = recap.focusedProspectIds.includes(id);
+            const focusDisabled = !focusEnabled || remaining < COMBINE_FOCUS_HOURS_COST || alreadyFocusedToday;
       {activeTab === "ALL" ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-center text-sm sm:text-base">
@@ -230,6 +273,13 @@ export default function ScoutingCombine() {
                     <div className="h-2 w-full overflow-hidden rounded bg-white/15"><div className={`h-full ${barTone(iqReveal)}`} style={{ width: `${iqReveal}%` }} /></div>
                   </div>
                 </div>
+                <button
+                  className={`rounded border px-3 py-2 ${focusDisabled ? "cursor-not-allowed border-white/10 text-white/40" : "border-sky-500 text-sky-200"}`}
+                  disabled={focusDisabled}
+                  onClick={() => dispatch({ type: "SCOUT_COMBINE_FOCUS", payload: { prospectId: id } })}
+                >
+                  {alreadyFocusedToday ? "Focused" : `Focus (-${COMBINE_FOCUS_HOURS_COST})`}
+                </button>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
