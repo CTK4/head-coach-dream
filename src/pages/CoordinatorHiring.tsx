@@ -23,6 +23,9 @@ export default function CoordinatorHiring() {
   const { state, dispatch } = useGame();
   const [role, setRole] = useState<"OC" | "DC" | "STC">("OC");
   const [levelIdx, setLevelIdx] = useState(1);
+  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
+  const [offerYears, setOfferYears] = useState(3);
+  const [offerSalaryValue, setOfferSalaryValue] = useState(0);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
@@ -89,18 +92,29 @@ export default function CoordinatorHiring() {
     return [...base, ...emergencyAny].slice(0, 30);
   }, [role, hiredSet, level, remainingBudget]);
 
-  const hire = (personId: string, salary: number) => {
-    if (roleFilled) return;
-    dispatch({ type: "HIRE_STAFF", payload: { role, personId, salary } });
-
-    // Auto-advance to the next unfilled coordinator position
-    const allRoles: Array<"OC" | "DC" | "STC"> = ["OC", "DC", "STC"];
-    const filledAfterHire = new Set<string>(
-      [role, state.staff.ocId && "OC", state.staff.dcId && "DC", state.staff.stcId && "STC"].filter(Boolean) as string[]
-    );
-    const nextRole = allRoles.find((r) => !filledAfterHire.has(r));
-    if (nextRole) setRole(nextRole);
+  const openOfferEditor = (candidate: Cand) => {
+    setEditingCandidateId(candidate.p.personId);
+    setOfferYears(3);
+    setOfferSalaryValue(candidate.salary);
   };
+
+  const submitOffer = (personId: string) => {
+    if (roleFilled) return;
+    dispatch({
+      type: "CREATE_STAFF_OFFER",
+      payload: { roleType: "COORDINATOR", role, personId, years: offerYears, salary: offerSalaryValue },
+    });
+    setEditingCandidateId(null);
+  };
+
+  const latestOfferByPerson = useMemo(() => {
+    const byPerson: Record<string, (typeof state.staffOffers)[number]> = {};
+    for (const offer of state.staffOffers) {
+      if (offer.roleType !== "COORDINATOR") continue;
+      if (!byPerson[offer.personId]) byPerson[offer.personId] = offer;
+    }
+    return byPerson;
+  }, [state.staffOffers]);
 
   const wrapInShell = state.phase === "COORD_HIRING" && !location?.pathname?.startsWith?.("/hub/");
 
@@ -110,7 +124,7 @@ export default function CoordinatorHiring() {
         <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="text-2xl font-bold">Coordinator Hiring</div>
-            <div className="text-sm text-muted-foreground">Pool backfills with safety and emergency options when needed.</div>
+            <div className="text-sm text-muted-foreground">Create offers with custom years/salary. Counter-offers are deferred for now.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
@@ -124,31 +138,13 @@ export default function CoordinatorHiring() {
       <Card>
         <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant={role === "OC" ? "default" : "secondary"}
-              onClick={() => setRole("OC")}
-              disabled={Boolean(state.staff.ocId)}
-              title={state.staff.ocId ? "OC already hired" : ""}
-            >
+            <Button size="sm" variant={role === "OC" ? "default" : "secondary"} onClick={() => setRole("OC")} disabled={Boolean(state.staff.ocId)} title={state.staff.ocId ? "OC already hired" : ""}>
               OC
             </Button>
-            <Button
-              size="sm"
-              variant={role === "DC" ? "default" : "secondary"}
-              onClick={() => setRole("DC")}
-              disabled={Boolean(state.staff.dcId)}
-              title={state.staff.dcId ? "DC already hired" : ""}
-            >
+            <Button size="sm" variant={role === "DC" ? "default" : "secondary"} onClick={() => setRole("DC")} disabled={Boolean(state.staff.dcId)} title={state.staff.dcId ? "DC already hired" : ""}>
               DC
             </Button>
-            <Button
-              size="sm"
-              variant={role === "STC" ? "default" : "secondary"}
-              onClick={() => setRole("STC")}
-              disabled={Boolean(state.staff.stcId)}
-              title={state.staff.stcId ? "STC already hired" : ""}
-            >
+            <Button size="sm" variant={role === "STC" ? "default" : "secondary"} onClick={() => setRole("STC")} disabled={Boolean(state.staff.stcId)} title={state.staff.stcId ? "STC already hired" : ""}>
               STC
             </Button>
           </div>
@@ -160,6 +156,7 @@ export default function CoordinatorHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="text-xs text-muted-foreground mt-1">Offer: {LEVEL_LABEL[level]}</div>
+            <div className="text-xs text-muted-foreground">Counter-offers are not interactive yet (stubbed for a future update).</div>
             {roleFilled ? <div className="text-xs text-amber-300">Role already filled</div> : null}
           </div>
         </CardContent>
@@ -168,34 +165,66 @@ export default function CoordinatorHiring() {
       <Card>
         <CardContent className="p-4 space-y-2">
           {candidates.length ? (
-            candidates.map(({ p, exp, salary, safety, emergency }) => (
-              <div key={p.personId} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
-                <div className="min-w-0 flex items-center gap-3">
-                  <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach"), avatarUrl: p.avatarUrl }} size={40} />
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
+            candidates.map((candidate) => {
+              const { p, exp, salary, safety, emergency } = candidate;
+              const latest = latestOfferByPerson[p.personId];
+              const isEditing = editingCandidateId === p.personId;
+              return (
+                <div key={p.personId} className="border rounded-md px-3 py-2 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach"), avatarUrl: p.avatarUrl }} size={40} />
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">Rep {Number(p.reputation ?? 0)} · Suggested {money(salary)} · Expected {money(exp)}</div>
+                        {latest?.status === "REJECTED" ? <div className="text-xs text-amber-300 mt-1">{latest.reason}</div> : null}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Rep {Number(p.reputation ?? 0)} · Expected {money(exp)}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
+                      <Button size="sm" variant="outline" onClick={() => openOfferEditor(candidate)} disabled={roleFilled}>
+                        Create Offer
+                      </Button>
                     </div>
                   </div>
+
+                  {isEditing ? (
+                    <div className="flex flex-wrap items-end gap-2 border-t border-slate-400/20 pt-3">
+                      <label className="text-xs text-muted-foreground">
+                        Years
+                        <input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={offerYears}
+                          onChange={(e) => setOfferYears(Number(e.target.value) || 1)}
+                          className="mt-1 w-20 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs text-muted-foreground">
+                        Salary (annual, $M)
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.05}
+                          value={(offerSalaryValue / 1_000_000).toFixed(2)}
+                          onChange={(e) => setOfferSalaryValue(Math.round((Number(e.target.value) || 0) * 1_000_000))}
+                          className="mt-1 w-32 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <Button size="sm" onClick={() => submitOffer(p.personId)} disabled={offerSalaryValue <= 0}>
+                        Submit Offer
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingCandidateId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => hire(p.personId, salary)}
-                    disabled={roleFilled || salary > remainingBudget}
-                    title={`Send ${money(salary)} offer${emergency ? " (Emergency)" : safety ? " (Safety)" : ""}`}
-                    aria-label={`Send ${money(salary)} offer to ${String(p.fullName ?? "Coach")}${emergency ? " (Emergency)" : safety ? " (Safety)" : ""}`}
-                  >
-                    Send {money(salary)} {emergency ? "(Emergency)" : safety ? "(Safety)" : ""}
-                  </Button>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="text-sm text-muted-foreground">No candidates available for this role.</div>
           )}
