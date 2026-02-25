@@ -148,6 +148,8 @@ export default function PreDraft() {
                     ...(state.offseasonData.combine.results?.[p.id] ?? {}),
                   }).combineScore10;
 
+                  // STUB — Phase N: Pro Day variance tag behavior remains placeholder-only until variance model finalization.
+
                   return (
                     <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">

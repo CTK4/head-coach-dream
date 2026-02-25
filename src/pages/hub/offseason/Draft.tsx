@@ -164,6 +164,7 @@ export default function Draft() {
                 <div>
                   <div className="font-semibold">
                     {p.name} ({getPositionLabel(normalizeProspectPosition(p.pos, "DRAFT"))})
+                    {p.name} ({getPositionLabel(p.pos)})
                   </div>
                   <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
                 </div>
@@ -207,6 +208,7 @@ export default function Draft() {
               <div key={`${pick.overall}-${pick.prospectId}`} className="rounded border px-3 py-2">
                 <div className="font-semibold text-sm">
                   {pick.overall}. {pick.name} ({getPositionLabel(normalizeProspectPosition(pick.pos, "DRAFT"))})
+                  {pick.overall}. {pick.name} ({getPositionLabel(pick.pos)})
                 </div>
                 <div className="text-xs text-slate-500">
                   R{pick.round}P{pick.pickInRound} · Team {pick.teamId} · Rank #{pick.rank}
@@ -241,6 +243,7 @@ export default function Draft() {
               {myCompletedPicks.map(({ slot, selection }) => (
                 <div key={slot.overall} className="rounded border px-3 py-2 text-sm">
                   O{slot.overall} · {selection?.name} ({getPositionLabel(normalizeProspectPosition(String(selection?.pos ?? "ATH"), "DRAFT"))})
+                  O{slot.overall} · {selection?.name} ({selection ? getPositionLabel(selection.pos) : ""})
                 </div>
               ))}
             </div>

@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
-import { recommendFourthDown } from "@/engine/gameSim";
+import { recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
+import { evaluatePlayConcepts, recommendFourthDown } from "@/engine/gameSim";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
-import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type PersonnelPackage } from "@/engine/personnel";
+import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type DefensivePackage, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ const SPECIAL_PLAYS: PlayDef[] = [
   { id: "KNEEL", label: "Kneel", icon: "🧎", desc: "Bleed time safely" },
 ];
 
+const PLAYBOOK: PlayDef[] = [...RUN_PLAYS, ...PASS_PLAYS, ...SPECIAL_PLAYS];
+
 // ─── Utility ────────────────────────────────────────────────────────────────
 
 function fmtClock(sec: number): string {
@@ -50,12 +53,6 @@ function shellLabel(s: DefensiveLook["shell"]): string {
 }
 function boxLabel(b: DefensiveLook["box"]): string {
   return b === "LIGHT" ? "Light Box" : b === "HEAVY" ? "Heavy Box" : "Normal Box";
-}
-function blitzLabel(b: DefensiveLook["blitz"]): string {
-  return b === "NONE" ? "No Blitz" : b === "POSSIBLE" ? "Blitz Possible" : "Blitz Likely";
-}
-function blitzVariant(b: DefensiveLook["blitz"]): "default" | "destructive" | "outline" | "secondary" {
-  return b === "LIKELY" ? "destructive" : b === "POSSIBLE" ? "default" : "outline";
 }
 
 function tagIcon(kind: ResultTag["kind"]): string {
@@ -96,16 +93,107 @@ function statLine(g: GameSim): string {
   return `Home: ${h.rushYards} rush ${h.passYards} pass ${h.turnovers} TO | Away: ${a.rushYards} rush ${a.passYards} pass ${a.turnovers} TO`;
 }
 
+const PERSONNEL_BY_DEF_PACKAGE: Record<DefensivePackage, string> = {
+  Base: "Base 4-3",
+  Nickel: "Nickel 4-2-5",
+  Dime: "Dime 4-1-6",
+  GoalLine: "Goal Line",
+};
+
+const FRONT_BY_DEF_PACKAGE: Record<DefensivePackage, string> = {
+  Base: "Even front",
+  Nickel: "Over front",
+  Dime: "Mug front",
+  GoalLine: "Bear front",
+};
+
+const BOX_COUNT_BY_PACKAGE: Record<DefensivePackage, Record<DefensiveLook["box"], number>> = {
+  Base: { LIGHT: 6, NORMAL: 7, HEAVY: 8 },
+  Nickel: { LIGHT: 5, NORMAL: 6, HEAVY: 7 },
+  Dime: { LIGHT: 5, NORMAL: 6, HEAVY: 7 },
+  GoalLine: { LIGHT: 7, NORMAL: 8, HEAVY: 9 },
+};
+
+function toSituationLabel(bucket?: SituationBucket): string {
+  if (!bucket) return "Unknown";
+  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replaceAll("_", " ").replace("3RD", "3rd").replace("4TH", "4th");
+}
+
+function compactCallLabel(signature: string): string {
+  const [pkg, shell, , blitz] = signature.split(":");
+  const shellShort = shell === "SINGLE_HIGH" ? "1H" : shell === "TWO_HIGH" ? "2H" : "--";
+  const blitzShort = blitz === "LIKELY" ? "B+" : blitz === "POSSIBLE" ? "B?" : "B0";
+  return `${pkg} ${shellShort} ${blitzShort}`;
+}
+
+function possessionLabel(g: GameSim): string {
+  const teamId = g.possession === "HOME" ? g.homeTeamId : g.awayTeamId;
+  return `● ${teamId} ball`;
+}
+
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function DefLookPanel({ look }: { look: DefensiveLook }) {
+function DefensiveIntelPanel({ g }: { g: GameSim }) {
+  const defensivePackage = g.selectedDefensivePackage ?? "Nickel";
+  const look = g.defLook;
+  const windowBuckets = g.situationWindowCounts ?? {};
+  const windowTotals = Object.values(windowBuckets).reduce((acc, item) => {
+    if (!item) return acc;
+    acc.total += item.total;
+    acc.blitzLikely += item.blitzLikely;
+    return acc;
+  }, { total: 0, blitzLikely: 0 });
+  const blitzRate = windowTotals.total > 0 ? (windowTotals.blitzLikely / windowTotals.total) * 100 : 0;
+  const recentDefensiveCalls = g.recentDefensiveCalls ?? [];
+  const currentSituation = recentDefensiveCalls[0]?.situationBucket;
+  const currentSituationCounts = currentSituation ? windowBuckets[currentSituation] : undefined;
+  const tendencyEntries = Object.entries(currentSituationCounts?.callsBySignature ?? {}).sort((a, b) => b[1] - a[1]);
+  const topCall = tendencyEntries[0];
+  const topCallPct = currentSituationCounts && currentSituationCounts.total > 0 && topCall
+    ? (topCall[1] / currentSituationCounts.total) * 100
+    : 0;
+  const defendingRatings = g.possession === "HOME" ? g.awayRatings : g.homeRatings;
+  const pressureScore = ((defendingRatings?.blitzImpact ?? 68) / 100) * 0.55 + (blitzRate / 100) * 0.45;
+  const pressureLabel = pressureScore >= 0.78 ? "High" : pressureScore >= 0.62 ? "Moderate" : "Low";
+  const observedSnaps = g.observedSnaps ?? 0;
+  const CONFIDENCE_WINDOW = 12;
+  const MAX_CONFIDENCE_DOTS = 6;
+  const confidence = Math.min(100, Math.round((observedSnaps / CONFIDENCE_WINDOW) * 100));
+  const confidenceDots = Math.min(
+    MAX_CONFIDENCE_DOTS,
+    Math.round((confidence / 100) * MAX_CONFIDENCE_DOTS),
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
-      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Defense:</span>
-      <Badge variant="outline">{shellLabel(look.shell)}</Badge>
-      <Badge variant="outline">{boxLabel(look.box)}</Badge>
-      <Badge variant={blitzVariant(look.blitz)}>{blitzLabel(look.blitz)}</Badge>
-    </div>
+    <Card className="border-slate-700/70 bg-slate-950/60 text-slate-100">
+      <CardContent className="p-4 grid gap-4 md:grid-cols-[1fr_auto_1fr]">
+        <div className="space-y-1 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Defense</p>
+          <p>- {PERSONNEL_BY_DEF_PACKAGE[defensivePackage]}</p>
+          <p>- {look ? shellLabel(look.shell) : "Unknown shell"}</p>
+          <p>- {FRONT_BY_DEF_PACKAGE[defensivePackage]}</p>
+          <p>- {look ? `${BOX_COUNT_BY_PACKAGE[defensivePackage][look.box]} in box` : "Unknown box"}</p>
+        </div>
+        <div className="hidden md:block w-px bg-slate-700/80" />
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span>Blitz</span><span className="font-semibold">{Math.round(blitzRate)}%</span></div>
+          <div className="flex justify-between gap-3"><span>Last calls</span><span className="font-semibold text-right">{recentDefensiveCalls.map((c) => compactCallLabel(c.callSignature)).join(" / ") || "N/A"}</span></div>
+          <div className="rounded border border-slate-700/80 px-2 py-1">
+            <span className="font-semibold">{toSituationLabel(currentSituation)}</span>
+            <span className="text-slate-300"> → {topCall ? `${compactCallLabel(topCall[0])} (${Math.round(topCallPct)}%)` : "No tendency yet"}</span>
+          </div>
+          <div className="flex justify-between"><span>Pressure on {toSituationLabel(currentSituation)}</span><span className="font-semibold">{pressureLabel}</span></div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-amber-300">◔ {Math.round(confidence)}%</span>
+            <span className="flex items-center gap-1" aria-label="confidence-meter">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <span key={idx} className={`h-2 w-2 rounded-full ${idx < confidenceDots ? "bg-amber-300" : "bg-slate-600"}`} />
+              ))}
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -122,18 +210,46 @@ function ResultRibbon({ tags }: { tags: ResultTag[] }) {
   );
 }
 
-function PlayCard({ play, onClick }: { play: PlayDef; onClick: () => void }) {
+function compactPct(v: number): string {
+  return `${Math.round(v * 100)}%`;
+}
+
+function gradeFromScore(score: number): string {
+  if (score >= 0.62) return "A";
+  if (score >= 0.5) return "B";
+  if (score >= 0.4) return "C";
+  return "D";
+}
+
+function FieldPreview({ ballOn, distance, selectedPlay, defensiveLook }: { ballOn: number; distance: number; selectedPlay?: PlayType; defensiveLook?: DefensiveLook }) {
+  const width = 360;
+  const xForYardline = (yard: number) => 20 + Math.max(0, Math.min(100, yard)) * 3.2;
+  const losX = xForYardline(ballOn);
+  const firstDownX = xForYardline(Math.min(100, ballOn + distance));
+  const stem = selectedPlay ? (selectedPlay.includes("ZONE") || selectedPlay === "POWER" ? "RUN" : selectedPlay === "PUNT" || selectedPlay === "FG" ? "SPECIAL" : "PASS") : "PASS";
+  const path = stem === "RUN"
+    ? `M ${losX} 64 C ${losX + 18} 58, ${losX + 26} 44, ${losX + 44} 40`
+    : stem === "SPECIAL"
+      ? `M ${losX} 64 C ${losX + 22} 46, ${losX + 48} 30, ${losX + 86} 18`
+      : `M ${losX} 64 C ${losX + 20} 58, ${losX + 34} 34, ${losX + 64} 28`;
+
   return (
-    <Card className="cursor-pointer hover:border-primary transition-colors" onClick={onClick}>
-      <CardContent className="p-4 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-sm flex items-center gap-1">
-            <span>{play.icon}</span>
-            <span>{play.label}</span>
-          </span>
-          <Badge variant="outline" className="text-xs">{play.id.replace(/_/g, " ")}</Badge>
+    <Card>
+      <CardContent className="p-3 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Zone 3 · Field Preview</p>
+        <svg viewBox={`0 0 ${width} 84`} className="w-full rounded border bg-emerald-950/90">
+          <rect x="20" y="14" width="320" height="56" rx="6" fill="#14532d" />
+          <line x1={losX} x2={losX} y1={16} y2={68} stroke="#f8fafc" strokeWidth="2" />
+          <line x1={firstDownX} x2={firstDownX} y1={16} y2={68} stroke="#facc15" strokeWidth="2" strokeDasharray="4 3" />
+          <path d={path} stroke="#38bdf8" strokeWidth="3" fill="none" />
+          <circle cx={losX} cy="64" r="3.5" fill="#f8fafc" />
+        </svg>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant="outline">LOS {ballOn}</Badge>
+          <Badge variant="outline">Line to gain {Math.min(100, ballOn + distance)}</Badge>
+          <Badge variant="secondary">{selectedPlay ? selectedPlay.replace(/_/g, " ") : "Select play"}</Badge>
+          {defensiveLook ? <Badge variant="outline">Leverage: {boxLabel(defensiveLook.box)} · {shellLabel(defensiveLook.shell)}</Badge> : null}
         </div>
-        <p className="text-xs text-muted-foreground">{play.desc}</p>
       </CardContent>
     </Card>
   );
@@ -201,6 +317,7 @@ const Playcall = () => {
   const [aggression, setAggression] = useState<AggressionLevel>("NORMAL");
   const [tempo, setTempo] = useState<TempoMode>("NORMAL");
   const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
+  const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
 
   const teamId = state.acceptedOffer?.teamId;
   const g = state.game;
@@ -217,10 +334,23 @@ const Playcall = () => {
     [g]
   );
 
+  const rankedCards = useMemo(() => {
+    const evaluations = evaluatePlayConcepts(g, PLAYBOOK.map((p) => p.id), { aggression, tempo, personnelPackage, look: g.defLook });
+    return evaluations
+      .map((evaluation) => ({
+        evaluation,
+        play: PLAYBOOK.find((p) => p.id === evaluation.playType) ?? PLAYBOOK[0],
+      }))
+      .sort((a, b) => b.evaluation.score - a.evaluation.score);
+  }, [g, aggression, tempo, personnelPackage]);
+
   const handlePlay = (playType: PlayType) => {
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
+    setSelectedPlayId(null);
     force((x) => x + 1);
   };
+
+  const selectedCard = rankedCards.find((c) => c.play.id === selectedPlayId) ?? rankedCards[0];
 
   const exit = () => {
     dispatch({ type: "EXIT_GAME" });
@@ -247,6 +377,26 @@ const Playcall = () => {
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-4">
 
+        <div className="sticky top-2 z-20">
+          <Card className="border-slate-700/70 bg-slate-950/80 text-slate-100 backdrop-blur">
+            <CardContent className="py-2 px-4">
+              <div className="flex flex-wrap items-center gap-2 text-base font-medium">
+                <span>{g.homeTeamId} {g.homeScore}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.awayTeamId} {g.awayScore}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.clock.quarter}Q {fmtClock(g.clock.timeRemainingSec)}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.down}&amp;{g.distance}</span>
+                <span className="text-slate-400">|</span>
+                <span>Ball: {g.ballOn}</span>
+                <span className="text-slate-400">|</span>
+                <span>{possessionLabel(g)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* ── Scoreboard ── */}
         <Card>
           <CardContent className="p-5 space-y-2">
@@ -265,13 +415,10 @@ const Playcall = () => {
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <Badge variant="secondary">Q{g.clock.quarter} {fmtClock(g.clock.timeRemainingSec)}</Badge>
               <Badge variant="outline" className="font-bold text-base">{g.homeScore} – {g.awayScore}</Badge>
-              <Badge variant="outline">{g.possession} ball</Badge>
+              <Badge variant="outline">{possessionLabel(g)}</Badge>
               <Badge variant="outline">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
               <Badge variant="outline">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
             </div>
-
-            {/* Defensive look */}
-            {g.defLook && canShowPlay && <DefLookPanel look={g.defLook} />}
 
             {/* Last result + tags */}
             <PlayRibbon latestPlay={g.lastPlayResult} />
@@ -341,6 +488,9 @@ const Playcall = () => {
 
         {canShowPlay ? (
           <>
+            <DefensiveIntelPanel g={g} />
+            <FieldPreview ballOn={g.ballOn} distance={g.distance} selectedPlay={selectedCard?.play.id} defensiveLook={g.defLook} />
+
             {/* ── Aggression / Tempo toggles ── */}
             <Card>
               <CardContent className="p-4 space-y-3">
@@ -348,10 +498,10 @@ const Playcall = () => {
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Aggression</p>
                     <div className="flex gap-1">
-                      {(["CONSERVATIVE", "NORMAL", "AGGRESSIVE"] as AggressionLevel[]).map((a) => (
+                      {(["AGGRESSIVE", "NORMAL", "CONSERVATIVE"] as AggressionLevel[]).map((a) => (
                         <Button key={a} size="sm" variant={aggression === a ? "default" : "outline"}
                           onClick={() => setAggression(a)}>
-                          {a === "CONSERVATIVE" ? "Conserv." : a === "AGGRESSIVE" ? "Aggress." : "Normal"}
+                          {a === "CONSERVATIVE" ? "Conservative" : a === "AGGRESSIVE" ? "Aggressive" : "Balanced"}
                         </Button>
                       ))}
                     </div>
@@ -359,10 +509,10 @@ const Playcall = () => {
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tempo</p>
                     <div className="flex gap-1">
-                      {(["NORMAL", "HURRY_UP"] as TempoMode[]).map((t) => (
+                      {(["NORMAL", "MILK", "HURRY_UP"] as TempoMode[]).map((t) => (
                         <Button key={t} size="sm" variant={tempo === t ? "default" : "outline"}
                           onClick={() => setTempo(t)}>
-                          {t === "HURRY_UP" ? "Hurry-Up" : "Normal"}
+                          {t === "HURRY_UP" ? "Hurry" : t === "MILK" ? "Milk" : "Normal"}
                         </Button>
                       ))}
                     </div>
@@ -371,25 +521,50 @@ const Playcall = () => {
               </CardContent>
             </Card>
 
-            {/* ── Play call grid ── */}
+            {/* ── Zone 5 ranked card grid ── */}
             <div className="space-y-3">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Run Plays</p>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  {RUN_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {rankedCards.map(({ play, evaluation }) => {
+                  const isSelected = selectedPlayId === play.id;
+                  const lock = evaluation.score >= 0.62;
+                  const variance = evaluation.risk >= 0.45;
+                  const todayStat = play.id === "INSIDE_ZONE" || play.id === "OUTSIDE_ZONE" || play.id === "POWER"
+                    ? `${g.stats.home.rushYards} rush yds`
+                    : `${g.stats.home.passYards} pass yds`;
+                  return (
+                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => setSelectedPlayId(play.id)}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold flex items-center gap-1">{play.icon} {play.label}</span>
+                          <Badge variant="outline" className="text-[10px]">{play.id.includes("PASS") || play.id === "SCREEN" || play.id === "QUICK_GAME" ? "PASS" : play.id === "PUNT" || play.id === "FG" ? "SPECIAL" : "RUN"}</Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant={evaluation.boxAdvantage >= 0 ? "secondary" : "destructive"} className="text-[10px]">Box {evaluation.boxAdvantage >= 0 ? "Adv" : "Stress"}</Badge>
+                          <Badge variant="outline" className="text-[10px]">Explosive {compactPct(evaluation.explosiveChance)}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{todayStat}</Badge>
+                        </div>
+                        <div className="h-1.5 w-full rounded bg-muted overflow-hidden">
+                          <div className="h-1.5 bg-primary" style={{ width: `${Math.round(evaluation.score * 100)}%` }} />
+                        </div>
+                        <div className="flex flex-wrap gap-1 text-[10px]">
+                          <Badge variant="secondary">Grade {gradeFromScore(evaluation.score)}</Badge>
+                          <Badge variant="outline">Conf {compactPct(evaluation.confidence)}</Badge>
+                          <Badge variant={evaluation.risk > 0.38 ? "destructive" : "outline"}>Risk {compactPct(evaluation.risk)}</Badge>
+                          {lock ? <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">LOCK</Badge> : null}
+                          {variance ? <Badge variant="destructive">VARIANCE</Badge> : null}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">Yards {evaluation.yards.low}/{evaluation.yards.median}/{evaluation.yards.high} · Success {compactPct(evaluation.expectedSuccessProbability)}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between rounded border p-3">
+                <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
+                <Button size="sm" disabled={!selectedCard} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
               </div>
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pass Plays</p>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  {PASS_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Specials</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {SPECIAL_PLAYS.map((p) => <PlayCard key={p.id} play={p} onClick={() => handlePlay(p.id)} />)}
-                </div>
+                <p className="text-xs text-muted-foreground">Recommended stem updates instantly from card selection. Two-tap flow: select then confirm.</p>
               </div>
             </div>
           </>
@@ -420,4 +595,3 @@ const Playcall = () => {
 };
 
 export default Playcall;
-

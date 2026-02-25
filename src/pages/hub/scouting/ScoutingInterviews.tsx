@@ -14,6 +14,7 @@ export default function ScoutingInterviews() {
     <div className="space-y-3 p-4">
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
         <div className="font-semibold">Prospect Interviews</div>
+        {/* STUB — Phase N: Advanced Interview Focus (Model B) tuning/controls are intentionally deferred. */}
         <div className="mt-1 text-xs text-muted-foreground">Coming soon: spend interview slots to reveal traits + IQ range.</div>
       </div>
       <button
