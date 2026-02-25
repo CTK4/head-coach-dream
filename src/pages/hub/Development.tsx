@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
@@ -104,7 +105,7 @@ export default function Development() {
       .map((p: Record<string, unknown>) => ({
         playerId: String(p.playerId ?? ""),
         name: String(p.fullName ?? "Unknown"),
-        pos: normalizePos(String(p.pos ?? "UNK")),
+        pos: getPositionLabel(normalizePos(String(p.pos ?? "UNK"))),
         age: Number(p.age ?? 0),
         ovr: clamp100(Number(p.overall ?? 0)),
         potential: Number(p.potential ?? 0),
@@ -251,9 +252,9 @@ export default function Development() {
             {POS_GROUPS.map((pos) => {
               const level: FocusLevel = draftFocus[pos] ?? "NORMAL";
               return (
-                <Card key={pos} className="rounded-2xl border-white/10 bg-white/[0.04]">
+                <Card key={getPositionLabel(pos)} className="rounded-2xl border-white/10 bg-white/[0.04]">
                   <CardContent className="flex items-center gap-3 p-3">
-                    <div className="w-12 shrink-0 text-sm font-bold text-slate-200">{pos}</div>
+                    <div className="w-12 shrink-0 text-sm font-bold text-slate-200">{getPositionLabel(pos)}</div>
                     <div className="flex flex-1 gap-1">
                       {(["LOW", "NORMAL", "HIGH"] as FocusLevel[]).map((lvl) => (
                         <button

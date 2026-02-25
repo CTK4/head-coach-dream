@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -168,7 +169,7 @@ export default function Tampering() {
                               </button>
                             </div>
                             <div className="mt-0.5 text-xs text-muted-foreground">
-                              {p.age} | {normalizePos(p.pos)} · Market {moneyShort(p.market)}/yr
+                              {p.age} | {getPositionLabel(normalizePos(p.pos))} · Market {moneyShort(p.market)}/yr
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -300,7 +301,7 @@ export default function Tampering() {
               state.tampering.shortlistPlayerIds.map((id) => (
                 <div key={id} className="rounded-xl border p-3 flex items-center justify-between">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate">{state.tampering.nameByPlayerId[id] ?? `Player ${id}`}</div>
+                    <div className="font-semibold truncate">{state.tampering.nameByPlayerId[id] ?? "Unknown Player"}</div>
                     <div className="text-xs text-muted-foreground">
                       Interest {pct(state.tampering.interestByPlayerId[id] ?? 0)} · Soft {state.tampering.softOffersByPlayerId[id] ? "Yes" : "No"}
                     </div>

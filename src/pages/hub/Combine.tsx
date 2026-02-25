@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useGame, getDraftClass } from "@/context/GameContext";
 import { IntelMeters } from "@/components/IntelMeters";
 import { ProspectProfileModal } from "@/components/ProspectProfileModal";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const POS_TABS = ["Top", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"];
 
@@ -44,7 +45,7 @@ export default function Combine() {
       {prospects.slice(0, 80).map((p) => (
         <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
-            <button className="font-semibold" onClick={() => setProfileId(p.id)}>{p.name} ({p.pos})</button>
+            <button className="font-semibold" onClick={() => setProfileId(p.id)}>{p.name} ({getPositionLabel(p.pos)})</button>
             <IntelMeters intel={intelById[p.id]} />
             <div className="text-xs opacity-70">40 {combine[p.id]?.forty ?? "-"} · RAS {combine[p.id]?.ras ?? "-"}</div>
           </div>

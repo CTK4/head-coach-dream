@@ -5,6 +5,7 @@ import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { useGame, type GmMode, type PriorityPos } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PlaybookScreen from "@/pages/hub/strategy/PlaybookScreen";
 import {
@@ -308,7 +309,7 @@ function PrioritiesScreen() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {top3.length ? top3.map((p) => <Badge key={p}>{p}</Badge>) : <span className="text-sm text-slate-400">None selected</span>}
+              {top3.length ? top3.map((p) => <Badge key={p}>{getPositionLabel(p)}</Badge>) : <span className="text-sm text-slate-400">None selected</span>}
             </div>
             <div className="grid grid-cols-3 gap-2">
               {POS_GROUPS.map((p) => (
@@ -319,7 +320,7 @@ function PrioritiesScreen() {
                     priorities.includes(p) ? "border-blue-400/40 bg-blue-500/10 text-white" : "border-white/10 bg-white/5"
                   }`}
                 >
-                  {p}
+                  {getPositionLabel(p)}
                 </button>
               ))}
             </div>

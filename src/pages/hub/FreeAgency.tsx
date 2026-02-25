@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { IntelMeters } from "@/components/IntelMeters";
 import { PlayerNameLink } from "@/components/players/PlayerNameLink";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const TABS = ["Top", "Offense", "Defense", "Special"];
 const groupTab = (pos: string) => (["QB", "RB", "WR", "TE", "OL"].includes(pos) ? "Offense" : ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? "Defense" : ["K", "P"].includes(pos) ? "Special" : "Top");
@@ -32,7 +33,7 @@ export default function FreeAgency() {
         <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
             <div className="font-semibold">
-              <PlayerNameLink playerId={p.id} name={p.name} pos={p.pos} namespace="free-agency" /> {state.freeAgency.signingsByPlayerId[p.id] ? "(SIGNED)" : ""}
+              <PlayerNameLink playerId={p.id} name={p.name} pos={getPositionLabel(p.pos)} namespace="free-agency" /> {state.freeAgency.signingsByPlayerId[p.id] ? "(SIGNED)" : ""}
             </div>
             <div className="text-xs opacity-70">OVR {p.ovr} · Age {p.age}</div>
             <IntelMeters intel={state.offseasonData.scouting.intelByFAId[p.id]} />

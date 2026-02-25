@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useGame, type TagType } from "@/context/GameContext";
 import { getContracts, getPlayers } from "@/data/leagueDb";
 import { normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { resolveTagCost, posTagGroup } from "@/engine/tagValues";
 import { LockedPhaseCard } from "@/components/hub/LockedPhaseCard";
@@ -343,7 +344,7 @@ export default function TagCenter() {
           <SheetHeader className="pb-2">
             <SheetTitle>
               Apply Tag
-              {focus ? ` — ${focus.name} (${focus.pos})` : ""}
+              {focus ? ` — ${focus.name} (${getPositionLabel(focus.pos)})` : ""}
             </SheetTitle>
           </SheetHeader>
 
@@ -353,7 +354,7 @@ export default function TagCenter() {
               <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap text-sm">
                   <span className="font-semibold">{focus.name}</span>
-                  <Badge variant="outline">{focus.pos}</Badge>
+                  <Badge variant="outline">{getPositionLabel(focus.pos)}</Badge>
                   <span className="text-muted-foreground">{focus.tagGroup}</span>
                   <span className="text-muted-foreground">·</span>
                   <span>OVR {focus.ovr}</span>
