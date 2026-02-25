@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
@@ -87,7 +88,7 @@ export default function RosterAudit() {
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div className="truncate font-semibold text-slate-100">
                           {p.name ?? p.fullName ?? "Player"}{" "}
-                          <span className="text-slate-200/70">({normalizePos(String(p.pos ?? "UNK"))})</span>
+                          <span className="text-slate-200/70">({getPositionLabel(normalizePos(String(p.pos ?? "UNK")))})</span>
                         </div>
                         <PlayerStatusIcons player={p} />
                         <div className="text-xs text-slate-200/70">{money(apy)} APY</div>

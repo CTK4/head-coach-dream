@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getPositionLabel } from "@/lib/displayLabels";
 import {
   Select,
   SelectContent,

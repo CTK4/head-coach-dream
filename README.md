@@ -98,3 +98,9 @@ Where `<worker-host>` is either:
 - `https://assets.example.com` (custom domain)
 
 The Worker preserves object content headers via `writeHttpMetadata`, returns `404` for missing keys/routes, and sets cache policy `public, max-age=31536000, immutable`.
+
+## Contributor guidelines
+
+- Never render enum constants or internal IDs directly in UI text (e.g. `AIR_RAID`, `teamId`, `QB`, raw status codes).
+- Use centralized mapping helpers from `src/lib/displayLabels.ts` for anything surfaced to users (schemes, playbooks, positions, and other domain enums).
+- If a new enum appears in UI, add its label mapping in `src/lib/displayLabels.ts` first, then use the helper in components.

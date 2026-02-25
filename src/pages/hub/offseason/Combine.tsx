@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HubShell } from "@/components/franchise-hub/HubShell";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useGame } from "@/context/GameContext";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -16,15 +17,30 @@ export default function Combine() {
   const { openProspectProfile, modal } = useProspectProfileModal(state);
   const [posFilter, setPosFilter] = useState<string>("ALL");
 
-  const combine = (state as any).offseasonData?.combine ?? {};
-  const prospects: any[] = Array.isArray(combine.prospects) ? combine.prospects : [];
+  const combine = state.offseasonData.combine;
+
+  useEffect(() => {
+    dispatch({ type: "OFFSEASON_SET_STEP", payload: { stepId: "COMBINE" } });
+  }, [dispatch]);
+
+  const prospects: any[] = useMemo(() => {
+    if (Array.isArray(combine.prospects) && combine.prospects.length > 0) return combine.prospects;
+
+    const resultIds = new Set(Object.keys(combine.results ?? {}));
+    const board = (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : state.offseasonData.preDraft.board) as any[];
+    if (!board.length) return [];
+    return resultIds.size ? board.filter((p) => resultIds.has(String(p.id ?? p.playerId ?? ""))) : board;
+  }, [combine.prospects, combine.results, state.offseasonData.draft.board, state.offseasonData.preDraft.board]);
 
   const filtered = useMemo(() => {
-    const list = prospects.slice();
+    const list = prospects
+      .map((p) => ({ ...p, ...(combine.results?.[String(p.id ?? p.playerId ?? "")] ?? {}) }))
+      .sort((a, b) => Number(b.ras ?? -1) - Number(a.ras ?? -1));
     if (posFilter === "ALL") return list;
     return list.filter((p) => String(p.pos ?? "").toUpperCase() === posFilter);
-  }, [prospects, posFilter]);
+  }, [prospects, posFilter, combine.results]);
 
+  const isCombineReady = combine.generated && prospects.length > 0 && Object.keys(combine.results ?? {}).length > 0;
   const top = filtered.slice(0, 80);
 
   function completeStep() {
@@ -43,7 +59,7 @@ export default function Combine() {
           subtitle="Review athletic testing and measurables. Use filters to narrow the board."
           right={
             <>
-              <Badge variant="outline">{prospects.length} Prospects</Badge>
+              <Badge variant="outline">{isCombineReady ? `${prospects.length} Prospects` : "Loading combine..."}</Badge>
               <Button variant="outline" className="min-h-11" onClick={completeStep}>
                 Complete Step
               </Button>
@@ -68,8 +84,10 @@ export default function Combine() {
           <Separator className="my-3 bg-slate-300/15" />
 
           <div className="max-h-[560px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
-            {top.length === 0 ? (
-              <div className="text-sm text-slate-200/70">No prospects available.</div>
+            {!isCombineReady ? (
+              <div className="text-sm text-slate-200/70">Generating combine data for this season…</div>
+            ) : top.length === 0 ? (
+              <div className="text-sm text-slate-200/70">No combine prospects found for this season.</div>
             ) : (
               top.map((p, idx) => {
                 const name = String(p.name ?? p.fullName ?? "Prospect");
@@ -77,7 +95,7 @@ export default function Combine() {
                 const forty = p.forty != null ? String(p.forty) : "—";
                 const vert = p.vert != null ? String(p.vert) : "—";
                 const bench = p.bench != null ? String(p.bench) : "—";
-                const ras = p.ras != null ? clamp(Number(p.ras), 0, 10).toFixed(1) : "—";
+                const combineScore10 = computeCombineScore(p as Record<string, unknown>).combineScore10;
 
                 return (
                   <div
@@ -93,7 +111,7 @@ export default function Combine() {
                         <span className="text-slate-200/70">({pos})</span>
                       </div>
                       <div className="truncate text-xs text-slate-200/70">
-                        40 {forty} · Vert {vert} · Bench {bench} · RAS {ras}
+                        40 {forty} · Vert {vert} · Bench {bench} · CS {formatCombineScore10(combineScore10)}
                       </div>
                     </div>
                     <Badge variant="secondary">Tier {clamp(Number(p.tier ?? 60), 1, 99)}</Badge>

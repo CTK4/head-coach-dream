@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const EXPIRING = [
   { id: "PLY_1001", name: "D. Reed", pos: "WR", ovr: 84, askApy: 8_500_000 },
@@ -43,7 +44,7 @@ export default function Resigning() {
             <Card key={p.id}>
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">{p.name} <span className="text-muted-foreground font-normal">({p.pos})</span></div>
+                  <div className="font-semibold">{p.name} <span className="text-muted-foreground font-normal">({getPositionLabel(p.pos)})</span></div>
                   <Badge variant="outline">OVR {p.ovr}</Badge>
                 </div>
                 <div className="text-sm text-muted-foreground">Ask: ${Math.round(p.askApy / 1_000_000)}M/yr</div>

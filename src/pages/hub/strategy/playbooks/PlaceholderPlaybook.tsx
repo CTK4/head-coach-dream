@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPlaybookLabel } from "@/lib/displayLabels";
 
 type PlaceholderPlaybookProps = {
   side: "Offense" | "Defense";
@@ -13,7 +14,7 @@ export default function PlaceholderPlaybook({ side, schemeId }: PlaceholderPlayb
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          Placeholder for <span className="font-mono text-slate-200">{schemeId}</span>. Paste your full playbook component into this file when ready.
+          Placeholder for <span className="font-mono text-slate-200">{getPlaybookLabel(schemeId)}</span>. Paste your full playbook component into this file when ready.
         </p>
       </CardContent>
     </Card>

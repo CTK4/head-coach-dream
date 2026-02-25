@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -79,7 +80,7 @@ export default function DraftResults() {
                     <div key={p.overall} className="border rounded-md p-3 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-semibold truncate">
-                          R{p.round} #{p.pickInRound} · {r?.name ?? p.prospectId} <span className="text-muted-foreground">({r?.pos ?? "UNK"})</span>
+                          R{p.round} #{p.pickInRound} · {r?.name ?? p.prospectId} <span className="text-muted-foreground">({getPositionLabel(r?.pos ?? "UNK")})</span>
                         </div>
                         <div className="text-xs text-muted-foreground">
                           Scout: OVR {r?.scoutOvr ?? "—"} · DEV {r?.scoutDev ?? "—"} · Conf {r?.scoutConf ?? "—"}
@@ -125,7 +126,7 @@ export default function DraftResults() {
                           const r = rookById[p.rookiePlayerId];
                           return (
                             <div key={p.overall} className="flex items-center justify-between gap-2">
-                              <div className="min-w-0 truncate">R{p.round}#{p.pickInRound} · {r?.name ?? p.prospectId} <span className="text-muted-foreground">({r?.pos ?? "UNK"})</span></div>
+                              <div className="min-w-0 truncate">R{p.round}#{p.pickInRound} · {r?.name ?? p.prospectId} <span className="text-muted-foreground">({getPositionLabel(r?.pos ?? "UNK")})</span></div>
                               <div className="text-muted-foreground text-xs shrink-0">OVR {r?.scoutOvr ?? "—"} · Conf {r?.scoutConf ?? "—"}</div>
                             </div>
                           );

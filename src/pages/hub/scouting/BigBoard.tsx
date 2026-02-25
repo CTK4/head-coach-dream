@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
+import { computeCombineScore } from "@/engine/scouting/combineScore";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DT", "EDGE", "LB", "K", "P", "ALL"];
 
@@ -16,7 +18,7 @@ export default function BigBoard() {
   const [ascending, setAscending] = useState(true);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [boardOrder, setBoardOrder] = useState<string[]>([]);
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   const { openProspectProfile, modal } = useProspectProfileModal(state);
 
   useEffect(() => {
@@ -36,36 +38,44 @@ export default function BigBoard() {
         confidence: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence as number) ?? 0),
         height: String(p.height ?? "—"),
         weight: String(p.weight ?? "—"),
+        combineScore10: computeCombineScore({
+          ...(p as Record<string, unknown>),
+          ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+          ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+        }).combineScore10,
       })),
-    [draftClass, scouting?.scoutProfiles]
+    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId]
   );
 
   useEffect(() => {
     if (!normalizedProspects.length) return;
-    setBoardOrder((prev) => (prev.length ? prev.filter((id) => normalizedProspects.some((p) => p.id === id)) : normalizedProspects.map((p) => p.id)));
-  }, [normalizedProspects]);
+    dispatch({ type: "SCOUT_HYDRATE_MY_BOARD_ORDER", payload: { prospectIds: normalizedProspects.map((p) => p.id) } });
+  }, [dispatch, normalizedProspects]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(pointer: coarse)");
+    const apply = () => setIsCoarsePointer(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
 
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
 
   const filtered = normalizedProspects.filter((p) => activePos === "ALL" || normalizeScoutingDraftPosition(p.pos) === activePos);
   const scoutOrdered = [...filtered].sort((a, b) => (ascending ? a.estHigh - b.estHigh : b.estHigh - a.estHigh));
-  const myOrdered = boardOrder
+  const myBoardOrder = scouting.myBoardOrder ?? [];
+  const myOrdered = myBoardOrder
     .map((id) => filtered.find((p) => p.id === id))
     .filter((p): p is Prospect => Boolean(p));
 
   const rendered = boardMode === "MY" ? myOrdered : scoutOrdered;
+  const canDrag = boardMode === "MY" && !isCoarsePointer;
 
   const onDrop = (targetId: string) => {
-    if (!draggedId || draggedId === targetId) return;
-    setBoardOrder((prev) => {
-      const next = [...prev];
-      const from = next.indexOf(draggedId);
-      const to = next.indexOf(targetId);
-      if (from < 0 || to < 0) return prev;
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
+    if (!canDrag || !draggedId || draggedId === targetId) return;
+    dispatch({ type: "SCOUT_REORDER_MY_BOARD", payload: { draggedId, targetId } });
     setDraggedId(null);
     setDragOverId(null);
   };
@@ -76,7 +86,7 @@ export default function BigBoard() {
         <h1 className="text-xl font-bold">Big Board</h1>
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
           {POSITION_PILLS.map((p) => (
-            <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{p}</button>
+            <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{getPositionLabel(p)}</button>
           ))}
         </div>
 
@@ -99,14 +109,17 @@ export default function BigBoard() {
                 isExpanded={openId === p.id}
                 onToggle={() => setOpenId((v) => (v === p.id ? null : p.id))}
                 onDragStart={(e) => {
+                  if (!canDrag) return;
                   e.dataTransfer.effectAllowed = "move";
                   setDraggedId(p.id);
                 }}
                 onDragOver={(e) => {
+                  if (!canDrag) return;
                   e.preventDefault();
                   setDragOverId(p.id);
                 }}
                 onDrop={() => onDrop(p.id)}
+                draggable={canDrag}
                 isDragging={draggedId === p.id}
                 isDragOver={dragOverId === p.id}
                 report={report}
