@@ -153,8 +153,13 @@ function DefensiveIntelPanel({ g }: { g: GameSim }) {
   const pressureScore = ((defendingRatings?.blitzImpact ?? 68) / 100) * 0.55 + (blitzRate / 100) * 0.45;
   const pressureLabel = pressureScore >= 0.78 ? "High" : pressureScore >= 0.62 ? "Moderate" : "Low";
   const observedSnaps = g.observedSnaps ?? 0;
-  const confidence = Math.min(100, Math.round((observedSnaps / 12) * 100));
-  const confidenceDots = Math.max(1, Math.min(6, Math.round(confidence / 16.7)));
+  const CONFIDENCE_WINDOW = 12;
+  const MAX_CONFIDENCE_DOTS = 6;
+  const confidence = Math.min(100, Math.round((observedSnaps / CONFIDENCE_WINDOW) * 100));
+  const confidenceDots = Math.min(
+    MAX_CONFIDENCE_DOTS,
+    Math.round((confidence / 100) * MAX_CONFIDENCE_DOTS),
+  );
 
   return (
     <Card className="border-slate-700/70 bg-slate-950/60 text-slate-100">
