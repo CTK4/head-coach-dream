@@ -49,6 +49,11 @@ import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 import FrontOffice from "@/pages/hub/FrontOffice";
 import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
 import InterviewRunner from "@/pages/InterviewRunner";
+import Landing from "@/pages/Landing";
+import LoadSave from "@/pages/LoadSave";
+import SaveModeSelect from "@/pages/SaveModeSelect";
+import StoryInterview from "@/pages/story/StoryInterview";
+import FreePlaySetup from "@/pages/FreePlaySetup";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +105,19 @@ function LegacyHubPlayerRedirect() {
   return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />;
 }
 
+function RootEntry() {
+  const { state } = useGame();
+  const showMenu = typeof window !== "undefined" && sessionStorage.getItem("show_main_menu") === "1";
+  if (showMenu) {
+    sessionStorage.removeItem("show_main_menu");
+    return <Landing />;
+  }
+  if (state.phase === "HUB" && state.coach?.name && state.careerStage) {
+    return <Navigate to="/hub" replace />;
+  }
+  return <Landing />;
+}
+
 // Scouting Routes Wrapper
 function ScoutingRoutes() {
     return (
@@ -135,7 +153,11 @@ const App = () => (
             <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
             <Route path="/onboarding/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
 
-            <Route path="/" element={<Navigate to="/onboarding" replace />} />
+            <Route path="/" element={<RootEntry />} />
+            <Route path="/load-save" element={<LoadSave />} />
+            <Route path="/new-save" element={<SaveModeSelect />} />
+            <Route path="/story/interview" element={<StoryInterview />} />
+            <Route path="/free-play/setup" element={<FreePlaySetup />} />
             <Route path="/background" element={<Navigate to="/onboarding/background" replace />} />
             <Route path="/interviews" element={<Navigate to="/onboarding/interviews" replace />} />
             <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />

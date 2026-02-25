@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { computeHOFm } from "@/engine/hofMonitor";
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -72,6 +73,7 @@ export default function PlayerProfile() {
 
   const careerStats = state.playerCareerStatsById?.[playerId];
   const careerSeasons = careerStats?.seasons ?? [];
+  const hof = computeHOFm({ pos, overall: ovr, careerStats, accolades: state.playerAccolades?.[playerId] as any });
 
   const offers = state.freeAgency.offersByPlayerId[playerId] ?? [];
   const hasUserOffer = offers.some((o) => o.isUser && o.status !== "WITHDRAWN");
@@ -187,6 +189,21 @@ export default function PlayerProfile() {
                   </Table>
                 </CollapsibleContent>
               </Collapsible>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
+            <CardHeader className="pb-2"><CardTitle className="text-base tracking-wide">HALL OF FAME MONITOR</CardTitle></CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {!hof ? <div className="text-muted-foreground">HOF Monitor unlocks after 3 seasons.</div> : <>
+                <div className="flex items-center justify-between"><Badge className={hof.tier === "LOCK" ? "bg-yellow-400 text-black" : hof.tier === "STRONG" ? "bg-blue-600 text-white" : hof.tier === "BORDERLINE" ? "bg-yellow-200 text-black" : hof.tier === "LONGSHOT" ? "bg-slate-500 text-slate-100" : "bg-secondary text-muted-foreground"}>{hof.tier}</Badge><div className="text-2xl font-black">{hof.score}</div></div>
+                <div className="text-muted-foreground">{hof.label}</div>
+                <div className="h-2 rounded bg-muted overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min(100, (hof.score / 150) * 100)}%` }} /></div>
+                <Collapsible>
+                  <CollapsibleTrigger asChild><Button variant="outline" className="w-full justify-between">Score Breakdown <span>▼</span></Button></CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-1">{hof.breakdown.map((f) => <div key={f.label} className="flex justify-between"><span>{f.label}</span><span>+{f.value}</span></div>)}<div className="border-t pt-1 flex justify-between font-semibold"><span>Total</span><span>{hof.score}</span></div></CollapsibleContent>
+                </Collapsible>
+              </>}
             </CardContent>
           </Card>
 

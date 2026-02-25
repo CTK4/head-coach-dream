@@ -105,6 +105,7 @@ import type { NewsItem as LeagueNewsItem } from "@/types/news";
 import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
 import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
+import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -577,6 +578,12 @@ export type GameState = {
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
+  storySetup?: {
+    teamId: string;
+    teamName: string;
+    gmName?: string;
+    teamLocked: true;
+  };
   autonomyRating?: number;
   ownerPatience?: number;
   season: number;
@@ -611,6 +618,8 @@ export type GameState = {
     regularSeasonWeek: number;
     schedule: LeagueSchedule | null;
   };
+  unreadNewsCount: number;
+  lastNewsReadWeek: number;
   offseasonNews: LeagueNewsItem[];
   newsHistory: LeagueNewsItem[];
   retiredPlayers: RetiredPlayerRecord[];
@@ -707,6 +716,7 @@ export type DraftState = {
   };
 
 export type GameAction =
+  | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string } }
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
@@ -1066,6 +1076,8 @@ function createInitialState(): GameState {
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: defaultNews(2026), newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    unreadNewsCount: 0,
+    lastNewsReadWeek: 0,
     offseasonNews: [],
     newsHistory: [],
     retiredPlayers: [],
@@ -1913,7 +1925,7 @@ function pushNews(state: GameState, line: string): GameState {
 
 function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
   const news = [makeNewsItem(item.title, { body: item.body, category: item.category }), ...(state.hub.news ?? [])].slice(0, 200);
-  return { ...state, hub: { ...state.hub, news } };
+  return { ...state, hub: { ...state.hub, news }, unreadNewsCount: (state.unreadNewsCount ?? 0) + 1 };
 }
 
 function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number): LeagueNewsItem[] {
@@ -2177,6 +2189,8 @@ function seasonRollover(state: GameState): GameState {
       regularSeasonWeek: 1,
       schedule,
     },
+    unreadNewsCount: 0,
+    lastNewsReadWeek: 0,
     tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
     freeAgency: {
       ui: { mode: "NONE" },
@@ -3273,6 +3287,24 @@ function patiencePenalty(args: {
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
+    case "INIT_NEW_GAME_FROM_STORY": {
+      const fresh = createInitialState();
+      return {
+        ...fresh,
+        phase: "CREATE",
+        acceptedOffer: action.payload.offer,
+        autonomyRating: action.payload.offer.autonomy,
+        ownerPatience: action.payload.offer.patience,
+        userTeamId: action.payload.offer.teamId,
+        teamId: action.payload.offer.teamId,
+        storySetup: {
+          teamId: action.payload.offer.teamId,
+          teamName: action.payload.teamName,
+          gmName: action.payload.gmName,
+          teamLocked: true,
+        },
+      };
+    }
     case "SET_COACH": {
       const nextCoach = { ...state.coach, ...action.payload };
       const lockedCoord = nextCoach.archetypeId === "oc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
@@ -3337,7 +3369,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "HUB_MARK_NEWS_READ": {
       const ids: Record<string, true> = { ...(state.hub.newsReadIds ?? {}) };
       for (const item of state.hub.news ?? []) ids[item.id] = true;
-      return { ...state, hub: { ...state.hub, newsReadIds: ids } };
+      return { ...state, hub: { ...state.hub, newsReadIds: ids }, unreadNewsCount: 0, lastNewsReadWeek: Number(state.hub.regularSeasonWeek ?? state.week ?? 0) };
     }
     case "HUB_MARK_NEWS_ITEM_READ": {
       const id = String(action.payload.id);
@@ -6407,6 +6439,9 @@ function loadState(): GameState {
       pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
       ui: { ...initial.ui, ...((migrated as any).ui ?? {}) },
       hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
+      unreadNewsCount: Number((migrated as any).unreadNewsCount ?? 0),
+      lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
+      storySetup: (migrated as any).storySetup,
     };
     out = ensureAccolades(bootstrapAccolades(out));
     out = ensureLeagueGmMap(out);
@@ -6432,6 +6467,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      syncCurrentSave(state, getActiveSaveId() ?? undefined);
     } catch (error) {
       console.error("[state-save] Failed to persist save data", error);
     }
