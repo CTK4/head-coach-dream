@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { getDraftClass as getDraftClassFromSim } from "@/engine/draftSim";
 import { IntelMeters } from "@/components/IntelMeters";
 import { getPositionLabel } from "@/lib/displayLabels";
+import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
 type DraftTab = "RESULTS" | "POOL" | "MY_PICKS";
 
@@ -44,7 +45,7 @@ export default function Draft() {
 
   const available = useMemo(() => {
     let list = getDraftClassFromSim().filter((p) => !sim.takenProspectIds[p.prospectId]);
-    if (pos !== "ALL") list = list.filter((p) => p.pos === pos);
+    if (pos !== "ALL") list = list.filter((p) => normalizeProspectPosition(p.pos, "DRAFT") === pos);
     return list;
   }, [sim.takenProspectIds, pos]);
 
@@ -149,7 +150,7 @@ export default function Draft() {
         <section className="space-y-3">
           <div className="overflow-x-auto pb-1">
             <div className="flex min-w-max gap-2">
-              {["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => (
+              {["ALL", "QB", "RB", "WR", "TE", "OL", "DT", "EDGE", "LB", "CB", "S"].map((x) => (
                 <button key={x} className="min-h-11 rounded-full border px-3 py-1" onClick={() => setPos(x)}>
                   {getPositionLabel(x)}
                 </button>
@@ -162,6 +163,7 @@ export default function Draft() {
               <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">
+                    {p.name} ({getPositionLabel(normalizeProspectPosition(p.pos, "DRAFT"))})
                     {p.name} ({getPositionLabel(p.pos)})
                   </div>
                   <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
@@ -205,6 +207,7 @@ export default function Draft() {
             {sim.selections.map((pick) => (
               <div key={`${pick.overall}-${pick.prospectId}`} className="rounded border px-3 py-2">
                 <div className="font-semibold text-sm">
+                  {pick.overall}. {pick.name} ({getPositionLabel(normalizeProspectPosition(pick.pos, "DRAFT"))})
                   {pick.overall}. {pick.name} ({getPositionLabel(pick.pos)})
                 </div>
                 <div className="text-xs text-slate-500">
@@ -239,6 +242,7 @@ export default function Draft() {
             <div className="space-y-2">
               {myCompletedPicks.map(({ slot, selection }) => (
                 <div key={slot.overall} className="rounded border px-3 py-2 text-sm">
+                  O{slot.overall} · {selection?.name} ({getPositionLabel(normalizeProspectPosition(String(selection?.pos ?? "ATH"), "DRAFT"))})
                   O{slot.overall} · {selection?.name} ({selection ? getPositionLabel(selection.pos) : ""})
                 </div>
               ))}

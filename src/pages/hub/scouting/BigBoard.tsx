@@ -5,8 +5,9 @@ import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
 import { computeCombineScore } from "@/engine/scouting/combineScore";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
+import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
-const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DL", "LB", "K", "P", "ALL"];
+const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DT", "EDGE", "LB", "K", "P", "ALL"];
 
 export default function BigBoard() {
   const { state, dispatch } = useGame();
@@ -30,7 +31,7 @@ export default function BigBoard() {
       draftClass.map((p, i) => ({
         id: String(p.id ?? p.prospectId ?? p["Player ID"] ?? `p-${i}`),
         name: String(p.name ?? p["Name"] ?? "Unknown Prospect"),
-        pos: String(p.pos ?? p["POS"] ?? "ATH"),
+        pos: normalizeProspectPosition(String(p.pos ?? p["POS"] ?? "ATH"), "SCOUTING"),
         school: String(p.school ?? p["School"] ?? "Unknown"),
         estLow: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.estLow as number) ?? 65),
         estHigh: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.estHigh as number) ?? 85),
