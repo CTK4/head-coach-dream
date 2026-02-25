@@ -12,7 +12,8 @@ export function normalizeProspectPosition(rawPos: string, taxonomy: ProspectPosi
   const tokenSet = new Set(tokens);
   const compact = tokens.join("");
 
-  const hasAny = (...values: string[]) => values.some((v) => tokenSet.has(v) || compact.includes(v));
+  const hasAny = (...values: string[]) =>
+    values.some((v) => tokenSet.has(v) || (v.length > 1 && compact.includes(v)));
 
   let normalized = tokens[0] ?? "ATH";
 
@@ -22,8 +23,8 @@ export function normalizeProspectPosition(rawPos: string, taxonomy: ProspectPosi
   else if (hasAny("QB")) normalized = "QB";
   else if (hasAny("C", "OC", "OG", "G", "IOL", "INTERIOROL")) normalized = "IOL";
   else if (hasAny("OT", "T", "LT", "RT", "OLT")) normalized = "OT";
-  else if (hasAny("EDGE", "DE", "RUSH", "ER", "OLBEDGE", "ED")) normalized = "EDGE";
-  else if (hasAny("DT", "NT", "IDL", "DI", "INTERIORDL", "IDLINEMAN")) normalized = "DT";
+  else if (hasAny("EDGE", "DE", "RUSH", "OLBEDGE")) normalized = "EDGE";
+  else if (hasAny("DT", "NT", "IDL", "INTERIORDL", "IDLINEMAN")) normalized = "DT";
   else if (hasAny("LB", "MLB", "ILB", "OLB")) normalized = "LB";
   else if (hasAny("CB", "DB")) normalized = "CB";
   else if (hasAny("FS", "SS", "SAFETY", "S")) normalized = "S";
