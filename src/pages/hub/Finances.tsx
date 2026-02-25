@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -43,7 +44,7 @@ export default function Finances() {
         return {
           id: String(p.playerId),
           name: String(p.fullName),
-          pos: normalizePos(String(p.pos ?? "UNK")),
+          pos: getPositionLabel(normalizePos(String(p.pos ?? "UNK"))),
           ovr: Number(p.overall ?? 0),
           capHit: Number(c?.capHit ?? 0),
           yearsLeft: Number(c?.yearsRemaining ?? 0),

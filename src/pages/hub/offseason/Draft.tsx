@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { getDraftClass as getDraftClassFromSim } from "@/engine/draftSim";
 import { IntelMeters } from "@/components/IntelMeters";
 import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 type DraftTab = "RESULTS" | "POOL" | "MY_PICKS";
 
@@ -90,6 +91,11 @@ export default function Draft() {
         <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
             <div className="font-semibold">{p.name} ({p.pos})</div>
+      <div className="overflow-x-auto pb-1"><div className="flex min-w-max gap-2">{["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => <button key={x} className="min-h-11 rounded-full border px-3 py-1" onClick={() => setPos(x)}>{getPositionLabel(x)}</button>)}</div></div>
+      {available.slice(0, 80).map((p) => (
+        <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold">{p.name} ({getPositionLabel(p.pos)})</div>
             <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
     <div className="p-4 space-y-4">
       <div className="space-y-2">

@@ -7,6 +7,7 @@ import {
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -105,7 +106,7 @@ export default function ScoutingCombine() {
                 <div className="min-w-0">
                   <div className="truncate font-semibold">
                     <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
-                    <span className="opacity-70">{p.pos}</span>
+                    <span className="opacity-70">{getPositionLabel(p.pos)}</span>
                   </div>
                   <div className="text-xs opacity-70">Band {s.estLow}-{s.estHigh} • Conf {s.confidence}%</div>
                 </div>
@@ -153,7 +154,7 @@ export default function ScoutingCombine() {
                 <div className="min-w-0">
                   <div className="truncate font-semibold">
                     <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
-                    <span className="opacity-70">{p.pos}</span>
+                    <span className="opacity-70">{getPositionLabel(p.pos)}</span>
                   </div>
                   <div className="text-xs opacity-70">Char {s.clarity.CHAR}% • Fit {s.clarity.FIT}% • Leadership: {s.revealed.leadershipTag ?? "—"}</div>
                 </div>

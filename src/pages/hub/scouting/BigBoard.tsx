@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
+import { computeCombineScore } from "@/engine/scouting/combineScore";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DT", "EDGE", "LB", "K", "P", "ALL"];
 
@@ -36,8 +38,13 @@ export default function BigBoard() {
         confidence: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence as number) ?? 0),
         height: String(p.height ?? "—"),
         weight: String(p.weight ?? "—"),
+        combineScore10: computeCombineScore({
+          ...(p as Record<string, unknown>),
+          ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+          ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+        }).combineScore10,
       })),
-    [draftClass, scouting?.scoutProfiles]
+    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId]
   );
 
   useEffect(() => {
@@ -79,7 +86,7 @@ export default function BigBoard() {
         <h1 className="text-xl font-bold">Big Board</h1>
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
           {POSITION_PILLS.map((p) => (
-            <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{p}</button>
+            <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{getPositionLabel(p)}</button>
           ))}
         </div>
 

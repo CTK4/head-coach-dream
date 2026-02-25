@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -85,7 +86,7 @@ export default function PlayerContractScreen() {
       <ScreenHeader
         title="CONTRACT BREAKDOWN"
         showBack
-        subtitle={`${name} · ${pos}`}
+        subtitle={`${name} · ${getPositionLabel(pos)}`}
         rightAction={
           <div className="flex gap-1 flex-wrap justify-end">
             {isUfa && (

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import type { ResignOffer } from "@/engine/offseasonData";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 type PlayerRow = {
   playerId: string;
@@ -129,7 +130,7 @@ export default function ResignPlayers() {
                       <button className="hover:underline" onClick={() => navigate(`/hub/player/${p.playerId}`)}>
                         {p.fullName}
                       </button>{" "}
-                      <span className="text-muted-foreground">({p.pos})</span>
+                      <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Age {p.age ?? "—"} · {depth ? `Depth ${depth}` : "Depth —"} · OVR {p.overall ?? "—"}

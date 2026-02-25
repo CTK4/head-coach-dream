@@ -167,7 +167,7 @@ export default function Draft() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold truncate">{p.name}</span><Badge variant="outline">{p.pos}</Badge><span className="text-xs text-muted-foreground">#{p.rank}</span>{p.tier ? <Badge variant="secondary">{p.tier}</Badge> : null}
+                            <span className="font-semibold truncate">{p.name}</span><Badge variant="outline">{getPositionLabel(p.pos)}</Badge><span className="text-xs text-muted-foreground">#{p.rank}</span>{p.tier ? <Badge variant="secondary">{p.tier}</Badge> : null}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">{p.college}</div>
                         </div>
@@ -223,7 +223,7 @@ export default function Draft() {
 
           <Card>
             <CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardTitle>Recent Picks</CardTitle><Badge variant="secondary">{state.draft.selections.length}/224</Badge></div></CardHeader>
-            <CardContent className="pt-0"><ScrollArea className="h-[60vh] pr-3"><div className="space-y-2">{recent.map((p) => <div key={`${p.overall}-${p.prospectId}`} className="rounded-md border px-3 py-2"><div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">{p.overall}. {p.name}</div><Badge variant="secondary">{p.pos}</Badge></div><div className="text-xs text-muted-foreground">R{p.round}P{p.pickInRound} · {p.teamId} · #{p.rank}</div></div>)}{!recent.length && <div className="text-sm text-muted-foreground">No picks yet.</div>}</div></ScrollArea></CardContent>
+            <CardContent className="pt-0"><ScrollArea className="h-[60vh] pr-3"><div className="space-y-2">{recent.map((p) => <div key={`${p.overall}-${p.prospectId}`} className="rounded-md border px-3 py-2"><div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">{p.overall}. {p.name}</div><Badge variant="secondary">{getPositionLabel(p.pos)}</Badge></div><div className="text-xs text-muted-foreground">R{p.round}P{p.pickInRound} · {p.teamId} · #{p.rank}</div></div>)}{!recent.length && <div className="text-sm text-muted-foreground">No picks yet.</div>}</div></ScrollArea></CardContent>
           </Card>
         </div>
       </div>

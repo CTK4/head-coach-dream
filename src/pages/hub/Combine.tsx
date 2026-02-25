@@ -3,6 +3,8 @@ import { useGame, getDraftClass } from "@/context/GameContext";
 import { IntelMeters } from "@/components/IntelMeters";
 import { ProspectProfileModal } from "@/components/ProspectProfileModal";
 import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
+import { getPositionLabel } from "@/lib/displayLabels";
+import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 const POS_TABS = ["Top", "QB", "RB", "WR", "TE", "OL", "DT", "EDGE", "LB", "CB", "S"];
 
@@ -45,9 +47,9 @@ export default function Combine() {
       {prospects.slice(0, 80).map((p) => (
         <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
-            <button className="font-semibold" onClick={() => setProfileId(p.id)}>{p.name} ({p.pos})</button>
+            <button className="font-semibold" onClick={() => setProfileId(p.id)}>{p.name} ({getPositionLabel(p.pos)})</button>
             <IntelMeters intel={intelById[p.id]} />
-            <div className="text-xs opacity-70">40 {combine[p.id]?.forty ?? "-"} · RAS {combine[p.id]?.ras ?? "-"}</div>
+            <div className="text-xs opacity-70">40 {combine[p.id]?.forty ?? "-"} · CS {formatCombineScore10(computeCombineScore({ ...(p as Record<string, unknown>), ...(combine[p.id] ?? {}) }).combineScore10)}</div>
           </div>
           <div className="flex flex-col gap-2">
             <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "PROSPECT", targetId: p.id, actionType: "FILM_QUICK", prospect: p } })}>Film Quick (-2)</button>

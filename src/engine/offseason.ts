@@ -11,10 +11,15 @@ export type OffseasonStepId =
 
 export type OffseasonStep = { id: OffseasonStepId; title: string; desc: string };
 
+// Keep this flag for future reintroduction without removing tampering logic elsewhere.
+export const ENABLE_TAMPERING_STEP = false;
+
 export const OFFSEASON_STEPS: OffseasonStep[] = [
   { id: "RESIGNING", title: "Re-signing / Tags", desc: "Re-signing + Franchise/Transition tags." },
   { id: "COMBINE", title: "Scouting Combine", desc: "Athletic testing + initial evals." },
-  { id: "TAMPERING", title: "Legal Negotiating", desc: "UFA negotiating window (tampering)." },
+  ...(ENABLE_TAMPERING_STEP
+    ? ([{ id: "TAMPERING", title: "Legal Negotiating", desc: "UFA negotiating window (tampering)." }] as OffseasonStep[])
+    : []),
   { id: "FREE_AGENCY", title: "New League Year / FA / Trades", desc: "Free agency opens + trades begin." },
   { id: "PRE_DRAFT", title: "Pre-Draft", desc: "Top 30 visits, pro days, private workouts." },
   { id: "DRAFT", title: "Draft", desc: "Draft selections + rookie onboarding." },
@@ -24,6 +29,9 @@ export const OFFSEASON_STEPS: OffseasonStep[] = [
 ];
 
 export function nextOffseasonStepId(current: OffseasonStepId): OffseasonStepId | null {
+  if (!ENABLE_TAMPERING_STEP) {
+    if (current === "COMBINE" || current === "TAMPERING") return "FREE_AGENCY";
+  }
   const idx = OFFSEASON_STEPS.findIndex((s) => s.id === current);
   if (idx < 0) return OFFSEASON_STEPS[0].id;
   return OFFSEASON_STEPS[idx + 1]?.id ?? null;

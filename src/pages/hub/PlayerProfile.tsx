@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -61,6 +62,7 @@ export default function PlayerProfile() {
 
   const name = String(p.fullName ?? "Player");
   const pos = normalizePos(String(p.pos ?? "UNK"));
+  const posLabel = getPositionLabel(pos);
   const age = Number(p.age ?? 0);
   const ovr = clamp100(Number(p.overall ?? 0));
   const teamId = String(p.teamId ?? "");
@@ -91,7 +93,7 @@ export default function PlayerProfile() {
               <PlayerAvatar
                 playerId={playerId}
                 name={name}
-                pos={pos}
+                pos={posLabel}
                 size="lg"
                 className="border-white/15"
               />
@@ -100,7 +102,7 @@ export default function PlayerProfile() {
                 <div className="text-xl font-extrabold tracking-wide truncate">
                   {name}
                 </div>
-                <div className="text-sm text-muted-foreground">{pos}</div>
+                <div className="text-sm text-muted-foreground">{posLabel}</div>
                 <div className="text-sm text-muted-foreground">Age {age}</div>
                 <div className="mt-1 flex flex-wrap gap-2 text-sm">
                   {depth ? (

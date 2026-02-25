@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { getPositionLabel } from "@/lib/displayLabels";
+import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 const POS_FILTER_ALL = "ALL";
 
@@ -141,6 +143,10 @@ export default function PreDraft() {
                   const disableWorkoutAdd = (!w && allSlotsUsed) || v;
 
                   const gmEval = viewMode === "GM" ? getUserProspectEval(state, p) : null;
+                  const combineScore10 = computeCombineScore({
+                    ...(p as Record<string, unknown>),
+                    ...(state.offseasonData.combine.results?.[p.id] ?? {}),
+                  }).combineScore10;
 
                   return (
                     <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between gap-2">
@@ -150,16 +156,16 @@ export default function PreDraft() {
                           <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(p.id))}>
                             {p.name}
                           </button>{" "}
-                          <span className="text-muted-foreground">({p.pos})</span>
+                          <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
                         </div>
 
                         {viewMode === "CONSENSUS" ? (
                           <div className="text-xs text-muted-foreground">
-                            Grade {p.grade} · RAS {p.ras} · Interview {p.interview} · {p.archetype}
+                            CS {formatCombineScore10(combineScore10)} · Interview {p.interview} · {p.archetype}
                           </div>
                         ) : (
                           <div className="text-xs text-muted-foreground">
-                            GM Grade {gmEval?.roundBand} <span className="text-muted-foreground">({gmEval?.value})</span> · Consensus {p.grade} · RAS {p.ras}
+                            GM Grade {gmEval?.roundBand} <span className="text-muted-foreground">({gmEval?.value})</span> · Consensus {p.grade} · CS {formatCombineScore10(combineScore10)}
                           </div>
                         )}
                         {alreadyScheduledOtherType ? (

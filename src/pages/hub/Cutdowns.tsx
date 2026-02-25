@@ -4,6 +4,7 @@ import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 export default function Cutdowns() {
   const { state, dispatch } = useGame();
@@ -30,7 +31,7 @@ export default function Cutdowns() {
               <div key={p.playerId} className="rounded-xl border border-border p-3 flex items-center justify-between">
                 <div className="min-w-0">
                   <div className="font-semibold truncate">{p.fullName}</div>
-                  <div className="text-xs text-muted-foreground">{p.pos} · OVR {p.overall}</div>
+                  <div className="text-xs text-muted-foreground">{getPositionLabel(p.pos)} · OVR {p.overall}</div>
                 </div>
               </div>
             ))}
