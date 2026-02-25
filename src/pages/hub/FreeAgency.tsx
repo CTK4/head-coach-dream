@@ -25,7 +25,10 @@ export default function FreeAgency() {
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between"><h1 className="text-xl font-bold">FREE AGENCY</h1><div className="flex gap-2"><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })}>My Offers</button><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_RESOLVE" })}>Resolve</button></div></div>
       <div className="flex gap-2">{TABS.map((t) => <button key={t} className="px-2 py-1 border rounded" onClick={() => setTab(t)}>{t}</button>)}<label className="ml-2 text-sm"><input type="checkbox" checked={hideSigned} onChange={(e) => setHideSigned(e.target.checked)} /> Hide signed</label></div>
-      {shown.slice(0, 120).map((p) => (
+      {shown.slice(0, 120).map((p) => {
+        const offers = state.freeAgency.offersByPlayerId[p.id] ?? [];
+        const latestUserDecision = offers.filter((o) => o.isUser && (o.status === "ACCEPTED" || o.status === "REJECTED")).slice().sort((a, b) => b.createdWeek - a.createdWeek)[0];
+        return (
         <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
             <div className="font-semibold">
@@ -34,10 +37,12 @@ export default function FreeAgency() {
             <div className="text-xs opacity-70">OVR {p.ovr} · Age {p.age}</div>
             <IntelMeters intel={state.offseasonData.scouting.intelByFAId[p.id]} />
             <div className="flex gap-2 mt-2"><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_TAPE_SCAN" } })}>Tape (-2)</button><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_FULL_DD" } })}>Full DD (-10)</button></div>
+            {latestUserDecision?.decisionReason ? <div className="text-xs opacity-70 mt-2">Reason: {latestUserDecision.decisionReason}</div> : null}
           </div>
           <button className="px-3 py-2 border rounded" onClick={() => dispatch({ type: "FA_OPEN_PLAYER", payload: { playerId: p.id } })}>Offer Contract</button>
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 }

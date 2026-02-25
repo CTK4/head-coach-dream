@@ -358,7 +358,7 @@ export default function PlayerProfile() {
                               {o.isUser ? "Your Offer" : o.teamId}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {o.years}y · {moneyShort(o.aav)} · {o.status}
+                              {o.years}y · {moneyShort(o.aav)} · {o.status}{o.decisionReason ? ` · ${o.decisionReason}` : ""}
                             </div>
                           </div>
                         </div>

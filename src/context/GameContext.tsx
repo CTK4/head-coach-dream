@@ -190,6 +190,7 @@ export type OffseasonData = {
     capTotal: number;
     capUsed: number;
     capHitsByPlayerId: Record<string, number>;
+    decisionReasonByPlayerId: Record<string, string>;
   };
   preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM" };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
@@ -462,6 +463,7 @@ export type FreeAgencyOffer = {
   fromTampering?: boolean;
   isCounter?: boolean;
   counterCreatedAtResolve?: number;
+  decisionReason?: string;
 };
 
 export type FreeAgencyUI =
@@ -1068,6 +1070,7 @@ function createInitialState(): GameState {
         capTotal: 82_000_000,
         capUsed: 54_000_000,
         capHitsByPlayerId: {},
+        decisionReasonByPlayerId: {},
       },
       preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
       draft: { board: [], picks: [], completed: false },
@@ -1407,6 +1410,68 @@ function offerScore(state: GameState, playerId: string, offer: FreeAgencyOffer, 
   return moneyScore + termScore + intScore + userBoost + noise;
 }
 
+function resolveRoleProjection(state: GameState, player: any) {
+  const pos = normalizePos(String(player?.pos ?? "UNK"));
+  const starters = state.depthChart?.startersByPos ?? {};
+  const starterForPos = String(starters[pos] ?? "");
+  if (starterForPos && starterForPos === String(player?.playerId ?? "")) return 92;
+  const roster = getEffectivePlayersByTeam(state, String(state.acceptedOffer?.teamId ?? ""))
+    .filter((x: any) => normalizePos(String(x.pos ?? "UNK")) === pos)
+    .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const idx = roster.findIndex((x: any) => String(x.playerId) === String(player?.playerId));
+  if (idx === 0) return 88;
+  if (idx === 1) return 72;
+  if (idx >= 0) return 58;
+  return 66;
+}
+
+function resolveContenderStatus(state: GameState, teamId: string) {
+  const row = state.league?.standings?.[String(teamId)] as any;
+  const wins = Number(row?.w ?? 0);
+  const losses = Number(row?.l ?? 0);
+  const games = Math.max(1, wins + losses);
+  const winPct = wins / games;
+  return Math.round(clamp01((winPct - 0.35) / 0.35) * 100);
+}
+
+function resolveLocationPreference(state: GameState, teamId: string, player: any) {
+  const teamRegion = String(getTeamById(teamId)?.region ?? "").toLowerCase();
+  const playerHome = String((player as any)?.hometown ?? (player as any)?.homeTown ?? state.coach?.hometown ?? "").toLowerCase();
+  if (!teamRegion || !playerHome) return 55;
+  return teamRegion.includes(playerHome) || playerHome.includes(teamRegion) ? 80 : 45;
+}
+
+function buildOfferDecisionContext(state: GameState, teamId: string, player: any) {
+  const schemeFit = Math.round(((computeFaInterest(state, player) - 0.35) / 0.75) * 100);
+  return {
+    saveSeed: Number(state.saveSeed ?? 1),
+    season: Number(state.season ?? 2026),
+    week: Number(state.week ?? 1),
+    teamId: String(teamId),
+    phase: "FA" as const,
+    schemeFit: clamp100(schemeFit),
+    roleProjection: resolveRoleProjection(state, player),
+    contenderStatus: resolveContenderStatus(state, teamId),
+    locationPreference: resolveLocationPreference(state, teamId, player),
+    desiredGuaranteeRatio: normalizePos(String(player?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+  };
+}
+
+function evaluateFaOffer(state: GameState, player: any, offer: FreeAgencyOffer) {
+  const interest = clamp100((state.tampering.interestByPlayerId[String(offer.playerId)] ?? 0.55) * 100);
+  return evaluateContractOffer({
+    player: {
+      id: String(player?.playerId ?? offer.playerId),
+      age: Number(player?.age ?? 26),
+      overall: Number(player?.overall ?? 65),
+      position: String(player?.pos ?? "UNK"),
+    },
+    offer: { years: Number(offer.years ?? 2), aav: Number(offer.aav ?? 0), guarantees: undefined },
+    context: buildOfferDecisionContext(state, String(offer.teamId), player),
+    interest,
+  });
+}
+
 function cpuWillAcceptCounter(state: GameState, teamId: string, p: any, years: number, aav: number) {
   const pos = normalizePos(String(p?.pos ?? "UNK"));
   const market = projectedMarketApy(pos, Number(p?.overall ?? 0), Number(p?.age ?? 26));
@@ -1424,7 +1489,7 @@ function closeAllOffers(offers: FreeAgencyOffer[], acceptedOfferId?: string) {
   });
 }
 
-function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffer, signingTeamId: string) {
+function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffer, signingTeamId: string, reason = "Top offer") {
   const years = Math.max(1, offer.years);
   const totalCash = offer.aav * years;
   const signingBonus = asMoney(totalCash * 0.22);
@@ -1455,7 +1520,18 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
     remainingCap: Math.round((next.finances.capSpace ?? 0) / 1000),
     playerIds: [String(playerId)],
   });
-  const withFeedback = { ...next, feedbackQueue: [capEvent, faEvent, ...next.feedbackQueue].slice(0, 50) };
+  const modal = {
+    open: true,
+    title: "Offer Accepted",
+    message: reason,
+    variant: "success" as const,
+    ts: Date.now(),
+  };
+  const withFeedback = {
+    ...next,
+    ui: { ...next.ui, offerResultModal: modal },
+    feedbackQueue: [capEvent, faEvent, ...next.feedbackQueue].slice(0, 50),
+  };
   return faPush(withFeedback, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(offer.aav / 1_000_000)}M/yr.`, playerId);
 }
 
@@ -3941,7 +4017,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           position: String(p.pos ?? "UNK"),
         },
         offer: { years: Number(offer.years ?? 2), aav: Number(offer.apy ?? 0), guarantees: Number(offer.guaranteesPct ?? 0) },
-        context: { saveSeed: Number(state.saveSeed ?? 1), season: Number(state.season ?? 2026), week: Number(state.week ?? 1), teamId: String(teamId), phase: "RESIGN" },
+        context: {
+          saveSeed: Number(state.saveSeed ?? 1),
+          season: Number(state.season ?? 2026),
+          week: Number(state.week ?? 1),
+          teamId: String(teamId),
+          phase: "RESIGN",
+          schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+          roleProjection: resolveRoleProjection(state, p),
+          contenderStatus: resolveContenderStatus(state, String(teamId)),
+          locationPreference: resolveLocationPreference(state, String(teamId), p),
+          desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+        },
         interest: interestBefore,
         priorOfferAav,
         rejectionCount,
@@ -4748,6 +4835,75 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
     }
 
+    case "FA_INIT_OFFERS": {
+      const existing = state.offseasonData.freeAgency.offers;
+      if (existing.length) return state;
+      const offers: FreeAgentOffer[] = getEffectiveFreeAgents(state)
+        .slice(0, 80)
+        .map((p: any, idx: number) => {
+          const apy = Math.round(Math.max(800_000, projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 60), Number(p.age ?? 26))));
+          const years = Math.max(1, Math.min(4, Number(p.age ?? 26) <= 26 ? 3 : 2));
+          return {
+            id: `OFF_FA_${state.season}_${idx}_${String(p.playerId)}`,
+            playerId: String(p.playerId),
+            name: String(p.fullName ?? `Player ${p.playerId}`),
+            pos: String(p.pos ?? "UNK"),
+            years,
+            apy,
+            interest: clamp01(computeFaInterest(state, p)),
+            schemeFitScore: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+          } as FreeAgentOffer;
+        });
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: { ...state.offseasonData.freeAgency, offers, decisionReasonByPlayerId: {} },
+        },
+      };
+    }
+
+    case "FA_REJECT": {
+      const playerId = String(action.payload.playerId);
+      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.playerId) === playerId);
+      const reason = offer ? (offer.interest >= 0.65 ? "Role projection" : "AAV vs market") : "Offer declined";
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: {
+            ...state.offseasonData.freeAgency,
+            rejected: { ...state.offseasonData.freeAgency.rejected, [playerId]: true },
+            decisionReasonByPlayerId: { ...state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+          },
+        },
+        ui: { ...state.ui, offerResultModal: { open: true, title: "Offer Rejected", message: reason, variant: "danger", ts: Date.now() } },
+      };
+    }
+
+    case "FA_SIGN": {
+      const offerId = String(action.payload.offerId);
+      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.id) === offerId);
+      if (!offer) return state;
+      const playerId = String(offer.playerId);
+      const reason = offer.interest >= 0.55 ? "AAV vs market" : "Contender status";
+      const capUsed = state.offseasonData.freeAgency.capUsed + Number(offer.apy ?? 0);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: {
+            ...state.offseasonData.freeAgency,
+            signings: Array.from(new Set([playerId, ...state.offseasonData.freeAgency.signings])),
+            capUsed,
+            capHitsByPlayerId: { ...state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: Number(offer.apy ?? 0) },
+            decisionReasonByPlayerId: { ...state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+          },
+        },
+        ui: { ...state.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
+      };
+    }
+
     case "FA_OPEN_PLAYER":
       return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
 
@@ -4876,8 +5032,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!counter) return state;
 
       if (!accept) {
-        const next = { ...state, freeAgency: upsertOffers(state, pid, offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "REJECTED" as const } : o))) };
-        return faPush(next, "Counter declined.", pid);
+        const next = { ...state, freeAgency: upsertOffers(state, pid, offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "REJECTED" as const, decisionReason: "Counter offer declined" } : o))) };
+        return { ...faPush(next, "Counter declined.", pid), ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: "Counter offer declined", variant: "danger", ts: Date.now() } } };
       }
 
       let next = { ...state, freeAgency: upsertOffers(state, pid, closeAllOffers(offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "ACCEPTED" as const } : o)), counter.offerId)) };
@@ -4889,7 +5045,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           pendingCounterTeamByPlayerId: { ...next.freeAgency.pendingCounterTeamByPlayerId, [pid]: null },
         },
       };
-      return signFromOffer(next, pid, counter, teamId);
+      return signFromOffer(next, pid, counter, teamId, counter.decisionReason ?? "Counter accepted")
     }
 
     case "FA_CPU_TICK": {
@@ -4973,7 +5129,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             });
             next.freeAgency.signingsByPlayerId[pid] = { teamId: winner.teamId, years: winner.years, aav: winner.aav, signingBonus: 0 };
             next.freeAgency.pendingCounterTeamByPlayerId[pid] = null;
-            next = winner.isUser ? signFromOffer(next, pid, winner, winner.teamId) : faPush(next, `${String(p?.fullName ?? "Player")} counter accepted by ${winner.teamId}.`, pid);
+            next = winner.isUser ? signFromOffer(next, pid, winner, winner.teamId, winner.decisionReason ?? "Counter accepted") : faPush(next, `${String(p?.fullName ?? "Player")} counter accepted by ${winner.teamId}.`, pid);
             next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
             continue;
           }
@@ -4993,6 +5149,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           continue;
         }
 
+        const userPending = pending.find((o) => o.isUser);
+        const userDecision = userPending ? evaluateFaOffer(next, p, userPending) : null;
         const scored = pending.map((o) => ({ o, s: offerScore(next, pid, o, market) })).sort((a, b) => b.s - a.s || b.o.aav - a.o.aav || b.o.years - a.o.years);
         const best = scored[0].o;
         const bestS = scored[0].s;
@@ -5000,11 +5158,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
         if (round >= 1) {
           if (roll < clamp01(0.55 + bestS * 0.35)) {
-            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.offerId === best.offerId ? { ...o, status: "ACCEPTED" as const } : o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => {
+              if (o.offerId === best.offerId) return { ...o, status: "ACCEPTED" as const, decisionReason: o.isUser ? userDecision?.reason : o.decisionReason };
+              if (o.status === "PENDING" || o.status === "COUNTERED") {
+                const isUserRejected = o.isUser && !best.isUser;
+                return { ...o, status: "REJECTED" as const, decisionReason: isUserRejected ? userDecision?.reason ?? "Offer not selected" : o.decisionReason };
+              }
+              return o;
+            });
+            if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
             next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
-            next = best.isUser ? signFromOffer(next, pid, best, best.teamId) : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
+            next = best.isUser ? signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer") : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
           } else {
-            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const, decisionReason: o.isUser ? userDecision?.reason ?? "Offer not selected" : o.decisionReason } : o));
+            if (userPending) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
             next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
           }
           next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
@@ -5015,9 +5182,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const counterProb = clamp01(0.2 + (1 - acceptProb) * 0.35);
 
         if (roll < acceptProb) {
-          next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.offerId === best.offerId ? { ...o, status: "ACCEPTED" as const } : o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+          next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => {
+              if (o.offerId === best.offerId) return { ...o, status: "ACCEPTED" as const, decisionReason: o.isUser ? userDecision?.reason : o.decisionReason };
+              if (o.status === "PENDING" || o.status === "COUNTERED") {
+                const isUserRejected = o.isUser && !best.isUser;
+                return { ...o, status: "REJECTED" as const, decisionReason: isUserRejected ? userDecision?.reason ?? "Offer not selected" : o.decisionReason };
+              }
+              return o;
+            });
+            if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
           next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
-          next = best.isUser ? signFromOffer(next, pid, best, best.teamId) : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
+          next = best.isUser ? signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer") : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
         } else if (roll < acceptProb + counterProb) {
           const finalistTeams = Array.from(new Set(pending.filter((o) => Number(o.aav) >= Number(best.aav) * 0.9).sort((a, b) => b.aav - a.aav || b.years - a.years).slice(0, 3).map((o) => o.teamId)));
           const updatedBase = allOffers.map((o) => (o.status !== "PENDING" ? o : finalistTeams.includes(o.teamId) ? o : { ...o, status: "REJECTED" as const }));
@@ -5036,6 +5211,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               status: "COUNTERED",
               isCounter: true,
               counterCreatedAtResolve: next.freeAgency.resolvesUsedThisPhase,
+              decisionReason: ref.isUser ? userDecision?.reason ?? "Counter offer requested" : undefined,
             };
           });
           const cleaned = updatedBase.filter((o) => !(o.status === "PENDING" && finalistTeams.includes(o.teamId)));
@@ -6264,6 +6440,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           capTotal: 82_000_000,
           capUsed: 54_000_000,
           capHitsByPlayerId: {},
+          decisionReasonByPlayerId: {},
         },
         preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
         draft: { board: [], picks: [], completed: false },
