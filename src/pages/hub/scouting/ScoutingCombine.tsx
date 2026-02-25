@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import {
-  COMBINE_DEFAULT_HOURS,
-  COMBINE_DEFAULT_INTERVIEW_SLOTS,
+  COMBINE_DEFAULT_INTERVIEW_TOKENS,
   COMBINE_FOCUS_HOURS_COST,
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
@@ -14,7 +13,6 @@ const DAYS = [
   { day: 2 as const, label: "Day 2" },
   { day: 3 as const, label: "Day 3" },
   { day: 4 as const, label: "Day 4" },
-  { day: 5 as const, label: "Day 5" },
 ];
 
 const INT_CATS: ("IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL")[] = ["IQ", "LEADERSHIP", "STRESS", "CULTURAL"];
@@ -67,8 +65,8 @@ export default function ScoutingCombine() {
       interviewsUsed: 0,
     };
   const used = Object.values(scouting.allocation.byGroup).reduce((a, b) => a + b, 0);
-  const remaining = Math.max(0, scouting.combine.hoursRemaining ?? COMBINE_DEFAULT_HOURS);
-  const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_SLOTS);
+  const remaining = Math.max(0, scouting.allocation.poolHours - used);
+  const interviewsRemaining = Math.max(0, scouting.combine.days?.[day]?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
 
   return (
     <div className="space-y-3 p-4">
@@ -76,7 +74,7 @@ export default function ScoutingCombine() {
         <div className="flex items-center justify-between">
           <div className="font-semibold">Combine</div>
           <div className="text-xs opacity-70">
-            Combine Hours: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews: {interviewEnabled ? `${interviewsRemaining} left` : "OFF"}
+            Focus Tokens: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews: {interviewEnabled ? `${interviewsRemaining} left` : "OFF"}
           </div>
         </div>
         <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -94,9 +92,9 @@ export default function ScoutingCombine() {
 
       <div className="rounded-lg border border-white/10 bg-white/5 p-3">
         <div className="font-semibold">Focus Drill</div>
-        <div className="mt-1 text-xs opacity-70">Spend Combine Hours to tighten confidence (by position group).</div>
+        <div className="mt-1 text-xs opacity-70">Spend focus tokens to tighten confidence (by position group).</div>
         {!focusEnabled ? <div className="mt-2 text-xs text-amber-300/80">Focus drill opens on Day 2 and Day 3.</div> : null}
-        {remaining <= 0 ? <div className="mt-2 text-xs text-rose-300/80">No hours remaining.</div> : null}
+        {remaining <= 0 ? <div className="mt-2 text-xs text-rose-300/80">No focus tokens remaining.</div> : null}
         <div className="mt-3 space-y-2">
           {topList.map(({ id, p, s }) => {
             const alreadyFocusedToday = recap.focusedProspectIds.includes(id);
@@ -115,7 +113,7 @@ export default function ScoutingCombine() {
                   disabled={focusDisabled}
                   onClick={() => dispatch({ type: "SCOUT_COMBINE_FOCUS", payload: { prospectId: id } })}
                 >
-                  {alreadyFocusedToday ? "Focused" : `Focus (-${COMBINE_FOCUS_HOURS_COST}h)`}
+                  {alreadyFocusedToday ? "Focused" : `Focus (-${COMBINE_FOCUS_HOURS_COST})`}
                 </button>
               </div>
             );
