@@ -59,6 +59,27 @@ describe("PAS engine + defensive look", () => {
     expect(["NONE", "POSSIBLE", "LIKELY"]).toContain(look.blitz);
   });
 
+
+
+  it("defensive look responds to down-and-distance game state", () => {
+    const shortYardage = {
+      ...initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 77 }),
+      down: 1 as const,
+      distance: 2,
+      ballOn: 50,
+    };
+    const thirdAndLong = {
+      ...shortYardage,
+      down: 3 as const,
+      distance: 11,
+    };
+
+    const heavyLook = computeDefensiveLook(shortYardage, () => 0.01);
+    const longYardageLook = computeDefensiveLook(thirdAndLong, () => 0.01);
+
+    expect(heavyLook.box).toBe("HEAVY");
+    expect(longYardageLook.shell).toBe("TWO_HIGH");
+  });
   it("stepPlay with granular play types produces result tags in driveLog", () => {
     let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 7 });
     sim = stepPlay(sim, "INSIDE_ZONE").sim;

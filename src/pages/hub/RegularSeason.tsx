@@ -122,6 +122,7 @@ const RegularSeason = () => {
             <Card>
         <CardContent className="p-6 space-y-3">
           <h3 className="text-lg font-semibold">Weekly Practice Focus</h3>
+          {/* STUB — Phase N: Practice Targeted Development controls/per-position targeting are deferred. */}
           <div className="flex flex-wrap gap-2">
             {(["Install", "Conditioning", "Fundamentals", "Recovery"] as FocusType[]).map((f) => (
               <Button key={f} size="sm" variant={focus === f ? "default" : "outline"} onClick={() => setFocus(f)}>{f}</Button>
