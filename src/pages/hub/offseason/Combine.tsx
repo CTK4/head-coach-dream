@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useGame } from "@/context/GameContext";
+import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -12,6 +13,7 @@ function clamp(n: number, min: number, max: number) {
 
 export default function Combine() {
   const { state, dispatch } = useGame();
+  const { openProspectProfile, modal } = useProspectProfileModal(state);
   const [posFilter, setPosFilter] = useState<string>("ALL");
 
   const combine = (state as any).offseasonData?.combine ?? {};
@@ -83,7 +85,11 @@ export default function Combine() {
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-100">
-                        #{idx + 1} {name} <span className="text-slate-200/70">({pos})</span>
+                        #{idx + 1}{" "}
+                        <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(p.id ?? p.playerId ?? ""))}>
+                          {name}
+                        </button>{" "}
+                        <span className="text-slate-200/70">({pos})</span>
                       </div>
                       <div className="truncate text-xs text-slate-200/70">
                         40 {forty} · Vert {vert} · Bench {bench} · RAS {ras}
@@ -97,6 +103,7 @@ export default function Combine() {
           </div>
         </HubPageCard>
       </div>
+      {modal}
     </HubShell>
   );
 }

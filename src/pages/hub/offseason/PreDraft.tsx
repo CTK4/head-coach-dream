@@ -5,6 +5,7 @@ import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 
 const POS_FILTER_ALL = "ALL";
 
@@ -17,6 +18,7 @@ function priorityWeight(priorities: PriorityPos[], pos: string): number {
 
 export default function PreDraft() {
   const { state, dispatch } = useGame();
+  const { openProspectProfile, modal } = useProspectProfileModal(state);
   const viewMode = (state.offseasonData.preDraft.viewMode as "CONSENSUS" | "GM" | "TEAM") ?? "CONSENSUS";
   const priorities = useMemo<PriorityPos[]>(() => state.strategy?.draftFaPriorities ?? ["QB", "OL", "EDGE"], [state.strategy?.draftFaPriorities]);
 
@@ -144,7 +146,11 @@ export default function PreDraft() {
                     <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-medium truncate">
-                          #{idx + 1} {p.name} <span className="text-muted-foreground">({p.pos})</span>
+                          #{idx + 1}{" "}
+                          <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(p.id))}>
+                            {p.name}
+                          </button>{" "}
+                          <span className="text-muted-foreground">({p.pos})</span>
                         </div>
 
                         {viewMode === "CONSENSUS" ? (
@@ -191,6 +197,7 @@ export default function PreDraft() {
           </div>
         </CardContent>
       </Card>
+      {modal}
     </div>
   );
 }

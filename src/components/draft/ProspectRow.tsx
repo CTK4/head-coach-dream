@@ -28,6 +28,7 @@ interface ProspectRowProps {
   isDragging: boolean;
   isDragOver?: boolean;
   report?: ScoutingReport;
+  onOpenProfile?: (prospectId: string) => void;
 }
 
 const gradeClass = (grade: number) => {
@@ -44,7 +45,7 @@ const rankBg = (rank: number) => {
   return "from-slate-500/60 to-slate-700/70";
 };
 
-export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, isDragging, isDragOver, report }: ProspectRowProps) {
+export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
   const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
     <div className="relative">
@@ -61,7 +62,22 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
             <span className="text-3xl font-bold text-white">{rank}</span>
           </div>
           <div className="flex-1 p-3">
-            <div className="font-semibold text-[16px]">{prospect.name}</div>
+            <div className="font-semibold text-[16px]">
+              {onOpenProfile ? (
+                <button
+                  type="button"
+                  className="max-w-full truncate text-left text-sky-300 hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenProfile(prospect.id);
+                  }}
+                >
+                  {prospect.name}
+                </button>
+              ) : (
+                prospect.name
+              )}
+            </div>
             <div className="text-xs text-slate-400">{prospect.pos} · {prospect.school ?? "Unknown School"}</div>
             <div className="mt-2 flex items-center gap-2">
               <span className={cn("rounded border px-2 py-0.5 text-[11px]", gradeClass(estCenter))}>

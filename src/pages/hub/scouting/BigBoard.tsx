@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
+import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 
 const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DL", "LB", "K", "P", "ALL"];
 
@@ -15,6 +16,7 @@ export default function BigBoard() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [boardOrder, setBoardOrder] = useState<string[]>([]);
+  const { openProspectProfile, modal } = useProspectProfileModal(state);
 
   useEffect(() => {
     if (!scouting) dispatch({ type: "SCOUT_INIT" });
@@ -107,11 +109,13 @@ export default function BigBoard() {
                 isDragging={draggedId === p.id}
                 isDragOver={dragOverId === p.id}
                 report={report}
+                onOpenProfile={openProspectProfile}
               />
             );
           })}
         </div>
       </div>
+      {modal}
     </div>
   );
 }

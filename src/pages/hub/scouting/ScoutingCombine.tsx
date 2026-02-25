@@ -6,6 +6,7 @@ import {
   COMBINE_FOCUS_HOURS_COST,
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
+import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -19,6 +20,7 @@ const INT_CATS: ("IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL")[] = ["IQ", "LEADER
 
 export default function ScoutingCombine() {
   const { state, dispatch } = useGame();
+  const { openProspectProfile, modal } = useProspectProfileModal(state);
   const scouting = state.scoutingState;
   const [intCat, setIntCat] = useState<"IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL">("LEADERSHIP");
 
@@ -102,7 +104,8 @@ export default function ScoutingCombine() {
               <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
                 <div className="min-w-0">
                   <div className="truncate font-semibold">
-                    {p.name} <span className="opacity-70">{p.pos}</span>
+                    <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
+                    <span className="opacity-70">{p.pos}</span>
                   </div>
                   <div className="text-xs opacity-70">Band {s.estLow}-{s.estHigh} • Conf {s.confidence}%</div>
                 </div>
@@ -149,7 +152,8 @@ export default function ScoutingCombine() {
               <div key={id} className="flex items-center justify-between gap-3 rounded border border-white/10 bg-black/20 p-3">
                 <div className="min-w-0">
                   <div className="truncate font-semibold">
-                    {p.name} <span className="opacity-70">{p.pos}</span>
+                    <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
+                    <span className="opacity-70">{p.pos}</span>
                   </div>
                   <div className="text-xs opacity-70">Char {s.clarity.CHAR}% • Fit {s.clarity.FIT}% • Leadership: {s.revealed.leadershipTag ?? "—"}</div>
                 </div>
@@ -191,6 +195,7 @@ export default function ScoutingCombine() {
           <div className="opacity-70">Interviews completed: {recap.interviewedProspectIds.length}</div>
         </div>
       </div>
+      {modal}
     </div>
   );
 }
