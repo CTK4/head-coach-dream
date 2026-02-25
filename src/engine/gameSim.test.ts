@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDefensiveLook, initGameSim, recommendFourthDown, stepPlay } from "@/engine/gameSim";
+import { computeDefensiveLook, initGameSim, recommendFourthDown, SITUATION_WINDOW_SIZE, stepPlay } from "@/engine/gameSim";
 import { mulberry32 } from "@/engine/rand";
 
 describe("clock sim + drive log", () => {
@@ -124,8 +124,8 @@ describe("defensive tendency window + confidence", () => {
 
     expect(sim.observedSnaps).toBe(14);
     const rollingTotal = Object.values(sim.situationWindowCounts).reduce((sum, bucket) => sum + (bucket?.total ?? 0), 0);
-    expect(rollingTotal).toBe(12);
-    const confidencePct = Math.min(100, Math.round((sim.observedSnaps / 12) * 100));
+    expect(rollingTotal).toBe(SITUATION_WINDOW_SIZE);
+    const confidencePct = Math.min(100, Math.round((sim.observedSnaps / SITUATION_WINDOW_SIZE) * 100));
     expect(confidencePct).toBe(100);
   });
 });

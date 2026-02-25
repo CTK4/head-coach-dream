@@ -136,7 +136,7 @@ export type TempoMode = "NORMAL" | "HURRY_UP";
 
 /** Baseline overall rating used when no real team data is available */
 const DEFAULT_RATING = 68;
-const SITUATION_WINDOW_SIZE = 12;
+export const SITUATION_WINDOW_SIZE = 12;
 
 export type DriveLogEntry = {
   personnelPackage?: PersonnelPackage;
