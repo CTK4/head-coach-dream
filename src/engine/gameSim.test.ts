@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDefensiveLook, initGameSim, recommendFourthDown, stepPlay, SITUATION_WINDOW_SIZE } from "@/engine/gameSim";
+import { computeDefensiveLook, initGameSim, recommendFourthDown, SITUATION_WINDOW_SIZE, stepPlay } from "@/engine/gameSim";
 import { mulberry32 } from "@/engine/rand";
 
 describe("clock sim + drive log", () => {
