@@ -65,10 +65,21 @@ export default function AssistantHiring() {
   const [activeRole, setActiveRole] = useState<keyof AssistantStaff>(firstUnfilled);
   const [toast, setToast] = useState<string | null>(null);
   const [levelIdx, setLevelIdx] = useState(1);
+  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
+  const [offerYears, setOfferYears] = useState(2);
+  const [offerSalaryValue, setOfferSalaryValue] = useState(0);
 
   useEffect(() => {
     if (state.assistantStaff[activeRole]) setActiveRole(firstUnfilled);
   }, [activeRole, firstUnfilled, state.assistantStaff]);
+
+  useEffect(() => {
+    if (state.uiToast) {
+      setToast(state.uiToast);
+      const t = setTimeout(() => setToast(null), 1700);
+      return () => clearTimeout(t);
+    }
+  }, [state.uiToast]);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
@@ -157,28 +168,38 @@ export default function AssistantHiring() {
     return [...base, ...emergencyAny].slice(0, 40);
   }, [activeRole, hiredSet, level, remainingBudget, roleAlreadyFilled, repCap]);
 
+  const latestOfferByPerson = useMemo(() => {
+    const byPerson: Record<string, (typeof state.staffOffers)[number]> = {};
+    for (const offer of state.staffOffers) {
+      if (offer.roleType !== "ASSISTANT") continue;
+      if (!byPerson[offer.personId]) byPerson[offer.personId] = offer;
+    }
+    return byPerson;
+  }, [state.staffOffers]);
+
   const allFilled = ROLE_ORDER.every((role) => Boolean(state.assistantStaff[role.key]));
 
-  const attemptHire = (personId: string, salary: number) => {
+  const openOfferEditor = (candidate: Cand) => {
+    setEditingCandidateId(candidate.p.personId);
+    setOfferYears(2);
+    setOfferSalaryValue(candidate.salary);
+  };
+
+  const submitOffer = (personId: string) => {
     if (!teamId) {
       setToast("No team selected yet.");
-      setTimeout(() => setToast(null), 1200);
       return;
     }
     if (state.assistantStaff[activeRole]) {
       setToast("That role is already filled.");
-      setTimeout(() => setToast(null), 1200);
-      return;
-    }
-    if (!Number.isFinite(salary)) {
-      setToast("Offer amount invalid.");
-      setTimeout(() => setToast(null), 1200);
       return;
     }
 
-    dispatch({ type: "HIRE_ASSISTANT", payload: { role: activeRole, personId, salary } });
-    setToast("Offer sent.");
-    setTimeout(() => setToast(null), 900);
+    dispatch({
+      type: "CREATE_STAFF_OFFER",
+      payload: { roleType: "ASSISTANT", role: activeRole, personId, years: offerYears, salary: offerSalaryValue },
+    });
+    setEditingCandidateId(null);
   };
 
   const handleContinue = () => {
@@ -194,7 +215,6 @@ export default function AssistantHiring() {
           <CardContent className="p-4 text-sm">{toast}</CardContent>
         </Card>
       ) : null}
-
 
       {allFilled ? (
         <Card>
@@ -265,6 +285,7 @@ export default function AssistantHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="mt-1 text-xs text-muted-foreground">Offer Level: {LEVEL_LABEL[level]}</div>
+            <div className="text-xs text-muted-foreground">Counter-offers are not interactive yet (stubbed for a future update).</div>
           </div>
         </div>
 
@@ -272,35 +293,69 @@ export default function AssistantHiring() {
 
         {roleAlreadyFilled ? (
           <Card>
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              This role is filled. Pick another role to hire.
-            </CardContent>
+            <CardContent className="p-4 text-sm text-muted-foreground">This role is filled. Pick another role to hire.</CardContent>
           </Card>
         ) : null}
 
         <div className="space-y-3">
-          {candidates.map((c) => (
-            <Card key={c.p.personId}>
-              <CardContent className="p-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar entity={{ type: "personnel", id: String(c.p.personId), name: String(c.p.fullName ?? "Coach"), avatarUrl: c.p.avatarUrl }} size={44} />
-                  <div className="space-y-1 min-w-0">
-                    <div className="font-semibold truncate">{c.p.fullName}</div>
-                    <div className="text-sm text-muted-foreground">
-                      Rep {repNumber(c.p)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
+          {candidates.map((c) => {
+            const latest = latestOfferByPerson[c.p.personId];
+            const isEditing = editingCandidateId === c.p.personId;
+            return (
+              <Card key={c.p.personId}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar entity={{ type: "personnel", id: String(c.p.personId), name: String(c.p.fullName ?? "Coach"), avatarUrl: c.p.avatarUrl }} size={44} />
+                      <div className="space-y-1 min-w-0">
+                        <div className="font-semibold truncate">{c.p.fullName}</div>
+                        <div className="text-sm text-muted-foreground">
+                          Rep {repNumber(c.p)} · Suggested {money(c.salary)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
+                        </div>
+                        {latest?.status === "REJECTED" ? <div className="text-xs text-amber-300">{latest.reason}</div> : null}
+                      </div>
                     </div>
+                    <Button onClick={() => openOfferEditor(c)} disabled={roleAlreadyFilled}>
+                      Create Offer
+                    </Button>
                   </div>
-                </div>
-                <Button
-                  onClick={() => attemptHire(c.p.personId, c.salary)}
-                  title={`Send ${money(c.salary)} offer`}
-                  aria-label={`Send ${money(c.salary)} offer to ${String(c.p.fullName ?? "Coach")}`}
-                >
-                  Send {money(c.salary)}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {isEditing ? (
+                    <div className="flex flex-wrap items-end gap-2 border-t border-slate-400/20 pt-3">
+                      <label className="text-xs text-muted-foreground">
+                        Years
+                        <input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={offerYears}
+                          onChange={(e) => setOfferYears(Number(e.target.value) || 1)}
+                          className="mt-1 w-20 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs text-muted-foreground">
+                        Salary (annual, $M)
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.05}
+                          value={(offerSalaryValue / 1_000_000).toFixed(2)}
+                          onChange={(e) => setOfferSalaryValue(Math.round((Number(e.target.value) || 0) * 1_000_000))}
+                          className="mt-1 w-32 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <Button size="sm" onClick={() => submitOffer(c.p.personId)} disabled={offerSalaryValue <= 0}>
+                        Submit Offer
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingCandidateId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </HubPageCard>
     </div>
