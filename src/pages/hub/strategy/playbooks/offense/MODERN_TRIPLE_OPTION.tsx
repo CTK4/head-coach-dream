@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function MODERN_TRIPLE_OPTION() {
-  return <PlaceholderPlaybook side="Offense" schemeId="MODERN_TRIPLE_OPTION" />;
+  return <OffensePlaybookTemplate schemeId="MODERN_TRIPLE_OPTION" />;
 }

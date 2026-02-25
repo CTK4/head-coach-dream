@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function POWER_GAP() {
-  return <PlaceholderPlaybook side="Offense" schemeId="POWER_GAP" />;
+  return <OffensePlaybookTemplate schemeId="POWER_GAP" />;
 }

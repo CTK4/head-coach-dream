@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function CHIP_KELLY_RPO() {
-  return <PlaceholderPlaybook side="Offense" schemeId="CHIP_KELLY_RPO" />;
+  return <OffensePlaybookTemplate schemeId="CHIP_KELLY_RPO" />;
 }

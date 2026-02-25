@@ -18,6 +18,7 @@ export default function FreeAgency() {
     () => fa.offers.filter((o) => !fa.rejected[o.playerId] && !fa.withdrawn[o.id] && !fa.signings.includes(o.playerId)),
     [fa.offers, fa.rejected, fa.withdrawn, fa.signings]
   );
+  const decisions = fa.decisionReasonByPlayerId ?? {};
 
   const sign = (offerId: string) => dispatch({ type: "FA_SIGN", payload: { offerId } });
   const reject = (playerId: string) => dispatch({ type: "FA_REJECT", payload: { playerId } });
@@ -83,6 +84,7 @@ export default function FreeAgency() {
                 fa.signings.map((pid) => (
                   <div key={pid} className="border rounded-md px-3 py-2 text-sm">
                     Signed: {pid} · ${Math.round((fa.capHitsByPlayerId[pid] ?? 0) / 1_000_000)}M
+                    {decisions[pid] ? <div className="text-xs text-muted-foreground mt-1">Reason: {decisions[pid]}</div> : null}
                   </div>
                 ))
               ) : (
@@ -92,6 +94,27 @@ export default function FreeAgency() {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">Rejected</div>
+            <Badge variant="outline">{Object.keys(fa.rejected).length}</Badge>
+          </div>
+          <div className="space-y-2 max-h-[220px] overflow-auto pr-1">
+            {Object.keys(fa.rejected).length ? (
+              Object.keys(fa.rejected).map((pid) => (
+                <div key={pid} className="border rounded-md px-3 py-2 text-sm">
+                  Declined: {pid}
+                  {decisions[pid] ? <div className="text-xs text-muted-foreground mt-1">Reason: {decisions[pid]}</div> : null}
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">No rejections yet.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="p-6 flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">When ready, complete and advance.</div>

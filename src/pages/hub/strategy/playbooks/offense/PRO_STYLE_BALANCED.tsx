@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function PRO_STYLE_BALANCED() {
-  return <PlaceholderPlaybook side="Offense" schemeId="PRO_STYLE_BALANCED" />;
+  return <OffensePlaybookTemplate schemeId="PRO_STYLE_BALANCED" />;
 }

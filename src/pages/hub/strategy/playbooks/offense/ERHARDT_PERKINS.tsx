@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function ERHARDT_PERKINS() {
-  return <PlaceholderPlaybook side="Offense" schemeId="ERHARDT_PERKINS" />;
+  return <OffensePlaybookTemplate schemeId="ERHARDT_PERKINS" />;
 }
