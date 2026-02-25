@@ -470,6 +470,7 @@ export type FreeAgencyUI =
   | { mode: "MY_OFFERS" };
 
 export type FreeAgencyState = {
+  initStatus: "idle" | "loading" | "ready" | "error";
   ui: FreeAgencyUI;
   offersByPlayerId: Record<string, FreeAgencyOffer[]>;
   signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
@@ -820,6 +821,10 @@ export type GameAction =
   | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
   | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
   | { type: "FA_INIT_OFFERS" }
+  | { type: "FA_INIT_START" }
+  | { type: "FA_INIT_READY" }
+  | { type: "FA_INIT_ERROR" }
+  | { type: "FA_INIT_RESET" }
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
   | { type: "FA_SIGN"; payload: { offerId: string } }
@@ -1078,6 +1083,7 @@ function createInitialState(): GameState {
     tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
     franchise: { yR1QBByTeamId: {} },
     freeAgency: {
+      initStatus: "idle",
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -1853,7 +1859,7 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
 function resetFaPhase(state: GameState): GameState {
   return {
     ...state,
-    freeAgency: { ...state.freeAgency, resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" }, resolveRoundByPlayerId: {}, pendingCounterTeamByPlayerId: {}, cpuTickedOnOpen: false },
+    freeAgency: { ...state.freeAgency, initStatus: "idle", resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" }, resolveRoundByPlayerId: {}, pendingCounterTeamByPlayerId: {}, cpuTickedOnOpen: false },
   };
 }
 
@@ -2234,6 +2240,7 @@ function seasonRollover(state: GameState): GameState {
     lastNewsReadWeek: 0,
     tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
     freeAgency: {
+      initStatus: "idle",
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -4748,6 +4755,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
     }
 
+    case "FA_INIT_START":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "loading" } };
+
+    case "FA_INIT_READY":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "ready" } };
+
+    case "FA_INIT_ERROR":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "error" } };
+
+    case "FA_INIT_RESET":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "idle" } };
+
     case "FA_OPEN_PLAYER":
       return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
 
@@ -4894,6 +4913,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "FA_CPU_TICK": {
       if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.cpuTickedOnOpen) return state;
       const next = cpuOfferTick(state, 70);
       const out = { ...next, freeAgency: { ...next.freeAgency, cpuTickedOnOpen: true } };
       reportFaInvariantViolations(out, "FA_CPU_TICK");
@@ -6443,6 +6463,7 @@ function loadState(): GameState {
       freeAgency: {
         ...initial.freeAgency,
         ...migrated.freeAgency,
+        initStatus: (migrated.freeAgency as any)?.initStatus ?? "idle",
         offersByPlayerId: { ...initial.freeAgency.offersByPlayerId, ...(migrated.freeAgency?.offersByPlayerId ?? {}) },
         signingsByPlayerId: { ...initial.freeAgency.signingsByPlayerId, ...(migrated.freeAgency?.signingsByPlayerId ?? {}) },
       },
