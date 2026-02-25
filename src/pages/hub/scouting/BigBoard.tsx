@@ -3,8 +3,9 @@ import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { normalizeScoutingDraftPosition } from "@/utils/positionTaxonomy";
 
-const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DL", "LB", "K", "P", "ALL"];
+const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DT", "EDGE", "LB", "K", "P", "ALL"];
 
 export default function BigBoard() {
   const { state, dispatch } = useGame();
@@ -46,7 +47,7 @@ export default function BigBoard() {
 
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
 
-  const filtered = normalizedProspects.filter((p) => activePos === "ALL" || p.pos === activePos);
+  const filtered = normalizedProspects.filter((p) => activePos === "ALL" || normalizeScoutingDraftPosition(p.pos) === activePos);
   const scoutOrdered = [...filtered].sort((a, b) => (ascending ? a.estHigh - b.estHigh : b.estHigh - a.estHigh));
   const myOrdered = boardOrder
     .map((id) => filtered.find((p) => p.id === id))
