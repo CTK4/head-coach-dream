@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 function groupPos(pos?: string) {
   const p = String(pos ?? "").toUpperCase();
@@ -117,7 +118,7 @@ export default function PreseasonSnaps() {
               return (
                 <div key={p.id} className="border rounded-md p-3 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <div className="font-medium truncate">{p.name} <span className="text-muted-foreground">({p.pos})</span></div>
+                    <div className="font-medium truncate">{p.name} <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span></div>
                     <div className="flex gap-2">
                       <Badge variant={isStarter ? "secondary" : "outline"}>{isStarter ? "Starter" : "Depth"}</Badge>
                       <Badge variant="outline">OVR {p.ovr}</Badge>

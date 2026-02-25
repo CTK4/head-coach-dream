@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 const POS_FILTER_ALL = "ALL";
@@ -155,7 +156,7 @@ export default function PreDraft() {
                           <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(p.id))}>
                             {p.name}
                           </button>{" "}
-                          <span className="text-muted-foreground">({p.pos})</span>
+                          <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
                         </div>
 
                         {viewMode === "CONSENSUS" ? (

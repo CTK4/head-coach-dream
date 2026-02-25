@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -172,7 +173,7 @@ export default function TradeHub() {
           <CardContent className="space-y-2">
             <div className="flex gap-2"><Input placeholder="Search your roster" value={queryLeft} onChange={(e)=>setQueryLeft(e.target.value)} /><Input placeholder="Pos (ALL/QB/WR...)" value={leftPos} onChange={(e)=>setLeftPos(e.target.value.toUpperCase())} /></div>
             <div className="max-h-64 overflow-auto space-y-1">
-              {filteredMine.map((p) => <button key={p.id} type="button" onClick={()=>toggleInSet(setOfferPlayers,p.id)} className={`w-full rounded border px-2 py-1 text-left text-sm ${offerPlayers.has(p.id)?"bg-secondary":""}`}>{p.name} ({normalizePos(p.pos)}) OVR {p.ovr}</button>)}
+              {filteredMine.map((p) => <button key={p.id} type="button" onClick={()=>toggleInSet(setOfferPlayers,p.id)} className={`w-full rounded border px-2 py-1 text-left text-sm ${offerPlayers.has(p.id)?"bg-secondary":""}`}>{p.name} ({getPositionLabel(normalizePos(p.pos))}) OVR {p.ovr}</button>)}
             </div>
             <div className="text-sm font-medium">Your picks</div>
             <div className="max-h-32 overflow-auto space-y-1">
@@ -190,7 +191,7 @@ export default function TradeHub() {
           <CardContent className="space-y-2">
             <div className="flex gap-2"><Input placeholder="Search their roster" value={queryRight} onChange={(e)=>setQueryRight(e.target.value)} /><Input placeholder="Pos (ALL/QB/WR...)" value={rightPos} onChange={(e)=>setRightPos(e.target.value.toUpperCase())} /></div>
             <div className="max-h-64 overflow-auto space-y-1">
-              {filteredTheirs.map((p) => <button key={p.id} type="button" onClick={()=>toggleInSet(setReceivePlayers,p.id)} className={`w-full rounded border px-2 py-1 text-left text-sm ${receivePlayers.has(p.id)?"bg-secondary":""}`}>{p.name} ({normalizePos(p.pos)}) OVR {p.ovr}</button>)}
+              {filteredTheirs.map((p) => <button key={p.id} type="button" onClick={()=>toggleInSet(setReceivePlayers,p.id)} className={`w-full rounded border px-2 py-1 text-left text-sm ${receivePlayers.has(p.id)?"bg-secondary":""}`}>{p.name} ({getPositionLabel(normalizePos(p.pos))}) OVR {p.ovr}</button>)}
             </div>
             <div className="text-sm font-medium">Their picks</div>
             <div className="max-h-32 overflow-auto space-y-1">
