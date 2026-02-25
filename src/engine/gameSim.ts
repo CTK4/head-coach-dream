@@ -284,12 +284,18 @@ function rebuildSituationWindowCounts(records: DefensiveCallRecord[]): Partial<R
 }
 
 function recordDefensiveCall(sim: GameSim, record: DefensiveCallRecord): GameSim {
-  const defensiveCallRecords = [...(sim.defensiveCallRecords ?? []), record];
-  const recentDefensiveCalls = defensiveCallRecords.slice(-3).reverse();
-  const windowRecords = defensiveCallRecords.slice(-SITUATION_WINDOW_SIZE);
+  const previousRecords = sim.defensiveCallRecords ?? [];
+  const defensiveCallRecords = [...previousRecords, record];
+  const maxRecords = SITUATION_WINDOW_SIZE + 3; // keep enough for situation window + recent calls
+  const trimmedDefensiveCallRecords =
+    defensiveCallRecords.length > maxRecords
+      ? defensiveCallRecords.slice(-maxRecords)
+      : defensiveCallRecords;
+  const recentDefensiveCalls = trimmedDefensiveCallRecords.slice(-3).reverse();
+  const windowRecords = trimmedDefensiveCallRecords.slice(-SITUATION_WINDOW_SIZE);
   return {
     ...sim,
-    defensiveCallRecords,
+    defensiveCallRecords: trimmedDefensiveCallRecords,
     recentDefensiveCalls,
     situationWindowCounts: rebuildSituationWindowCounts(windowRecords),
     observedSnaps: (sim.observedSnaps ?? 0) + 1,
