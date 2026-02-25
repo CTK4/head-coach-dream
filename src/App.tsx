@@ -47,6 +47,7 @@ import OwnerRelations from "./pages/hub/OwnerRelations";
 import ActivityLog from "./pages/hub/ActivityLog";
 import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 import FrontOffice from "@/pages/hub/FrontOffice";
+import CoachOfficeRoutes from "@/pages/hub/CoachOfficeRoutes";
 import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
 import InterviewRunner from "@/pages/InterviewRunner";
 import Landing from "@/pages/Landing";
@@ -180,6 +181,7 @@ const App = () => (
               <Route path="/hub/owner-relations" element={<OwnerRelations />} />
               <Route path="/hub/team-strategy" element={<TeamStrategy />} />
               <Route path="/hub/front-office" element={<FrontOffice />} />
+              <Route path="/coachs-office/*" element={<CoachOfficeRoutes />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
               <Route path="/re-sign/*" element={<ReSignRoutes />} />

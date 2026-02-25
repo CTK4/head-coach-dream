@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { Avatar } from "@/components/common/Avatar";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,6 +19,7 @@ type StaffItem = { label: string; personId?: string };
 
 export default function StaffManagement() {
   const { state, dispatch } = useGame();
+  const navigate = useNavigate();
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
@@ -120,7 +122,19 @@ export default function StaffManagement() {
       <Card>
         <CardContent className="p-4 space-y-2">
           {rows.map((r) => (
-            <div key={r.pid} className="border rounded-md px-3 py-2 flex items-center justify-between gap-3">
+            <div
+              key={r.pid}
+              onClick={() => navigate(`/coachs-office/staff/${r.pid}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(`/coachs-office/staff/${r.pid}`);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              className="w-full border rounded-md px-3 py-2 flex items-center justify-between gap-3 text-left transition-colors hover:bg-muted/50"
+            >
               <div className="min-w-0 flex items-center gap-3">
                 <Avatar entity={{ type: "personnel", id: r.pid, name: r.name, avatarUrl: r.avatarUrl }} size={40} />
                 <div className="min-w-0">
@@ -137,7 +151,10 @@ export default function StaffManagement() {
               <Button
                 size="sm" className="min-h-11"
                 variant="destructive"
-                onClick={() => dispatch({ type: "FIRE_STAFF", payload: { personId: r.pid, roleLabel: r.label, spreadSeasons } })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  dispatch({ type: "FIRE_STAFF", payload: { personId: r.pid, roleLabel: r.label, spreadSeasons } });
+                }}
                 disabled={spreadSeasons === 1 ? r.total > state.teamFinances.cash + 5_000_000 : (r.chunks[0] ?? 0) > state.teamFinances.cash + 5_000_000}
               >
                 Fire

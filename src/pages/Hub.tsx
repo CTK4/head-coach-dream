@@ -99,7 +99,7 @@ export default function Hub() {
       badgeKind: "unread",
       cornerBubbleCount: Math.min(badgeCounts.newsUnread, 9),
     },
-    { id: "coachs_office", title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: HUB_TILE_IMAGES.coachs_office },
+    { id: "coachs_office", title: "Coach's Office", subtitle: "Profiles + Skill Tree", to: "/coachs-office", imageUrl: HUB_TILE_IMAGES.coachs_office },
     { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
     { id: "hall_of_fame", title: "Hall of Fame", to: "/hub/hall-of-fame", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
   ];
