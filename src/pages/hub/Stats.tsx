@@ -14,19 +14,19 @@ export default function StatsPage() {
     <Card>
       <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
       <CardContent>
-        <Table>
+        <div className="overflow-x-auto"><Table className="min-w-[520px]">
           <TableHeader><TableRow><TableHead>#</TableHead><TableHead>Player</TableHead><TableHead>Team</TableHead><TableHead className="text-right">Value</TableHead></TableRow></TableHeader>
           <TableBody>
             {rows.slice(0, 10).map((r, i) => <TableRow key={`${r.playerName}-${i}`}><TableCell>{i + 1}</TableCell><TableCell>{r.playerName}</TableCell><TableCell>{r.teamId}</TableCell><TableCell className="text-right">{r.value}</TableCell></TableRow>)}
           </TableBody>
-        </Table>
+        </Table></div>
       </CardContent>
     </Card>
   );
 
   return (
     <div className="space-y-4">
-      <Card><CardContent className="p-4"><Tabs value={tab} onValueChange={(v) => setTab(v as any)}><TabsList><TabsTrigger value="LEADERS">League Leaders</TabsTrigger><TabsTrigger value="RECORDS">Career Records</TabsTrigger></TabsList></Tabs></CardContent></Card>
+      <Card><CardContent className="p-4"><Tabs value={tab} onValueChange={(v) => setTab(v as any)}><div className="overflow-x-auto pb-1"><TabsList className="min-w-max"><TabsTrigger value="LEADERS" className="min-h-11">League Leaders</TabsTrigger><TabsTrigger value="RECORDS" className="min-h-11">Career Records</TabsTrigger></TabsList></div></Tabs></CardContent></Card>
       {tab === "LEADERS" ? (
         <div className="grid gap-4">
           <LeaderTable title="Passing Yards" rows={leaders.passingYards ?? []} />

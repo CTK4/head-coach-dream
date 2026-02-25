@@ -1,5 +1,8 @@
 import type { PlayerIntel } from "@/engine/scoutingCapacity";
 import type { ProspectScoutProfile } from "@/engine/scouting/types";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type ProspectRecord = Record<string, unknown>;
 type CombineSummary = ProspectRecord & { grades?: { forty?: string } };
@@ -29,6 +32,7 @@ export function ProspectProfileModal({
   scoutingProfile?: ProspectScoutProfile;
   combine?: CombineSummary;
 }) {
+  const isMobile = useIsMobile();
 
   if (!open || !prospect) return null;
   const source = { ...(combine ?? {}), ...prospect } as ProspectRecord;
@@ -97,15 +101,14 @@ export function ProspectProfileModal({
     combined ? { label: "Risk", value: combined } : null,
   ].filter((row): row is { label: string; value: string } => Boolean(row));
 
-  return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-auto bg-slate-900 border border-slate-700 rounded-lg p-4" onClick={(e) => e.stopPropagation()}>
+  const modalBody = (
+      <div className="w-full overflow-auto bg-slate-900 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-bold">{name}</div>
             <div className="text-sm opacity-80">{[pos, college].filter(Boolean).join(" · ")}</div>
           </div>
-          <button className="px-3 py-1 border border-slate-600 rounded" onClick={onClose}>Close</button>
+          <button className="min-h-11 rounded border border-slate-600 px-3 py-1" onClick={onClose}>Close</button>
         </div>
 
         {blurbs.length ? (
@@ -151,6 +154,23 @@ export function ProspectProfileModal({
           </div>
         ) : null}
       </div>
-    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+        <SheetContent side="bottom" className="max-h-[88vh] overflow-y-auto rounded-t-2xl border-slate-700 bg-slate-900 p-0">
+          {modalBody}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto border-slate-700 bg-slate-900 p-0 text-slate-100">
+        {modalBody}
+      </DialogContent>
+    </Dialog>
   );
 }
