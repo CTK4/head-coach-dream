@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Resigning from "./Resigning";
 import Combine from "./Combine";
+import FreeAgency from "./FreeAgency";
 import Tampering from "./Tampering";
 import PreDraft from "./PreDraft";
 import Draft from "./Draft";
