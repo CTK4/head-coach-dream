@@ -70,8 +70,8 @@ function durationWeeks(rng: () => number, def: InjuryDef, sev: InjurySeverity): 
   return a + Math.floor(rng() * (b - a + 1));
 }
 
-function shouldGenerateInjury(rng: () => number, recurrenceMultiplier = 1.0): boolean {
-  return rng() < 0.035 * recurrenceMultiplier;
+function shouldGenerateInjury(rng: () => number, recurrenceMultiplier = 1.0, riskMod = 0): boolean {
+  return rng() < clamp(0.035 * recurrenceMultiplier + riskMod, 0.005, 0.16);
 }
 
 function newInjuryId(seed: number, playerId: string, week: number): string {
@@ -125,7 +125,8 @@ export function resolveInjuries(state: GameState): GameState {
 
     const def = choose(rng, INJURY_DEFS);
     const recMult = computeRecurrenceMultiplier(playerId, def.injuryType, currentWeek, existing);
-    if (!shouldGenerateInjury(rng, recMult)) continue;
+    const practiceRiskMod = Number(state.nextGameInjuryRiskMod ?? 0) + Number(state.cumulativeNeglectPenalty ?? 0) * 0.25;
+    if (!shouldGenerateInjury(rng, recMult, practiceRiskMod)) continue;
 
     const sev = rollSeverity(rng);
     const weeks = durationWeeks(rng, def, sev);

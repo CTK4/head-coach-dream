@@ -190,6 +190,7 @@ export type GameSim = {
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
   selectedDefensivePackage?: DefensivePackage;
   practiceExecutionBonus: number;
+  lateGamePracticeRetentionBonus: number;
   coachArchetypeId?: string;
   coachTenureYear: number;
   coachUnlockedPerkIds?: string[];
@@ -400,7 +401,9 @@ function executionState(sim: GameSim, playType: PlayType, matchup: MatchupModifi
     acc += composeExecutionModifiers({ fatigueMod, matchupMod, pressureRisk: matchup.pressureRisk, isRun: runPlay }) * item.w;
   }
 
-  return (acc - 1) * 0.8 + sim.practiceExecutionBonus * 0.02;
+  const lateGame = (sim.clock.quarter === 2 || sim.clock.quarter === 4) && sim.clock.timeRemainingSec <= 120;
+  const lateGameBonus = lateGame ? sim.lateGamePracticeRetentionBonus * 0.015 : 0;
+  return (acc - 1) * 0.8 + sim.practiceExecutionBonus * 0.02 + lateGameBonus;
 }
 
 /** Compute the Play Advantage Score. */
@@ -1115,6 +1118,7 @@ export function initGameSim(params: {
   playerFatigue?: Record<string, number>;
   currentPersonnelPackage?: PersonnelPackage;
   practiceExecutionBonus?: number;
+  lateGamePracticeRetentionBonus?: number;
   coachArchetypeId?: string;
   coachTenureYear?: number;
 }): GameSim {
@@ -1146,6 +1150,7 @@ export function initGameSim(params: {
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
+    lateGamePracticeRetentionBonus: params.lateGamePracticeRetentionBonus ?? 0,
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
     coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],

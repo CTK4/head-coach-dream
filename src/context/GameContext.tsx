@@ -56,7 +56,17 @@ import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers,
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, type TradeDeadlineError } from "@/engine/tradeDeadline";
-import { DEFAULT_PRACTICE_PLAN, applyPracticeFatigue, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity, type PracticePlan } from "@/engine/practiceFocus";
+import {
+  DEFAULT_PRACTICE_PLAN,
+  applyPracticeFatigue,
+  buildNextNeglectTracker,
+  getEffectPreview,
+  getPracticeEffect,
+  migratePracticePlan,
+  resolveInstallFamiliarity,
+  type PracticeNeglectTracker,
+  type PracticePlan,
+} from "@/engine/practiceFocus";
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
 import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
@@ -723,8 +733,14 @@ export type GameState = {
   playerFatigueById: Record<string, PersistedFatigue>;
   practicePlan: PracticePlan;
   practicePlanConfirmed: boolean;
+  practiceNeglectCounters: PracticeNeglectTracker;
+  cumulativeNeglectPenalty: number;
   weeklyFamiliarityBonus: number;
+  weeklyMentalErrorMod: number;
+  weeklySchemeConceptBonus: number;
+  weeklyLateGameRetentionBonus: number;
   nextGameInjuryRiskMod: number;
+  lastPracticeOutcomeSummary?: string;
   playerDevXpById: Record<string, number>;
   pendingTradeOffers: PendingTradeOffer[];
   tradeError?: TradeDeadlineError;
@@ -1007,11 +1023,12 @@ function upsertGameFatigueState(state: GameState, sim: GameSim): GameState {
   return { ...state, playerFatigueById: next };
 }
 
-type PracticeApplicationSummary = { avgFatigueDelta: number; devXpPlayers: number; avgFamiliarityGain: number; injuryRiskMod: number };
+type PracticeApplicationSummary = { avgFatigueDelta: number; devXpPlayers: number; avgFamiliarityGain: number; injuryRiskMod: number; mentalErrorMod: number; schemeConceptBonus: number; lateGameRetentionBonus: number; neglectPenalty: number };
 
 export function applyPracticePlanForWeek(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { nextState: GameState; summary: PracticeApplicationSummary } {
-  const plan = state.practicePlan ?? DEFAULT_PRACTICE_PLAN;
-  const effect = getPracticeEffect(plan);
+  const plan = migratePracticePlan(state.practicePlan ?? DEFAULT_PRACTICE_PLAN);
+  const planWithNeglect: PracticePlan = { ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks };
+  const effect = getPracticeEffect(planWithNeglect);
   const roster = getEffectivePlayersByTeam(state, teamId);
   const fatigue = { ...state.playerFatigueById };
   const dev = { ...state.playerDevXpById };
@@ -1042,12 +1059,19 @@ export function applyPracticePlanForWeek(state: GameState, teamId: string, week:
   }
 
   const size = Math.max(1, roster.length);
+  const nextNeglect = buildNextNeglectTracker(plan.allocation, state.practiceNeglectCounters ?? DEFAULT_PRACTICE_PLAN.neglectWeeks);
   const summary: PracticeApplicationSummary = {
     avgFatigueDelta: totalFatigueDelta / size,
     devXpPlayers,
     avgFamiliarityGain: totalFamiliarity / size,
     injuryRiskMod: effect.injuryRiskMod,
+    mentalErrorMod: effect.mentalErrorMod,
+    schemeConceptBonus: effect.schemeConceptBonus,
+    lateGameRetentionBonus: effect.lateGameRetentionBonus,
+    neglectPenalty: effect.cumulativeNeglectPenalty,
   };
+
+  const outcome = `Practice complete — discipline ${summary.mentalErrorMod <= 0 ? "improved" : "slipped"}, scheme rhythm ${summary.avgFamiliarityGain.toFixed(1)}, and conditioning ${summary.lateGameRetentionBonus >= 0 ? "supported" : "hurt"} late-game legs.`;
 
   return {
     nextState: {
@@ -1055,9 +1079,15 @@ export function applyPracticePlanForWeek(state: GameState, teamId: string, week:
       playerFatigueById: fatigue,
       playerDevXpById: dev,
       weeklyFamiliarityBonus: summary.avgFamiliarityGain,
-      nextGameInjuryRiskMod: effect.injuryRiskMod,
-      practicePlan: DEFAULT_PRACTICE_PLAN,
+      weeklyMentalErrorMod: summary.mentalErrorMod,
+      weeklySchemeConceptBonus: summary.schemeConceptBonus,
+      weeklyLateGameRetentionBonus: summary.lateGameRetentionBonus,
+      nextGameInjuryRiskMod: summary.injuryRiskMod,
+      cumulativeNeglectPenalty: summary.neglectPenalty,
+      practiceNeglectCounters: nextNeglect,
+      practicePlan: { ...DEFAULT_PRACTICE_PLAN, neglectWeeks: nextNeglect },
       practicePlanConfirmed: false,
+      lastPracticeOutcomeSummary: outcome,
       uiToast: `Practice complete — avg fatigue ${summary.avgFatigueDelta >= 0 ? "+" : ""}${summary.avgFatigueDelta.toFixed(1)} | ${summary.devXpPlayers} players gained Dev XP`,
     },
     summary,
@@ -1219,8 +1249,14 @@ function createInitialState(): GameState {
     playerFatigueById: {},
     practicePlan: DEFAULT_PRACTICE_PLAN,
     practicePlanConfirmed: false,
+    practiceNeglectCounters: { ...DEFAULT_PRACTICE_PLAN.neglectWeeks },
+    cumulativeNeglectPenalty: 0,
     weeklyFamiliarityBonus: 0,
+    weeklyMentalErrorMod: 0,
+    weeklySchemeConceptBonus: 0,
+    weeklyLateGameRetentionBonus: 0,
     nextGameInjuryRiskMod: 0,
+    lastPracticeOutcomeSummary: undefined,
     playerDevXpById: {},
     pendingTradeOffers: [],
     tradeError: undefined,
@@ -6205,8 +6241,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return state;
     }
     case "SET_PRACTICE_PLAN": {
-      const preview = getEffectPreview(action.payload);
-      return { ...state, practicePlan: action.payload, practicePlanConfirmed: true, uiToast: `Practice plan set — Fatigue ${preview.fatigueRange[0]} to ${preview.fatigueRange[1]} | Dev XP ${preview.devXP}` };
+      const plan = migratePracticePlan(action.payload);
+      const preview = getEffectPreview({ ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks });
+      return {
+        ...state,
+        practicePlan: { ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks },
+        practicePlanConfirmed: true,
+        uiToast: `Practice plan set — Fatigue ${preview.fatigueRange[0]} | Scheme +${preview.schemeConceptBonus.toFixed(1)} | Dev XP ${preview.devXP}`,
+      };
     }
     case "INJURY_UPSERT": {
       const existing = state.injuries ?? [];
@@ -6289,7 +6331,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           awayRatings: computeTeamGameRatings(action.payload.opponentTeamId),
           trackedPlayers,
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
-          practiceExecutionBonus: base.weeklyFamiliarityBonus,
+          practiceExecutionBonus: base.weeklyFamiliarityBonus + base.weeklySchemeConceptBonus + Math.max(0, -base.weeklyMentalErrorMod * 8) - base.cumulativeNeglectPenalty * 8,
+          lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
           coachArchetypeId: base.coach.archetypeId,
           coachTenureYear: base.coach.tenureYear,
           coachUnlockedPerkIds: base.coach.unlockedPerkIds,
@@ -6696,10 +6739,19 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       const v = (oldState as any).playerFatigueById?.[String(pl.playerId)];
       return [String(pl.playerId), { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }];
     })),
-    practicePlan: (oldState as any).practicePlan ?? DEFAULT_PRACTICE_PLAN,
+    practicePlan: migratePracticePlan((oldState as any).practicePlan),
     practicePlanConfirmed: Boolean((oldState as any).practicePlanConfirmed ?? false),
+    practiceNeglectCounters: {
+      ...DEFAULT_PRACTICE_PLAN.neglectWeeks,
+      ...((oldState as any).practiceNeglectCounters ?? {}),
+    },
+    cumulativeNeglectPenalty: Number((oldState as any).cumulativeNeglectPenalty ?? 0),
     weeklyFamiliarityBonus: Number((oldState as any).weeklyFamiliarityBonus ?? 0),
+    weeklyMentalErrorMod: Number((oldState as any).weeklyMentalErrorMod ?? 0),
+    weeklySchemeConceptBonus: Number((oldState as any).weeklySchemeConceptBonus ?? 0),
+    weeklyLateGameRetentionBonus: Number((oldState as any).weeklyLateGameRetentionBonus ?? 0),
     nextGameInjuryRiskMod: Number((oldState as any).nextGameInjuryRiskMod ?? 0),
+    lastPracticeOutcomeSummary: (oldState as any).lastPracticeOutcomeSummary,
     playerDevXpById: { ...((oldState as any).playerDevXpById ?? {}) },
     pendingTradeOffers: Array.isArray((oldState as any).pendingTradeOffers) ? (oldState as any).pendingTradeOffers : [],
     tradeError: undefined,
@@ -6858,10 +6910,19 @@ function loadState(): GameState {
       playerFatigueById: Object.fromEntries(
         Object.entries((migrated as any).playerFatigueById ?? {}).map(([k, v]: [string, any]) => [k, { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }]),
       ) as Record<string, PersistedFatigue>,
-      practicePlan: (migrated as any).practicePlan ?? DEFAULT_PRACTICE_PLAN,
+      practicePlan: migratePracticePlan((migrated as any).practicePlan),
       practicePlanConfirmed: Boolean((migrated as any).practicePlanConfirmed ?? false),
+      practiceNeglectCounters: {
+        ...DEFAULT_PRACTICE_PLAN.neglectWeeks,
+        ...((migrated as any).practiceNeglectCounters ?? {}),
+      },
+      cumulativeNeglectPenalty: Number((migrated as any).cumulativeNeglectPenalty ?? 0),
       weeklyFamiliarityBonus: Number((migrated as any).weeklyFamiliarityBonus ?? 0),
+      weeklyMentalErrorMod: Number((migrated as any).weeklyMentalErrorMod ?? 0),
+      weeklySchemeConceptBonus: Number((migrated as any).weeklySchemeConceptBonus ?? 0),
+      weeklyLateGameRetentionBonus: Number((migrated as any).weeklyLateGameRetentionBonus ?? 0),
       nextGameInjuryRiskMod: Number((migrated as any).nextGameInjuryRiskMod ?? 0),
+      lastPracticeOutcomeSummary: (migrated as any).lastPracticeOutcomeSummary,
       playerDevXpById: { ...(initial.playerDevXpById ?? {}), ...((migrated as any).playerDevXpById ?? {}) },
       pendingTradeOffers: Array.isArray((migrated as any).pendingTradeOffers) ? (migrated as any).pendingTradeOffers : [],
       tradeError: undefined,
