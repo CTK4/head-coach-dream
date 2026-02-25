@@ -43,6 +43,29 @@ export type DefensiveLook = {
   blitz: DefBlitz;
 };
 
+export type SituationBucket = "EARLY_DOWN" | "3RD_SHORT" | "3RD_MEDIUM" | "3RD_8_PLUS" | "4TH_DOWN" | "RED_ZONE";
+
+export type DefensiveCallSignature = `${DefensivePackage}:${DefShell}:${DefBox}:${DefBlitz}`;
+
+export type DefensiveCallRecord = {
+  snap: number;
+  down: 1 | 2 | 3 | 4;
+  distance: number;
+  ballOn: number;
+  defensivePackage: DefensivePackage;
+  look: DefensiveLook;
+  callSignature: DefensiveCallSignature;
+  situationBucket: SituationBucket;
+  pressureLook: boolean;
+};
+
+export type SituationWindowCount = {
+  total: number;
+  pressureLooks: number;
+  blitzLikely: number;
+  callsBySignature: Record<DefensiveCallSignature, number>;
+};
+
 // ─── Result ribbons ────────────────────────────────────────────────────────
 export type ResultTagKind = "PRESSURE" | "COVERAGE" | "BOX" | "MISMATCH" | "EXECUTION" | "MISTAKE" | "SITUATION";
 export type ResultTag = { kind: ResultTagKind; text: string };
@@ -113,6 +136,7 @@ export type TempoMode = "NORMAL" | "HURRY_UP";
 
 /** Baseline overall rating used when no real team data is available */
 const DEFAULT_RATING = 68;
+const SITUATION_WINDOW_SIZE = 12;
 
 export type DriveLogEntry = {
   personnelPackage?: PersonnelPackage;
@@ -189,6 +213,10 @@ export type GameSim = {
   currentPersonnelPackage: PersonnelPackage;
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
   selectedDefensivePackage?: DefensivePackage;
+  defensiveCallRecords: DefensiveCallRecord[];
+  recentDefensiveCalls: DefensiveCallRecord[];
+  situationWindowCounts: Partial<Record<SituationBucket, SituationWindowCount>>;
+  observedSnaps: number;
   practiceExecutionBonus: number;
   coachArchetypeId?: string;
   coachTenureYear: number;
@@ -224,6 +252,49 @@ function buildPlayExplanation(sim: GameSim, playType: PlayType, outcome: "SUCCES
 }
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
+
+function getSituationBucket(sim: Pick<GameSim, "down" | "distance" | "ballOn">): SituationBucket {
+  if (sim.ballOn >= 80) return "RED_ZONE";
+  if (sim.down === 4) return "4TH_DOWN";
+  if (sim.down === 3 && sim.distance >= 8) return "3RD_8_PLUS";
+  if (sim.down === 3 && sim.distance >= 4) return "3RD_MEDIUM";
+  if (sim.down === 3) return "3RD_SHORT";
+  return "EARLY_DOWN";
+}
+
+function isPressureLook(look: DefensiveLook): boolean {
+  return look.blitz === "LIKELY" || (look.blitz === "POSSIBLE" && look.shell === "SINGLE_HIGH");
+}
+
+function buildDefensiveCallSignature(defensivePackage: DefensivePackage, look: DefensiveLook): DefensiveCallSignature {
+  return `${defensivePackage}:${look.shell}:${look.box}:${look.blitz}`;
+}
+
+function rebuildSituationWindowCounts(records: DefensiveCallRecord[]): Partial<Record<SituationBucket, SituationWindowCount>> {
+  const counts: Partial<Record<SituationBucket, SituationWindowCount>> = {};
+  for (const record of records) {
+    const bucketCount = counts[record.situationBucket] ?? { total: 0, pressureLooks: 0, blitzLikely: 0, callsBySignature: {} as Record<DefensiveCallSignature, number> };
+    bucketCount.total += 1;
+    if (record.pressureLook) bucketCount.pressureLooks += 1;
+    if (record.look.blitz === "LIKELY") bucketCount.blitzLikely += 1;
+    bucketCount.callsBySignature[record.callSignature] = (bucketCount.callsBySignature[record.callSignature] ?? 0) + 1;
+    counts[record.situationBucket] = bucketCount;
+  }
+  return counts;
+}
+
+function recordDefensiveCall(sim: GameSim, record: DefensiveCallRecord): GameSim {
+  const defensiveCallRecords = [...(sim.defensiveCallRecords ?? []), record];
+  const recentDefensiveCalls = defensiveCallRecords.slice(-3).reverse();
+  const windowRecords = defensiveCallRecords.slice(-SITUATION_WINDOW_SIZE);
+  return {
+    ...sim,
+    defensiveCallRecords,
+    recentDefensiveCalls,
+    situationWindowCounts: rebuildSituationWindowCounts(windowRecords),
+    observedSnaps: (sim.observedSnaps ?? 0) + 1,
+  };
+}
 
 
 export function resolveArchetypePassives(coach: { archetypeId?: string; tenureYear?: number }, gameContext: { sim: GameSim; playType: PlayType; aggression: AggressionLevel }): PassiveResolution {
@@ -1145,6 +1216,10 @@ export function initGameSim(params: {
     trackedPlayers: params.trackedPlayers ?? { HOME: {}, AWAY: {} },
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
+    defensiveCallRecords: [],
+    recentDefensiveCalls: [],
+    situationWindowCounts: {},
+    observedSnaps: 0,
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
@@ -1226,6 +1301,18 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = { ...s, clock: { ...s.clock, clockRunning: status.running, restartMode: status.restart, playClockLen: 40 } };
 
   if (s.clock.timeRemainingSec === 0) s = quarterAdvanceIfNeeded(s);
+
+  s = recordDefensiveCall(s, {
+    snap: (s.observedSnaps ?? 0) + 1,
+    down: downBefore,
+    distance: distanceBefore,
+    ballOn: ballBefore,
+    defensivePackage: selectedDefensivePackage,
+    look,
+    callSignature: buildDefensiveCallSignature(selectedDefensivePackage, look),
+    situationBucket: getSituationBucket({ down: downBefore, distance: distanceBefore, ballOn: ballBefore }),
+    pressureLook: isPressureLook(look),
+  });
 
   // Generate the next snap's defensive look after the play
   const nextLook = computeDefensiveLook(s, mulberry32(s.seed + 13));
