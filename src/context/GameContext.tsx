@@ -40,7 +40,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents, runLeagueAging } from "@/engine/offseasonGen";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
 import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
-import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
@@ -173,7 +173,7 @@ export type OffseasonData = {
   resigning: { decisions: Record<string, ResignDecision> };
   tagCenter: { applied?: TagApplied };
   rosterAudit: { cutDesignations: Record<string, "NONE" | "POST_JUNE_1"> };
-  combine: { results: Record<string, any>; generated: boolean };
+  combine: { prospects: Prospect[]; results: Record<string, any>; generated: boolean };
   scouting: {
     windowId: ScoutingWindowId;
     budget: { total: number; spent: number; remaining: number; carryIn: number };
@@ -314,6 +314,31 @@ function draftBoard(): Prospect[] {
   const rows = DRAFT_ROWS.slice();
   rows.sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999));
   return rows.map(toProspect);
+}
+
+function ensureOffseasonCombineData(state: GameState): GameState {
+  const combine = state.offseasonData.combine;
+  const prospects = draftBoard().slice(0, 220);
+  const resultKeys = Object.keys(combine.results ?? {});
+
+  if (combine.generated && combine.prospects.length > 0 && resultKeys.length > 0) return state;
+
+  const nextProspects = combine.prospects.length
+    ? combine.prospects
+    : resultKeys.length
+      ? prospects.filter((p) => resultKeys.includes(p.id))
+      : prospects;
+  const nextResults = resultKeys.length
+    ? combine.results
+    : Object.fromEntries(prospects.map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, k), p)]));
+
+  return {
+    ...state,
+    offseasonData: {
+      ...state.offseasonData,
+      combine: { prospects: nextProspects, results: nextResults, generated: true },
+    },
+  };
 }
 
 // GM mode draft scoring constants
@@ -484,6 +509,7 @@ export type FreeAgencyUI =
   | { mode: "MY_OFFERS" };
 
 export type FreeAgencyState = {
+  initStatus: "idle" | "loading" | "ready" | "error";
   ui: FreeAgencyUI;
   offersByPlayerId: Record<string, FreeAgencyOffer[]>;
   signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
@@ -840,6 +866,10 @@ export type GameAction =
   | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
   | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
   | { type: "FA_INIT_OFFERS" }
+  | { type: "FA_INIT_START" }
+  | { type: "FA_INIT_READY" }
+  | { type: "FA_INIT_ERROR" }
+  | { type: "FA_INIT_RESET" }
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
   | { type: "FA_SIGN"; payload: { offerId: string } }
@@ -1071,7 +1101,7 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
       rosterAudit: { cutDesignations: {} },
-      combine: { results: {}, generated: false },
+      combine: { prospects: [], results: {}, generated: false },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -1099,6 +1129,7 @@ function createInitialState(): GameState {
     tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
     franchise: { yR1QBByTeamId: {} },
     freeAgency: {
+      initStatus: "idle",
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -1948,7 +1979,7 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
 function resetFaPhase(state: GameState): GameState {
   return {
     ...state,
-    freeAgency: { ...state.freeAgency, resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" }, resolveRoundByPlayerId: {}, pendingCounterTeamByPlayerId: {}, cpuTickedOnOpen: false },
+    freeAgency: { ...state.freeAgency, initStatus: "idle", resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" }, resolveRoundByPlayerId: {}, pendingCounterTeamByPlayerId: {}, cpuTickedOnOpen: false },
   };
 }
 
@@ -2329,6 +2360,7 @@ function seasonRollover(state: GameState): GameState {
     lastNewsReadWeek: 0,
     tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
     freeAgency: {
+      initStatus: "idle",
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -4045,6 +4077,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "OFFSEASON_SET_STEP": {
       const stepId = action.payload.stepId;
+      if (stepId === "COMBINE") {
+        const next = ensureOffseasonCombineData(state);
+        return { ...next, offseason: { ...next.offseason, stepId } };
+      }
       if (stepId === "PRE_DRAFT" && !state.offseasonData.preDraft.board.length) {
         return {
           ...state,
@@ -4064,8 +4100,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "OFFSEASON_ADVANCE_STEP": {
       const cur = state.offseason.stepId;
       if (!state.offseason.stepsComplete[cur]) return state;
-      const nextStep = nextOffseasonStepId(cur);
-      if (!nextStep) return state;
+      const rawNextStep = nextOffseasonStepId(cur);
+      if (!rawNextStep) return state;
+      const nextStep: OffseasonStepId =
+        !ENABLE_TAMPERING_STEP && (cur === "COMBINE" || rawNextStep === "TAMPERING")
+          ? "FREE_AGENCY"
+          : rawNextStep;
 
       const prevStage = state.careerStage;
       const stage: CareerStage =
@@ -4080,6 +4120,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               : state.careerStage;
 
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      if (nextStep === "COMBINE") next = ensureOffseasonCombineData(next);
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
@@ -4906,8 +4947,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "COMBINE_GENERATE": {
-      const results = Object.fromEntries(draftBoard().slice(0, 220).map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, k), p)]));
-      return { ...state, offseasonData: { ...state.offseasonData, combine: { results, generated: true } } };
+      return ensureOffseasonCombineData(state);
     }
     case "TAMPERING_ADD_OFFER":
       return {
@@ -4984,6 +5024,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
     }
 
+    case "FA_INIT_START":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "loading" } };
+
+    case "FA_INIT_READY":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "ready" } };
+
+    case "FA_INIT_ERROR":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "error" } };
+
+    case "FA_INIT_RESET":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "idle" } };
     case "FA_INIT_OFFERS": {
       const existing = state.offseasonData.freeAgency.offers;
       if (existing.length) return state;
@@ -5199,6 +5250,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "FA_CPU_TICK": {
       if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.cpuTickedOnOpen) return state;
       const next = cpuOfferTick(state, 70);
       const out = { ...next, freeAgency: { ...next.freeAgency, cpuTickedOnOpen: true } };
       reportFaInvariantViolations(out, "FA_CPU_TICK");
@@ -6572,7 +6624,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
         rosterAudit: { cutDesignations: {} },
-        combine: { results: {}, generated: false },
+        combine: { prospects: [], results: {}, generated: false },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -6770,6 +6822,7 @@ function loadState(): GameState {
       freeAgency: {
         ...initial.freeAgency,
         ...migrated.freeAgency,
+        initStatus: (migrated.freeAgency as any)?.initStatus ?? "idle",
         offersByPlayerId: { ...initial.freeAgency.offersByPlayerId, ...(migrated.freeAgency?.offersByPlayerId ?? {}) },
         signingsByPlayerId: { ...initial.freeAgency.signingsByPlayerId, ...(migrated.freeAgency?.signingsByPlayerId ?? {}) },
       },

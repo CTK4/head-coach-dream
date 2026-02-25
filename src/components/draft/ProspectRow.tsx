@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScoutingReport } from "@/types/scouting";
+import { formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 export interface Prospect {
   id: string;
@@ -15,6 +16,7 @@ export interface Prospect {
   weight?: string;
   forty?: string;
   positionRank?: string;
+  combineScore10?: number | null;
 }
 
 interface ProspectRowProps {
@@ -32,11 +34,12 @@ interface ProspectRowProps {
   onOpenProfile?: (prospectId: string) => void;
 }
 
-const gradeClass = (grade: number) => {
-  if (grade >= 90) return "bg-amber-500/20 text-amber-200 border-amber-400/30";
-  if (grade >= 80) return "bg-blue-500/20 text-blue-200 border-blue-400/30";
-  if (grade >= 70) return "bg-emerald-500/20 text-emerald-200 border-emerald-400/30";
-  if (grade >= 60) return "bg-amber-500/20 text-amber-100 border-amber-400/30";
+const scoreClass = (score: number | null | undefined) => {
+  if (!Number.isFinite(score)) return "bg-slate-500/20 text-slate-200 border-slate-400/30";
+  if ((score as number) >= 9) return "bg-amber-500/20 text-amber-200 border-amber-400/30";
+  if ((score as number) >= 8) return "bg-blue-500/20 text-blue-200 border-blue-400/30";
+  if ((score as number) >= 7) return "bg-emerald-500/20 text-emerald-200 border-emerald-400/30";
+  if ((score as number) >= 6) return "bg-amber-500/20 text-amber-100 border-amber-400/30";
   return "bg-slate-500/20 text-slate-200 border-slate-400/30";
 };
 
@@ -46,6 +49,7 @@ const rankBg = (rank: number) => {
   return "from-slate-500/60 to-slate-700/70";
 };
 
+export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
 export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
   const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
@@ -81,8 +85,8 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
             </div>
             <div className="text-xs text-slate-400">{prospect.pos} · {prospect.school ?? "Unknown School"}</div>
             <div className="mt-2 flex items-center gap-2">
-              <span className={cn("rounded border px-2 py-0.5 text-[11px]", gradeClass(estCenter))}>
-                {prospect.estLow === prospect.estHigh ? prospect.estLow : `${prospect.estLow}–${prospect.estHigh}`}
+              <span className={cn("rounded border px-2 py-0.5 text-[11px]", scoreClass(prospect.combineScore10))}>
+                CS {formatCombineScore10(prospect.combineScore10)}
               </span>
               {prospect.confidence ? <span className="text-[11px] text-slate-400">Conf {prospect.confidence}%</span> : null}
             </div>

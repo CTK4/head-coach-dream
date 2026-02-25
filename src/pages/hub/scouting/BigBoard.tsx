@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { getDraftClass, useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
+import { computeCombineScore } from "@/engine/scouting/combineScore";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 
@@ -36,8 +37,13 @@ export default function BigBoard() {
         confidence: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence as number) ?? 0),
         height: String(p.height ?? "—"),
         weight: String(p.weight ?? "—"),
+        combineScore10: computeCombineScore({
+          ...(p as Record<string, unknown>),
+          ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+          ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
+        }).combineScore10,
       })),
-    [draftClass, scouting?.scoutProfiles]
+    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId]
   );
 
   useEffect(() => {
