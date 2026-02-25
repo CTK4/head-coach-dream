@@ -40,7 +40,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents, runLeagueAging } from "@/engine/offseasonGen";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
 import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
-import { OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
 import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
@@ -4062,8 +4062,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "OFFSEASON_ADVANCE_STEP": {
       const cur = state.offseason.stepId;
       if (!state.offseason.stepsComplete[cur]) return state;
-      const nextStep = nextOffseasonStepId(cur);
-      if (!nextStep) return state;
+      const rawNextStep = nextOffseasonStepId(cur);
+      if (!rawNextStep) return state;
+      const nextStep: OffseasonStepId =
+        !ENABLE_TAMPERING_STEP && (cur === "COMBINE" || rawNextStep === "TAMPERING")
+          ? "FREE_AGENCY"
+          : rawNextStep;
 
       const prevStage = state.careerStage;
       const stage: CareerStage =

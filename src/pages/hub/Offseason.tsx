@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 const stepRoute: Record<string, string> = {
   RESIGNING: "/offseason/resigning",
   COMBINE: "/offseason/combine",
-  TAMPERING: "/offseason/tampering",
+  TAMPERING: "/offseason/free-agency",
   FREE_AGENCY: "/offseason/free-agency",
   PRE_DRAFT: "/offseason/pre-draft",
   DRAFT: "/offseason/draft",
@@ -22,7 +22,7 @@ export default function Offseason() {
   const { state } = useGame();
   const navigate = useNavigate();
   const step = state.offseason.stepId;
-  const stepMeta = OFFSEASON_STEPS.find((s) => s.id === step)!;
+  const stepMeta = OFFSEASON_STEPS.find((s) => s.id === step) ?? OFFSEASON_STEPS[0];
   const goCurrent = () => navigate(stepRoute[step]);
   const ready = useMemo(() => !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId && !!state.orgRoles.stcCoachId, [state.orgRoles.ocCoachId, state.orgRoles.dcCoachId, state.orgRoles.stcCoachId]);
 
