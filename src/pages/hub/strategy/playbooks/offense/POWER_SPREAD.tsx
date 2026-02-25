@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function POWER_SPREAD() {
-  return <PlaceholderPlaybook side="Offense" schemeId="POWER_SPREAD" />;
+  return <OffensePlaybookTemplate schemeId="POWER_SPREAD" />;
 }

@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function VERTICAL_PASSING() {
-  return <PlaceholderPlaybook side="Offense" schemeId="VERTICAL_PASSING" />;
+  return <OffensePlaybookTemplate schemeId="VERTICAL_PASSING" />;
 }

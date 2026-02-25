@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function AIR_RAID() {
-  return <PlaceholderPlaybook side="Offense" schemeId="AIR_RAID" />;
+  return <OffensePlaybookTemplate schemeId="AIR_RAID" />;
 }
