@@ -8,6 +8,9 @@ describe("normalizeProspectPosition", () => {
     expect(normalizeProspectPosition("OLB/EDGE", "SCOUTING")).toBe("EDGE");
     expect(normalizeProspectPosition("IDL", "SCOUTING")).toBe("DT");
     expect(normalizeProspectPosition("NT", "SCOUTING")).toBe("DT");
+    // Regression: single-letter token false positives
+    expect(normalizeProspectPosition("CB", "SCOUTING")).toBe("CB");
+    expect(normalizeProspectPosition("DT", "SCOUTING")).toBe("DT");
   });
 
   it("maps OL variants for draft taxonomy", () => {
@@ -28,5 +31,9 @@ describe("normalizeProspectPosition", () => {
     expect(counts.IOL).toBeGreaterThan(0);
     expect(counts.DT).toBeGreaterThan(0);
     expect(counts.EDGE).toBeGreaterThan(0);
+    // Regression: positions should not be miscategorized into others
+    expect(counts.CB).toBeGreaterThan(0);
+    expect(counts.CB).not.toEqual(counts.IOL);
+    expect(counts.DT).not.toEqual(counts.OT);
   });
 });
