@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useGame } from "@/context/GameContext";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
+import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -77,7 +78,7 @@ export default function Combine() {
                 const forty = p.forty != null ? String(p.forty) : "—";
                 const vert = p.vert != null ? String(p.vert) : "—";
                 const bench = p.bench != null ? String(p.bench) : "—";
-                const ras = p.ras != null ? clamp(Number(p.ras), 0, 10).toFixed(1) : "—";
+                const combineScore10 = computeCombineScore(p as Record<string, unknown>).combineScore10;
 
                 return (
                   <div
@@ -93,7 +94,7 @@ export default function Combine() {
                         <span className="text-slate-200/70">({pos})</span>
                       </div>
                       <div className="truncate text-xs text-slate-200/70">
-                        40 {forty} · Vert {vert} · Bench {bench} · RAS {ras}
+                        40 {forty} · Vert {vert} · Bench {bench} · CS {formatCombineScore10(combineScore10)}
                       </div>
                     </div>
                     <Badge variant="secondary">Tier {clamp(Number(p.tier ?? 60), 1, 99)}</Badge>
