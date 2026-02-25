@@ -33,7 +33,7 @@ function parseSave(raw: string | null): GameState | null {
 
 function toMetadata(saveId: string, state: GameState): SaveMetadata {
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
-  const teamName = getTeamById(teamId)?.name ?? teamId || "Unassigned Team";
+  const teamName = (getTeamById(teamId)?.name ?? teamId) || "Unassigned Team";
   const standing = (state.currentStandings ?? []).find((s) => s.teamId === teamId);
   return {
     saveId,
