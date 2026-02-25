@@ -604,8 +604,46 @@ export type GameState = {
   orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
   scheme?: {
-    offense?: { style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY"; tempo: "SLOW" | "NORMAL" | "FAST" };
-    defense?: { style: "MAN" | "ZONE" | "MIXED"; aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE" };
+    offense?: {
+      style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
+      tempo: "SLOW" | "NORMAL" | "FAST";
+      schemeId?:
+        | "AIR_RAID"
+        | "SHANAHAN_WIDE_ZONE"
+        | "VERTICAL_PASSING"
+        | "PRO_STYLE_BALANCED"
+        | "POWER_GAP"
+        | "ERHARDT_PERKINS"
+        | "RUN_AND_SHOOT"
+        | "SPREAD_RPO"
+        | "WEST_COAST"
+        | "AIR_CORYELL"
+        | "MODERN_TRIPLE_OPTION"
+        | "CHIP_KELLY_RPO"
+        | "TWO_TE_POWER_I"
+        | "MOTION_BASED_MISDIRECTION"
+        | "POWER_SPREAD";
+    };
+    defense?: {
+      style: "MAN" | "ZONE" | "MIXED";
+      aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
+      schemeId?:
+        | "THREE_FOUR_TWO_GAP"
+        | "FOUR_TWO_FIVE"
+        | "SEATTLE_COVER_3"
+        | "COVER_SIX"
+        | "FANGIO_TWO_HIGH"
+        | "TAMPA_2"
+        | "MULTIPLE_HYBRID"
+        | "CHAOS_FRONT"
+        | "PHILLIPS_BASE_THREE_FOUR"
+        | "LEBEAU_ZONE_BLITZ_THREE_FOUR"
+        | "BEARS_FOUR_SIX"
+        | "FOUR_THREE_OVER"
+        | "SINGLE_HIGH_COVER_3"
+        | "SABAN_COVER_4_MATCH"
+        | "RYAN_NICKEL_PRESSURE";
+    };
   };
   strategy: StrategyState;
   scouting?: { boardSeed: number; combineRun?: boolean };
@@ -1072,7 +1110,10 @@ function createInitialState(): GameState {
     staff: {},
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
-    scheme: { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    scheme: {
+      offense: { style: "BALANCED", tempo: "NORMAL", schemeId: "PRO_STYLE_BALANCED" },
+      defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
+    },
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: { news: defaultNews(2026), newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
@@ -3775,8 +3816,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return {
           ...state,
           scheme: {
-            offense: { style: "BALANCED", tempo: state.coach?.repBaseline && state.coach.repBaseline > 55 ? "FAST" : "NORMAL" },
-            defense: { style: "MIXED", aggression: "NORMAL" },
+            offense: {
+              style: "BALANCED",
+              tempo: state.coach?.repBaseline && state.coach.repBaseline > 55 ? "FAST" : "NORMAL",
+              schemeId: "PRO_STYLE_BALANCED",
+            },
+            defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
           },
         };
       }
@@ -6225,7 +6270,18 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },
       } as OffseasonData),
-    scheme: oldState.scheme ?? { offense: { style: "BALANCED", tempo: "NORMAL" }, defense: { style: "MIXED", aggression: "NORMAL" } },
+    scheme: {
+      offense: {
+        style: oldState.scheme?.offense?.style ?? "BALANCED",
+        tempo: oldState.scheme?.offense?.tempo ?? "NORMAL",
+        schemeId: oldState.scheme?.offense?.schemeId ?? "PRO_STYLE_BALANCED",
+      },
+      defense: {
+        style: oldState.scheme?.defense?.style ?? "MIXED",
+        aggression: oldState.scheme?.defense?.aggression ?? "NORMAL",
+        schemeId: oldState.scheme?.defense?.schemeId ?? "MULTIPLE_HYBRID",
+      },
+    },
     strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {

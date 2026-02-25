@@ -7,6 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PlaybookScreen from "@/pages/hub/strategy/PlaybookScreen";
+import {
+  DEFENSE_SCHEME_IDS,
+  DEFENSE_SCHEME_LABELS,
+  DEFAULT_DEFENSE_SCHEME_ID,
+  DEFAULT_OFFENSE_SCHEME_ID,
+  OFFENSE_SCHEME_IDS,
+  OFFENSE_SCHEME_LABELS,
+} from "@/lib/schemeLabels";
 
 const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
 
@@ -94,6 +102,9 @@ function IdentityScreen() {
   const offenseTempo = state.scheme?.offense?.tempo ?? "NORMAL";
   const defenseStyle = state.scheme?.defense?.style ?? "MIXED";
   const defenseAgg = state.scheme?.defense?.aggression ?? "NORMAL";
+  const offenseSchemeId = state.scheme?.offense?.schemeId ?? DEFAULT_OFFENSE_SCHEME_ID;
+  const defenseSchemeId = state.scheme?.defense?.schemeId ?? DEFAULT_DEFENSE_SCHEME_ID;
+
 
   return (
     <div className="min-w-0">
@@ -124,7 +135,7 @@ function IdentityScreen() {
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: v as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: v as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -140,13 +151,40 @@ function IdentityScreen() {
             </div>
 
             <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Scheme</div>
+              <Select
+                value={offenseSchemeId}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: {
+                      offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: v as never },
+                      defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId },
+                    },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OFFENSE_SCHEME_IDS.map((schemeId) => (
+                    <SelectItem key={schemeId} value={schemeId}>
+                      {OFFENSE_SCHEME_LABELS[schemeId]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
               <div className="text-xs text-slate-400">Tempo</div>
               <Select
                 value={offenseTempo}
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: v as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: v as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -175,7 +213,7 @@ function IdentityScreen() {
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: v as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: v as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -191,13 +229,40 @@ function IdentityScreen() {
             </div>
 
             <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Scheme</div>
+              <Select
+                value={defenseSchemeId}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: {
+                      offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId },
+                      defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: v as never },
+                    },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEFENSE_SCHEME_IDS.map((schemeId) => (
+                    <SelectItem key={schemeId} value={schemeId}>
+                      {DEFENSE_SCHEME_LABELS[schemeId]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
               <div className="text-xs text-slate-400">Aggression</div>
               <Select
                 value={defenseAgg}
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: v as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: v as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
