@@ -84,4 +84,31 @@ describe("evaluateContractOffer", () => {
     expect(out.interestAfter).toBeLessThan(out.interestBefore);
     expect(out.interestAfter).toBeGreaterThanOrEqual(37);
   });
+
+  it("accepts market-rate offers at realistic frequency", () => {
+    const probe = evaluateContractOffer({ ...baseParams, offer: { years: 3, aav: 10_000_000 }, interest: 58 });
+    const marketAav = Math.round(probe.askAav * 1.0);
+    let accepts = 0;
+    for (let i = 0; i < 50; i++) {
+      const result = evaluateContractOffer({
+        ...baseParams,
+        context: { ...baseParams.context, saveSeed: 5000 + i, schemeFit: 62, roleProjection: 70, contenderStatus: 58, locationPreference: 55 },
+        offer: { years: 3, aav: marketAav },
+        interest: 58,
+      });
+      if (result.accepted) accepts += 1;
+    }
+    expect(accepts).toBeGreaterThanOrEqual(18);
+  });
+
+  it("returns reason labels tied to scoring factors", () => {
+    const result = evaluateContractOffer({
+      ...baseParams,
+      context: { ...baseParams.context, schemeFit: 25, roleProjection: 35, contenderStatus: 30, locationPreference: 20 },
+      offer: { years: 1, aav: 7_200_000 },
+      interest: 40,
+    });
+    expect(["AAV vs market", "Contract term", "Team interest", "Scheme fit", "Role projection", "Contender status", "Location preference", "Guarantee structure"]).toContain(result.reason);
+  });
+
 });

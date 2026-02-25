@@ -17,7 +17,18 @@ export type OfferDecisionResult = {
 type OfferDecisionParams = {
   player: { id: string; age?: number; overall?: number; position?: string; dev?: number; traits?: string[] };
   offer: { years: number; total?: number; aav?: number; guarantees?: number };
-  context: { saveSeed: number; season: number; week: number; teamId: string; phase: "RESIGN" | "FA" };
+  context: {
+    saveSeed: number;
+    season: number;
+    week: number;
+    teamId: string;
+    phase: "RESIGN" | "FA";
+    schemeFit?: number;
+    roleProjection?: number;
+    contenderStatus?: number;
+    locationPreference?: number;
+    desiredGuaranteeRatio?: number;
+  };
   interest: number;
   priorOfferAav?: number;
   rejectionCount?: number;
@@ -80,15 +91,44 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   const yearsFit = clamp(1 - yearGap * 0.2, 0.55, 1);
   const yearPenalty = (1 - yearsFit) * 0.2;
 
-  let score = sigmoid((aavRatio - 1) * 10) - yearPenalty;
-  score += ((clamp(params.interest, 0, 100) / 100) - 0.55) * 0.18;
+  const scoreFactors: Array<{ label: string; delta: number }> = [];
+
+  const marketDelta = (sigmoid((aavRatio - 0.96) * 9) - 0.5) * 1.25;
+  scoreFactors.push({ label: "AAV vs market", delta: marketDelta });
+
+  const termDelta = -yearPenalty;
+  scoreFactors.push({ label: "Contract term", delta: termDelta });
+
+  const interestDelta = ((clamp(params.interest, 0, 100) / 100) - 0.52) * 0.2;
+  scoreFactors.push({ label: "Team interest", delta: interestDelta });
+
+  const contextAxes: Array<[string, number | undefined, number]> = [
+    ["Scheme fit", params.context.schemeFit, 0.06],
+    ["Role projection", params.context.roleProjection, 0.05],
+    ["Contender status", params.context.contenderStatus, 0.05],
+    ["Location preference", params.context.locationPreference, 0.035],
+  ];
+  for (const [label, value, weight] of contextAxes) {
+    if (value == null) continue;
+    const delta = ((clamp(value, 0, 100) / 100) - 0.5) * weight;
+    scoreFactors.push({ label, delta });
+  }
+
+  if (params.offer.guarantees != null && params.context.desiredGuaranteeRatio != null) {
+    const offerGuaranteeRatio = params.offer.guarantees > 1 ? params.offer.guarantees / 100 : params.offer.guarantees;
+    const desired = clamp(params.context.desiredGuaranteeRatio, 0, 1);
+    const gap = clamp(offerGuaranteeRatio, 0, 1) - desired;
+    scoreFactors.push({ label: "Guarantee structure", delta: clamp(gap * 0.28, -0.08, 0.08) });
+  }
+
+  let score = 0.57 + scoreFactors.reduce((sum, f) => sum + f.delta, 0);
 
   const seedKey = `${params.context.saveSeed}|${params.player.id}|${params.context.teamId}|${params.context.week}|${params.offer.years}|${offerAav}|${params.context.phase}`;
   const noise = (mulberry32(hashStr(seedKey))() - 0.5) * 0.08;
   score = clamp(score + noise, 0, 1);
 
   const ovr = Number(params.player.overall ?? 65);
-  let threshold = 0.62;
+  let threshold = 0.57;
   if (ovr >= 92) threshold += 0.1;
   else if (ovr >= 86) threshold += 0.07;
   else if (ovr >= 80) threshold += 0.05;
@@ -114,18 +154,10 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   const deltaApplied = deltaInterest + recovery;
   const interestAfter = clamp(interestBefore + deltaApplied, 0, 100);
 
-  let reason = "Competitive offer";
-  if (accepted && aavRatio >= 1.05 && yearsFit >= 0.92) reason = "Strong AAV + term";
-  if (!accepted) {
-    const yearDiff = Number(params.offer.years ?? preferred) - preferred;
-    const deficits = [
-      { reason: "Too low vs market", score: Math.max(0, 1 - aavRatio) * 1.2 },
-      { reason: "Wants more years", score: yearDiff < 0 ? Math.abs(yearDiff) * 0.5 : 0 },
-      { reason: "Prefers shorter deal", score: yearDiff > 0 ? Math.abs(yearDiff) * 0.5 : 0 },
-      { reason: "Low interest in re-signing", score: params.interest < 45 ? (45 - params.interest) / 45 : 0 },
-    ].sort((a, b) => b.score - a.score);
-    reason = deficits[0]?.reason ?? "Too low vs market";
-  }
+  const topFactor = scoreFactors
+    .map((f) => ({ ...f, impact: accepted ? f.delta : -f.delta }))
+    .sort((a, b) => b.impact - a.impact)[0];
+  const reason = topFactor?.label ?? (accepted ? "Overall offer strength" : "Overall offer weakness");
 
   return {
     accepted,
