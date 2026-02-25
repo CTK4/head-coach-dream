@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { moraleChipColor } from "@/engine/morale";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 export default function RosterPlayers() {
   const { state } = useGame();
@@ -41,9 +41,8 @@ export default function RosterPlayers() {
           <CardContent className="p-0">
             <div className="divide-y divide-white/10">
               {rows.map((r) => (
-                <Link
+                <div
                   key={r.playerId}
-                  to={`/roster/player/${r.playerId}`}
                   className="flex items-center justify-between px-4 py-3 hover:bg-white/5"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -54,9 +53,9 @@ export default function RosterPlayers() {
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <div className="truncate font-semibold">{r.name}</div>
+                      <div className="truncate font-semibold"><PlayerNameLink playerId={r.playerId} name={r.name} pos={r.pos} namespace="roster" /></div>
                       <div className="text-xs text-slate-400">
-                        {r.pos} • OVR {r.ovr} • Age {r.age}
+                        OVR {r.ovr} • Age {r.age}
                       </div>
                     </div>
                   </div>
@@ -65,7 +64,7 @@ export default function RosterPlayers() {
                   >
                     M {r.morale}
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </CardContent>

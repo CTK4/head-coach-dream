@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { IntelMeters } from "@/components/IntelMeters";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 const TABS = ["Top", "Offense", "Defense", "Special"];
 const groupTab = (pos: string) => (["QB", "RB", "WR", "TE", "OL"].includes(pos) ? "Offense" : ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? "Defense" : ["K", "P"].includes(pos) ? "Special" : "Top");
@@ -27,7 +28,9 @@ export default function FreeAgency() {
       {shown.slice(0, 120).map((p) => (
         <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
-            <div className="font-semibold">{p.name} ({p.pos}) {state.freeAgency.signingsByPlayerId[p.id] ? "(SIGNED)" : ""}</div>
+            <div className="font-semibold">
+              <PlayerNameLink playerId={p.id} name={p.name} pos={p.pos} namespace="free-agency" /> {state.freeAgency.signingsByPlayerId[p.id] ? "(SIGNED)" : ""}
+            </div>
             <div className="text-xs opacity-70">OVR {p.ovr} · Age {p.age}</div>
             <IntelMeters intel={state.offseasonData.scouting.intelByFAId[p.id]} />
             <div className="flex gap-2 mt-2"><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_TAPE_SCAN" } })}>Tape (-2)</button><button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_FULL_DD" } })}>Full DD (-10)</button></div>
