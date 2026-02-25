@@ -578,6 +578,12 @@ export type GameState = {
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
+  storySetup?: {
+    teamId: string;
+    teamName: string;
+    gmName?: string;
+    teamLocked: true;
+  };
   autonomyRating?: number;
   ownerPatience?: number;
   season: number;
@@ -710,6 +716,7 @@ export type DraftState = {
   };
 
 export type GameAction =
+  | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string } }
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
@@ -3280,6 +3287,24 @@ function patiencePenalty(args: {
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
+    case "INIT_NEW_GAME_FROM_STORY": {
+      const fresh = createInitialState();
+      return {
+        ...fresh,
+        phase: "CREATE",
+        acceptedOffer: action.payload.offer,
+        autonomyRating: action.payload.offer.autonomy,
+        ownerPatience: action.payload.offer.patience,
+        userTeamId: action.payload.offer.teamId,
+        teamId: action.payload.offer.teamId,
+        storySetup: {
+          teamId: action.payload.offer.teamId,
+          teamName: action.payload.teamName,
+          gmName: action.payload.gmName,
+          teamLocked: true,
+        },
+      };
+    }
     case "SET_COACH": {
       const nextCoach = { ...state.coach, ...action.payload };
       const lockedCoord = nextCoach.archetypeId === "oc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
@@ -6416,6 +6441,7 @@ function loadState(): GameState {
       hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
       unreadNewsCount: Number((migrated as any).unreadNewsCount ?? 0),
       lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
+      storySetup: (migrated as any).storySetup,
     };
     out = ensureAccolades(bootstrapAccolades(out));
     out = ensureLeagueGmMap(out);
