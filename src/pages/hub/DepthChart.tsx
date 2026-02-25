@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GripVertical } from "lucide-react";
 import { hapticTap } from "@/lib/haptics";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 type Unit = "OFFENSE" | "DEFENSE" | "ST";
 type Section = { key: Unit; title: string; slots: string[] };
@@ -691,9 +692,18 @@ export default function DepthChart() {
                                 ) : null}
                                 <div className="min-w-0 flex-1">
                                   <div className="truncate text-sm font-medium">
-                                    {sel
-                                      ? `${sel.name} (${sel.pos} ${sel.ovr})`
-                                      : "Auto (top OVR)"}{" "}
+                                    {sel ? (
+                                      <>
+                                        <PlayerNameLink
+                                          playerId={sel.id}
+                                          name={sel.name}
+                                          pos={sel.pos}
+                                          linkClassName="font-medium"
+                                          namespace="roster"
+                                        />{" "}
+                                        <span className="text-muted-foreground">OVR {sel.ovr}</span>
+                                      </>
+                                    ) : "Auto (top OVR)"}{" "}
                                     {locked ? "• Locked" : ""}
                                   </div>
                                   <div className="truncate text-xs text-muted-foreground">

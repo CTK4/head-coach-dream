@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 function moneyShort(n: number) {
   const m = n / 1_000_000;
@@ -108,7 +109,7 @@ export default function Finances() {
               <div key={r.id} className="rounded-xl border border-border bg-card/50 p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-semibold truncate">
-                    {r.name} <span className="text-muted-foreground">({r.pos})</span> <span className="text-muted-foreground">· OVR {r.ovr}</span>
+                    <PlayerNameLink playerId={r.id} name={r.name} pos={r.pos} namespace="contracts" /> <span className="text-muted-foreground">· OVR {r.ovr}</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Cap Hit {moneyShort(r.capHit)} · Years Left {r.yearsLeft} {r.isOverride ? "· (Override)" : ""}

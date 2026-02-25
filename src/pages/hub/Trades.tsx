@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 function resolveUserTeamId(state: any): string | undefined {
   return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
@@ -148,17 +149,24 @@ export default function TradesPage() {
             <Separator className="bg-slate-300/15" />
             <div className="max-h-[560px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
               {myPlayers.slice().sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)).map((p) => (
-                <button
+                <div
                   key={p.playerId}
-                  type="button"
-                  className={`w-full rounded-lg border p-3 text-left transition ${outgoingIds.has(p.playerId) ? "border-emerald-400/50 bg-emerald-900/20" : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"}`}
+                  role="button"
+                  tabIndex={0}
+                  className={`w-full cursor-pointer rounded-lg border p-3 text-left transition ${outgoingIds.has(p.playerId) ? "border-emerald-400/50 bg-emerald-900/20" : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"}`}
                   onClick={() => toggle(setOutgoingIds, p.playerId)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggle(setOutgoingIds, p.playerId);
+                    }
+                  }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-100">{p.name} <span className="text-slate-200/70">({p.pos ?? "—"})</span></div><div className="truncate text-xs text-slate-200/70">OVR {p.overall ?? "—"} • Age {p.age ?? "—"}</div></div>
+                    <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-100"><PlayerNameLink playerId={p.playerId} name={p.name} pos={p.pos ?? "—"} linkClassName="text-slate-100" /> </div><div className="truncate text-xs text-slate-200/70">OVR {p.overall ?? "—"} • Age {p.age ?? "—"}</div></div>
                     <Badge variant="outline">{p.overall ?? "—"}</Badge>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -171,17 +179,24 @@ export default function TradesPage() {
             {!partnerTeamId ? <div className="text-sm text-slate-200/70">Select a partner team to view their roster.</div> : (
               <div className="max-h-[560px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
                 {partnerPlayers.slice().sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0)).map((p) => (
-                  <button
+                  <div
                     key={p.playerId}
-                    type="button"
-                    className={`w-full rounded-lg border p-3 text-left transition ${incomingIds.has(p.playerId) ? "border-emerald-400/50 bg-emerald-900/20" : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"}`}
+                    role="button"
+                    tabIndex={0}
+                    className={`w-full cursor-pointer rounded-lg border p-3 text-left transition ${incomingIds.has(p.playerId) ? "border-emerald-400/50 bg-emerald-900/20" : "border-slate-300/15 bg-slate-950/20 hover:bg-slate-950/35"}`}
                     onClick={() => toggle(setIncomingIds, p.playerId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(setIncomingIds, p.playerId);
+                      }
+                    }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-100">{p.name} <span className="text-slate-200/70">({p.pos ?? "—"})</span></div><div className="truncate text-xs text-slate-200/70">OVR {p.overall ?? "—"} • Age {p.age ?? "—"}</div></div>
+                      <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-100"><PlayerNameLink playerId={p.playerId} name={p.name} pos={p.pos ?? "—"} linkClassName="text-slate-100" /> </div><div className="truncate text-xs text-slate-200/70">OVR {p.overall ?? "—"} • Age {p.age ?? "—"}</div></div>
                       <Badge variant="outline">{p.overall ?? "—"}</Badge>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
