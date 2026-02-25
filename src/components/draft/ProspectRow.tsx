@@ -25,6 +25,7 @@ interface ProspectRowProps {
   onDragStart: (e: DragEvent) => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: () => void;
+  draggable?: boolean;
   isDragging: boolean;
   isDragOver?: boolean;
   report?: ScoutingReport;
@@ -45,17 +46,17 @@ const rankBg = (rank: number) => {
   return "from-slate-500/60 to-slate-700/70";
 };
 
-export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
+export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
   const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
     <div className="relative">
       {isDragOver ? <div className="absolute left-0 right-0 top-0 z-10 h-0.5 bg-blue-500" /> : null}
       <div
-        draggable
+        draggable={draggable}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#13131A] transition", isDragging && "opacity-50")}
+        className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#13131A] transition touch-pan-y", isDragging && "opacity-50")}
       >
         <button onClick={onToggle} className="flex min-h-[44px] w-full items-stretch text-left">
           <div className={cn("flex w-[72px] items-center justify-center bg-gradient-to-b", rankBg(rank))}>

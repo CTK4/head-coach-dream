@@ -814,6 +814,8 @@ export type GameAction =
   | { type: "SCOUTING_WINDOW_INIT"; payload: { windowId: ScoutingWindowId } }
   | { type: "SCOUTING_SPEND"; payload: { targetType: "PROSPECT" | "FA"; targetId: string; actionType: ScoutAction; prospect?: Prospect } }
   | { type: "SCOUT_INIT" }
+  | { type: "SCOUT_HYDRATE_MY_BOARD_ORDER"; payload: { prospectIds: string[] } }
+  | { type: "SCOUT_REORDER_MY_BOARD"; payload: { draggedId: string; targetId: string } }
   | { type: "SCOUT_BOARD_MOVE"; payload: { prospectId: string; dir: "UP" | "DOWN" } }
   | { type: "SCOUT_BOARD_MOVE_TIER"; payload: { prospectId: string; tierId: "T1" | "T2" | "T3" | "T4" | "T5" } }
   | { type: "SCOUT_PIN"; payload: { prospectId: string } }
@@ -4401,6 +4403,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           carryover: budget.remaining,
           trueProfiles,
           scoutProfiles,
+          myBoardOrder: draftClass.map((p) => String(p.id)),
           bigBoard: { tiers, tierByProspectId: tierBy },
           combine: { generated: false, day: 1, hoursRemaining: COMBINE_DEFAULT_HOURS, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
@@ -4411,6 +4414,39 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
+
+    case "SCOUT_HYDRATE_MY_BOARD_ORDER": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const validIds = new Set(Object.keys(s.scoutProfiles));
+      const seen = new Set<string>();
+      const currentOrder = Array.isArray(s.myBoardOrder) ? s.myBoardOrder : [];
+      const provided = action.payload.prospectIds.filter((id) => validIds.has(id) && !seen.has(id) && seen.add(id));
+      const existing = currentOrder.filter((id) => validIds.has(id) && !seen.has(id) && seen.add(id));
+      const myBoardOrder = [...existing, ...provided];
+      if (
+        myBoardOrder.length === currentOrder.length &&
+        myBoardOrder.every((id, i) => id === currentOrder[i])
+      ) {
+        return state;
+      }
+      return { ...state, scoutingState: { ...s, myBoardOrder } };
+    }
+
+    case "SCOUT_REORDER_MY_BOARD": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { draggedId, targetId } = action.payload;
+      if (!draggedId || !targetId || draggedId === targetId) return state;
+      const next = [...(Array.isArray(s.myBoardOrder) ? s.myBoardOrder : [])];
+      const from = next.indexOf(draggedId);
+      const to = next.indexOf(targetId);
+      if (from < 0 || to < 0) return state;
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return { ...state, scoutingState: { ...s, myBoardOrder: next } };
+    }
+
 
     case "SCOUT_BOARD_MOVE": {
       const s = state.scoutingState;
