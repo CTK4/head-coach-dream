@@ -15,6 +15,13 @@ type DraftProspectLite = {
   age: string;
 };
 
+const DAY_BUCKETS: Record<number, { label: string; positions: string[] }> = {
+  1: { label: "Backfield", positions: ["QB", "RB", "FB"] },
+  2: { label: "TE / Secondary", positions: ["TE", "WR", "CB", "FS", "SS", "S", "DB"] },
+  3: { label: "Trenches", positions: ["OT", "OG", "C", "OL", "DE", "DT", "NT", "DL", "EDGE", "MLB", "ILB", "OLB", "LB"] },
+  4: { label: "Specialists", positions: ["K", "P", "LS", "ATH", "UNK"] },
+};
+
 const TABS: { id: TabId; label: string }[] = [
   { id: "ALL", label: "All Prospects" },
   { id: "SHORTLIST", label: "Interview Shortlist" },
@@ -28,6 +35,14 @@ const medicalToneByTier: Record<string, string> = {
   RED: "text-rose-200 border-rose-500/40",
   BLACK: "text-rose-100 border-rose-600/60",
 };
+
+function getDayBucketForPos(pos: string): 1 | 2 | 3 | 4 {
+  const normalized = String(pos ?? "UNK").toUpperCase();
+  if (DAY_BUCKETS[1].positions.includes(normalized)) return 1;
+  if (DAY_BUCKETS[2].positions.includes(normalized)) return 2;
+  if (DAY_BUCKETS[3].positions.includes(normalized)) return 3;
+  return 4;
+}
 
 function barTone(value: number) {
   if (value >= 70) return "bg-emerald-400";
@@ -47,6 +62,20 @@ export default function ScoutingCombine() {
     if (scouting && !scouting.combine.generated) dispatch({ type: "SCOUT_COMBINE_GENERATE" });
   }, [dispatch, scouting]);
 
+  useEffect(() => {
+    const persisted = globalThis.localStorage?.getItem(`combine-notes:${state.saveSeed}`);
+    if (!persisted) return;
+    try {
+      setNotesByProspect(JSON.parse(persisted));
+    } catch {
+      setNotesByProspect({});
+    }
+  }, [state.saveSeed]);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(`combine-notes:${state.saveSeed}`, JSON.stringify(notesByProspect));
+  }, [notesByProspect, state.saveSeed]);
+
   const draftClass = useMemo(
     (): DraftProspectLite[] =>
       (getDraftClass() as any[]).map((row, i) => ({
@@ -59,6 +88,8 @@ export default function ScoutingCombine() {
     [],
   );
 
+  const draftById = useMemo(() => new Map(draftClass.map((row) => [row.id, row])), [draftClass]);
+
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
 
   const currentDay = Math.min(scouting.combine.day, 4);
@@ -66,7 +97,7 @@ export default function ScoutingCombine() {
 
   const allProspects = Object.keys(scouting.scoutProfiles)
     .map((id, index) => {
-      const draft = draftClass.find((row) => row.id === id);
+      const draft = draftById.get(id);
       const profile = scouting.scoutProfiles[id];
       const metrics = scouting.combine.resultsByProspectId[id];
       if (!draft || !profile) return null;
@@ -75,13 +106,16 @@ export default function ScoutingCombine() {
         draft,
         profile,
         metrics,
-        dayBucket: (index % 4) + 1,
+        dayBucket: getDayBucketForPos(draft.pos),
         interviewCount: scouting.interviews.history[id]?.length ?? 0,
+        order: index,
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-  const dayProspects = allProspects.filter((prospect) => prospect.dayBucket === currentDay);
+  const dayProspects = allProspects
+    .filter((prospect) => prospect.dayBucket === currentDay)
+    .sort((a, b) => a.order - b.order);
 
   const shortlist = allProspects
     .filter((prospect) => prospect.interviewCount >= 1)
@@ -91,8 +125,10 @@ export default function ScoutingCombine() {
       return bReveal - aReveal;
     });
 
+  const interviewedToday = scouting.combine.recapByDay[scouting.combine.day]?.interviewedProspectIds ?? [];
+
   const bestAutoSuggest = dayProspects
-    .filter((p) => !((scouting.combine.recapByDay[scouting.combine.day]?.interviewedProspectIds ?? []).includes(p.id)))
+    .filter((prospect) => !interviewedToday.includes(prospect.id))
     .sort((a, b) => {
       const aNeed = 100 - Math.max(a.profile.clarity.CHAR ?? 0, a.profile.clarity.FIT ?? 0);
       const bNeed = 100 - Math.max(b.profile.clarity.CHAR ?? 0, b.profile.clarity.FIT ?? 0);
@@ -101,6 +137,8 @@ export default function ScoutingCombine() {
 
   const urgencyText = interviewsRemaining <= 0 ? "OUT" : interviewsRemaining <= 1 ? "CRITICAL" : interviewsRemaining <= 3 ? "LOW" : "STABLE";
   const urgencyTone = interviewsRemaining <= 0 ? "text-rose-200" : interviewsRemaining <= 1 ? "text-rose-300" : interviewsRemaining <= 3 ? "text-amber-200" : "text-emerald-200";
+  const bucketLabel = DAY_BUCKETS[currentDay].label;
+  const interviewsEnabled = currentDay === 4;
 
   return (
     <div className="space-y-3 p-3 pb-24 sm:p-4">
@@ -109,6 +147,7 @@ export default function ScoutingCombine() {
           <div className="text-sm font-semibold tracking-wide sm:text-base">COMBINE — DAY {currentDay} / 4</div>
           <div className="text-right text-xs font-semibold text-amber-200">INTERVIEWS REMAINING: {interviewsRemaining}</div>
         </div>
+        <div className="mt-1 text-xs opacity-70">Current bucket: {bucketLabel}</div>
         <div className="mt-3 overflow-x-auto">
           <div className="flex min-w-max gap-2">
             {TABS.map((tab) => (
@@ -127,17 +166,22 @@ export default function ScoutingCombine() {
 
       {activeTab === "ALL" ? (
         <div className="space-y-3">
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-center text-sm sm:text-base">
+            <div className="font-semibold text-amber-200">{interviewsRemaining} INTERVIEWS REMAINING TODAY</div>
+            <div className="mt-1 text-xs opacity-80">Select from today&apos;s {bucketLabel} bucket. Interviews reveal partial Character and IQ grades.</div>
+          </div>
+
           {dayProspects.map(({ id, draft, profile, metrics }) => {
             const charReveal = profile.clarity.CHAR ?? 0;
             const iqReveal = profile.clarity.FIT ?? 0;
-            const alreadyInterviewedToday = (scouting.combine.recapByDay[scouting.combine.day]?.interviewedProspectIds ?? []).includes(id);
-            const addInterviewDisabled = interviewsRemaining <= 0 || alreadyInterviewedToday;
+            const alreadyInterviewedToday = interviewedToday.includes(id);
+            const addInterviewDisabled = !interviewsEnabled || interviewsRemaining <= 0 || alreadyInterviewedToday;
             const medicalTier = profile.revealed.medicalTier ?? "UNKNOWN";
             const medicalShort = profile.notes.medical ?? "No firm flags yet; confidence still moving.";
 
             return (
               <div key={id} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded border border-white/15 px-2 py-1 text-xs">{getPositionLabel(draft.pos)}</span>
@@ -145,7 +189,7 @@ export default function ScoutingCombine() {
                         {draft.name}
                       </button>
                     </div>
-                    <div className="text-xs opacity-75">{draft.school} • Age {draft.age}</div>
+                    <div className="text-xs opacity-75">{draft.school} · Age {draft.age}</div>
                   </div>
                   <div className="text-xs opacity-70">Current range: {profile.estLow}-{profile.estHigh}</div>
                 </div>
@@ -189,7 +233,7 @@ export default function ScoutingCombine() {
                     disabled={addInterviewDisabled}
                     onClick={() => dispatch({ type: "SCOUT_COMBINE_INTERVIEW", payload: { prospectId: id, category: iqReveal <= charReveal ? "IQ" : "LEADERSHIP" } })}
                   >
-                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : "[ADD INTERVIEW]"}
+                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : !interviewsEnabled ? "DAY 4 ONLY" : "[ADD INTERVIEW]"}
                   </button>
                   <button type="button" className="min-h-11 rounded border border-sky-500 px-3 text-xs text-sky-200 sm:text-sm" onClick={() => openProspectProfile(id)}>
                     [VIEW PROFILE]
@@ -234,6 +278,7 @@ export default function ScoutingCombine() {
                   setNotesByProspect((prev) => ({ ...prev, [prospect.id]: { notes: value } }));
                 }}
               />
+              <div className="mt-1 text-xs opacity-60">Saved for this save file and persists while switching combine days/tabs.</div>
             </div>
           ))}
         </div>
@@ -243,8 +288,8 @@ export default function ScoutingCombine() {
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2">
           <button
             type="button"
-            className={`min-h-11 rounded border px-4 text-sm ${interviewsRemaining <= 0 || !bestAutoSuggest ? "cursor-not-allowed border-white/10 text-white/40" : "border-violet-400 text-violet-200"}`}
-            disabled={interviewsRemaining <= 0 || !bestAutoSuggest}
+            className={`min-h-11 rounded border px-4 text-sm ${!interviewsEnabled || interviewsRemaining <= 0 || !bestAutoSuggest ? "cursor-not-allowed border-white/10 text-white/40" : "border-violet-400 text-violet-200"}`}
+            disabled={!interviewsEnabled || interviewsRemaining <= 0 || !bestAutoSuggest}
             onClick={() => {
               if (!bestAutoSuggest) return;
               const category = (bestAutoSuggest.profile.clarity.FIT ?? 0) <= (bestAutoSuggest.profile.clarity.CHAR ?? 0) ? "IQ" : "LEADERSHIP";
