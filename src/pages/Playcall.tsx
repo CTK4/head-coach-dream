@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
+import { recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
 import { evaluatePlayConcepts, recommendFourthDown } from "@/engine/gameSim";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
-import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type PersonnelPackage } from "@/engine/personnel";
+import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type DefensivePackage, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,12 +54,6 @@ function shellLabel(s: DefensiveLook["shell"]): string {
 function boxLabel(b: DefensiveLook["box"]): string {
   return b === "LIGHT" ? "Light Box" : b === "HEAVY" ? "Heavy Box" : "Normal Box";
 }
-function blitzLabel(b: DefensiveLook["blitz"]): string {
-  return b === "NONE" ? "No Blitz" : b === "POSSIBLE" ? "Blitz Possible" : "Blitz Likely";
-}
-function blitzVariant(b: DefensiveLook["blitz"]): "default" | "destructive" | "outline" | "secondary" {
-  return b === "LIKELY" ? "destructive" : b === "POSSIBLE" ? "default" : "outline";
-}
 
 function tagIcon(kind: ResultTag["kind"]): string {
   const icons: Record<string, string> = {
@@ -98,16 +93,107 @@ function statLine(g: GameSim): string {
   return `Home: ${h.rushYards} rush ${h.passYards} pass ${h.turnovers} TO | Away: ${a.rushYards} rush ${a.passYards} pass ${a.turnovers} TO`;
 }
 
+const PERSONNEL_BY_DEF_PACKAGE: Record<DefensivePackage, string> = {
+  Base: "Base 4-3",
+  Nickel: "Nickel 4-2-5",
+  Dime: "Dime 4-1-6",
+  GoalLine: "Goal Line",
+};
+
+const FRONT_BY_DEF_PACKAGE: Record<DefensivePackage, string> = {
+  Base: "Even front",
+  Nickel: "Over front",
+  Dime: "Mug front",
+  GoalLine: "Bear front",
+};
+
+const BOX_COUNT_BY_PACKAGE: Record<DefensivePackage, Record<DefensiveLook["box"], number>> = {
+  Base: { LIGHT: 6, NORMAL: 7, HEAVY: 8 },
+  Nickel: { LIGHT: 5, NORMAL: 6, HEAVY: 7 },
+  Dime: { LIGHT: 5, NORMAL: 6, HEAVY: 7 },
+  GoalLine: { LIGHT: 7, NORMAL: 8, HEAVY: 9 },
+};
+
+function toSituationLabel(bucket?: SituationBucket): string {
+  if (!bucket) return "Unknown";
+  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replaceAll("_", " ").replace("3RD", "3rd").replace("4TH", "4th");
+}
+
+function compactCallLabel(signature: string): string {
+  const [pkg, shell, , blitz] = signature.split(":");
+  const shellShort = shell === "SINGLE_HIGH" ? "1H" : shell === "TWO_HIGH" ? "2H" : "--";
+  const blitzShort = blitz === "LIKELY" ? "B+" : blitz === "POSSIBLE" ? "B?" : "B0";
+  return `${pkg} ${shellShort} ${blitzShort}`;
+}
+
+function possessionLabel(g: GameSim): string {
+  const teamId = g.possession === "HOME" ? g.homeTeamId : g.awayTeamId;
+  return `● ${teamId} ball`;
+}
+
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function DefLookPanel({ look }: { look: DefensiveLook }) {
+function DefensiveIntelPanel({ g }: { g: GameSim }) {
+  const defensivePackage = g.selectedDefensivePackage ?? "Nickel";
+  const look = g.defLook;
+  const windowBuckets = g.situationWindowCounts ?? {};
+  const windowTotals = Object.values(windowBuckets).reduce((acc, item) => {
+    if (!item) return acc;
+    acc.total += item.total;
+    acc.blitzLikely += item.blitzLikely;
+    return acc;
+  }, { total: 0, blitzLikely: 0 });
+  const blitzRate = windowTotals.total > 0 ? (windowTotals.blitzLikely / windowTotals.total) * 100 : 0;
+  const recentDefensiveCalls = g.recentDefensiveCalls ?? [];
+  const currentSituation = recentDefensiveCalls[0]?.situationBucket;
+  const currentSituationCounts = currentSituation ? windowBuckets[currentSituation] : undefined;
+  const tendencyEntries = Object.entries(currentSituationCounts?.callsBySignature ?? {}).sort((a, b) => b[1] - a[1]);
+  const topCall = tendencyEntries[0];
+  const topCallPct = currentSituationCounts && currentSituationCounts.total > 0 && topCall
+    ? (topCall[1] / currentSituationCounts.total) * 100
+    : 0;
+  const defendingRatings = g.possession === "HOME" ? g.awayRatings : g.homeRatings;
+  const pressureScore = ((defendingRatings?.blitzImpact ?? 68) / 100) * 0.55 + (blitzRate / 100) * 0.45;
+  const pressureLabel = pressureScore >= 0.78 ? "High" : pressureScore >= 0.62 ? "Moderate" : "Low";
+  const observedSnaps = g.observedSnaps ?? 0;
+  const CONFIDENCE_WINDOW = 12;
+  const MAX_CONFIDENCE_DOTS = 6;
+  const confidence = Math.min(100, Math.round((observedSnaps / CONFIDENCE_WINDOW) * 100));
+  const confidenceDots = Math.min(
+    MAX_CONFIDENCE_DOTS,
+    Math.round((confidence / 100) * MAX_CONFIDENCE_DOTS),
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
-      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Defense:</span>
-      <Badge variant="outline">{shellLabel(look.shell)}</Badge>
-      <Badge variant="outline">{boxLabel(look.box)}</Badge>
-      <Badge variant={blitzVariant(look.blitz)}>{blitzLabel(look.blitz)}</Badge>
-    </div>
+    <Card className="border-slate-700/70 bg-slate-950/60 text-slate-100">
+      <CardContent className="p-4 grid gap-4 md:grid-cols-[1fr_auto_1fr]">
+        <div className="space-y-1 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Defense</p>
+          <p>- {PERSONNEL_BY_DEF_PACKAGE[defensivePackage]}</p>
+          <p>- {look ? shellLabel(look.shell) : "Unknown shell"}</p>
+          <p>- {FRONT_BY_DEF_PACKAGE[defensivePackage]}</p>
+          <p>- {look ? `${BOX_COUNT_BY_PACKAGE[defensivePackage][look.box]} in box` : "Unknown box"}</p>
+        </div>
+        <div className="hidden md:block w-px bg-slate-700/80" />
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span>Blitz</span><span className="font-semibold">{Math.round(blitzRate)}%</span></div>
+          <div className="flex justify-between gap-3"><span>Last calls</span><span className="font-semibold text-right">{recentDefensiveCalls.map((c) => compactCallLabel(c.callSignature)).join(" / ") || "N/A"}</span></div>
+          <div className="rounded border border-slate-700/80 px-2 py-1">
+            <span className="font-semibold">{toSituationLabel(currentSituation)}</span>
+            <span className="text-slate-300"> → {topCall ? `${compactCallLabel(topCall[0])} (${Math.round(topCallPct)}%)` : "No tendency yet"}</span>
+          </div>
+          <div className="flex justify-between"><span>Pressure on {toSituationLabel(currentSituation)}</span><span className="font-semibold">{pressureLabel}</span></div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-amber-300">◔ {Math.round(confidence)}%</span>
+            <span className="flex items-center gap-1" aria-label="confidence-meter">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <span key={idx} className={`h-2 w-2 rounded-full ${idx < confidenceDots ? "bg-amber-300" : "bg-slate-600"}`} />
+              ))}
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -291,6 +377,26 @@ const Playcall = () => {
     <div className="min-h-screen p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-4">
 
+        <div className="sticky top-2 z-20">
+          <Card className="border-slate-700/70 bg-slate-950/80 text-slate-100 backdrop-blur">
+            <CardContent className="py-2 px-4">
+              <div className="flex flex-wrap items-center gap-2 text-base font-medium">
+                <span>{g.homeTeamId} {g.homeScore}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.awayTeamId} {g.awayScore}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.clock.quarter}Q {fmtClock(g.clock.timeRemainingSec)}</span>
+                <span className="text-slate-400">|</span>
+                <span>{g.down}&amp;{g.distance}</span>
+                <span className="text-slate-400">|</span>
+                <span>Ball: {g.ballOn}</span>
+                <span className="text-slate-400">|</span>
+                <span>{possessionLabel(g)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* ── Scoreboard ── */}
         <Card>
           <CardContent className="p-5 space-y-2">
@@ -309,13 +415,10 @@ const Playcall = () => {
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <Badge variant="secondary">Q{g.clock.quarter} {fmtClock(g.clock.timeRemainingSec)}</Badge>
               <Badge variant="outline" className="font-bold text-base">{g.homeScore} – {g.awayScore}</Badge>
-              <Badge variant="outline">{g.possession} ball</Badge>
+              <Badge variant="outline">{possessionLabel(g)}</Badge>
               <Badge variant="outline">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
               <Badge variant="outline">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
             </div>
-
-            {/* Defensive look */}
-            {g.defLook && canShowPlay && <DefLookPanel look={g.defLook} />}
 
             {/* Last result + tags */}
             <PlayRibbon latestPlay={g.lastPlayResult} />
@@ -385,6 +488,7 @@ const Playcall = () => {
 
         {canShowPlay ? (
           <>
+            <DefensiveIntelPanel g={g} />
             <FieldPreview ballOn={g.ballOn} distance={g.distance} selectedPlay={selectedCard?.play.id} defensiveLook={g.defLook} />
 
             {/* ── Aggression / Tempo toggles ── */}
