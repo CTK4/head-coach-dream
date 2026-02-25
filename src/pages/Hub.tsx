@@ -36,13 +36,10 @@ export default function Hub() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const badgeCounts = useMemo(() => {
-    const hub = state.hub;
-    const unread = (hub.news ?? []).filter((x: any) => !hub.newsReadIds?.[String(x?.id)]).length;
-
     return {
-      newsUnread: clampInt(unread, 0, 99),
+      newsUnread: clampInt(state.unreadNewsCount ?? 0, 0, 99),
     };
-  }, [state.hub]);
+  }, [state.unreadNewsCount]);
 
   const nextStage = nextStageForNavigate(state.careerStage);
   const showTrades = isTradesAllowed(state);
@@ -89,7 +86,7 @@ export default function Hub() {
     },
     { id: "roster", title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
     { id: "strategy", title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
-    { id: "strategy", title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "strategy", title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: "/placeholders/Trophy_Room.PNG" },
     { id: "contracts", title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
     { id: "scouting", title: "Scouting", to: "/scouting", imageUrl: HUB_TILE_IMAGES.scouting },
     {
@@ -100,7 +97,7 @@ export default function Hub() {
       badgeCount: badgeCounts.newsUnread,
       badgeHint: "Unread news stories",
       badgeKind: "unread",
-      cornerBubbleCount: badgeCounts.newsUnread,
+      cornerBubbleCount: Math.min(badgeCounts.newsUnread, 9),
     },
     { id: "coachs_office", title: "Coach's Office", subtitle: "Skill Tree", to: "/skill-tree", imageUrl: HUB_TILE_IMAGES.coachs_office },
     { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },

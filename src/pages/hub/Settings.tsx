@@ -82,6 +82,7 @@ export default function SettingsPage() {
 
   const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettings() }));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [quitOpen, setQuitOpen] = useState(false);
 
   const seasonLabel = useMemo(() => `${state.season}`, [state.season]);
 
@@ -130,6 +131,9 @@ export default function SettingsPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => navigate("/hub")}>
                     Back to Hub
+                  </Button>
+                  <Button variant="outline" onClick={() => setQuitOpen(true)}>
+                    Main Menu
                   </Button>
                   <Button variant="outline" onClick={resetToDefaults}>
                     Reset Preferences
@@ -277,6 +281,19 @@ export default function SettingsPage() {
               <Button variant="destructive" onClick={onResetConfirmed}>
                 Yes, Reset
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={quitOpen} onOpenChange={setQuitOpen}>
+          <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+            <DialogHeader>
+              <DialogTitle>Save and quit?</DialogTitle>
+              <DialogDescription className="text-slate-200/70">Return to main menu and keep this save available in Continue.</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setQuitOpen(false)}>Cancel</Button>
+              <Button onClick={() => { sessionStorage.setItem("show_main_menu", "1"); navigate("/"); }}>Save & Quit</Button>
             </div>
           </DialogContent>
         </Dialog>
