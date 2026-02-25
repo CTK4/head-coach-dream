@@ -5,7 +5,6 @@ import {
   COMBINE_FOCUS_HOURS_COST,
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
-import { COMBINE_DEFAULT_INTERVIEW_SLOTS } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
@@ -15,6 +14,7 @@ const DAYS = [
   { day: 2 as const, label: "Day 2" },
   { day: 3 as const, label: "Day 3" },
   { day: 4 as const, label: "Day 4" },
+];
 type TabId = "ALL" | "SHORTLIST" | "NOTES";
 type CombineProspectState = { notes: string };
 
@@ -119,9 +119,8 @@ export default function ScoutingCombine() {
     };
   const used = Object.values(scouting.allocation.byGroup).reduce((a, b) => a + b, 0);
   const remaining = Math.max(0, scouting.allocation.poolHours - used);
-  const interviewsRemaining = Math.max(0, scouting.combine.days?.[day]?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
   const currentDay = Math.min(scouting.combine.day, 4);
-  const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_SLOTS);
+  const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
 
   const allProspects = Object.keys(scouting.scoutProfiles)
     .map((id, index) => {
@@ -173,13 +172,6 @@ export default function ScoutingCombine() {
   };
 
   return (
-    <div className="space-y-3 p-4">
-      <div className="sticky top-[52px] z-20 rounded-lg border border-white/10 bg-black/40 p-3 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold">Combine</div>
-          <div className="text-xs opacity-70">
-            Focus Tokens: {used}/{scouting.allocation.poolHours} (rem {remaining}) • Focus: {focusEnabled ? "ON" : "OFF"} • Interviews: {interviewEnabled ? `${interviewsRemaining} left` : "OFF"}
-          </div>
     <div className="space-y-3 p-3 pb-24 sm:p-4">
       <div className="sticky top-[52px] z-20 rounded-lg border border-white/10 bg-black/70 p-3 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
@@ -203,15 +195,6 @@ export default function ScoutingCombine() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <div className="font-semibold">Focus Drill</div>
-        <div className="mt-1 text-xs opacity-70">Spend focus tokens to tighten confidence (by position group).</div>
-        {!focusEnabled ? <div className="mt-2 text-xs text-amber-300/80">Focus drill opens on Day 2 and Day 3.</div> : null}
-        {remaining <= 0 ? <div className="mt-2 text-xs text-rose-300/80">No focus tokens remaining.</div> : null}
-        <div className="mt-3 space-y-2">
-          {topList.map(({ id, p, s }) => {
-            const alreadyFocusedToday = recap.focusedProspectIds.includes(id);
-            const focusDisabled = !focusEnabled || remaining < COMBINE_FOCUS_HOURS_COST || alreadyFocusedToday;
       {activeTab === "ALL" ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-center text-sm sm:text-base">
@@ -226,6 +209,8 @@ export default function ScoutingCombine() {
             const addInterviewDisabled = !interviewsEnabled || interviewsRemaining <= 0 || alreadyInterviewedToday;
             const medicalTier = profile.revealed.medicalTier ?? "UNKNOWN";
             const medicalShort = profile.notes.medical ?? "No firm flags yet; confidence still moving.";
+            const alreadyFocusedToday = recap.focusedProspectIds.includes(id);
+            const focusDisabled = !focusEnabled || remaining < COMBINE_FOCUS_HOURS_COST || alreadyFocusedToday;
 
             return (
               <div key={id} className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -305,63 +290,31 @@ export default function ScoutingCombine() {
         <div className="space-y-2">
           {shortlist.map((prospect) => {
             const combinedReveal = Math.max(prospect.profile.clarity.CHAR ?? 0, prospect.profile.clarity.FIT ?? 0);
-      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="font-semibold">Day 4 Interviews</div>
-            <div className="text-xs opacity-70">Consumes interview slots. Improves CHAR/FIT clarity and reveals selected interview attribute.</div>
-          </div>
-          <div className="flex gap-2">
-            {INT_CATS.map((c) => (
-              <button
-                key={c}
-                className={`rounded border px-3 py-1 ${intCat === c ? "border-sky-400 text-sky-200" : "border-white/10"} ${interviewEnabled ? "" : "opacity-50"}`}
-                disabled={!interviewEnabled}
-                onClick={() => setIntCat(c)}
-                title={`Reveals ${COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[c]}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="mt-1 text-xs opacity-70">{interviewEnabled ? `${interviewsRemaining} interviews left` : "Interviews open on Day 4."}</div>
-        {/* STUB — Phase N: Model B focus interviews are intentionally disabled until follow-up design work lands. */}
-        <button className="mt-2 rounded border border-white/10 px-3 py-1 text-xs text-white/40" disabled>
-          Advanced Interview (Coming Soon)
-        </button>
-
-        <div className="mt-3 space-y-2">
-          {topList.map(({ id, p, s }) => {
-            const alreadyInterviewedToday = recap.interviewedProspectIds.includes(id);
-            const interviewDisabled = !interviewEnabled || interviewsRemaining <= 0 || alreadyInterviewedToday;
-            const reveal = scouting.interviews.modelARevealByProspectId?.[id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-            const trueCharacterScore = scouting.trueProfiles[id]?.trueAttributes?.character ?? 50;
-            const trueIntelligenceScore = scouting.trueProfiles[id]?.trueAttributes?.intelligence ?? 50;
+            const reveal = scouting.interviews.modelARevealByProspectId?.[prospect.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+            const trueCharacterScore = scouting.trueProfiles[prospect.id]?.trueAttributes?.character ?? 50;
+            const trueIntelligenceScore = scouting.trueProfiles[prospect.id]?.trueAttributes?.intelligence ?? 50;
             const charRange = formatRange(trueCharacterScore, reveal.characterRevealPct);
             const iqRange = formatRange(trueIntelligenceScore, reveal.intelligenceRevealPct);
             return (
-              <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
-                <div className="min-w-0">
-                  <div className="truncate font-semibold">{prospect.draft.name}</div>
-                  <div className="text-xs opacity-70">{getPositionLabel(prospect.draft.pos)} • Interviews: {prospect.interviewCount}</div>
-                  <div className="truncate font-semibold">
-                    <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(id)}>{p.name}</button>{" "}
-                    <span className="opacity-70">{getPositionLabel(p.pos)}</span>
+              <div key={prospect.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <button type="button" className="truncate text-left font-semibold text-sky-300 hover:underline" onClick={() => openProspectProfile(prospect.id)}>
+                      {prospect.draft.name}
+                    </button>
+                    <div className="text-xs opacity-70">{getPositionLabel(prospect.draft.pos)} • Interviews: {prospect.interviewCount}</div>
+                    <div className="mt-1 text-xs opacity-80">
+                      <div className="mb-1">Character Reveal: {reveal.characterRevealPct}%</div>
+                      <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-emerald-400" style={{ width: `${reveal.characterRevealPct}%` }} /></div>
+                    </div>
+                    <div className="mt-1 text-xs opacity-80">
+                      <div className="mb-1">Football IQ Reveal: {reveal.intelligenceRevealPct}%</div>
+                      <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
+                    </div>
+                    <div className="mt-1 text-xs opacity-70">Character: {charRange} • Football IQ: {iqRange}</div>
                   </div>
-                  <div className="mt-1 text-xs opacity-80">
-                    <div className="mb-1">Character Reveal: {reveal.characterRevealPct}%</div>
-                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-emerald-400" style={{ width: `${reveal.characterRevealPct}%` }} /></div>
-                  </div>
-                  <div className="mt-1 text-xs opacity-80">
-                    <div className="mb-1">Football IQ Reveal: {reveal.intelligenceRevealPct}%</div>
-                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
-                  </div>
-                  <div className="mt-1 text-xs opacity-70">
-                    Character: {charRange} • Football IQ: {iqRange} • Leadership: {s.revealed.leadershipTag ?? "—"}
-                  </div>
+                  <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
-                <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
               </div>
             );
           })}

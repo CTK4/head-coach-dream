@@ -44,8 +44,8 @@ async function run() {
   assert(badTeamRefs.length === 0, `Players with invalid teamId references: ${badTeamRefs.length}`);
   assert(badContractRefs.length === 0, `Players with invalid contractId references: ${badContractRefs.length}`);
 
-  const interviewQuestions = await loadJson("src/data/ugf_interview_bank_150.json");
-  assert(Array.isArray(interviewQuestions.questions) && interviewQuestions.questions.length > 0, "Interview bank has no questions");
+  const interviewBank = await loadJson("src/data/ugf_interview_bank_150.json");
+  assert(Array.isArray(interviewBank.systems) && interviewBank.systems.length > 0, "Interview bank has no systems");
 
   console.log("[smoke] OK: league data and interview bank wiring look valid");
 }

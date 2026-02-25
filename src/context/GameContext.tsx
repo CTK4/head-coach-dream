@@ -4549,8 +4549,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           bigBoard: { tiers, tierByProspectId: tierBy },
           combine: { generated: false, day: 1, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
-          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {} },
-          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_SLOTS, history: {}, modelARevealByProspectId: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {} },
           medical: { requests: {} },
           allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_INTERVIEW_TOKENS : 20, byGroup: {} },
           inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
@@ -4939,7 +4938,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         scoutingState: {
           ...s,
-          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, interviewsRemaining - 1), history },
           interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history, modelARevealByProspectId },
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
           combine: {
