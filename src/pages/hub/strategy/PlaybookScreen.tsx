@@ -36,42 +36,13 @@ import FOUR_THREE_OVER from "./playbooks/defense/FOUR_THREE_OVER";
 import SINGLE_HIGH_COVER_3 from "./playbooks/defense/SINGLE_HIGH_COVER_3";
 import SABAN_COVER_4_MATCH from "./playbooks/defense/SABAN_COVER_4_MATCH";
 import RYAN_NICKEL_PRESSURE from "./playbooks/defense/RYAN_NICKEL_PRESSURE";
+import {
+  getSchemeDisplayName,
+  type DefenseSchemeId,
+  type OffenseSchemeId,
+} from "./playbooks/schemeDisplay";
 
 type Side = "OFFENSE" | "DEFENSE";
-
-type OffenseSchemeId =
-  | "AIR_RAID"
-  | "SHANAHAN_WIDE_ZONE"
-  | "VERTICAL_PASSING"
-  | "PRO_STYLE_BALANCED"
-  | "POWER_GAP"
-  | "ERHARDT_PERKINS"
-  | "RUN_AND_SHOOT"
-  | "SPREAD_RPO"
-  | "WEST_COAST"
-  | "AIR_CORYELL"
-  | "MODERN_TRIPLE_OPTION"
-  | "CHIP_KELLY_RPO"
-  | "TWO_TE_POWER_I"
-  | "MOTION_BASED_MISDIRECTION"
-  | "POWER_SPREAD";
-
-type DefenseSchemeId =
-  | "THREE_FOUR_TWO_GAP"
-  | "FOUR_TWO_FIVE"
-  | "SEATTLE_COVER_3"
-  | "COVER_SIX"
-  | "FANGIO_TWO_HIGH"
-  | "TAMPA_2"
-  | "MULTIPLE_HYBRID"
-  | "CHAOS_FRONT"
-  | "PHILLIPS_BASE_THREE_FOUR"
-  | "LEBEAU_ZONE_BLITZ_THREE_FOUR"
-  | "BEARS_FOUR_SIX"
-  | "FOUR_THREE_OVER"
-  | "SINGLE_HIGH_COVER_3"
-  | "SABAN_COVER_4_MATCH"
-  | "RYAN_NICKEL_PRESSURE";
 
 type SchemeMeta = {
   id: OffenseSchemeId | DefenseSchemeId;
@@ -82,39 +53,39 @@ type SchemeMeta = {
 };
 
 const OFFENSE_SCHEMES: SchemeMeta[] = [
-  { id: "AIR_RAID", label: "Air Raid", description: "Spread passing system with quick rhythm and spacing.", tags: ["Pass Heavy", "Tempo", "Spacing"], playMix: { pass: 30, run: 10 } },
-  { id: "SHANAHAN_WIDE_ZONE", label: "Shanahan Wide Zone", description: "Outside-zone core with heavy motion and layered play-action.", tags: ["Wide Zone", "Motion", "Play-Action"], playMix: { run: 20, pass: 20 } },
-  { id: "VERTICAL_PASSING", label: "Vertical Passing", description: "Downfield route structures that stress safeties and leverage.", tags: ["Shot Plays", "Deep Routes", "Protection"], playMix: undefined },
-  { id: "PRO_STYLE_BALANCED", label: "Pro Style Balanced", description: "Traditional under-center and gun blend with balanced sequencing.", tags: ["Balanced", "Multiple Personnel"], playMix: undefined },
-  { id: "POWER_GAP", label: "Power Gap", description: "Gap/power run identity with complementary play-action concepts.", tags: ["Gap Runs", "Physical", "Play-Action"], playMix: { run: 25, pass: 15 } },
-  { id: "ERHARDT_PERKINS", label: "Erhardt-Perkins", description: "Concept-based terminology and flexible route adjustments.", tags: ["Concept Language", "Adjustments"], playMix: undefined },
-  { id: "RUN_AND_SHOOT", label: "Run and Shoot", description: "Wide spread with option routes and post-snap receiver adjustments.", tags: ["Option Routes", "Spread"], playMix: undefined },
-  { id: "SPREAD_RPO", label: "Spread RPO", description: "Conflict-defender reads blending run game and quick passing.", tags: ["RPO", "Spread", "Reads"], playMix: { run: 20, pass: 20 } },
-  { id: "WEST_COAST", label: "West Coast", description: "Timing and rhythm passing with run-game complements.", tags: ["Timing", "YAC", "Rhythm"], playMix: { pass: 25, run: 15 } },
-  { id: "AIR_CORYELL", label: "Air Coryell", description: "Route tree built around vertical stretches and deep-intermediate timing.", tags: ["Vertical", "Intermediate", "Route Tree"], playMix: undefined },
-  { id: "MODERN_TRIPLE_OPTION", label: "Modern Triple Option", description: "Gun option framework with QB run conflict and perimeter stress.", tags: ["Option", "QB Run", "Constraint Plays"], playMix: undefined },
-  { id: "CHIP_KELLY_RPO", label: "Chip Kelly RPO", description: "Tempo-driven spread menu with packaged plays and fast pace.", tags: ["Tempo", "RPO", "Space"], playMix: undefined },
-  { id: "TWO_TE_POWER_I", label: "Two TE Power I", description: "Heavy personnel downhill run system with max-protection shots.", tags: ["Heavy Personnel", "Power I"], playMix: undefined },
-  { id: "MOTION_BASED_MISDIRECTION", label: "Motion-Based Misdirection", description: "Pre-snap movement and eye candy to create leverage.", tags: ["Motion", "Misdirection", "Shifts"], playMix: undefined },
-  { id: "POWER_SPREAD", label: "Power Spread", description: "Spread sets paired with physical downhill run concepts.", tags: ["Spread", "Power", "Hybrid"], playMix: undefined },
+  { id: "AIR_RAID", label: getSchemeDisplayName("AIR_RAID"), description: "Spread passing system with quick rhythm and spacing.", tags: ["Pass Heavy", "Tempo", "Spacing"], playMix: { pass: 30, run: 10 } },
+  { id: "SHANAHAN_WIDE_ZONE", label: getSchemeDisplayName("SHANAHAN_WIDE_ZONE"), description: "Outside-zone core with heavy motion and layered play-action.", tags: ["Wide Zone", "Motion", "Play-Action"], playMix: { run: 20, pass: 20 } },
+  { id: "VERTICAL_PASSING", label: getSchemeDisplayName("VERTICAL_PASSING"), description: "Downfield route structures that stress safeties and leverage.", tags: ["Shot Plays", "Deep Routes", "Protection"], playMix: undefined },
+  { id: "PRO_STYLE_BALANCED", label: getSchemeDisplayName("PRO_STYLE_BALANCED"), description: "Traditional under-center and gun blend with balanced sequencing.", tags: ["Balanced", "Multiple Personnel"], playMix: undefined },
+  { id: "POWER_GAP", label: getSchemeDisplayName("POWER_GAP"), description: "Gap/power run identity with complementary play-action concepts.", tags: ["Gap Runs", "Physical", "Play-Action"], playMix: { run: 25, pass: 15 } },
+  { id: "ERHARDT_PERKINS", label: getSchemeDisplayName("ERHARDT_PERKINS"), description: "Concept-based terminology and flexible route adjustments.", tags: ["Concept Language", "Adjustments"], playMix: undefined },
+  { id: "RUN_AND_SHOOT", label: getSchemeDisplayName("RUN_AND_SHOOT"), description: "Wide spread with option routes and post-snap receiver adjustments.", tags: ["Option Routes", "Spread"], playMix: undefined },
+  { id: "SPREAD_RPO", label: getSchemeDisplayName("SPREAD_RPO"), description: "Conflict-defender reads blending run game and quick passing.", tags: ["RPO", "Spread", "Reads"], playMix: { run: 20, pass: 20 } },
+  { id: "WEST_COAST", label: getSchemeDisplayName("WEST_COAST"), description: "Timing and rhythm passing with run-game complements.", tags: ["Timing", "YAC", "Rhythm"], playMix: { pass: 25, run: 15 } },
+  { id: "AIR_CORYELL", label: getSchemeDisplayName("AIR_CORYELL"), description: "Route tree built around vertical stretches and deep-intermediate timing.", tags: ["Vertical", "Intermediate", "Route Tree"], playMix: undefined },
+  { id: "MODERN_TRIPLE_OPTION", label: getSchemeDisplayName("MODERN_TRIPLE_OPTION"), description: "Gun option framework with QB run conflict and perimeter stress.", tags: ["Option", "QB Run", "Constraint Plays"], playMix: undefined },
+  { id: "CHIP_KELLY_RPO", label: getSchemeDisplayName("CHIP_KELLY_RPO"), description: "Tempo-driven spread menu with packaged plays and fast pace.", tags: ["Tempo", "RPO", "Space"], playMix: undefined },
+  { id: "TWO_TE_POWER_I", label: getSchemeDisplayName("TWO_TE_POWER_I"), description: "Heavy personnel downhill run system with max-protection shots.", tags: ["Heavy Personnel", "Power I"], playMix: undefined },
+  { id: "MOTION_BASED_MISDIRECTION", label: getSchemeDisplayName("MOTION_BASED_MISDIRECTION"), description: "Pre-snap movement and eye candy to create leverage.", tags: ["Motion", "Misdirection", "Shifts"], playMix: undefined },
+  { id: "POWER_SPREAD", label: getSchemeDisplayName("POWER_SPREAD"), description: "Spread sets paired with physical downhill run concepts.", tags: ["Spread", "Power", "Hybrid"], playMix: undefined },
 ];
 
 const DEFENSE_SCHEMES: SchemeMeta[] = [
-  { id: "THREE_FOUR_TWO_GAP", label: "3-4 Two-Gap", description: "Two-gapping front mechanics designed to keep linebackers clean.", tags: ["3-4", "Two-Gap", "Front Control"] },
-  { id: "FOUR_TWO_FIVE", label: "4-2-5", description: "Nickel base with speed on the field and versatile overhang usage.", tags: ["Nickel", "Speed", "Versatility"] },
-  { id: "SEATTLE_COVER_3", label: "Seattle Cover 3", description: "Single-high zone family with strong perimeter run support rules.", tags: ["Cover 3", "Single High", "Run Support"] },
-  { id: "COVER_SIX", label: "Cover 6", description: "Quarter-quarter-half split-field coverages for matchup control.", tags: ["Split Field", "Quarters", "Halves"] },
-  { id: "FANGIO_TWO_HIGH", label: "Fangio Two-High", description: "Two-high shell structure with disguised rotations and leverage.", tags: ["Two-High", "Match Zones", "Disguise"] },
-  { id: "TAMPA_2", label: "Tampa 2", description: "Classic two-deep shell with MLB seam-drop responsibilities.", tags: ["Tampa", "Middle Run Through", "Zone"] },
-  { id: "MULTIPLE_HYBRID", label: "Multiple Hybrid", description: "Flexible front/coverage menu tailored by opponent game plans.", tags: ["Multiple", "Hybrid", "Gameplan"] },
-  { id: "CHAOS_FRONT", label: "Chaos Front", description: "Movement-driven fronts and pressure looks to stress protections.", tags: ["Movement", "Pressure", "Disruption"] },
-  { id: "PHILLIPS_BASE_THREE_FOUR", label: "Phillips Base 3-4", description: "One-gap 3-4 principles with aggressive edge play.", tags: ["Phillips", "3-4", "One-Gap"] },
-  { id: "LEBEAU_ZONE_BLITZ_THREE_FOUR", label: "LeBeau Zone Blitz 3-4", description: "Fire-zone concepts with simulated pressures from 3-4 roots.", tags: ["Zone Blitz", "Fire Zone", "3-4"] },
-  { id: "BEARS_FOUR_SIX", label: "Bears 4-6", description: "Pressure-heavy bear front package for downhill disruption.", tags: ["Bear Front", "Pressure", "Run Fits"] },
-  { id: "FOUR_THREE_OVER", label: "4-3 Over", description: "Traditional 4-3 over alignment with strong-side front declarations.", tags: ["4-3", "Over Front", "Structure"] },
-  { id: "SINGLE_HIGH_COVER_3", label: "Single-High Cover 3", description: "Generic single-high Cover 3 bucket when Seattle-specific tags are absent.", tags: ["Cover 3", "Single High"] },
-  { id: "SABAN_COVER_4_MATCH", label: "Saban Cover 4 Match", description: "Pattern-match quarters with matchup conversion rules.", tags: ["Match", "Quarters", "Pattern Read"] },
-  { id: "RYAN_NICKEL_PRESSURE", label: "Ryan Nickel Pressure", description: "Pressure-oriented nickel ecosystem with overload and mug looks.", tags: ["Nickel", "Pressure", "Sim Pressures"] },
+  { id: "THREE_FOUR_TWO_GAP", label: getSchemeDisplayName("THREE_FOUR_TWO_GAP"), description: "Two-gapping front mechanics designed to keep linebackers clean.", tags: ["3-4", "Two-Gap", "Front Control"] },
+  { id: "FOUR_TWO_FIVE", label: getSchemeDisplayName("FOUR_TWO_FIVE"), description: "Nickel base with speed on the field and versatile overhang usage.", tags: ["Nickel", "Speed", "Versatility"] },
+  { id: "SEATTLE_COVER_3", label: getSchemeDisplayName("SEATTLE_COVER_3"), description: "Single-high zone family with strong perimeter run support rules.", tags: ["Cover 3", "Single High", "Run Support"] },
+  { id: "COVER_SIX", label: getSchemeDisplayName("COVER_SIX"), description: "Quarter-quarter-half split-field coverages for matchup control.", tags: ["Split Field", "Quarters", "Halves"] },
+  { id: "FANGIO_TWO_HIGH", label: getSchemeDisplayName("FANGIO_TWO_HIGH"), description: "Two-high shell structure with disguised rotations and leverage.", tags: ["Two-High", "Match Zones", "Disguise"] },
+  { id: "TAMPA_2", label: getSchemeDisplayName("TAMPA_2"), description: "Classic two-deep shell with MLB seam-drop responsibilities.", tags: ["Tampa", "Middle Run Through", "Zone"] },
+  { id: "MULTIPLE_HYBRID", label: getSchemeDisplayName("MULTIPLE_HYBRID"), description: "Flexible front/coverage menu tailored by opponent game plans.", tags: ["Multiple", "Hybrid", "Gameplan"] },
+  { id: "CHAOS_FRONT", label: getSchemeDisplayName("CHAOS_FRONT"), description: "Movement-driven fronts and pressure looks to stress protections.", tags: ["Movement", "Pressure", "Disruption"] },
+  { id: "PHILLIPS_BASE_THREE_FOUR", label: getSchemeDisplayName("PHILLIPS_BASE_THREE_FOUR"), description: "One-gap 3-4 principles with aggressive edge play.", tags: ["Phillips", "3-4", "One-Gap"] },
+  { id: "LEBEAU_ZONE_BLITZ_THREE_FOUR", label: getSchemeDisplayName("LEBEAU_ZONE_BLITZ_THREE_FOUR"), description: "Fire-zone concepts with simulated pressures from 3-4 roots.", tags: ["Zone Blitz", "Fire Zone", "3-4"] },
+  { id: "BEARS_FOUR_SIX", label: getSchemeDisplayName("BEARS_FOUR_SIX"), description: "Pressure-heavy bear front package for downhill disruption.", tags: ["Bear Front", "Pressure", "Run Fits"] },
+  { id: "FOUR_THREE_OVER", label: getSchemeDisplayName("FOUR_THREE_OVER"), description: "Traditional 4-3 over alignment with strong-side front declarations.", tags: ["4-3", "Over Front", "Structure"] },
+  { id: "SINGLE_HIGH_COVER_3", label: getSchemeDisplayName("SINGLE_HIGH_COVER_3"), description: "Generic single-high Cover 3 bucket when Seattle-specific tags are absent.", tags: ["Cover 3", "Single High"] },
+  { id: "SABAN_COVER_4_MATCH", label: getSchemeDisplayName("SABAN_COVER_4_MATCH"), description: "Pattern-match quarters with matchup conversion rules.", tags: ["Match", "Quarters", "Pattern Read"] },
+  { id: "RYAN_NICKEL_PRESSURE", label: getSchemeDisplayName("RYAN_NICKEL_PRESSURE"), description: "Pressure-oriented nickel ecosystem with overload and mug looks.", tags: ["Nickel", "Pressure", "Sim Pressures"] },
 ];
 
 const OFFENSE_COMPONENTS: Record<OffenseSchemeId, () => JSX.Element> = {
@@ -341,7 +312,7 @@ export default function PlaybookScreen() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div>
-                  Canonical ID: <span className="font-mono text-slate-100">{activeScheme}</span>
+                  Active Scheme: <span className="font-semibold text-slate-100">{getSchemeDisplayName(activeScheme)}</span>
                 </div>
                 <div>
                   {side === "OFFENSE" ? "OC" : "DC"}: <span className="font-semibold">{coordinator.coachName}</span>
@@ -392,7 +363,7 @@ export default function PlaybookScreen() {
                       <div className="font-semibold text-sm">{scheme.label}</div>
                       {isActive ? <Badge className="bg-accent text-black">ACTIVE</Badge> : null}
                     </div>
-                    <div className="mt-1 font-mono text-[11px] text-muted-foreground">{scheme.id}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{scheme.description}</div>
                   </div>
                 );
               })}

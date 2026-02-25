@@ -1,5 +1,5 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
+import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
 
 export default function SPREAD_RPO() {
-  return <PlaceholderPlaybook side="Offense" schemeId="SPREAD_RPO" />;
+  return <OffensePlaybookTemplate schemeId="SPREAD_RPO" />;
 }
