@@ -254,7 +254,7 @@ export default function PlayerProfile() {
       </div>
 
       <Dialog open={offerOpen} onOpenChange={setOfferOpen}>
-        <DialogContent className="max-w-lg rounded-2xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-t-2xl sm:max-w-lg sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle>{hasUserOffer ? "Offers" : "Make Offer"}</DialogTitle>
           </DialogHeader>

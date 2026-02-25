@@ -44,10 +44,11 @@ export default function Combine() {
           right={
             <>
               <Badge variant="outline">{prospects.length} Prospects</Badge>
-              <Button variant="outline" onClick={completeStep}>
+              <Button variant="outline" className="min-h-11" onClick={completeStep}>
                 Complete Step
               </Button>
               <Button
+                className="min-h-11"
                 onClick={next}
                 disabled={!state.offseason?.stepsComplete?.COMBINE && !(state as any).offseason?.stepsComplete?.COMBINE}
               >
@@ -56,13 +57,13 @@ export default function Combine() {
             </>
           }
         >
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="overflow-x-auto pb-1"><div className="flex min-w-max items-center gap-2">
             {["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((p) => (
-              <Button key={p} size="sm" variant={posFilter === p ? "default" : "secondary"} onClick={() => setPosFilter(p)}>
+              <Button key={p} size="sm" variant={posFilter === p ? "default" : "secondary"} className="min-h-11 rounded-full" onClick={() => setPosFilter(p)}>
                 {p}
               </Button>
             ))}
-          </div>
+          </div></div>
 
           <Separator className="my-3 bg-slate-300/15" />
 

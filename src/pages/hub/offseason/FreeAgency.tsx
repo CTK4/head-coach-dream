@@ -59,10 +59,10 @@ export default function FreeAgency() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => reject(o.playerId)}>
+                      <Button size="sm" variant="ghost" className="min-h-11" onClick={() => reject(o.playerId)}>
                         Reject
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => sign(o.id)} disabled={!can}>
+                      <Button size="sm" variant="outline" className="min-h-11" onClick={() => sign(o.id)} disabled={!can}>
                         Sign
                       </Button>
                     </div>
@@ -96,10 +96,10 @@ export default function FreeAgency() {
         <CardContent className="p-6 flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">When ready, complete and advance.</div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={completeStep}>
+            <Button variant="outline" className="min-h-11" onClick={completeStep}>
               Complete Step
             </Button>
-            <Button onClick={next} disabled={!state.offseason.stepsComplete.FREE_AGENCY}>
+            <Button className="min-h-11" onClick={next} disabled={!state.offseason.stepsComplete.FREE_AGENCY}>
               Next →
             </Button>
           </div>

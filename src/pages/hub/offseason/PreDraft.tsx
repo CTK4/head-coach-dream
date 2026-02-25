@@ -92,17 +92,17 @@ export default function PreDraft() {
           <div className="flex items-center justify-between gap-3">
             <div className="font-semibold">Board</div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={togglePicker}>
+              <Button size="sm" variant="outline" className="min-h-11" onClick={togglePicker}>
                 {pickerOpen ? "Hide Picker" : "Open Picker"}
               </Button>
-              <div className="flex rounded-md border overflow-hidden">
-                <Button size="sm" variant={viewMode === "CONSENSUS" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("CONSENSUS")}>
+              <div className="flex overflow-x-auto rounded-md border">
+                <Button size="sm" variant={viewMode === "CONSENSUS" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("CONSENSUS")}>
                   Consensus
                 </Button>
-                <Button size="sm" variant={viewMode === "GM" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("GM")}>
+                <Button size="sm" variant={viewMode === "GM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("GM")}>
                   GM View
                 </Button>
-                <Button size="sm" variant={viewMode === "TEAM" ? "default" : "ghost"} className="rounded-none" onClick={() => setViewMode("TEAM")}>
+                <Button size="sm" variant={viewMode === "TEAM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("TEAM")}>
                   Team View
                 </Button>
               </div>
@@ -123,13 +123,13 @@ export default function PreDraft() {
 
           {pickerOpen ? (
             <>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="overflow-x-auto pb-1"><div className="flex min-w-max items-center gap-2">
                 {positionFilters.map((pos) => (
-                  <Button key={pos} size="sm" variant={posFilter === pos ? "default" : "outline"} onClick={() => setPosFilter(pos)}>
+                  <Button key={pos} size="sm" variant={posFilter === pos ? "default" : "outline"} className="min-h-11 rounded-full" onClick={() => setPosFilter(pos)}>
                     {pos}
                   </Button>
                 ))}
-              </div>
+              </div></div>
 
               <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
                 {filteredBoard.map((p, idx) => {
@@ -168,10 +168,10 @@ export default function PreDraft() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button size="sm" variant={v ? "default" : "outline"} onClick={() => toggleVisit(p.id)} disabled={disableVisitAdd}>
+                        <Button size="sm" variant={v ? "default" : "outline"} className="min-h-11" onClick={() => toggleVisit(p.id)} disabled={disableVisitAdd}>
                           {v ? "Visited" : "Visit"}
                         </Button>
-                        <Button size="sm" variant={w ? "default" : "outline"} onClick={() => toggleWorkout(p.id)} disabled={disableWorkoutAdd}>
+                        <Button size="sm" variant={w ? "default" : "outline"} className="min-h-11" onClick={() => toggleWorkout(p.id)} disabled={disableWorkoutAdd}>
                           {w ? "Workout" : "Set Workout"}
                         </Button>
                       </div>
@@ -188,10 +188,10 @@ export default function PreDraft() {
         <CardContent className="p-6 flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">Visits/workouts are saved; complete when ready.</div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={completeStep}>
+            <Button variant="outline" className="min-h-11" onClick={completeStep}>
               Complete Step
             </Button>
-            <Button onClick={next} disabled={!state.offseason.stepsComplete.PRE_DRAFT}>
+            <Button className="min-h-11" onClick={next} disabled={!state.offseason.stepsComplete.PRE_DRAFT}>
               Next →
             </Button>
           </div>

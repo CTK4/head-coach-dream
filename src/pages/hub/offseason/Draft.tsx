@@ -25,7 +25,7 @@ export default function Draft() {
   return (
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between"><h1 className="text-xl font-bold">DRAFT</h1><div>{onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div></div>
-      <div className="flex gap-2 flex-wrap">{["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => <button key={x} className="px-2 py-1 border rounded" onClick={() => setPos(x)}>{x}</button>)}</div>
+      <div className="overflow-x-auto pb-1"><div className="flex min-w-max gap-2">{["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => <button key={x} className="min-h-11 rounded-full border px-3 py-1" onClick={() => setPos(x)}>{x}</button>)}</div></div>
       {available.slice(0, 80).map((p) => (
         <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
           <div>
@@ -33,8 +33,8 @@ export default function Draft() {
             <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
           </div>
           <div className="flex flex-col gap-2">
-            <button disabled={!onClock} className="px-2 py-1 border rounded disabled:opacity-50" onClick={() => dispatch({ type: "DRAFT_USER_PICK", payload: { prospectId: p.prospectId } })}>Draft Player</button>
-            <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "PROSPECT", targetId: p.prospectId, actionType: "FILM_DEEP", prospect: { id: p.prospectId, name: p.name, pos: p.pos, archetype: "Prospect", grade: 70, ras: 50, interview: 50 } } })}>Deep Scout (-5)</button>
+            <button disabled={!onClock} className="min-h-11 rounded border px-3 py-1 disabled:opacity-50" onClick={() => dispatch({ type: "DRAFT_USER_PICK", payload: { prospectId: p.prospectId } })}>Draft Player</button>
+            <button className="min-h-11 rounded border px-3 py-1" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "PROSPECT", targetId: p.prospectId, actionType: "FILM_DEEP", prospect: { id: p.prospectId, name: p.name, pos: p.pos, archetype: "Prospect", grade: 70, ras: 50, interview: 50 } } })}>Deep Scout (-5)</button>
           </div>
         </div>
       ))}
