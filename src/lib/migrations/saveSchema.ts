@@ -58,6 +58,10 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
     saveId: state.saveId ?? saveId,
   };
 
+  if (!Number.isFinite(Number(next.careerSeed))) {
+    next.careerSeed = Number(next.saveSeed ?? 1);
+  }
+
   if (next.schemaVersion < LATEST_SAVE_SCHEMA_VERSION) {
     next.schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
   }

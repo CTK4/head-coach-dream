@@ -2,7 +2,9 @@ import { applyTime, applyTwoMinuteGate, betweenPlaysRunoff, chooseSnapWithLeft, 
 import { clamp, mulberry32, tri } from "@/engine/rand";
 import { BASE_SNAP_COSTS, FATIGUE_VARIANCE_BAND, clampFatigue, computeFatigueEffects, type FatigueTrackedPosition } from "@/engine/fatigue";
 import { getDefensiveReaction, getMatchupModifier, selectDefensivePackageFromRoll, isRunPlay, type DefensivePackage, type MatchupModifier, type PersonnelPackage } from "@/engine/personnel";
-import { rng as contextualRng } from "@/engine/rng";
+import { hashSeed, rng as contextualRng } from "@/engine/rng";
+import { resolveContact, type ContactInput } from "@/engine/physics/contactResolver";
+import { resolveCatchPoint, type CatchInput } from "@/engine/physics/catchPointResolver";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
@@ -730,7 +732,8 @@ function resolveWithPAS(
   rng: () => number,
   playType: PlayType,
   look: DefensiveLook,
-  aggression: AggressionLevel
+  aggression: AggressionLevel,
+  snapKey: string,
 ): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
   const passive = resolveArchetypePassives(
@@ -745,20 +748,8 @@ function resolveWithPAS(
   );
   const pas = pasComp.pas + passivePas + perkPas;
 
-  // Aggression + tempo modifiers
-  const aggMod = aggression === "AGGRESSIVE" ? 0.2 : aggression === "CONSERVATIVE" ? -0.15 : 0;
-  const tempoMod = sim.tempo === "HURRY_UP" ? 0.08 : sim.tempo === "MILK" ? -0.06 : 0;
-
-  // Core probabilities
-  const pSuccess = clamp(sigmoid(2.5 * pas + 0.2) - Math.max(tempoMod, 0) * 0.1 + Math.max(-tempoMod, 0) * 0.06, 0.25, 0.82);
-  const pExplosive = clamp(0.08 + 0.18 * (pas + aggMod) + Math.max(tempoMod, 0) * 0.1, 0.02, 0.34);
-  const pNegative = clamp(0.12 - 0.15 * pas + 0.08 * (aggMod > 0 ? aggMod : 0) + Math.max(tempoMod, 0) * 0.08, 0.04, 0.42);
-
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
-
-  const roll1 = rng();
-  const roll2 = rng();
 
   let yards = 0;
   let turnover = false;
@@ -767,66 +758,57 @@ function resolveWithPAS(
   let incomplete = false;
   let outcomeLabel = "normal";
 
+  const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression);
+  const resolverTags: ResultTag[] = [];
+
   if (isRun) {
-    if (roll1 < pNegative) {
-      // TFL or stuff
-      yards = Math.round(tri(rng, -4, -1, 0));
-      outcomeLabel = "negative";
-    } else if (roll1 < pNegative + pExplosive) {
-      // Chunk or breakaway
-      yards = roll2 < 0.25 ? Math.round(tri(rng, 15, 22, 40)) : Math.round(tri(rng, 7, 11, 16));
-      outcomeLabel = "explosive";
-    } else {
-      // Normal gain
-      yards = Math.round(tri(rng, 1, 4, 8));
-      outcomeLabel = "success";
-    }
-    // Fumble (rare)
-    if (rng() < clamp(0.008 - 0.004 * pas, 0.002, 0.018)) {
-      turnover = true;
-      yards = Math.max(yards, 0);
-      outcomeLabel = "turnover";
-    }
+    const contactRng = contextualRng(sim.seed, `${snapKey}:contact`);
+    const contactInput: ContactInput = {
+      ballcarrier: { weightLb: 215, strength: 74, balance: 73, agility: 77, accel: 78, tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
+      tackler: { weightLb: look.box === "HEAVY" ? 248 : 228, strength: look.box === "HEAVY" ? 80 : 74, balance: 66, agility: 69, accel: 70, tackling: look.blitz === "LIKELY" ? 78 : 72, heightIn: 74, jump: 70, fatigue01: 0.22 },
+      move: { type: playType === "OUTSIDE_ZONE" ? "JUKE" : playType === "POWER" ? "STIFF_ARM" : "NONE", timing01: 0.55 },
+      context: {
+        angleDeg: look.blitz === "LIKELY" ? 18 : look.shell === "SINGLE_HIGH" ? 34 : 46,
+        padLevelOff01: 0.56,
+        padLevelDef01: look.box === "HEAVY" ? 0.72 : 0.62,
+        shortYardage: sim.distance <= 2,
+        pile: sim.distance <= 1,
+        surface: "DRY",
+      },
+    };
+    const contact = resolveContact(contactInput, contactRng);
+    yards = contact.yacYards;
+    turnover = contact.fumble && contact.recoveredBy === "DEFENSE";
+    outcomeLabel = turnover ? "turnover" : contact.tackled ? "success" : contact.yacYards >= 12 ? "explosive" : "success";
+    resolverTags.push(...contact.resultTags);
   } else if (isPass) {
-    // Sack probability (tied to blitz + pass rush)
-    const sackBase = (look.blitz === "LIKELY" ? 0.16 : look.blitz === "POSSIBLE" ? 0.1 : 0.07) + Math.max(tempoMod, 0) * 0.05;
+    const sackBase = look.blitz === "LIKELY" ? 0.16 : look.blitz === "POSSIBLE" ? 0.1 : 0.07;
     const sackProb = clamp(sackBase - 0.08 * pas, 0.03, 0.22);
-    if (roll1 < sackProb) {
+    if (rng() < sackProb) {
       sack = true;
       yards = -Math.round(tri(rng, 4, 7, 12));
       outcomeLabel = "negative";
     } else {
-      // Incompletion
-      const baseInc = (playType === "DROPBACK" || playType === "DEEP_PASS" ? 0.42 : playType === "PLAY_ACTION" ? 0.28 : 0.3) + Math.max(tempoMod, 0) * 0.05;
-      const incProb = clamp(baseInc - 0.18 * pSuccess + 0.1 * (1 - pSuccess), 0.12, 0.58);
-      if (roll1 < sackProb + incProb) {
-        incomplete = true;
-        yards = 0;
-        outcomeLabel = "incomplete";
-        // INT on incompletion (rare)
-        if (rng() < clamp(0.04 - 0.03 * pas + (aggMod > 0 ? 0.02 : 0), 0.005, 0.12)) {
-          turnover = true;
-          outcomeLabel = "turnover";
-        }
-      } else if (roll1 < sackProb + incProb + pExplosive) {
-        // Explosive completion
-        yards = playType === "DROPBACK" || playType === "DEEP_PASS"
-          ? Math.round(tri(rng, 16, 28, 45))
-          : Math.round(tri(rng, 12, 18, 30));
-        outcomeLabel = "explosive";
-      } else if (roll2 < pNegative * 0.5) {
-        // Short / negative completion
-        yards = Math.round(tri(rng, -2, 1, 4));
-        outcomeLabel = "negative";
-      } else {
-        // Normal completion
-        yards = playType === "QUICK_GAME" || playType === "SHORT_PASS" || playType === "SCREEN"
-          ? Math.round(tri(rng, 2, 6, 10))
-          : playType === "PLAY_ACTION"
-          ? Math.round(tri(rng, 4, 9, 17))
-          : Math.round(tri(rng, 5, 10, 18));
-        outcomeLabel = "success";
-      }
+      const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
+      const catchInput: CatchInput = {
+        qb: { accuracy: 76, arm: 78, decision: 74, pressure01: look.blitz === "LIKELY" ? 0.62 : 0.34, fatigue01: 0.22 },
+        wr: { heightIn: 73, weightLb: 198, speed: 84, hands: 79, jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
+        cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
+        context: {
+          targetDepth: playType === "SCREEN" || playType === "QUICK_GAME" ? "SHORT" : playType === "DROPBACK" ? "MID" : "DEEP",
+          separationYds: playType === "SCREEN" ? 1.8 : 1.1,
+          routeBreakSeverity01: playType === "QUICK_GAME" ? 0.35 : playType === "DROPBACK" ? 0.55 : 0.42,
+          highPoint: playType === "DROPBACK",
+          contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
+          surface: "DRY",
+        },
+      };
+      const catchOutcome = resolveCatchPoint(catchInput, catchRng);
+      incomplete = !catchOutcome.completed;
+      turnover = catchOutcome.intercepted;
+      yards = catchOutcome.completed ? catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4) : 0;
+      outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= 18 ? "explosive" : "success";
+      resolverTags.push(...catchOutcome.resultTags);
     }
   }
 
@@ -836,9 +818,8 @@ function resolveWithPAS(
     : outcomeLabel === "incomplete" ? "FAILURE"
     : "SUCCESS";
 
-  const tags = buildResultTags(playType, look, pasComp, outcome, aggression);
+  const tags = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
 
-  // Check for TD
   if (sim.ballOn + yards >= 100 && !turnover) {
     td = true;
     yards = 100 - sim.ballOn;
@@ -1041,7 +1022,7 @@ function isGranularPlay(playType: PlayType): boolean {
     || playType === "QUICK_GAME" || playType === "DROPBACK" || playType === "SCREEN";
 }
 
-function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType) {
+function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string) {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
     return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE") };
@@ -1053,7 +1034,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType) 
     const aggression = sim.aggression ?? "NORMAL";
     const isRunP = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER";
 
-    const resolved = resolveWithPAS(sim, rng, playType, look, aggression);
+    const resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey);
     const { yards, tags, sack, incomplete, turnover: isTO } = resolved;
 
     // Update stats
@@ -1353,7 +1334,6 @@ function applySnapFatigue(sim: GameSim, playType: PlayType): GameSim {
 }
 
 export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: PersonnelPackage = "11"): PlayResolution {
-  const rng = mulberry32(sim.seed);
   const downBefore = sim.down;
   const distanceBefore = sim.distance;
   const ballBefore = sim.ballOn;
@@ -1362,11 +1342,17 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = quarterAdvanceIfNeeded(s);
   if (s.clock.timeRemainingSec === 0) return { sim: s, ended: s.clock.quarter === 4 };
 
-  s = applySnapLoopTime(s, rng);
+  const preSnapRng = contextualRng(hashSeed(s.seed, "presnap", s.driveNumber, s.playNumberInDrive + 1));
+  s = applySnapLoopTime(s, preSnapRng);
   if (s.clock.timeRemainingSec === 0) {
     s = quarterAdvanceIfNeeded(s);
     return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
   }
+
+  const snapKey = `SNAP:${s.driveNumber}:${s.playNumberInDrive + 1}`;
+  const gameKey = `${s.homeTeamId}:${s.awayTeamId}:${s.weekType ?? "REGULAR_SEASON"}:${s.weekNumber ?? 0}`;
+  const snapSeed = hashSeed(s.seed, gameKey, s.driveNumber, s.playNumberInDrive + 1);
+  const rng = contextualRng(snapSeed, snapKey);
 
   // Generate defensive look for this snap (use existing defLook if pre-set, else generate)
   const reactions = getDefensiveReaction(s.down, s.distance, personnelPackage);
@@ -1386,7 +1372,7 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     s = fgAttempt(s, rng);
     tag = "SCORE";
   } else {
-    const resolved = resolveNormalPlay(s, rng, playType);
+    const resolved = resolveNormalPlay(s, rng, playType, snapKey);
     s = resolved.sim;
     tag = resolved.tag;
     live = resolved.live;
