@@ -95,6 +95,7 @@ const ChooseBackground = () => {
                       {isTouchDevice ? (
                         <div className="pt-1">
                           <Button
+                            data-test="background-continue"
                             onClick={(event) => {
                               event.stopPropagation();
                               handleSelect(archetype);

@@ -138,13 +138,13 @@ export default function CoordinatorHiring() {
       <Card>
         <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button size="sm" variant={role === "OC" ? "default" : "secondary"} onClick={() => setRole("OC")} disabled={Boolean(state.staff.ocId)} title={state.staff.ocId ? "OC already hired" : ""}>
+            <Button data-test="hire-oc" size="sm" variant={role === "OC" ? "default" : "secondary"} onClick={() => setRole("OC")} disabled={Boolean(state.staff.ocId)} title={state.staff.ocId ? "OC already hired" : ""}>
               OC
             </Button>
-            <Button size="sm" variant={role === "DC" ? "default" : "secondary"} onClick={() => setRole("DC")} disabled={Boolean(state.staff.dcId)} title={state.staff.dcId ? "DC already hired" : ""}>
+            <Button data-test="hire-dc" size="sm" variant={role === "DC" ? "default" : "secondary"} onClick={() => setRole("DC")} disabled={Boolean(state.staff.dcId)} title={state.staff.dcId ? "DC already hired" : ""}>
               DC
             </Button>
-            <Button size="sm" variant={role === "STC" ? "default" : "secondary"} onClick={() => setRole("STC")} disabled={Boolean(state.staff.stcId)} title={state.staff.stcId ? "STC already hired" : ""}>
+            <Button data-test="hire-stc" size="sm" variant={role === "STC" ? "default" : "secondary"} onClick={() => setRole("STC")} disabled={Boolean(state.staff.stcId)} title={state.staff.stcId ? "STC already hired" : ""}>
               STC
             </Button>
           </div>

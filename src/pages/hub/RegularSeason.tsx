@@ -186,7 +186,7 @@ const RegularSeason = () => {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_WEEK" })}>Advance Week</Button>
+            <Button data-test="advance-week" variant="secondary" onClick={() => dispatch({ type: "ADVANCE_WEEK" })}>Advance Week</Button>
           </div>
           {state.lastPracticeOutcomeSummary ? <p className="text-sm text-muted-foreground">{state.lastPracticeOutcomeSummary}</p> : null}
           {state.uiToast ? <p className="text-xs text-muted-foreground">{state.uiToast}</p> : null}
