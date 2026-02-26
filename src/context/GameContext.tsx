@@ -729,6 +729,7 @@ export type GameState = {
   weeklyResults: WeekResult[];
   leagueStatLeaders: LeagueStatLeaders;
   saveSeed: number;
+  careerSeed: number;
   game: GameSim;
   gameHistory: import("@/engine/gameSim").GameBoxScore[];
   playerSeasonStatsById: Record<string, PlayerSeasonStats[]>;
@@ -1241,7 +1242,8 @@ function createInitialState(): GameState {
     weeklyResults: [],
     leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
     saveSeed,
-    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed }),
+    careerSeed: saveSeed ^ 0x85ebca6b,
+    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed ^ 0x85ebca6b }),
     gameHistory: [],
     playerSeasonStatsById: {},
     playerCareerStatsById: {},
@@ -6516,7 +6518,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         game: initGameSim({
           homeTeamId: teamId,
           awayTeamId: action.payload.opponentTeamId,
-          seed: base.saveSeed + (base.hub.preseasonWeek + base.hub.regularSeasonWeek) * 1009,
+          seed: (base.careerSeed ?? base.saveSeed) ^ hashStr(`game:${gameType}:${action.payload.weekNumber ?? action.payload.week ?? 0}:${teamId}:${action.payload.opponentTeamId}`),
           weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
           homeRatings: computeTeamGameRatings(teamId),
@@ -6559,7 +6561,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         userHomeTeamId: state.game.homeTeamId,
         userAwayTeamId: state.game.awayTeamId,
         userScore: { homeScore: state.game.homeScore, awayScore: state.game.awayScore },
-        seed: state.saveSeed,
+        seed: state.careerSeed ?? state.saveSeed,
         previousStandings: state.currentStandings,
         priorWeekResults: state.weeklyResults,
       });
@@ -6596,7 +6598,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
             },
             careerStage: "REGULAR_SEASON",
-            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
           };
         }
       }
@@ -6612,7 +6614,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
         hub,
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
-        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: state.saveSeed + 777, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
       if (state.game.weekType === "REGULAR_SEASON") {
         nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
@@ -6625,7 +6627,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "EXIT_GAME":
       return {
         ...state,
-        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: state.saveSeed + 555, coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`exit:${state.hub.regularSeasonWeek}:${state.hub.preseasonWeek}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
     case "ADVANCE_WEEK": {
       const schedule = state.hub.schedule;
@@ -6647,7 +6649,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         week,
         userHomeTeamId: matchup.homeTeamId,
         userAwayTeamId: matchup.awayTeamId,
-        seed: state.saveSeed + week * 1013 + (gameType === "PRESEASON" ? 17 : 31),
+        seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`simweek:${gameType}:${week}`),
         previousStandings: state.currentStandings,
         priorWeekResults: state.weeklyResults,
       });
@@ -6698,7 +6700,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           const { postseason, championTeamId } = simulatePlayoffs({
             league: out.league,
             season: Number(out.season ?? 2026),
-            seed: Number(out.saveSeed ?? 1) + 99991,
+            seed: Number(out.careerSeed ?? out.saveSeed ?? 1) ^ hashStr(`migrate:postseason`),
           });
           out = { ...out, league: { ...out.league, postseason } };
           out = applySeasonMilestoneAwards(out);
@@ -6840,6 +6842,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   let s: Partial<GameState> = {
     ...oldState,
     saveSeed,
+    careerSeed: Number((oldState as any).careerSeed ?? (saveSeed ^ 0x85ebca6b)),
     careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
     seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
     earnedMilestoneIds: Array.isArray(oldState.earnedMilestoneIds) ? oldState.earnedMilestoneIds.map(String) : [],
