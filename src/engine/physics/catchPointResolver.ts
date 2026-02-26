@@ -1,5 +1,6 @@
 import type { ResultTag } from "@/engine/gameSim";
 import { CATCH_BASE_COMPLETION, CATCH_BASE_INT } from "@/engine/physics/constants";
+import { resolveFumble } from "@/engine/physics/fumbleResolver";
 import { codSkill, ratingZ, reachIn } from "@/engine/physics/ratingsToKinematics";
 
 export type CatchContact = "NONE" | "LIGHT" | "HEAVY";
@@ -14,6 +15,9 @@ export type CatchInput = {
     highPoint: boolean;
     contactAtCatch: CatchContact;
     surface: "DRY" | "WET" | "SNOW";
+    throwQualityAdj?: number;
+    deepVarianceMult?: number;
+    wobbleChance?: number;
   };
 };
 
@@ -22,6 +26,8 @@ export type CatchOutcome = {
   pbu: boolean;
   intercepted: boolean;
   yacYards: number;
+  fumble: boolean;
+  recoveredBy?: "OFFENSE" | "DEFENSE";
   catchType: "OPEN" | "CONTESTED" | "HIGH_POINT" | "THROUGH_CONTACT";
   resultTags: ResultTag[];
   debug: Record<string, number>;
@@ -57,8 +63,9 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
   const skillDelta = ratingZ(input.wr.hands) - ratingZ(input.cb.coverage) + ratingZ(input.wr.strength) * 0.08;
   const highPointBonus = input.context.highPoint ? reachAdvIn * 0.05 : 0;
 
+  const depthVariancePenalty = input.context.targetDepth === "DEEP" ? ((input.context.deepVarianceMult ?? 1) - 1) * 0.14 : 0;
   const completionProb = clamp(
-    CATCH_BASE_COMPLETION + throwQ * 0.18 + effSeparation * 0.12 + skillDelta * 0.1 + highPointBonus,
+    CATCH_BASE_COMPLETION + (throwQ + (input.context.throwQualityAdj ?? 0)) * 0.18 + effSeparation * 0.12 + skillDelta * 0.1 + highPointBonus - depthVariancePenalty,
     0.06,
     0.9,
   );
@@ -68,6 +75,8 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
   let pbu = false;
   let intercepted = false;
   let yacYards = 0;
+  let fumble = false;
+  let recoveredBy: "OFFENSE" | "DEFENSE" | undefined;
   const tags: ResultTag[] = [];
 
   if (!completed) {
@@ -100,6 +109,20 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
       } else if (input.context.contactAtCatch === "HEAVY" && secureCatchRoll > secureProb - 0.12) {
         tags.push({ kind: "MISMATCH", text: "JARRED LOOSE RISK" });
       }
+
+      if (completed && input.context.contactAtCatch === "HEAVY") {
+        const fumbleOutcome = resolveFumble(
+          {
+            carrier: { balanceZ: ratingZ(input.wr.balance), strengthZ: ratingZ(input.wr.strength), fatigue01: input.wr.fatigue01 },
+            hitter: { hitPowerZ: ratingZ(input.cb.strength), tackleZ: ratingZ(input.cb.coverage) },
+            context: { impulseProxy: 1.2, surface: input.context.surface, contactType: "CATCH" },
+          },
+          rng,
+        );
+        fumble = fumbleOutcome.fumble;
+        recoveredBy = fumbleOutcome.recoveredBy;
+        tags.push(...fumbleOutcome.resultTags);
+      }
     }
   }
 
@@ -120,6 +143,8 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
     pbu,
     intercepted,
     yacYards,
+    fumble,
+    recoveredBy,
     catchType,
     resultTags: tags,
     debug: {

@@ -31,8 +31,10 @@ describe("resolveCatchPoint", () => {
           "sepDelta": -0.26120809601257217,
           "throwQ": 1.1686666666666665,
         },
+        "fumble": false,
         "intercepted": false,
         "pbu": false,
+        "recoveredBy": undefined,
         "resultTags": [
           {
             "kind": "EXECUTION",

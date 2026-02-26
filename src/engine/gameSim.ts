@@ -5,6 +5,12 @@ import { getDefensiveReaction, getMatchupModifier, selectDefensivePackageFromRol
 import { hashSeed, rng as contextualRng } from "@/engine/rng";
 import { resolveContact, type ContactInput } from "@/engine/physics/contactResolver";
 import { resolveCatchPoint, type CatchInput } from "@/engine/physics/catchPointResolver";
+import { resolvePassRush } from "@/engine/physics/passRushResolver";
+import { resolveQbBallistics } from "@/engine/physics/qbBallistics";
+import { resolvePile } from "@/engine/physics/pileResolver";
+import { resolveFumble } from "@/engine/physics/fumbleResolver";
+import { resolveFieldGoal, resolvePunt } from "@/engine/physics/kickResolver";
+import { ratingZ } from "@/engine/physics/ratingsToKinematics";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
@@ -762,6 +768,21 @@ function resolveWithPAS(
   const resolverTags: ResultTag[] = [];
 
   if (isRun) {
+    if (sim.distance <= 2 || sim.ballOn >= 96) {
+      const pile = resolvePile(
+        {
+          offense: { OL_pushZ: 0.42, RB_massEff: 218, RB_balanceZ: 0.5 },
+          defense: { DL_anchorZ: look.box === "HEAVY" ? 0.72 : 0.4, boxCount: look.box === "HEAVY" ? 8 : 7, LB_fillZ: look.blitz === "LIKELY" ? 0.62 : 0.38 },
+          context: { yardsToGo: sim.distance, goalLine: sim.ballOn >= 96, surface: "DRY", fatigue: 0.2 },
+        },
+        contextualRng(sim.seed, `${snapKey}:pile`),
+      );
+      yards = pile.yardsGained;
+      resolverTags.push(...pile.resultTags);
+      if (pile.stuffed && yards === 0) {
+        outcomeLabel = "negative";
+      }
+    }
     const contactRng = contextualRng(sim.seed, `${snapKey}:contact`);
     const contactInput: ContactInput = {
       ballcarrier: { weightLb: 215, strength: 74, balance: 73, agility: 77, accel: 78, tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
@@ -777,18 +798,50 @@ function resolveWithPAS(
       },
     };
     const contact = resolveContact(contactInput, contactRng);
-    yards = contact.yacYards;
-    turnover = contact.fumble && contact.recoveredBy === "DEFENSE";
+    yards = Math.max(yards, contact.yacYards);
+    const runFumble = resolveFumble(
+      {
+        carrier: { balanceZ: ratingZ(contactInput.ballcarrier.balance), strengthZ: ratingZ(contactInput.ballcarrier.strength), fatigue01: contactInput.ballcarrier.fatigue01 },
+        hitter: { hitPowerZ: ratingZ(contactInput.tackler.strength), tackleZ: ratingZ(contactInput.tackler.tackling) },
+        context: { impulseProxy: contact.tackled ? 1 : 0.7, surface: contactInput.context.surface, contactType: sim.distance <= 1 ? "SCRUM" : "RUN" },
+      },
+      contextualRng(sim.seed, `${snapKey}:fumble-run`),
+    );
+    turnover = runFumble.fumble && runFumble.recoveredBy === "DEFENSE";
     outcomeLabel = turnover ? "turnover" : contact.tackled ? "success" : contact.yacYards >= 12 ? "explosive" : "success";
-    resolverTags.push(...contact.resultTags);
+    resolverTags.push(...contact.resultTags, ...runFumble.resultTags);
   } else if (isPass) {
-    const sackBase = look.blitz === "LIKELY" ? 0.16 : look.blitz === "POSSIBLE" ? 0.1 : 0.07;
-    const sackProb = clamp(sackBase - 0.08 * pas, 0.03, 0.22);
-    if (rng() < sackProb) {
+    const rushOutcome = resolvePassRush(
+      {
+        rusher: { speed: look.blitz === "LIKELY" ? 83 : 77, accel: 79, strength: 78, technique: 76, bend: 80, fatigue01: 0.2 },
+        blocker: { passPro: 74, footwork: 73, anchor: 75, fatigue01: 0.2 },
+        context: { rushAngleDeg: look.shell === "SINGLE_HIGH" ? 28 : 41, depthYds: playType === "DROPBACK" ? 9 : 6, chipHelp: playType === "SCREEN", quickGame: playType === "QUICK_GAME" },
+      },
+      contextualRng(sim.seed, `${snapKey}:pass-rush`),
+    );
+    resolverTags.push(...rushOutcome.resultTags);
+    if (rushOutcome.sacked) {
       sack = true;
       yards = -Math.round(tri(rng, 4, 7, 12));
+      const sackFumble = resolveFumble(
+        {
+          carrier: { balanceZ: 0.4, strengthZ: 0.35, fatigue01: 0.22 },
+          hitter: { hitPowerZ: 0.62, tackleZ: 0.55 },
+          context: { impulseProxy: 1.05, surface: "DRY", contactType: "SACK" },
+        },
+        contextualRng(sim.seed, `${snapKey}:fumble-sack`),
+      );
+      turnover = sackFumble.fumble && sackFumble.recoveredBy === "DEFENSE";
+      resolverTags.push(...sackFumble.resultTags);
       outcomeLabel = "negative";
     } else {
+      const ballistics = resolveQbBallistics(
+        {
+          qb: { arm: 78, accuracy: 76, release: 77, spin: 75, fatigue01: 0.22 },
+          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: "LOW", precipTier: "NONE", throwOnRun: playType === "PLAY_ACTION" && look.blitz === "LIKELY" },
+        },
+        contextualRng(sim.seed, `${snapKey}:ballistics`),
+      );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
       const catchInput: CatchInput = {
         qb: { accuracy: 76, arm: 78, decision: 74, pressure01: look.blitz === "LIKELY" ? 0.62 : 0.34, fatigue01: 0.22 },
@@ -801,11 +854,14 @@ function resolveWithPAS(
           highPoint: playType === "DROPBACK",
           contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
           surface: "DRY",
+          throwQualityAdj: ballistics.throwQualityAdj - (rushOutcome.pressured ? 0.14 : 0),
+          deepVarianceMult: ballistics.deepVarianceMult,
+          wobbleChance: ballistics.wobbleChance,
         },
       };
       const catchOutcome = resolveCatchPoint(catchInput, catchRng);
       incomplete = !catchOutcome.completed;
-      turnover = catchOutcome.intercepted;
+      turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
       yards = catchOutcome.completed ? catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4) : 0;
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= 18 ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
@@ -969,9 +1025,12 @@ function turnover(sim: GameSim, rng: () => number): GameSim {
 
 function punt(sim: GameSim, rng: () => number): GameSim {
   let clock = applyTime(sim.clock, adminTime(rng, "PUNT_SETUP"));
-  const returned = rng() < 0.55;
+  const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
+  const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-punt");
+  const puntOutcome = resolvePunt({ power: 78, accuracy: 73, hang: 76, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: "LOW", precipTier: "NONE", surface: "DRY" }, kickRng);
+  const returned = puntOutcome.returnable;
   clock = applyTime(clock, liveTime(rng, returned ? "PUNT_RETURN" : "PUNT_FAIR"));
-  return turnover({ ...sim, clock, lastResult: "Punt." }, rng);
+  return turnover({ ...sim, clock, lastResult: `Punt ${puntOutcome.netYds}y${puntOutcome.inside20 ? " (inside 20)" : ""}.`, lastResultTags: puntOutcome.resultTags }, rng);
 }
 
 function fgMakeProb(ballOn: number): number {
@@ -983,15 +1042,17 @@ function fgMakeProb(ballOn: number): number {
 function fgAttempt(sim: GameSim, rng: () => number): GameSim {
   let clock = applyTime(sim.clock, adminTime(rng, "FG_SETUP"));
   clock = applyTime(clock, liveTime(rng, "FG"));
-  const makeProb = fgMakeProb(sim.ballOn);
   const kickYards = 100 - sim.ballOn + 17;
+  const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
+  const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-fg");
+  const fgOutcome = resolveFieldGoal({ power: 79, accuracy: 77, spin: 74 }, { distanceYds: kickYards, windTier: "LOW", precipTier: "NONE", surface: "DRY" }, kickRng);
 
-  if (rng() < makeProb) {
+  if (fgOutcome.made) {
     const off = scoreRef(sim);
     off.set(off.get() + 3);
-    return kickoffAfterScore({ ...sim, clock, lastResult: `FG is GOOD (${kickYards}y)!` }, rng);
+    return kickoffAfterScore({ ...sim, clock, lastResult: `FG is GOOD (${kickYards}y)!`, lastResultTags: fgOutcome.resultTags }, rng);
   }
-  return turnover({ ...sim, clock, lastResult: `FG missed (${kickYards}y).` }, rng);
+  return turnover({ ...sim, clock, lastResult: `FG missed ${fgOutcome.missDir} (${kickYards}y).`, lastResultTags: fgOutcome.resultTags }, rng);
 }
 
 function advanceDown(sim: GameSim, gained: number): GameSim {
