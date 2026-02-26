@@ -59,7 +59,8 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   };
 
   if (!Number.isFinite(Number(next.careerSeed))) {
-    next.careerSeed = Number(next.saveSeed ?? 1);
+    const baseSaveSeed = Number(next.saveSeed ?? 1);
+    next.careerSeed = baseSaveSeed ^ 0x85ebca6b;
   }
 
   if (next.schemaVersion < LATEST_SAVE_SCHEMA_VERSION) {
