@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
+import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
 import {
   clearPersonnelTeam,
   cutPlayerToFreeAgent,
@@ -117,6 +118,7 @@ import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generate
 import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
+import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -305,7 +307,7 @@ export type RetiredPlayerRecord = { playerId: string; name: string; pos: string;
 const CURRENT_SAVE_VERSION = 5;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
-const DRAFT_ROWS = draftClassJson as DraftRow[];
+const DRAFT_ROWS = getDraftClassRows() as DraftRow[];
 
 const num = (v: any, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const str = (v: any, d = "") => (v == null ? d : String(v));
@@ -2566,7 +2568,7 @@ function rookieContractFromApy(startSeason: number, apy: number): RookieContract
 }
 
 export function getProspectRow(prospectId: string): Record<string, unknown> | null {
-  return DRAFT_ROWS.find((r) => String(r["Player ID"]) === prospectId) ?? null;
+  return (getProspectById(prospectId) as Record<string, unknown> | null) ?? null;
 }
 
 function clamp(n: number, a: number, b: number) {
@@ -5957,7 +5959,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!slot || slot.teamId !== state.draft.userTeamId) return state;
 
       const p = getDraftClassFromSim().find((x) => x.prospectId === String(action.payload.prospectId));
-      if (!p || state.draft.takenProspectIds[p.prospectId]) return state;
+      if (!p || state.draft.takenProspectIds[p.prospectId]) return { ...state, uiToast: "Prospect not found" };
 
       const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
       const draftProjection = resolveDraftUncertainty({
@@ -6026,7 +6028,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const p = (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : draftBoard()).find(
         (x) => x.id === action.payload.prospectId,
       );
-      if (!p) return state;
+      if (!p || !doesProspectExist(p.id)) return { ...state, uiToast: "Prospect not found" };
 
       const nextState = {
         ...state,
@@ -6939,6 +6941,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     delete scoutingState.combine.hoursRemaining;
   }
 
+  s = migrateDraftClassIdsInSave(s);
   s = ensureAccolades(bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
 }
@@ -7105,6 +7108,7 @@ function loadState(): GameState {
       storySetup: (migrated as any).storySetup,
     };
     out = ensureAccolades(bootstrapAccolades(out));
+    out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
     return out;
