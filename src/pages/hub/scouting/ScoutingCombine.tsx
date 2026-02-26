@@ -310,8 +310,8 @@ export default function ScoutingCombine() {
                   <div className="mt-1 text-xs opacity-70">
                     Character: {charRange} • Football IQ: {iqRange} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
+                  <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
-                <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
               </div>
             );
           })}
