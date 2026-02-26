@@ -1,5 +1,6 @@
 import type { GameState } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
+import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState, type SaveValidationErrorCode } from "@/lib/migrations/saveSchema";
 
 export interface SaveMetadata {
   saveId: string;
@@ -22,6 +23,52 @@ function getStorageKey(saveId: string) {
   return `hc_career_save__${saveId}`;
 }
 
+function getBackupKey(storageKey: string) {
+  return `${storageKey}__bak`;
+}
+
+function getTempKey(storageKey: string) {
+  return `${storageKey}__tmp`;
+}
+
+export type LoadSaveErrorCode = "MISSING_SAVE" | "CORRUPT_SAVE" | "INVALID_SAVE";
+
+export type LoadSaveResult =
+  | { ok: true; state: GameState }
+  | {
+      ok: false;
+      code: LoadSaveErrorCode;
+      saveId: string;
+      restoredFromBackup: boolean;
+      validationCode?: SaveValidationErrorCode;
+      message: string;
+    };
+
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // no-op
+  }
+}
+
 function parseSave(raw: string | null): GameState | null {
   if (!raw) return null;
   try {
@@ -29,6 +76,29 @@ function parseSave(raw: string | null): GameState | null {
   } catch {
     return null;
   }
+}
+
+function readAndValidateState(raw: string | null, saveId: string): { state: GameState | null; validationCode?: SaveValidationErrorCode } {
+  const parsed = parseSave(raw);
+  if (!parsed) return { state: null };
+  const migrated = migrateSaveSchema(parsed, saveId);
+  const validation = validateCriticalSaveState(migrated);
+  if (!validation.ok) {
+    return { state: null, validationCode: validation.code };
+  }
+  return { state: migrated };
+}
+
+function commitAtomic(storageKey: string, serializedState: string): void {
+  const tempKey = getTempKey(storageKey);
+  const backupKey = getBackupKey(storageKey);
+  const existing = safeGetItem(storageKey);
+  safeSetItem(tempKey, serializedState);
+  if (existing !== null) {
+    safeSetItem(backupKey, existing);
+  }
+  safeSetItem(storageKey, serializedState);
+  safeRemoveItem(tempKey);
 }
 
 function toMetadata(saveId: string, state: GameState): SaveMetadata {
@@ -52,39 +122,42 @@ function toMetadata(saveId: string, state: GameState): SaveMetadata {
 
 function readIndex(): SaveIndexRow[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(SAVE_INDEX_KEY) ?? "[]") as SaveIndexRow[];
+    const parsed = JSON.parse(safeGetItem(SAVE_INDEX_KEY) ?? "[]") as SaveIndexRow[];
     if (Array.isArray(parsed)) return parsed;
   } catch {
     // no-op
   }
 
-  const legacy = parseSave(localStorage.getItem(LEGACY_KEY));
+  const legacy = parseSave(safeGetItem(LEGACY_KEY));
   if (!legacy) return [];
   const saveId = "legacy-default";
-  return [{ ...toMetadata(saveId, legacy), storageKey: LEGACY_KEY }];
+  return [{ ...toMetadata(saveId, migrateSaveSchema(legacy, saveId)), storageKey: LEGACY_KEY }];
 }
 
 function writeIndex(rows: SaveIndexRow[]) {
-  localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify(rows));
+  safeSetItem(SAVE_INDEX_KEY, JSON.stringify(rows));
 }
 
 export function getActiveSaveId(): string | null {
-  return localStorage.getItem(SAVE_ACTIVE_ID_KEY);
+  return safeGetItem(SAVE_ACTIVE_ID_KEY);
 }
 
 export function setActiveSaveId(saveId: string) {
-  localStorage.setItem(SAVE_ACTIVE_ID_KEY, saveId);
+  safeSetItem(SAVE_ACTIVE_ID_KEY, saveId);
 }
 
 export function syncCurrentSave(state: GameState, saveId?: string) {
   const id = saveId || getActiveSaveId() || `save-${Date.now()}`;
   const storageKey = getStorageKey(id);
+  const nextState = migrateSaveSchema(state, id);
+  const serialized = JSON.stringify(nextState);
+
   setActiveSaveId(id);
-  localStorage.setItem(storageKey, JSON.stringify(state));
-  localStorage.setItem(LEGACY_KEY, JSON.stringify(state));
+  commitAtomic(storageKey, serialized);
+  commitAtomic(LEGACY_KEY, serialized);
 
   const rows = readIndex().filter((row) => row.saveId !== id);
-  rows.push({ ...toMetadata(id, state), storageKey });
+  rows.push({ ...toMetadata(id, nextState), storageKey });
   writeIndex(rows.sort((a, b) => b.lastPlayed - a.lastPlayed));
 }
 
@@ -94,23 +167,103 @@ export function listSaves(): SaveMetadata[] {
     .map(({ storageKey: _storageKey, ...meta }) => meta);
 }
 
-export function loadSave(saveId: string): GameState | null {
+export function loadSaveResult(saveId: string): LoadSaveResult {
   const row = readIndex().find((s) => s.saveId === saveId);
   const key = row?.storageKey ?? getStorageKey(saveId);
-  const state = parseSave(localStorage.getItem(key));
-  if (state) {
+
+  const primary = readAndValidateState(safeGetItem(key), saveId);
+  if (primary.state) {
+    const serialized = JSON.stringify(primary.state);
     setActiveSaveId(saveId);
-    localStorage.setItem(LEGACY_KEY, JSON.stringify(state));
+    commitAtomic(LEGACY_KEY, serialized);
+    commitAtomic(key, serialized);
+    return { ok: true, state: primary.state };
   }
-  return state;
+
+  const backup = readAndValidateState(safeGetItem(getBackupKey(key)), saveId);
+  if (backup.state) {
+    const serialized = JSON.stringify(backup.state);
+    commitAtomic(key, serialized);
+    setActiveSaveId(saveId);
+    commitAtomic(LEGACY_KEY, serialized);
+    return { ok: true, state: backup.state };
+  }
+
+  if (!safeGetItem(key)) {
+    return {
+      ok: false,
+      code: "MISSING_SAVE",
+      saveId,
+      restoredFromBackup: false,
+      message: "Save file is missing.",
+    };
+  }
+
+  return {
+    ok: false,
+    code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE",
+    saveId,
+    restoredFromBackup: false,
+    validationCode: primary.validationCode ?? backup.validationCode,
+    message: "Save appears corrupted. Backup restore failed.",
+  };
+}
+
+export function loadSave(saveId: string): GameState | null {
+  const result = loadSaveResult(saveId);
+  return result.ok ? result.state : null;
+}
+
+export function exportSave(saveId: string): { blob: Blob; fileName: string } | null {
+  const result = loadSaveResult(saveId);
+  if (!result.ok) return null;
+  const state = migrateSaveSchema(result.state, saveId);
+  const payload = JSON.stringify(state, null, 2);
+  return {
+    blob: new Blob([payload], { type: "application/json" }),
+    fileName: `head-coach-dream-${saveId}-v${LATEST_SAVE_SCHEMA_VERSION}.json`,
+  };
+}
+
+export function importSave(json: string): LoadSaveResult {
+  const parsed = parseSave(json);
+  if (!parsed) {
+    return {
+      ok: false,
+      code: "CORRUPT_SAVE",
+      saveId: "",
+      restoredFromBackup: false,
+      message: "Could not parse imported save JSON.",
+    };
+  }
+
+  const saveId = `import-${Date.now()}`;
+  const migrated = migrateSaveSchema(parsed, saveId);
+  const validation = validateCriticalSaveState(migrated);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      code: "INVALID_SAVE",
+      validationCode: validation.code,
+      saveId,
+      restoredFromBackup: false,
+      message: validation.message,
+    };
+  }
+
+  syncCurrentSave(migrated, saveId);
+  return { ok: true, state: migrated };
 }
 
 export function deleteSave(saveId: string): void {
   const rows = readIndex();
   const row = rows.find((s) => s.saveId === saveId);
-  localStorage.removeItem(row?.storageKey ?? getStorageKey(saveId));
+  const storageKey = row?.storageKey ?? getStorageKey(saveId);
+  safeRemoveItem(storageKey);
+  safeRemoveItem(getBackupKey(storageKey));
+  safeRemoveItem(getTempKey(storageKey));
   writeIndex(rows.filter((s) => s.saveId !== saveId));
   if (getActiveSaveId() === saveId) {
-    localStorage.removeItem(SAVE_ACTIVE_ID_KEY);
+    safeRemoveItem(SAVE_ACTIVE_ID_KEY);
   }
 }

@@ -645,6 +645,8 @@ export type GameState = {
   ownerPatience?: number;
   season: number;
   week?: number;
+  schemaVersion: number;
+  saveId?: string;
   saveVersion: number;
   memoryLog: MemoryEvent[];
   contextFlags?: string[];
@@ -1192,6 +1194,7 @@ function createInitialState(): GameState {
     offers: [],
     season: 2026,
     week: 1,
+    schemaVersion: 1,
     saveVersion: CURRENT_SAVE_VERSION,
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
