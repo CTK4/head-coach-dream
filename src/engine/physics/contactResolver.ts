@@ -1,6 +1,8 @@
 import type { ResultTag } from "@/engine/gameSim";
 import { CONTACT_BASE_FUMBLE, CONTACT_BASE_TACKLE, CONTACT_PILE_TACKLE_BONUS, CONTACT_SHORT_YARDAGE_TACKLE_BONUS } from "@/engine/physics/constants";
 import { resolveBounce, type BounceSurface } from "@/engine/physics/bounce";
+import { resolveMoveAdvantage } from "@/engine/physics/moveResolver";
+import { resolveAngleBand } from "@/engine/physics/tackleAngle";
 import { codSkill, effectiveMass, handStrength, ratingZ, reachIn } from "@/engine/physics/ratingsToKinematics";
 
 export type ContactMove = "NONE" | "JUKE" | "SPIN" | "STIFF_ARM";
@@ -67,18 +69,13 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
   const defMass = effectiveMass(input.tackler.weightLb, defStrengthZ, input.context.padLevelDef01, input.tackler.fatigue01);
   const leverageDelta = (input.context.padLevelDef01 - input.context.padLevelOff01) * 0.45 + defTackleZ * 0.2 - offBalanceZ * 0.12;
 
-  const offCod = codSkill(ratingZ(input.ballcarrier.agility), ratingZ(input.ballcarrier.accel));
-  const defCod = codSkill(ratingZ(input.tackler.agility), ratingZ(input.tackler.accel));
-  const reachAdv = reachIn(input.ballcarrier.heightIn, ratingZ(input.ballcarrier.jump)) - reachIn(input.tackler.heightIn, ratingZ(input.tackler.jump));
-
-  let moveAdv = 0;
-  if (input.move.type === "JUKE") {
-    moveAdv = (offCod - defCod) * (0.2 + angleVariance * 0.55) + input.move.timing01 * 0.16;
-  } else if (input.move.type === "SPIN") {
-    moveAdv = (offBalanceZ - defTackleZ) * 0.2 + 0.03;
-  } else if (input.move.type === "STIFF_ARM") {
-    moveAdv = handStrength(offStrengthZ) * 0.08 + reachAdv * 0.014 + (angle > 20 ? 0.08 : 0);
-  }
+  const moveAdv = resolveMoveAdvantage({
+    moveType: input.move.type,
+    timing01: input.move.timing01,
+    angleDeg: angle,
+    ballcarrier: input.ballcarrier,
+    tackler: input.tackler,
+  });
 
   const pileBonus = (input.context.pile ? CONTACT_PILE_TACKLE_BONUS : 0) + (input.context.shortYardage ? CONTACT_SHORT_YARDAGE_TACKLE_BONUS : 0);
   const tackleProb = clamp(
@@ -119,7 +116,7 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
 
   let recoveredBy: "OFFENSE" | "DEFENSE" | undefined;
   const tags: ResultTag[] = [
-    { kind: "EXECUTION", text: `ANGLE:${angle <= 20 ? "head-on" : angle <= 55 ? "inside" : "glancing"}` },
+    { kind: "EXECUTION", text: `ANGLE:${resolveAngleBand(angle).toLowerCase()}` },
   ];
 
   if (!tackled) tags.push({ kind: "MISMATCH", text: `BROKEN_TACKLE:${brokenType ?? "ARM"}` });
