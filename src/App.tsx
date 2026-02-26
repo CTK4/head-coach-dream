@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import HallOfFame from "@/pages/hub/HallOfFame";
+import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { GameProvider, useGame } from "@/context/GameContext";
@@ -211,6 +212,7 @@ const App = () => (
                <Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} />
                <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
                <Route path="/hub/hall-of-fame" element={<HallOfFame />} />
+               <Route path="/hub/league-history" element={<LeagueHistory />} />
                <Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} />
                <Route path="/hub/tampering" element={<Navigate to="/offseason/tampering" replace />} />
                <Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} />
