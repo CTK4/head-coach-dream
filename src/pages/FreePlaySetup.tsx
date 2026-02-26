@@ -48,6 +48,7 @@ export default function FreePlaySetup() {
                 </div>
                 <Button
                   size="sm"
+                  data-test={`team-select-${team.teamId}`}
                   onClick={() => {
                     if (!window.confirm(`Start your career with ${team.name}?`)) return;
                     dispatch({

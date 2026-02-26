@@ -20,7 +20,7 @@ export default function SaveModeSelect() {
           <CardContent className="p-6 space-y-2">
             <div className="text-2xl font-bold">🌐 Free Play</div>
             <p className="text-sm text-muted-foreground">Select any franchise and start your career immediately. Full control over your coach creation and team choice.</p>
-            <button className="font-semibold" onClick={() => navigate(ROUTES.freePlaySetup)}>Start Free Play →</button>
+            <button data-test="start-free-play" className="font-semibold" onClick={() => navigate(ROUTES.freePlaySetup)}>Start Free Play →</button>
           </CardContent>
         </Card>
       </div>

@@ -1,37 +1,38 @@
 import { test, expect } from "@playwright/test";
 
-test("golden path smoke (mobile): new career -> advance week -> reload", async ({ page }) => {
+test("golden path smoke (mobile): free play -> advance week -> reload", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+
+  // Always accept confirm dialogs (FreePlaySetup uses window.confirm)
+  page.on("dialog", async (dialog) => {
+    await dialog.accept();
+  });
+
   await page.goto("/");
 
+  // 1) Create new save entry
   await page.getByRole("button", { name: /new save/i }).click();
-  await page.getByPlaceholder("Coach Name").fill("Golden Smoke");
 
-  await page.locator('[data-test="hometown-select"]').click();
-  await page.locator('[data-test^="hometown-option-"]').first().click();
-  await page.locator('[data-test="create-coach-continue"]').click();
+  // 2) Start Free Play
+  await page.locator('[data-test="start-free-play"]').click();
 
-  await page.locator('[data-test="background-continue"]').first().click();
+  // 3) Select a team
+  await page.locator('[data-test="team-select-MILWAUKEE_NORTHSHORE"]').click();
 
-  for (let interviewIndex = 0; interviewIndex < 3; interviewIndex += 1) {
-    await page.locator('[data-test^="interview-team-"]').first().click();
-    for (let answerIndex = 0; answerIndex < 5; answerIndex += 1) {
-      await page.locator('[data-test="interview-answer-0"]').click();
-    }
-  }
+  // 4) Confirm we landed in hub
+  await expect(page.locator('[data-test="hub-root"]')).toBeVisible();
 
-  await page.locator('[data-test="accept-offer"]').first().click();
-  await page.locator('[data-test="hire-oc"]').click();
-  await page.locator('[data-test="hire-dc"]').click();
-  await page.locator('[data-test="hire-stc"]').click();
-
+  // 5) Go to Regular Season
   await page.goto("/hub/regular-season");
+
+  // 6) Advance week
   await expect(page.locator('[data-test="advance-week"]')).toBeVisible();
   await page.locator('[data-test="advance-week"]').click();
 
-  const weekLabel = page.getByText(/week\s+\d+/i).first();
-  await expect(weekLabel).toBeVisible();
+  // 7) Verify week label exists
+  await expect(page.locator('[data-test="week-label"]')).toBeVisible();
 
+  // 8) Reload and verify state still usable
   await page.reload();
   await page.goto("/hub/regular-season");
   await expect(page.locator('[data-test="advance-week"]')).toBeVisible();

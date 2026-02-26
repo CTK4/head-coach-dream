@@ -105,7 +105,7 @@ export default function Hub() {
   ];
 
   return (
-    <div className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
+    <div data-test="hub-root" className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
       <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 
