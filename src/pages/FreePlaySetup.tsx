@@ -65,6 +65,7 @@ export default function FreePlaySetup() {
                         perks: [],
                       } as any,
                     });
+                    dispatch({ type: "SET_CAREER_STAGE", payload: "REGULAR_SEASON" });
                     dispatch({ type: "SET_PHASE", payload: "HUB" });
                     navigate("/hub");
                   }}
