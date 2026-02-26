@@ -10,6 +10,9 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { readSettings, writeSettings } from "@/lib/settings";
+import { exportDebugBundle } from "@/lib/debugBundle";
+import { getActiveSaveMetadata } from "@/lib/saveManager";
+import { logInfo } from "@/lib/logger";
 
 type SimSpeed = "SLOW" | "NORMAL" | "FAST";
 type Theme = "DARK" | "OLED";
@@ -137,6 +140,15 @@ export default function SettingsPage() {
                   </Button>
                   <Button variant="outline" onClick={resetToDefaults}>
                     Reset Preferences
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
+                      logInfo("debug.bundle.export", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week });
+                    }}
+                  >
+                    Export Debug Bundle
                   </Button>
                 </div>
               </div>

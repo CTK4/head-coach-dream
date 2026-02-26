@@ -1,11 +1,14 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { logError } from "@/lib/logger";
 
 type Props = {
   children: React.ReactNode;
   fallback?: React.ReactNode;
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  onExportDebugBundle?: () => void;
+  onResetToMainMenu?: () => void;
 };
 
 type State = {
@@ -20,12 +23,26 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error("[ui-error-boundary] Unhandled render error", { error, errorInfo });
+    logError("ui.error_boundary", {
+      meta: {
+        message: error.message,
+        componentStack: errorInfo.componentStack?.slice(0, 2000),
+      },
+    });
     this.props.onError?.(error, errorInfo);
   }
 
   private handleReload = () => {
     window.location.reload();
+  };
+
+  private handleResetToMainMenu = () => {
+    if (this.props.onResetToMainMenu) {
+      this.props.onResetToMainMenu();
+      return;
+    }
+    sessionStorage.setItem("show_main_menu", "1");
+    window.location.href = "/";
   };
 
   render() {
@@ -43,7 +60,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
               <p className="text-sm text-muted-foreground">
                 We hit an unexpected issue. Your latest data is still stored locally.
               </p>
-              <Button onClick={this.handleReload}>Reload App</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={this.handleReload}>Reload App</Button>
+                <Button variant="secondary" onClick={this.props.onExportDebugBundle}>Export Debug Bundle</Button>
+                <Button variant="outline" onClick={this.handleResetToMainMenu}>Reset to Main Menu</Button>
+              </div>
             </CardContent>
           </Card>
         </div>
