@@ -41,7 +41,8 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents, runLeagueAging } from "@/engine/offseasonGen";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
 import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
-import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, nextOffseasonStepId, type OffseasonStepId } from "@/engine/offseason";
+import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
+import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
 import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
@@ -4254,18 +4255,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "OFFSEASON_SET_STEP": {
       const stepId = action.payload.stepId;
-      if (stepId === "COMBINE") {
+      if (stepId === OffseasonStepEnum.COMBINE) {
         const next = ensureOffseasonCombineData(state);
         return { ...next, offseason: { ...next.offseason, stepId } };
       }
-      if (stepId === "PRE_DRAFT" && !state.offseasonData.preDraft.board.length) {
+      if (stepId === OffseasonStepEnum.PRE_DRAFT && !state.offseasonData.preDraft.board.length) {
         return {
           ...state,
           offseason: { ...state.offseason, stepId },
           offseasonData: { ...state.offseasonData, preDraft: { ...state.offseasonData.preDraft, board: draftBoard() } },
         };
       }
-      if (stepId === "DRAFT" && !state.offseasonData.draft.board.length) {
+      if (stepId === OffseasonStepEnum.DRAFT && !state.offseasonData.draft.board.length) {
         return {
           ...state,
           offseason: { ...state.offseason, stepId },
@@ -4277,32 +4278,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "OFFSEASON_ADVANCE_STEP": {
       const cur = state.offseason.stepId;
       if (!state.offseason.stepsComplete[cur]) return state;
-      const rawNextStep = nextOffseasonStepId(cur);
-      if (!rawNextStep) return state;
-      const nextStep: OffseasonStepId =
-        !ENABLE_TAMPERING_STEP && (cur === "COMBINE" || rawNextStep === "TAMPERING")
-          ? "FREE_AGENCY"
-          : rawNextStep;
+      let nextStep: OffseasonStepId;
+      try {
+        nextStep = StateMachine.advanceOffseasonStep(cur, { enableTamperingStep: ENABLE_TAMPERING_STEP });
+      } catch {
+        return state;
+      }
 
       const prevStage = state.careerStage;
-      const stage: CareerStage =
-        nextStep === "FREE_AGENCY"
-          ? "FREE_AGENCY"
-          : nextStep === "TRAINING_CAMP"
-          ? "TRAINING_CAMP"
-          : nextStep === "PRESEASON"
-            ? "PRESEASON"
-            : nextStep === "CUT_DOWNS"
-              ? "OFFSEASON_HUB"
-              : state.careerStage;
+      const stage: CareerStage = StateMachine.careerStageForOffseasonStep(nextStep, state.careerStage);
 
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
-      if (nextStep === "COMBINE") next = ensureOffseasonCombineData(next);
+      if (nextStep === OffseasonStepEnum.COMBINE) next = ensureOffseasonCombineData(next);
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
       if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
       if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(applyOffseasonAgingAndRetirement(next)));
-      if (nextStep === "TRAINING_CAMP") next = applySeasonDevelopment(next);
+      if (nextStep === OffseasonStepEnum.TRAINING_CAMP) next = applySeasonDevelopment(next);
       return next;
     }
     case "RESIGN_SET_DECISION":
