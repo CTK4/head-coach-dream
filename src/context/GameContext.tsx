@@ -120,6 +120,8 @@ import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
+import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
+import { runDevAction, type DevAction } from "@/dev/runDevAction";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -977,6 +979,8 @@ export type GameAction =
   | { type: "DISMISS_FEEDBACK"; payload: { id: string } }
   | { type: "CLEAR_FEEDBACK_QUEUE" }
   | { type: "CLEAR_PENDING_INJURY_ALERT" }
+  | { type: "DEV_APPLY_GATE"; payload: { gate: DevGate; options?: { reset?: boolean; saveAfter?: boolean } } }
+  | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
   | { type: "RESET" };
 
 
@@ -6487,6 +6491,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "CLEAR_PENDING_INJURY_ALERT": {
       return { ...state, pendingInjuryAlert: undefined };
+    }
+    case "DEV_APPLY_GATE": {
+      return applyDevGate(state, action.payload.gate);
+    }
+    case "DEV_RUN_ACTION": {
+      if (action.payload.action === "ADVANCE_PHASE") {
+        if (state.phase === "HUB" && state.careerStage === "REGULAR_SEASON") {
+          return gameReducer(state, { type: "ADVANCE_WEEK" });
+        }
+        return gameReducer(state, { type: "OFFSEASON_ADVANCE_STEP" });
+      }
+      return runDevAction(state, action.payload.action, action.payload.payload);
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;

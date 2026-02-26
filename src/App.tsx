@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import HallOfFame from "@/pages/hub/HallOfFame";
 import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { GameProvider, useGame } from "@/context/GameContext";
 import CreateCoach from "./pages/CreateCoach";
@@ -62,6 +63,9 @@ import { ROUTES } from "@/routes/appRoutes";
 import { useState } from "react";
 
 const queryClient = new QueryClient();
+
+const shouldEnableDevPanel = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
+const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : null;
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
@@ -162,6 +166,7 @@ const App = () => (
       <GameProvider>
         <OfferResultModalHost />
         <BrowserRouter>
+          {DevPanel ? <Suspense fallback={null}><DevPanel /></Suspense> : null}
           <Routes>
             <Route path="/onboarding" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
             <Route path="/onboarding/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
