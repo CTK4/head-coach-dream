@@ -127,7 +127,7 @@ const RegularSeason = () => {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-6 space-y-3">
-          <h2 className="text-2xl font-bold">Regular Season Week {state.hub.regularSeasonWeek}</h2>
+          <h2 className="text-2xl font-bold">Regular Season <span data-test="week-label">Week {state.hub.regularSeasonWeek}</span></h2>
           <p className="text-sm text-muted-foreground">Regular season currently runs {REGULAR_SEASON_WEEKS} weeks.</p>
           <p>
             Matchup: <strong>{opponent?.name ?? "No matchup available"}</strong>
