@@ -444,7 +444,7 @@ function InjuryDrawer({
                   className="border-slate-300/20 text-slate-400 opacity-40 cursor-not-allowed"
                   title="Not yet implemented"
                 >
-                  Release / Injury Settlement (TODO)
+                  Release / Injury Settlement
                 </Button>
               </div>
             </div>

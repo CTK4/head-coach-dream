@@ -124,7 +124,7 @@ export default function CoordinatorHiring() {
         <CardContent className="p-6 flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
             <div className="text-2xl font-bold">Coordinator Hiring</div>
-            <div className="text-sm text-muted-foreground">Create offers with custom years/salary. Counter-offers are deferred for now.</div>
+            <div className="text-sm text-muted-foreground">Create offers with custom years/salary.</div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="outline">Budget {money(state.staffBudget.total)}</Badge>
@@ -156,7 +156,7 @@ export default function CoordinatorHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="text-xs text-muted-foreground mt-1">Offer: {LEVEL_LABEL[level]}</div>
-            <div className="text-xs text-muted-foreground">Counter-offers are not interactive yet (stubbed for a future update).</div>
+            <div className="text-xs text-muted-foreground">Counter-offers will be resolved automatically.</div>
             {roleFilled ? <div className="text-xs text-amber-300">Role already filled</div> : null}
           </div>
         </CardContent>

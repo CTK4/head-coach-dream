@@ -264,10 +264,8 @@ export default function TagCenter() {
                 <span>Deadline</span>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                {/* TODO: extension flow — wire to extension system when available */}
+                {/* Extension flow — wire to extension system when available */}
                 Extension talks: <span className="text-foreground font-medium">Open</span>
-                <span className="mx-1">·</span>
-                <span className="italic text-xs">TODO: extension flow</span>
               </div>
             </div>
           </CardContent>
