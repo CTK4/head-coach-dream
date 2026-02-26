@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { runGoldenSeason } from "@/testHarness/goldenSeasonRunner";
-import { stableStateHash } from "@/testHarness/stateHash";
+import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
 class LocalStorageMock {
   private store = new Map<string, string>();
@@ -37,29 +37,62 @@ describe("saveManager round trip at golden checkpoints", () => {
   });
 
   it("preserves state hash at offseason, midseason, and postseason checkpoints", () => {
-    const offseason = runGoldenSeason({ careerSeed: 1001, userTeamId: "MILWAUKEE_NORTHSHORE", strategy: { resignTopN: 3 } }).finalState;
+    const offseason = runGoldenSeason({
+      careerSeed: 1001,
+      userTeamId: "MILWAUKEE_NORTHSHORE",
+      strategy: { resignTopN: 3 },
+      stopAt: "OFFSEASON_DONE",
+    }).finalState;
 
     const offseasonLoaded = saveAndLoad("golden-offseason", offseason);
     const offseasonLoadedAgain = saveAndLoad("golden-offseason-2", offseasonLoaded);
-    expect(stableStateHash(offseasonLoadedAgain)).toBe(stableStateHash(offseasonLoaded));
+    expect(stableDeterminismHash(offseasonLoaded)).toBe(stableDeterminismHash(offseason));
+    expect(stableIntegrityHash(offseasonLoadedAgain)).toBe(stableIntegrityHash(offseasonLoaded));
     expect(offseasonLoaded.careerStage).toBe(offseason.careerStage);
 
-    const midseason = {
-      ...offseason,
-      careerStage: "REGULAR_SEASON",
-      hub: { ...offseason.hub, regularSeasonWeek: 9 },
-      week: 9,
-      league: { ...offseason.league, week: 9 },
-    };
+    const midseason = runGoldenSeason({
+      careerSeed: 1001,
+      userTeamId: "MILWAUKEE_NORTHSHORE",
+      strategy: { resignTopN: 3 },
+      stopAt: "WEEK_9",
+    }).finalState;
     const midLoaded = saveAndLoad("golden-midseason", midseason);
     const midLoadedAgain = saveAndLoad("golden-midseason-2", midLoaded);
-    expect(stableStateHash(midLoadedAgain)).toBe(stableStateHash(midLoaded));
-    expect(midLoaded.hub.regularSeasonWeek).toBe(9);
+    expect(stableDeterminismHash(midLoaded)).toBe(stableDeterminismHash(midseason));
+    expect(stableIntegrityHash(midLoadedAgain)).toBe(stableIntegrityHash(midLoaded));
+    expect(Number(midLoaded.weeklyResults?.length ?? 0)).toBeGreaterThanOrEqual(9);
 
-    const postseason = { ...offseason, careerStage: "SEASON_AWARDS" };
+    const postseason = runGoldenSeason({
+      careerSeed: 1001,
+      userTeamId: "MILWAUKEE_NORTHSHORE",
+      strategy: { resignTopN: 3 },
+      stopAt: "POSTSEASON",
+    }).finalState;
     const postLoaded = saveAndLoad("golden-postseason", postseason);
     const postLoadedAgain = saveAndLoad("golden-postseason-2", postLoaded);
-    expect(stableStateHash(postLoadedAgain)).toBe(stableStateHash(postLoaded));
+    expect(stableDeterminismHash(postLoaded)).toBe(stableDeterminismHash(postseason));
+    expect(stableIntegrityHash(postLoadedAgain)).toBe(stableIntegrityHash(postLoaded));
     expect(postLoaded.careerStage).toBe("SEASON_AWARDS");
+  });
+
+  it("restores from backup when primary save is corrupted", () => {
+    const s = runGoldenSeason({
+      careerSeed: 2020,
+      userTeamId: "MILWAUKEE_NORTHSHORE",
+      stopAt: "OFFSEASON_DONE",
+    }).finalState;
+
+    syncCurrentSave({ ...s, saveId: "corrupt-me" }, "corrupt-me");
+    syncCurrentSave({ ...s, week: Number(s.week ?? 1) + 1, saveId: "corrupt-me" }, "corrupt-me");
+
+    const key = "hc_career_save__corrupt-me";
+    localStorage.setItem(key, "{not valid json");
+
+    const res = loadSaveResult("corrupt-me");
+    expect(res.ok).toBe(true);
+    if (!res.ok) throw new Error("expected backup restore");
+    const canonical = saveAndLoad("corrupt-me-canonical", res.state);
+    expect(stableDeterminismHash(res.state)).toBe(stableDeterminismHash(s));
+    expect(stableIntegrityHash(canonical)).toBe(stableIntegrityHash(res.state));
   });
 });

@@ -6,7 +6,8 @@ describe("golden season determinism", () => {
     const a = runGoldenSeason({ careerSeed: 424242, userTeamId: "MILWAUKEE_NORTHSHORE" });
     const b = runGoldenSeason({ careerSeed: 424242, userTeamId: "MILWAUKEE_NORTHSHORE" });
 
-    expect(a.stateHash).toBe(b.stateHash);
+    expect(a.determinismHash).toBe(b.determinismHash);
+    expect(a.integrityHash).toBe(b.integrityHash);
     expect(a.summary).toEqual(b.summary);
     expect(a.visitedSteps.length).toBeGreaterThan(3);
     expect(a.summary.standingsCount).toBeGreaterThan(0);
@@ -18,7 +19,7 @@ describe("golden season determinism", () => {
     const a = runGoldenSeason({ careerSeed: 424242, userTeamId: "MILWAUKEE_NORTHSHORE" });
     const b = runGoldenSeason({ careerSeed: 424243, userTeamId: "MILWAUKEE_NORTHSHORE" });
 
-    expect(a.stateHash).not.toBe(b.stateHash);
+    expect(a.determinismHash).not.toBe(b.determinismHash);
     expect(a.summary.standingsCount).toBe(b.summary.standingsCount);
     expect(b.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(b.summary.record.losses).toBeGreaterThanOrEqual(0);

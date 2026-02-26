@@ -75,6 +75,7 @@ const InterviewSession = ({
             <div className="space-y-3">
               {question.answers.map((ans, answerIdx) => (
                 <Card
+                  data-test={`interview-answer-${answerIdx}`}
                   key={ans.key}
                   className="cursor-pointer transition-all hover:border-primary hover:bg-secondary/50"
                   onClick={() => handleAnswer(answerIdx, ans.delta)}
@@ -139,7 +140,7 @@ const Interviews = () => {
           {items.map((item) => {
             const team = getTeamById(item.teamId);
             return (
-              <Card key={item.teamId} className="cursor-pointer" onClick={() => setActiveTeam(item.teamId)}>
+              <Card data-test={`interview-team-${item.teamId}`} key={item.teamId} className="cursor-pointer" onClick={() => setActiveTeam(item.teamId)}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>

@@ -1,7 +1,7 @@
 import { gameReducer, type GameAction, type GameState, type OfferItem } from "@/context/GameContext";
 import { getPersonnel, getPersonnelFreeAgents, getPlayersByTeam } from "@/data/leagueDb";
 import { StateMachine } from "@/lib/stateMachine";
-import { stableStateHash } from "@/testHarness/stateHash";
+import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
 export type GoldenStrategy = {
   resignTopN: number;
@@ -91,7 +91,6 @@ function validateStandingsInvariant(state: GameState): void {
   }
 }
 
-
 function withFixedNow<T>(now: number, fn: () => T): T {
   const originalNow = Date.now;
   Date.now = () => now;
@@ -102,52 +101,114 @@ function withFixedNow<T>(now: number, fn: () => T): T {
   }
 }
 
-export function runGoldenSeason({ careerSeed, userTeamId, strategy }: { careerSeed: number; userTeamId: string; strategy?: Partial<GoldenStrategy> }) {
+export function runGoldenSeason({
+  careerSeed,
+  userTeamId,
+  strategy,
+  stopAt,
+}: {
+  careerSeed: number;
+  userTeamId: string;
+  strategy?: Partial<GoldenStrategy>;
+  stopAt?: "OFFSEASON_DONE" | "WEEK_9" | "POSTSEASON";
+}) {
   const effectiveStrategy: GoldenStrategy = { resignTopN: strategy?.resignTopN ?? 5 };
 
   return withFixedNow(careerSeed, () => {
-  let state = dispatch({} as GameState, { type: "INIT_NEW_GAME_FROM_STORY", payload: { offer: defaultOffer(userTeamId), teamName: userTeamId } });
-  state = dispatch(state, { type: "SET_COACH", payload: { name: "Golden Coach", archetypeId: "ceo" } });
-  state = { ...state, saveSeed: careerSeed, careerSeed };
+    let state = dispatch({} as GameState, { type: "INIT_NEW_GAME_FROM_STORY", payload: { offer: defaultOffer(userTeamId), teamName: userTeamId } });
+    state = dispatch(state, { type: "SET_COACH", payload: { name: "Golden Coach", archetypeId: "ceo" } });
+    state = { ...state, saveSeed: careerSeed, careerSeed };
+    state = hireBestCoordinators(state);
 
-  state = hireBestCoordinators(state);
+    const visitedSteps: string[] = [state.offseason.stepId];
+    while (state.offseason.stepId !== "CUT_DOWNS") {
+      state = completeAndAdvance(state);
+      visitedSteps.push(state.offseason.stepId);
+      if (visitedSteps.length > 16) throw new Error("Offseason did not advance deterministically");
+    }
 
-  const visitedSteps: string[] = [state.offseason.stepId];
-  while (state.offseason.stepId !== "PRESEASON") {
+    const required = ["RESIGNING", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUT_DOWNS"];
+    for (const step of required) {
+      if (!visitedSteps.includes(step)) {
+        throw new Error(`GoldenSeason missing offseason step: ${step}. Visited: ${visitedSteps.join(",")}`);
+      }
+    }
+
     state = completeAndAdvance(state);
-    visitedSteps.push(state.offseason.stepId);
-    if (visitedSteps.length > 16) throw new Error("Offseason did not advance deterministically");
-  }
 
-  state = dispatch(state, { type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "PRESEASON" } });
-  state = dispatch(state, { type: "OFFSEASON_ADVANCE_STEP" });
+    let stageGuard = 0;
+    while (state.careerStage !== "REGULAR_SEASON" && stageGuard < 8) {
+      state = dispatch(state, { type: "ADVANCE_CAREER_STAGE" });
+      stageGuard += 1;
+    }
 
-  let lastWeek = Number(state.hub.regularSeasonWeek ?? 1);
-  while (state.careerStage === "REGULAR_SEASON") {
-    state = dispatch(state, { type: "ADVANCE_WEEK" });
-    const currentWeek = Number(state.hub.regularSeasonWeek ?? lastWeek);
-    if (currentWeek < lastWeek) throw new Error("Week regressed");
-    lastWeek = currentWeek;
-    if (state.careerStage === "SEASON_AWARDS") break;
-    if (lastWeek > 18) break;
-  }
+    if (stopAt === "OFFSEASON_DONE") {
+      const summary: GoldenSummary = {
+        season: Number(state.season),
+        careerStage: String(state.careerStage),
+        week: Number(state.hub.regularSeasonWeek ?? state.week ?? 0),
+        userTeamId,
+        record: { wins: 0, losses: 0 },
+        standingsCount: state.currentStandings.length,
+      };
+      return {
+        finalState: state,
+        summary,
+        determinismHash: stableDeterminismHash(state),
+        integrityHash: stableIntegrityHash(state),
+        stateHash: `${stableDeterminismHash(state)}:${stableIntegrityHash(state)}`,
+        strategy: effectiveStrategy,
+        visitedSteps,
+        personnelCount: getPersonnel().length,
+      };
+    }
 
-  validateNoDuplicateRosterIds(state);
-  validateStandingsInvariant(state);
+    let lastWeek = Number(state.hub.regularSeasonWeek ?? 1);
+    let priorStage = String(state.careerStage);
+    let advanceGuard = 0;
+    while (advanceGuard < 40) {
+      state = dispatch(state, { type: "ADVANCE_WEEK" });
+      const currentStage = String(state.careerStage);
+      const currentWeek = Number(state.hub.regularSeasonWeek ?? lastWeek);
+      if (priorStage === "REGULAR_SEASON" && currentStage === "REGULAR_SEASON" && currentWeek < lastWeek) {
+        throw new Error("Week regressed");
+      }
+      priorStage = currentStage;
+      lastWeek = currentWeek;
+      advanceGuard += 1;
 
-  const record = state.currentStandings.find((s) => s.teamId === userTeamId) ?? { wins: 0, losses: 0 };
-  const summary: GoldenSummary = {
-    season: Number(state.season),
-    careerStage: String(state.careerStage),
-    week: Number(state.hub.regularSeasonWeek ?? state.week ?? 0),
-    userTeamId,
-    record: { wins: Number(record.wins ?? 0), losses: Number(record.losses ?? 0) },
-    standingsCount: state.currentStandings.length,
-  };
+      if (stopAt === "WEEK_9" && Number(state.weeklyResults?.length ?? 0) >= 9) break;
+      if (stopAt === "POSTSEASON" && state.careerStage === "SEASON_AWARDS") break;
+      if (!stopAt && state.careerStage === "SEASON_AWARDS") break;
+    }
 
-  const phaseKey = StateMachine.getPhaseKey(state);
-  if (!phaseKey) throw new Error("Invalid phase key");
+    validateNoDuplicateRosterIds(state);
+    validateStandingsInvariant(state);
 
-  return { finalState: state, summary, stateHash: stableStateHash(state), strategy: effectiveStrategy, visitedSteps, personnelCount: getPersonnel().length };
+    const record = state.currentStandings.find((s) => s.teamId === userTeamId) ?? { wins: 0, losses: 0 };
+    const summary: GoldenSummary = {
+      season: Number(state.season),
+      careerStage: String(state.careerStage),
+      week: Number(state.hub.regularSeasonWeek ?? state.week ?? 0),
+      userTeamId,
+      record: { wins: Number(record.wins ?? 0), losses: Number(record.losses ?? 0) },
+      standingsCount: state.currentStandings.length,
+    };
+
+    const phaseKey = StateMachine.getPhaseKey(state);
+    if (!phaseKey) throw new Error("Invalid phase key");
+
+    const determinismHash = stableDeterminismHash(state);
+    const integrityHash = stableIntegrityHash(state);
+    return {
+      finalState: state,
+      summary,
+      determinismHash,
+      integrityHash,
+      stateHash: `${determinismHash}:${integrityHash}`,
+      strategy: effectiveStrategy,
+      visitedSteps,
+      personnelCount: getPersonnel().length,
+    };
   });
 }

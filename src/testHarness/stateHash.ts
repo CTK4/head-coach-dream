@@ -36,26 +36,46 @@ function fnv1a(input: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-export function stableStateHash(state: GameState): string {
+export function stableDeterminismHash(state: GameState): string {
   const relevant = {
+    saveSeed: state.saveSeed,
+    careerSeed: state.careerSeed,
+    phase: state.phase,
+    careerStage: state.careerStage,
     season: state.season,
     week: state.week,
-    careerStage: state.careerStage,
-    offseason: state.offseason,
-    league: state.league,
+    hubWeeks: {
+      preseasonWeek: state.hub?.preseasonWeek,
+      regularSeasonWeek: state.hub?.regularSeasonWeek,
+    },
+    leagueWeek: state.league?.week,
     standings: state.currentStandings,
+    leagueResults: state.league?.results,
     weeklyResults: state.weeklyResults,
-    gameHistory: state.gameHistory,
+    postseason: state.league?.postseason,
+  };
+  return fnv1a(canonicalize(sanitize(relevant)));
+}
+
+export function stableIntegrityHash(state: GameState): string {
+  const relevant = {
+    acceptedOffer: state.acceptedOffer,
+    userTeamId: state.userTeamId,
     staff: state.staff,
     orgRoles: state.orgRoles,
     assistantStaff: state.assistantStaff,
     rosterMgmt: state.rosterMgmt,
-    draft: state.draft,
     playerTeamOverrides: state.playerTeamOverrides,
     playerContractOverrides: state.playerContractOverrides,
     injuries: state.injuries,
-    acceptedOffer: state.acceptedOffer,
-    userTeamId: state.userTeamId,
+    draft: state.draft,
+    depthChart: state.depthChart,
+    finances: state.finances,
+    teamFinances: state.teamFinances,
   };
   return fnv1a(canonicalize(sanitize(relevant)));
+}
+
+export function stableStateHash(state: GameState): string {
+  return `${stableDeterminismHash(state)}:${stableIntegrityHash(state)}`;
 }
