@@ -124,7 +124,7 @@ const Offers = () => {
                     <Button variant="secondary" onClick={() => openNegotiate(offer)}>
                       Negotiate
                     </Button>
-                    <Button className="flex-1" onClick={() => handleAccept(offer)}>
+                    <Button data-test="accept-offer" className="flex-1" onClick={() => handleAccept(offer)}>
                       Accept Offer
                     </Button>
                   </div>

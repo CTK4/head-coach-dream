@@ -78,7 +78,7 @@ const CreateCoach = () => {
             </Select>
             {lockedTeam ? <p className="text-xs text-muted-foreground">Story Mode locked team: {lockedTeam.region} {lockedTeam.name}</p> : null}
           </div>
-          <Button onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
+          <Button data-test="create-coach-continue" onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
             Continue
           </Button>
         </CardContent>
