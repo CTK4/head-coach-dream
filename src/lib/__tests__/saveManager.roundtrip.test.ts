@@ -40,7 +40,6 @@ describe("saveManager round trip at golden checkpoints", () => {
     const offseason = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
       stopAt: "OFFSEASON_DONE",
     }).finalState;
 
@@ -53,7 +52,6 @@ describe("saveManager round trip at golden checkpoints", () => {
     const midseason = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
       stopAt: "WEEK_9",
     }).finalState;
     const midLoaded = saveAndLoad("golden-midseason", midseason);
@@ -65,7 +63,6 @@ describe("saveManager round trip at golden checkpoints", () => {
     const postseason = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
       stopAt: "POSTSEASON",
     }).finalState;
     const postLoaded = saveAndLoad("golden-postseason", postseason);

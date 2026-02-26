@@ -17,6 +17,7 @@ export type SaveValidationResult =
 
 const VALID_PHASES = new Set([
   "CREATE",
+  "HUB",
   "WEEK",
   "GAME",
   "RESULT",
