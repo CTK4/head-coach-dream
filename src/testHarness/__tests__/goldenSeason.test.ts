@@ -9,7 +9,8 @@ describe("golden season determinism", () => {
     expect(a.determinismHash).toBe(b.determinismHash);
     expect(a.integrityHash).toBe(b.integrityHash);
     expect(a.summary).toEqual(b.summary);
-    expect(a.visitedSteps.length).toBeGreaterThan(3);
+    expect(a.visitedSteps).toContain("DRAFT");
+    expect(a.visitedSteps.indexOf("RESIGNING")).toBeLessThan(a.visitedSteps.indexOf("CUT_DOWNS"));
     expect(a.summary.standingsCount).toBeGreaterThan(0);
     expect(a.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(a.summary.record.losses).toBeGreaterThanOrEqual(0);

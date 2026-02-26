@@ -42,6 +42,7 @@ export function stableDeterminismHash(state: GameState): string {
     careerSeed: state.careerSeed,
     phase: state.phase,
     careerStage: state.careerStage,
+    offseasonStepId: state.offseason?.stepId,
     season: state.season,
     week: state.week,
     hubWeeks: {
@@ -74,8 +75,4 @@ export function stableIntegrityHash(state: GameState): string {
     teamFinances: state.teamFinances,
   };
   return fnv1a(canonicalize(sanitize(relevant)));
-}
-
-export function stableStateHash(state: GameState): string {
-  return `${stableDeterminismHash(state)}:${stableIntegrityHash(state)}`;
 }

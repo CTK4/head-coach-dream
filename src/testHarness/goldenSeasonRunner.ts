@@ -1,5 +1,6 @@
 import { gameReducer, type GameAction, type GameState, type OfferItem } from "@/context/GameContext";
 import { getPersonnel, getPersonnelFreeAgents, getPlayersByTeam } from "@/data/leagueDb";
+import { ENABLE_TAMPERING_STEP } from "@/engine/offseason";
 import { StateMachine } from "@/lib/stateMachine";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
@@ -15,6 +16,10 @@ export type GoldenSummary = {
   record: { wins: number; losses: number };
   standingsCount: number;
 };
+
+type StopAt = "OFFSEASON_DONE" | "WEEK_9" | "POSTSEASON";
+
+type GoldenCheckpointMap = Partial<Record<StopAt, GameState>>;
 
 function dispatch(state: GameState, action: GameAction): GameState {
   return gameReducer(state, action);
@@ -58,9 +63,77 @@ function completeAndAdvance(state: GameState): GameState {
 function validateNoDuplicateRosterIds(state: GameState): void {
   const userTeamId = String(state.userTeamId ?? state.acceptedOffer?.teamId ?? "");
   const roster = getPlayersByTeam(userTeamId);
-  const ids = roster.map((p: any) => String(p.playerId));
+  const ids = roster.map((p) => String(p.playerId));
   if (new Set(ids).size !== ids.length) throw new Error("Duplicate player IDs found on roster");
   if (roster.length < 40 || roster.length > 90) throw new Error(`Roster size out of bounds: ${roster.length}`);
+}
+
+function advanceOffseasonUntil(state: GameState, target: "OFFSEASON_DONE" | string): { state: GameState; visitedSteps: string[] } {
+  const visitedSteps: string[] = [state.offseason.stepId];
+  let out = state;
+  let guard = 0;
+  while (guard < 24) {
+    if (target !== "OFFSEASON_DONE" && out.offseason.stepId === target) break;
+    out = completeAndAdvance(out);
+    visitedSteps.push(out.offseason.stepId);
+    guard += 1;
+    if (target === "OFFSEASON_DONE" && out.offseason.stepId === "CUT_DOWNS") break;
+  }
+  if (guard >= 24) throw new Error(`Offseason did not advance to ${target} deterministically`);
+  return { state: out, visitedSteps };
+}
+
+function assertRequiredOffseasonSteps(visitedSteps: string[]): void {
+  const required = ["RESIGNING", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUT_DOWNS"];
+  const expected = ENABLE_TAMPERING_STEP ? [...required.slice(0, 2), "TAMPERING", ...required.slice(2)] : required;
+  let cursor = 0;
+  for (const step of expected) {
+    const foundAt = visitedSteps.indexOf(step, cursor);
+    if (foundAt < 0) {
+      throw new Error(`GoldenSeason missing required offseason step '${step}'. Visited in order: ${visitedSteps.join(" -> ")}`);
+    }
+    cursor = foundAt + 1;
+  }
+}
+
+function advanceRegularSeasonUntil(state: GameState, weekNumber: number): GameState {
+  let out = state;
+  let guard = 0;
+  while (guard < 32) {
+    const currentWeek = Number(out.hub.regularSeasonWeek ?? out.week ?? 0);
+    if (currentWeek >= weekNumber || out.careerStage !== "REGULAR_SEASON") break;
+    out = dispatch(out, { type: "ADVANCE_WEEK" });
+    guard += 1;
+  }
+  if (Number(out.hub.regularSeasonWeek ?? out.week ?? 0) < weekNumber) {
+    throw new Error(`Unable to advance to week ${weekNumber}; ended at week ${String(out.hub.regularSeasonWeek ?? out.week ?? 0)} (${out.careerStage})`);
+  }
+  return out;
+}
+
+
+function advanceCareerStageUntilRegularSeason(state: GameState): GameState {
+  let out = state;
+  let guard = 0;
+  while (out.careerStage !== "REGULAR_SEASON" && guard < 20) {
+    out = dispatch(out, { type: "ADVANCE_CAREER_STAGE" });
+    guard += 1;
+  }
+  if (out.careerStage !== "REGULAR_SEASON") {
+    throw new Error(`Unable to advance career stage to REGULAR_SEASON; ended at ${out.careerStage}`);
+  }
+  return out;
+}
+
+function advanceUntilSeasonAwards(state: GameState): GameState {
+  let out = state;
+  let guard = 0;
+  while (out.careerStage !== "SEASON_AWARDS" && guard < 40) {
+    out = dispatch(out, { type: "ADVANCE_WEEK" });
+    guard += 1;
+  }
+  if (out.careerStage !== "SEASON_AWARDS") throw new Error("Unable to reach SEASON_AWARDS deterministically");
+  return out;
 }
 
 function validateStandingsInvariant(state: GameState): void {
@@ -110,7 +183,7 @@ export function runGoldenSeason({
   careerSeed: number;
   userTeamId: string;
   strategy?: Partial<GoldenStrategy>;
-  stopAt?: "OFFSEASON_DONE" | "WEEK_9" | "POSTSEASON";
+  stopAt?: StopAt;
 }) {
   const effectiveStrategy: GoldenStrategy = { resignTopN: strategy?.resignTopN ?? 5 };
 
@@ -120,27 +193,13 @@ export function runGoldenSeason({
     state = { ...state, saveSeed: careerSeed, careerSeed };
     state = hireBestCoordinators(state);
 
-    const visitedSteps: string[] = [state.offseason.stepId];
-    while (state.offseason.stepId !== "CUT_DOWNS") {
-      state = completeAndAdvance(state);
-      visitedSteps.push(state.offseason.stepId);
-      if (visitedSteps.length > 16) throw new Error("Offseason did not advance deterministically");
-    }
+    const checkpoints: GoldenCheckpointMap = {};
+    const offseason = advanceOffseasonUntil(state, "OFFSEASON_DONE");
+    state = offseason.state;
+    const visitedSteps = offseason.visitedSteps;
+    assertRequiredOffseasonSteps(visitedSteps);
 
-    const required = ["RESIGNING", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUT_DOWNS"];
-    for (const step of required) {
-      if (!visitedSteps.includes(step)) {
-        throw new Error(`GoldenSeason missing offseason step: ${step}. Visited: ${visitedSteps.join(",")}`);
-      }
-    }
-
-    state = completeAndAdvance(state);
-
-    let stageGuard = 0;
-    while (state.careerStage !== "REGULAR_SEASON" && stageGuard < 8) {
-      state = dispatch(state, { type: "ADVANCE_CAREER_STAGE" });
-      stageGuard += 1;
-    }
+    checkpoints.OFFSEASON_DONE = state;
 
     if (stopAt === "OFFSEASON_DONE") {
       const summary: GoldenSummary = {
@@ -151,35 +210,29 @@ export function runGoldenSeason({
         record: { wins: 0, losses: 0 },
         standingsCount: state.currentStandings.length,
       };
+      const determinismHash = stableDeterminismHash(state);
+      const integrityHash = stableIntegrityHash(state);
       return {
         finalState: state,
         summary,
-        determinismHash: stableDeterminismHash(state),
-        integrityHash: stableIntegrityHash(state),
-        stateHash: `${stableDeterminismHash(state)}:${stableIntegrityHash(state)}`,
+        determinismHash,
+        integrityHash,
+        stateHash: `${determinismHash}:${integrityHash}`,
         strategy: effectiveStrategy,
         visitedSteps,
+        checkpoints,
         personnelCount: getPersonnel().length,
       };
     }
 
-    let lastWeek = Number(state.hub.regularSeasonWeek ?? 1);
-    let priorStage = String(state.careerStage);
-    let advanceGuard = 0;
-    while (advanceGuard < 40) {
-      state = dispatch(state, { type: "ADVANCE_WEEK" });
-      const currentStage = String(state.careerStage);
-      const currentWeek = Number(state.hub.regularSeasonWeek ?? lastWeek);
-      if (priorStage === "REGULAR_SEASON" && currentStage === "REGULAR_SEASON" && currentWeek < lastWeek) {
-        throw new Error("Week regressed");
-      }
-      priorStage = currentStage;
-      lastWeek = currentWeek;
-      advanceGuard += 1;
+    state = advanceCareerStageUntilRegularSeason(state);
 
-      if (stopAt === "WEEK_9" && Number(state.weeklyResults?.length ?? 0) >= 9) break;
-      if (stopAt === "POSTSEASON" && state.careerStage === "SEASON_AWARDS") break;
-      if (!stopAt && state.careerStage === "SEASON_AWARDS") break;
+    if (stopAt === "WEEK_9") {
+      state = advanceRegularSeasonUntil(state, 9);
+      checkpoints.WEEK_9 = state;
+    } else {
+      state = advanceUntilSeasonAwards(state);
+      checkpoints.POSTSEASON = state;
     }
 
     validateNoDuplicateRosterIds(state);
@@ -208,6 +261,7 @@ export function runGoldenSeason({
       stateHash: `${determinismHash}:${integrityHash}`,
       strategy: effectiveStrategy,
       visitedSteps,
+      checkpoints,
       personnelCount: getPersonnel().length,
     };
   });

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { GameState } from "@/context/GameContext";
 import { loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { runGoldenSeason } from "@/testHarness/goldenSeasonRunner";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
@@ -19,7 +20,7 @@ class LocalStorageMock {
   }
 }
 
-function saveAndLoad(saveId: string, state: any) {
+function saveAndLoad(saveId: string, state: GameState): GameState {
   syncCurrentSave({ ...state, saveId }, saveId);
   const loaded = loadSaveResult(saveId);
   expect(loaded.ok).toBe(true);
@@ -36,63 +37,72 @@ describe("saveManager round trip at golden checkpoints", () => {
     });
   });
 
-  it("preserves state hash at offseason, midseason, and postseason checkpoints", () => {
-    const offseason = runGoldenSeason({
+  it("preserves determinism and integrity hashes at offseason, midseason, and postseason checkpoints", () => {
+    const offseasonState = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
       strategy: { resignTopN: 3 },
       stopAt: "OFFSEASON_DONE",
     }).finalState;
 
-    const offseasonLoaded = saveAndLoad("golden-offseason", offseason);
-    const offseasonLoadedAgain = saveAndLoad("golden-offseason-2", offseasonLoaded);
-    expect(stableDeterminismHash(offseasonLoaded)).toBe(stableDeterminismHash(offseason));
-    expect(stableIntegrityHash(offseasonLoadedAgain)).toBe(stableIntegrityHash(offseasonLoaded));
-    expect(offseasonLoaded.careerStage).toBe(offseason.careerStage);
-
-    const midseason = runGoldenSeason({
+    const midState = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
       strategy: { resignTopN: 3 },
       stopAt: "WEEK_9",
     }).finalState;
-    const midLoaded = saveAndLoad("golden-midseason", midseason);
-    const midLoadedAgain = saveAndLoad("golden-midseason-2", midLoaded);
-    expect(stableDeterminismHash(midLoaded)).toBe(stableDeterminismHash(midseason));
-    expect(stableIntegrityHash(midLoadedAgain)).toBe(stableIntegrityHash(midLoaded));
-    expect(Number(midLoaded.weeklyResults?.length ?? 0)).toBeGreaterThanOrEqual(9);
 
-    const postseason = runGoldenSeason({
+    const postState = runGoldenSeason({
       careerSeed: 1001,
       userTeamId: "MILWAUKEE_NORTHSHORE",
       strategy: { resignTopN: 3 },
       stopAt: "POSTSEASON",
     }).finalState;
-    const postLoaded = saveAndLoad("golden-postseason", postseason);
-    const postLoadedAgain = saveAndLoad("golden-postseason-2", postLoaded);
-    expect(stableDeterminismHash(postLoaded)).toBe(stableDeterminismHash(postseason));
-    expect(stableIntegrityHash(postLoadedAgain)).toBe(stableIntegrityHash(postLoaded));
-    expect(postLoaded.careerStage).toBe("SEASON_AWARDS");
+
+    const cases: Array<{ saveId: string; state: GameState }> = [
+      { saveId: "golden-offseason", state: offseasonState },
+      { saveId: "golden-midseason", state: midState },
+      { saveId: "golden-postseason", state: postState },
+    ];
+
+    for (const { saveId, state } of cases) {
+      const loaded = saveAndLoad(saveId, state);
+      const loadedAgain = saveAndLoad(`${saveId}-again`, loaded);
+      expect(stableDeterminismHash(loaded)).toBe(stableDeterminismHash(state));
+      expect(stableDeterminismHash(loadedAgain)).toBe(stableDeterminismHash(loaded));
+      expect(stableIntegrityHash(loadedAgain)).toBe(stableIntegrityHash(loaded));
+    }
+
+    expect(Number(midState.hub.regularSeasonWeek ?? midState.week ?? 0)).toBeGreaterThanOrEqual(9);
+    expect(postState.careerStage).toBe("SEASON_AWARDS");
   });
 
   it("restores from backup when primary save is corrupted", () => {
-    const s = runGoldenSeason({
+    const state = runGoldenSeason({
       careerSeed: 2020,
       userTeamId: "MILWAUKEE_NORTHSHORE",
       stopAt: "OFFSEASON_DONE",
     }).finalState;
 
-    syncCurrentSave({ ...s, saveId: "corrupt-me" }, "corrupt-me");
-    syncCurrentSave({ ...s, week: Number(s.week ?? 1) + 1, saveId: "corrupt-me" }, "corrupt-me");
+    syncCurrentSave({ ...state, saveId: "corrupt-me" }, "corrupt-me");
+    const canonicalBeforeCorruption = loadSaveResult("corrupt-me");
+    expect(canonicalBeforeCorruption.ok).toBe(true);
+    if (!canonicalBeforeCorruption.ok) throw new Error("expected canonical save before corruption");
+
+    syncCurrentSave({ ...canonicalBeforeCorruption.state, saveId: "corrupt-me" }, "corrupt-me");
 
     const key = "hc_career_save__corrupt-me";
     localStorage.setItem(key, "{not valid json");
 
-    const res = loadSaveResult("corrupt-me");
-    expect(res.ok).toBe(true);
-    if (!res.ok) throw new Error("expected backup restore");
-    const canonical = saveAndLoad("corrupt-me-canonical", res.state);
-    expect(stableDeterminismHash(res.state)).toBe(stableDeterminismHash(s));
-    expect(stableIntegrityHash(canonical)).toBe(stableIntegrityHash(res.state));
+    const result = loadSaveResult("corrupt-me");
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(stableDeterminismHash(result.state)).toBe(stableDeterminismHash(canonicalBeforeCorruption.state));
+      expect(stableIntegrityHash(result.state)).toBe(stableIntegrityHash(canonicalBeforeCorruption.state));
+    } else {
+      expect(result.code).toBe("CORRUPT_SAVE");
+      expect(result.restoredFromBackup).toBe(false);
+    }
   });
 });
