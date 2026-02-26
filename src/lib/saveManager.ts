@@ -1,6 +1,7 @@
 import type { GameState } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState, type SaveValidationErrorCode } from "@/lib/migrations/saveSchema";
+import { logError, logInfo, logWarn } from "@/lib/logger";
 
 export interface SaveMetadata {
   saveId: string;
@@ -152,13 +153,19 @@ export function syncCurrentSave(state: GameState, saveId?: string) {
   const nextState = migrateSaveSchema(state, id);
   const serialized = JSON.stringify(nextState);
 
-  setActiveSaveId(id);
-  commitAtomic(storageKey, serialized);
-  commitAtomic(LEGACY_KEY, serialized);
+  try {
+    setActiveSaveId(id);
+    commitAtomic(storageKey, serialized);
+    commitAtomic(LEGACY_KEY, serialized);
 
-  const rows = readIndex().filter((row) => row.saveId !== id);
-  rows.push({ ...toMetadata(id, nextState), storageKey });
-  writeIndex(rows.sort((a, b) => b.lastPlayed - a.lastPlayed));
+    const rows = readIndex().filter((row) => row.saveId !== id);
+    rows.push({ ...toMetadata(id, nextState), storageKey });
+    writeIndex(rows.sort((a, b) => b.lastPlayed - a.lastPlayed));
+    logInfo("save.sync.success", { saveId: id, phase: state.phase, season: state.season, week: state.week });
+  } catch (error) {
+    logError("save.sync.failure", { saveId: id, phase: state.phase, season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+    throw error;
+  }
 }
 
 export function listSaves(): SaveMetadata[] {
@@ -177,6 +184,7 @@ export function loadSaveResult(saveId: string): LoadSaveResult {
     setActiveSaveId(saveId);
     commitAtomic(LEGACY_KEY, serialized);
     commitAtomic(key, serialized);
+    logInfo("save.load.success", { saveId, phase: primary.state.phase, season: primary.state.season, week: primary.state.week, meta: { source: "primary" } });
     return { ok: true, state: primary.state };
   }
 
@@ -186,10 +194,12 @@ export function loadSaveResult(saveId: string): LoadSaveResult {
     commitAtomic(key, serialized);
     setActiveSaveId(saveId);
     commitAtomic(LEGACY_KEY, serialized);
+    logWarn("save.load.success_backup", { saveId, phase: backup.state.phase, season: backup.state.season, week: backup.state.week });
     return { ok: true, state: backup.state };
   }
 
   if (!safeGetItem(key)) {
+    logWarn("save.load.failure", { saveId, meta: { code: "MISSING_SAVE" } });
     return {
       ok: false,
       code: "MISSING_SAVE",
@@ -199,6 +209,8 @@ export function loadSaveResult(saveId: string): LoadSaveResult {
     };
   }
 
+  logError("save.load.failure", { saveId, meta: { code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE", validationCode: primary.validationCode ?? backup.validationCode } });
+
   return {
     ok: false,
     code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE",
@@ -207,6 +219,12 @@ export function loadSaveResult(saveId: string): LoadSaveResult {
     validationCode: primary.validationCode ?? backup.validationCode,
     message: "Save appears corrupted. Backup restore failed.",
   };
+}
+
+export function getActiveSaveMetadata(): SaveMetadata | null {
+  const activeId = getActiveSaveId();
+  if (!activeId) return null;
+  return listSaves().find((save) => save.saveId === activeId) ?? null;
 }
 
 export function loadSave(saveId: string): GameState | null {

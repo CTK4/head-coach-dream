@@ -123,6 +123,7 @@ import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
+import { logError, logInfo } from "@/lib/logger";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -3714,6 +3715,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
     case "SET_PHASE":
+      logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
     case "SET_CAREER_STAGE": {
       const prevStage = state.careerStage;
@@ -4293,6 +4295,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const prevStage = state.careerStage;
       const stage: CareerStage = StateMachine.careerStageForOffseasonStep(nextStep, state.careerStage);
 
+      logInfo("offseason.step.transition", { phase: state.phase, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: cur, to: nextStep } });
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
       if (nextStep === OffseasonStepEnum.COMBINE) next = ensureOffseasonCombineData(next);
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
@@ -6503,6 +6506,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
+      logInfo("game.sim.start", { phase: state.phase, season: state.season, week: state.week, driveIndex: state.game.driveNumber, playIndex: state.game.playNumberInDrive, saveId: getActiveSaveId(), meta: { gameType, opponentTeamId: action.payload.opponentTeamId } });
       let base = state;
       if (gameType === "PRESEASON") {
         if (!isActive53(state)) return applyOwnerPenalty(state, 1, "Attempted to start preseason without finalizing cutdowns");
@@ -6543,6 +6547,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const personnelPackage = action.payload.personnelPackage ?? "11";
       if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
       const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage);
+      if ((stepped.sim.driveNumber ?? 0) !== (state.game.driveNumber ?? 0) || (stepped.sim.playNumberInDrive ?? 0) <= 1) {
+        logInfo("game.sim.snap.resolved", { phase: state.phase, season: state.season, week: state.week, driveIndex: stepped.sim.driveNumber, playIndex: stepped.sim.playNumberInDrive, saveId: getActiveSaveId(), meta: { ended: stepped.ended, playType: action.payload.playType } });
+      }
       const next = upsertGameFatigueState({ ...state, game: stepped.sim }, stepped.sim);
       if (!stepped.ended) return next;
       const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}) };
@@ -6631,6 +6638,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     case "ADVANCE_WEEK": {
       const schedule = state.hub.schedule;
+      logInfo("sim.week.start", { phase: state.phase, season: state.season, week: state.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { careerStage: state.careerStage } });
       const teamId = state.acceptedOffer?.teamId;
       if (!schedule || !teamId) return state;
 
@@ -6767,6 +6775,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         });
       }
       out = { ...out, hotSeatStatus: nextHotSeat };
+      logInfo("sim.week.end", { phase: out.phase, season: out.season, week: out.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { standings: out.currentStandings.length, careerStage: out.careerStage } });
       return out;
     }
     case "SHOW_OFFER_RESULT_MODAL": {
@@ -7193,6 +7202,7 @@ function loadState(): GameState {
     out = applyCapModeQuery(out);
     return out;
   } catch (error) {
+    logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
     console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
     return initial;
   }
@@ -7214,6 +7224,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       syncCurrentSave(state, getActiveSaveId() ?? undefined);
     } catch (error) {
+      logError("state.save.failure", { phase: state.phase, saveId: getActiveSaveId(), season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
       console.error("[state-save] Failed to persist save data", error);
     }
   }, [state]);
