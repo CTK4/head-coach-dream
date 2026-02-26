@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useGame } from "@/context/GameContext";
 import { useNavigate } from "react-router-dom";
 import { useTeamRatings } from "@/hooks/useTeamRatings";
+import { ROUTES } from "@/routes/appRoutes";
 
 export default function FreePlaySetup() {
   const teams = useMemo(() => getTeams(), []);
@@ -52,22 +53,13 @@ export default function FreePlaySetup() {
                   onClick={() => {
                     if (!window.confirm(`Start your career with ${team.name}?`)) return;
                     dispatch({
-                      type: "ACCEPT_OFFER",
+                      type: "INIT_FREE_PLAY_CAREER",
                       payload: {
                         teamId: team.teamId,
                         teamName: team.name,
-                        ownerName: "Owner",
-                        years: 4,
-                        salary: 4_000_000,
-                        autonomy: 70,
-                        patience: 60,
-                        strategy: "steady_build",
-                        perks: [],
-                      } as any,
+                      },
                     });
-                    dispatch({ type: "SET_CAREER_STAGE", payload: "REGULAR_SEASON" });
-                    dispatch({ type: "SET_PHASE", payload: "HUB" });
-                    navigate("/hub");
+                    navigate(ROUTES.hub);
                   }}
                 >
                   Select
