@@ -827,6 +827,14 @@ export type DraftState = {
 
 export type GameAction =
   | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string } }
+  | {
+      type: "INIT_FREE_PLAY_CAREER";
+      payload: {
+        teamId: string;
+        teamName: string;
+        offer?: Partial<Pick<OfferItem, "years" | "salary" | "autonomy" | "patience" | "mediaNarrativeKey">>;
+      };
+    }
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
@@ -3689,6 +3697,52 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
     }
+    case "INIT_FREE_PLAY_CAREER": {
+      const { teamId, teamName, offer } = action.payload;
+      const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
+      const acceptedOffer: OfferItem = {
+        teamId,
+        years: Math.max(1, Number(offer?.years ?? 4)),
+        salary: Math.max(100_000, Math.round(Number(offer?.salary ?? 4_000_000))),
+        autonomy: clamp(Math.round(Number(offer?.autonomy ?? 70)), 0, 100),
+        patience: clamp(Math.round(Number(offer?.patience ?? 60)), 0, 100),
+        mediaNarrativeKey: String(offer?.mediaNarrativeKey ?? "free_play_start"),
+        base: {
+          years: Math.max(1, Number(offer?.years ?? 4)),
+          salary: Math.max(100_000, Math.round(Number(offer?.salary ?? 4_000_000))),
+          autonomy: clamp(Math.round(Number(offer?.autonomy ?? 70)), 0, 100),
+        },
+      };
+      const next = {
+        ...state,
+        acceptedOffer,
+        autonomyRating: acceptedOffer.autonomy,
+        ownerPatience: acceptedOffer.patience,
+        userTeamId: teamId,
+        teamId,
+        storySetup: state.storySetup ?? {
+          teamId,
+          teamName,
+          teamLocked: true as const,
+        },
+        memoryLog: [...(state.memoryLog ?? []), { type: "HIRED_COACH", season: Number(state.season), week: state.week, payload: acceptedOffer }],
+        phase: "HUB" as const,
+        careerStage: "RESIGN" as const,
+        offseason: {
+          ...(state.offseason ?? { completed: {}, stepsComplete: {} }),
+          stepId: state.offseason?.stepId ?? OffseasonStepEnum.RESIGNING,
+        },
+        hub: {
+          ...(state.hub ?? { news: [], newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, schedule: null }),
+          regularSeasonWeek: state.hub?.regularSeasonWeek ?? 1,
+        },
+        teamFinances: {
+          ...(state.teamFinances ?? { cash: 0, deadMoneyBySeason: {} }),
+          cash: financeRow?.cash ?? state.teamFinances?.cash ?? 0,
+        },
+      };
+      return applyFinances(next as GameState);
+    }
     case "SET_COACH": {
       const nextCoach = { ...state.coach, ...action.payload };
       const lockedCoord = nextCoach.archetypeId === "oc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
@@ -3892,8 +3946,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
         teamFinances: {
-          ...state.teamFinances,
-          cash: financeRow?.cash ?? state.teamFinances.cash,
+          ...(state.teamFinances ?? { cash: 0, deadMoneyBySeason: {} }),
+          cash: financeRow?.cash ?? state.teamFinances?.cash ?? 0,
         },
       };
       return applyFinances(next as GameState);

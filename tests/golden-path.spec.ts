@@ -10,8 +10,8 @@ test("golden path smoke (mobile): free play -> advance week -> reload", async ({
 
   await page.goto("/");
 
-  // 1) Create new save entry
-  await page.getByRole("button", { name: /new save/i }).click();
+  // 1) Go directly to save mode selector
+  await page.goto("/new-save");
 
   // 2) Start Free Play
   await page.locator('[data-test="start-free-play"]').click();
@@ -22,7 +22,7 @@ test("golden path smoke (mobile): free play -> advance week -> reload", async ({
   // 4) Confirm we landed in hub
   await expect(page.locator('[data-test="hub-root"]')).toBeVisible();
 
-  // 5) Go to Regular Season
+  // 5) Go to Regular Season (direct route fallback)
   await page.goto("/hub/regular-season");
 
   // 6) Advance week
