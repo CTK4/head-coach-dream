@@ -144,8 +144,9 @@ export default function SettingsPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
-                      logInfo("debug.bundle.export", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week });
+                      const saveMeta = getActiveSaveMetadata();
+                      exportDebugBundle({ state, saveMeta });
+                      logInfo("debug.bundle.export", { phase: state.phase, saveId: saveMeta?.saveId, season: state.season, week: state.week });
                     }}
                   >
                     Export Debug Bundle

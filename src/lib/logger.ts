@@ -15,7 +15,7 @@ export type LogEvent = {
   level: LogLevel;
   event: string;
   phase?: string;
-  saveId?: string;
+  saveId?: string | null;
   season?: number;
   week?: number;
   driveIndex?: number;
@@ -43,7 +43,7 @@ function sanitizeMeta(meta: Record<string, unknown> | undefined) {
       continue;
     }
     if (Array.isArray(value)) {
-      out[key] = value.slice(0, 20).map((item) => (typeof item === "object" ? "[redacted-object]" : item));
+      out[key] = value.slice(0, 20).map((item) => (item === null ? null : typeof item === "object" ? "[redacted-object]" : item));
       continue;
     }
     out[key] = "[redacted-object]";
