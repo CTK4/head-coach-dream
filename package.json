@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/validateSourceArtifacts.mjs && node scripts/validateJson.mjs",
+    "prebuild": "node scripts/generateLeagueHistoryFromCsv.mjs && node scripts/validateSourceArtifacts.mjs && node scripts/validateJson.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "repair:leagueDb": "node scripts/repairLeagueDbJson.mjs",
     "smoke": "node scripts/smokeTest.mjs",
-    "test:ui": "playwright test"
+    "test:ui": "playwright test",
+    "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
