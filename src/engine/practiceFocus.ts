@@ -83,7 +83,8 @@ export function normalizePracticeAllocation(allocation: Partial<PracticeAllocati
 }
 
 export function migratePracticePlan(input: unknown): PracticePlan {
-  const raw = (input ?? {}) as any;
+  if (input == null) return { ...DEFAULT_PRACTICE_PLAN };
+  const raw = input as any;
   if (raw && typeof raw === "object" && raw.allocation) {
     const budget = Number(raw.weeklyBudget ?? PRACTICE_POINTS_BUDGET);
     return {

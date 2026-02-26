@@ -99,7 +99,7 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   const termDelta = -yearPenalty;
   scoreFactors.push({ label: "Contract term", delta: termDelta });
 
-  const interestDelta = ((clamp(params.interest, 0, 100) / 100) - 0.52) * 0.2;
+  const interestDelta = ((clamp(params.interest, 0, 100) / 100) - 0.5) * 0.4;
   scoreFactors.push({ label: "Team interest", delta: interestDelta });
 
   const contextAxes: Array<[string, number | undefined, number]> = [
@@ -132,7 +132,7 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   if (ovr >= 92) threshold += 0.1;
   else if (ovr >= 86) threshold += 0.07;
   else if (ovr >= 80) threshold += 0.05;
-  if (params.interest < 45) threshold += 0.05;
+  if (params.interest < 50) threshold += (50 - params.interest) * 0.006;
 
   if (aavRatio < 0.85) {
     const canRarelyAccept = params.interest >= 85 && yearsFit >= 0.92;

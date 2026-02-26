@@ -4973,7 +4973,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "SCOUT_COMBINE_INTERVIEW": {
       const s = state.scoutingState;
-      if (!s || s.windowId !== "COMBINE") return state;
+      if (!s || !s.combine.generated) return state;
 
       const day = s.combine?.day ?? 1;
       if (day !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
@@ -6585,9 +6585,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
           practiceExecutionBonus: base.weeklyFamiliarityBonus + base.weeklySchemeConceptBonus + Math.max(0, -base.weeklyMentalErrorMod * 8) - base.cumulativeNeglectPenalty * 8,
           lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
-          coachArchetypeId: base.coach.archetypeId,
-          coachTenureYear: base.coach.tenureYear,
-          coachUnlockedPerkIds: base.coach.unlockedPerkIds,
+          coachArchetypeId: base.coach?.archetypeId,
+          coachTenureYear: base.coach?.tenureYear,
+          coachUnlockedPerkIds: base.coach?.unlockedPerkIds,
         }),
       };
     }
@@ -6905,6 +6905,8 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   let s: Partial<GameState> = {
     ...oldState,
     saveSeed,
+    season: Number((oldState as any).season ?? 2026),
+    week: Number((oldState as any).week ?? 1),
     careerSeed: Number((oldState as any).careerSeed ?? (saveSeed ^ 0x85ebca6b)),
     careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
     seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
@@ -7082,6 +7084,13 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     delete scoutingState.combine.hoursRemaining;
   }
 
+  // Ensure scoutingState has at minimum a myBoardOrder so migrations can validate IDs
+  if (!s.scoutingState) {
+    const boardOrder = (draftClassJson as any[]).map((row: any, i: number) => String(row["Player ID"] ?? `DC_${i + 1}`));
+    s = { ...s, scoutingState: { myBoardOrder: boardOrder } as any };
+  }
+
+  s = ensureOffseasonCombineData(s as GameState);
   s = migrateDraftClassIdsInSave(s);
   s = ensureAccolades(bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
