@@ -1,6 +1,6 @@
 import type { ResultTag } from "@/engine/gameSim";
-import { CONTACT_BASE_FUMBLE, CONTACT_BASE_TACKLE, CONTACT_PILE_TACKLE_BONUS, CONTACT_SHORT_YARDAGE_TACKLE_BONUS } from "@/engine/physics/constants";
-import { resolveBounce, type BounceSurface } from "@/engine/physics/bounce";
+import { CONTACT_BASE_TACKLE, CONTACT_PILE_TACKLE_BONUS, CONTACT_SHORT_YARDAGE_TACKLE_BONUS } from "@/engine/physics/constants";
+import type { BounceSurface } from "@/engine/physics/bounce";
 import { resolveMoveAdvantage } from "@/engine/physics/moveResolver";
 import { resolveAngleBand } from "@/engine/physics/tackleAngle";
 import { codSkill, effectiveMass, handStrength, ratingZ, reachIn } from "@/engine/physics/ratingsToKinematics";
@@ -39,8 +39,6 @@ export type ContactOutcome = {
   yacYards: number;
   brokenTackle: boolean;
   brokenType?: "ARM" | "LEG" | "HIGH";
-  fumble: boolean;
-  recoveredBy?: "OFFENSE" | "DEFENSE";
   resultTags: ResultTag[];
   debug: Record<string, number>;
 };
@@ -52,8 +50,6 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
  * 1) tackleRoll
  * 2) brokenTypeRoll (only if tackle failed)
  * 3) yacRoll
- * 4) fumbleRoll
- * 5) bounceRoll(s) (only if fumble)
  */
 export function resolveContact(input: ContactInput, rng: () => number): ContactOutcome {
   const angle = clamp(Math.abs(input.context.angleDeg), 0, 90);
@@ -104,36 +100,17 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
   let yacYards = Math.max(0, Math.round(yacBase + spinVariance));
   if (input.context.pile || input.context.shortYardage) yacYards = clamp(yacYards, 0, 3);
 
-  const fumbleRoll = rng();
-  const spinRisk = input.move.type === "SPIN" ? 0.012 : 0;
-  const contactLoad = tackled ? 0.012 : 0.006;
-  const fumbleProb = clamp(
-    CONTACT_BASE_FUMBLE + spinRisk + contactLoad + (input.context.surface === "WET" ? 0.006 : input.context.surface === "SNOW" ? 0.01 : 0),
-    0.002,
-    0.08,
-  );
-  const fumble = fumbleRoll < fumbleProb;
-
-  let recoveredBy: "OFFENSE" | "DEFENSE" | undefined;
   const tags: ResultTag[] = [
     { kind: "EXECUTION", text: `ANGLE:${resolveAngleBand(angle).toLowerCase()}` },
   ];
 
   if (!tackled) tags.push({ kind: "MISMATCH", text: `BROKEN_TACKLE:${brokenType ?? "ARM"}` });
 
-  if (fumble) {
-    const bounce = resolveBounce({ baseRecoveryBias01: 0.48 + (tackled ? -0.03 : 0.04), surface: input.context.surface }, rng);
-    recoveredBy = rng() < bounce.recoveryBias01 ? "OFFENSE" : "DEFENSE";
-    tags.push({ kind: "MISTAKE", text: `FUMBLE:${recoveredBy}` });
-  }
-
   return {
     tackled,
     yacYards,
     brokenTackle: !tackled,
     brokenType,
-    fumble,
-    recoveredBy,
     resultTags: tags,
     debug: {
       tackleProb,
@@ -143,8 +120,6 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
       leverageDelta,
       moveAdv,
       yacBase,
-      fumbleProb,
-      fumbleRoll,
     },
   };
 }

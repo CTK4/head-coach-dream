@@ -18,8 +18,6 @@ describe("resolveContact", () => {
         "brokenType": "ARM",
         "debug": {
           "defMass": 249.06141511680002,
-          "fumbleProb": 0.02,
-          "fumbleRoll": 0.15752814360894263,
           "leverageDelta": 0.18383333333333335,
           "moveAdv": 0.3166814814814814,
           "offMass": 218.93487616,
@@ -27,8 +25,6 @@ describe("resolveContact", () => {
           "tackleRoll": 0.9272666852921247,
           "yacBase": 7.569082064678271,
         },
-        "fumble": false,
-        "recoveredBy": undefined,
         "resultTags": [
           {
             "kind": "EXECUTION",
