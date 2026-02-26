@@ -106,11 +106,12 @@ import {
   buildUserTradeUpOffer,
   cpuAdvanceUntilUser,
   generateTradeOffers,
-  getDraftClass as getDraftClassFromSim,
   initDraftSim,
   submitUserTradeUpOffer,
   type DraftSimState,
 } from "@/engine/draftSim";
+import { buildRookieContract } from "@/engine/contracts/rookieContract";
+import { generateDraftClass } from "@/engine/draftClass/generateDraftClass";
 import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
@@ -729,8 +730,10 @@ export type GameState = {
   playerCareerStatsById: Record<string, import("@/types/stats").PlayerCareerStats>;
   leagueRecords: LeagueRecords;
   draft: DraftState;
+  upcomingDraftClass: import("@/engine/draftSim").Prospect[];
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
+  nextPlayerId: number;
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
   playerFatigueById: Record<string, PersistedFatigue>;
@@ -807,6 +810,8 @@ export type DraftState = {
   leaguePicks: DraftPick[];
   onClockTeamId?: string;
   withdrawnBoardIds: Record<string, true>;
+  prospectPool: import("@/engine/draftSim").Prospect[];
+  appliedSelectionCount: number;
 } &
   DraftSimState & {
     rosterCountsByTeamBucket: Record<string, Record<string, number>>;
@@ -934,6 +939,7 @@ export type GameAction =
   | { type: "DRAFT_SIM_ALL" }
   | { type: "NAV_TO_DRAFT_RESULTS" }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_FINALIZE" }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
   | { type: "INIT_TRAINING_CAMP_ROSTER" }
@@ -1241,12 +1247,16 @@ function createInitialState(): GameState {
       leaguePicks: [],
       onClockTeamId: undefined,
       withdrawnBoardIds: {},
+      prospectPool: generateDraftClass({ year: 2026, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
+      appliedSelectionCount: 0,
       ...initDraftSim({ saveSeed, season: 2026, userTeamId: "MILWAUKEE_NORTHSHORE" }),
       rosterCountsByTeamBucket: {},
       draftedCountsByTeamBucket: {},
     },
+    upcomingDraftClass: generateDraftClass({ year: 2026, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
     rookies: [],
     rookieContracts: {},
+    nextPlayerId: maxExistingPlayerNumericId() + 1,
     playerTeamOverrides: {},
     playerContractOverrides: {},
     playerFatigueById: {},
@@ -2710,6 +2720,69 @@ function draftRoundPick(overall: number, teamsCount: number) {
   const round = Math.floor((overall - 1) / teamsCount) + 1;
   const pickInRound = ((overall - 1) % teamsCount) + 1;
   return { round, pickInRound };
+}
+
+function maxExistingPlayerNumericId() {
+  const ids = getPlayers().map((pl: any) => Number(String(pl.playerId ?? "").replace(/\D/g, ""))).filter((v) => Number.isFinite(v));
+  return ids.length ? Math.max(...ids) : 0;
+}
+
+function applyDraftSelectionToState(state: GameState, selection: import("@/engine/draftSim").DraftSelection): GameState {
+  if (state.draft.withdrawnBoardIds[selection.prospectId]) return state;
+  const playerId = `ROOK_${String(state.nextPlayerId).padStart(6, "0")}`;
+  const contract = buildRookieContract({ overallPick: selection.overall, round: selection.round, pickInRound: selection.pickInRound, year: state.season });
+  const ovr = rookieOvrFromRank(selection.rank);
+  const dev = rookieDevFromTier({ DraftTier: "" });
+  const rookie: RookiePlayer = {
+    playerId,
+    prospectId: selection.prospectId,
+    name: selection.name,
+    pos: selection.pos,
+    age: 22,
+    ovr,
+    dev,
+    apy: contract.aav,
+    teamId: selection.teamId,
+    scoutOvr: ovr,
+    scoutDev: dev,
+    scoutConf: 80,
+  };
+  const legacyContract: RookieContract = {
+    startSeason: state.season,
+    years: 4,
+    capBySeason: {
+      [state.season]: contract.capHitsByYear[0] ?? 0,
+      [state.season + 1]: contract.capHitsByYear[1] ?? 0,
+      [state.season + 2]: contract.capHitsByYear[2] ?? 0,
+      [state.season + 3]: contract.capHitsByYear[3] ?? 0,
+    },
+    total: contract.totalValue,
+  };
+
+  return {
+    ...state,
+    nextPlayerId: state.nextPlayerId + 1,
+    rookies: [...state.rookies, rookie],
+    rookieContracts: { ...state.rookieContracts, [playerId]: legacyContract },
+    playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: selection.teamId },
+    draft: {
+      ...state.draft,
+      withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [selection.prospectId]: true },
+      prospectPool: state.draft.prospectPool.filter((p) => p.prospectId !== selection.prospectId),
+      leaguePicks: [...state.draft.leaguePicks, { overall: selection.overall, round: selection.round, pickInRound: selection.pickInRound, teamId: selection.teamId, prospectId: selection.prospectId, rookiePlayerId: playerId }],
+      appliedSelectionCount: state.draft.appliedSelectionCount + 1,
+    },
+  };
+}
+
+function finalizeDraftIfComplete(state: GameState): GameState {
+  if (!state.draft.complete) return state;
+  const nextYear = state.season + 1;
+  return {
+    ...state,
+    draft: { ...state.draft, completed: true, prospectPool: [] },
+    upcomingDraftClass: generateDraftClass({ year: nextYear, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
+  };
 }
 
 function coachScoutRep(state: GameState) {
@@ -5833,11 +5906,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const userTeamId = String(state.acceptedOffer?.teamId ?? "MILWAUKEE_NORTHSHORE");
       const season = state.season;
       const sim = initDraftSim({ saveSeed: state.saveSeed, season, userTeamId });
+      const pool = state.upcomingDraftClass?.length ? state.upcomingDraftClass : generateDraftClass({ year: season, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 });
       return {
         ...state,
         draft: {
           ...state.draft,
           ...sim,
+          prospectPool: pool,
+          leaguePicks: [],
+          withdrawnBoardIds: {},
+          appliedSelectionCount: 0,
           rosterCountsByTeamBucket: initDraftRosterCounts(state),
           draftedCountsByTeamBucket: {},
         },
@@ -5849,11 +5927,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const res = cpuAdvanceUntilUser({
         saveSeed: state.saveSeed,
         state: state.draft,
-        prospects: getDraftClassFromSim(),
+        prospects: state.draft.prospectPool,
         rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket ?? {},
         draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket ?? {},
       });
-      return {
+      let next: GameState = {
         ...state,
         draft: {
           ...state.draft,
@@ -5862,6 +5940,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           draftedCountsByTeamBucket: res.draftedCountsByTeamBucket,
         },
       };
+      const newSelections = next.draft.selections.slice(state.draft.appliedSelectionCount);
+      for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
+      return finalizeDraftIfComplete(next);
     }
 
     case "DRAFT_SHOP": {
@@ -5876,7 +5957,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const adv = cpuAdvanceUntilUser({
         saveSeed: state.saveSeed,
         state: sim,
-        prospects: getDraftClassFromSim(),
+        prospects: state.draft.prospectPool,
         rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
         draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
       });
@@ -5932,7 +6013,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const adv = cpuAdvanceUntilUser({
         saveSeed: state.saveSeed,
         state: outcome.appliedSim,
-        prospects: getDraftClassFromSim(),
+        prospects: state.draft.prospectPool,
         rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
         draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
       });
@@ -5958,42 +6039,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const slot = state.draft.slots[state.draft.cursor];
       if (!slot || slot.teamId !== state.draft.userTeamId) return state;
 
-      const p = getDraftClassFromSim().find((x) => x.prospectId === String(action.payload.prospectId));
+      const p = state.draft.prospectPool.find((x) => x.prospectId === String(action.payload.prospectId));
       if (!p || state.draft.takenProspectIds[p.prospectId]) return { ...state, uiToast: "Prospect not found" };
 
-      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-      const draftProjection = resolveDraftUncertainty({
-        saveSeed: state.saveSeed,
-        season: state.season,
-        prospectId: p.prospectId,
-        baseOvr: rookieOvrFromRank(p.rank),
-        baseDev: rookieDevFromTier({ DraftTier: p.tier }),
-        characterRevealPct: reveal.characterRevealPct,
-        intelligenceRevealPct: reveal.intelligenceRevealPct,
-      });
-
-      const idx = state.rookies.length + 1;
-      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
-      const rookie: RookiePlayer = {
-        playerId,
-        prospectId: p.prospectId,
-        name: p.name,
-        pos: p.pos,
-        age: p.age,
-        ovr: draftProjection.ovr,
-        dev: draftProjection.dev,
-        apy: rookieApyFromRank(p.rank),
-        teamId: state.draft.userTeamId,
-        scoutOvr: draftProjection.ovr,
-        scoutDev: draftProjection.dev,
-        scoutConf: 80,
-      };
-
       const sim = applySelection(state.draft, slot, p);
-      const withRookie: GameState = {
+      let withPick: GameState = {
         ...state,
-        rookies: [...state.rookies, rookie],
-        rookieContracts: { ...state.rookieContracts, [rookie.playerId]: rookieContractFromApy(state.season + 1, rookie.apy) },
         draft: {
           ...state.draft,
           ...sim,
@@ -6001,23 +6052,32 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
         },
       };
+      const userSel = withPick.draft.selections[withPick.draft.selections.length - 1];
+      if (userSel) withPick = applyDraftSelectionToState(withPick, userSel);
 
       const adv = cpuAdvanceUntilUser({
-        saveSeed: withRookie.saveSeed,
-        state: withRookie.draft,
-        prospects: getDraftClassFromSim(),
-        rosterCountsByTeamBucket: withRookie.draft.rosterCountsByTeamBucket,
-        draftedCountsByTeamBucket: withRookie.draft.draftedCountsByTeamBucket,
+        saveSeed: withPick.saveSeed,
+        state: withPick.draft,
+        prospects: withPick.draft.prospectPool,
+        rosterCountsByTeamBucket: withPick.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: withPick.draft.draftedCountsByTeamBucket,
       });
-      return {
-        ...withRookie,
+      let next: GameState = {
+        ...withPick,
         draft: {
-          ...withRookie.draft,
+          ...withPick.draft,
           ...adv.sim,
-          rosterCountsByTeamBucket: withRookie.draft.rosterCountsByTeamBucket,
+          rosterCountsByTeamBucket: withPick.draft.rosterCountsByTeamBucket,
           draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
         },
       };
+      const newSelections = next.draft.selections.slice(next.draft.appliedSelectionCount);
+      for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
+      return finalizeDraftIfComplete(next);
+    }
+
+    case "DRAFT_FINALIZE": {
+      return finalizeDraftIfComplete(state);
     }
 
     case "DRAFT_PICK": {
@@ -6885,9 +6945,13 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       leaguePicks: [],
       onClockTeamId: undefined,
       withdrawnBoardIds: {},
+      prospectPool: generateDraftClass({ year: Number((oldState as any).season ?? 2026), count: 224, leagueSeed: saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
+      appliedSelectionCount: 0,
     }) as DraftState,
+    upcomingDraftClass: (oldState as any).upcomingDraftClass ?? generateDraftClass({ year: Number((oldState as any).season ?? 2026), count: 224, leagueSeed: saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
+    nextPlayerId: Number((oldState as any).nextPlayerId ?? (maxExistingPlayerNumericId() + 1)),
     firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     depthChart: nextDepthChart,
     leagueDepthCharts: (oldState as any).leagueDepthCharts ?? {},
@@ -7063,8 +7127,10 @@ function loadState(): GameState {
       playerCareerStatsById: { ...(initial.playerCareerStatsById ?? {}), ...((migrated as any).playerCareerStatsById ?? {}) },
       leagueRecords: { ...defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
       draft: { ...initial.draft, ...migrated.draft },
+      upcomingDraftClass: (migrated as any).upcomingDraftClass ?? initial.upcomingDraftClass,
       rookies: migrated.rookies ?? initial.rookies,
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
+      nextPlayerId: Number((migrated as any).nextPlayerId ?? initial.nextPlayerId),
       playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
       playerContractOverrides: Object.fromEntries(
         Object.entries({ ...initial.playerContractOverrides, ...migrated.playerContractOverrides }).map(([k, v]: any) => {
