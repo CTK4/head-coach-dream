@@ -1,11 +1,7 @@
 import { gameReducer, type GameAction, type GameState, type OfferItem } from "@/context/GameContext";
-import { getPersonnel, getPersonnelFreeAgents, getPlayersByTeam } from "@/data/leagueDb";
+import { clearPersonnelTeam, expireContract, getCoordinatorFreeAgentsAll, getPersonnel, getPersonnelContract, getPlayersByTeam } from "@/data/leagueDb";
 import { StateMachine } from "@/lib/stateMachine";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
-
-export type GoldenStrategy = {
-  resignTopN: number;
-};
 
 export type GoldenSummary = {
   season: number;
@@ -32,18 +28,20 @@ function defaultOffer(teamId: string): OfferItem {
   };
 }
 
-function hireBestCoordinators(state: GameState): GameState {
+function hireBestCoordinators(state: GameState, hiredIds: string[]): GameState {
   let out = state;
-  const taken = new Set<string>();
-  const byRole = ["OC", "DC", "STC"] as const;
-  for (const role of byRole) {
-    const pool = getPersonnelFreeAgents()
-      .filter((p) => String(p.role).toUpperCase() === role && !taken.has(String(p.personId)))
+  const roles = ["OC", "DC", "STC"] as const;
+  for (const role of roles) {
+    const pool = getCoordinatorFreeAgentsAll(role)
       .sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
     const best = pool[0];
     if (!best) continue;
-    taken.add(String(best.personId));
+    hiredIds.push(String(best.personId));
     out = dispatch(out, { type: "HIRE_STAFF", payload: { role, personId: String(best.personId), salary: 1_000_000 } });
+  }
+  if (!out.staff?.ocId || !out.staff?.dcId || !out.staff?.stcId) {
+    const ids = `ocId=${out.staff?.ocId ?? "missing"}, dcId=${out.staff?.dcId ?? "missing"}, stcId=${out.staff?.stcId ?? "missing"}`;
+    throw new Error(`Failed to hire all coordinators: ${ids}`);
   }
   return out;
 }
@@ -104,21 +102,26 @@ function withFixedNow<T>(now: number, fn: () => T): T {
 export function runGoldenSeason({
   careerSeed,
   userTeamId,
-  strategy,
   stopAt,
 }: {
   careerSeed: number;
   userTeamId: string;
-  strategy?: Partial<GoldenStrategy>;
   stopAt?: "OFFSEASON_DONE" | "WEEK_9" | "POSTSEASON";
 }) {
-  const effectiveStrategy: GoldenStrategy = { resignTopN: strategy?.resignTopN ?? 5 };
-
   return withFixedNow(careerSeed, () => {
+    const hiredCoordIds: string[] = [];
+    const releaseHiredCoords = () => {
+      for (const personId of hiredCoordIds) {
+        const contract = getPersonnelContract(personId);
+        if (contract) expireContract(contract.contractId);
+        clearPersonnelTeam(personId);
+      }
+    };
+
     let state = dispatch({} as GameState, { type: "INIT_NEW_GAME_FROM_STORY", payload: { offer: defaultOffer(userTeamId), teamName: userTeamId } });
     state = dispatch(state, { type: "SET_COACH", payload: { name: "Golden Coach", archetypeId: "ceo" } });
     state = { ...state, saveSeed: careerSeed, careerSeed };
-    state = hireBestCoordinators(state);
+    state = hireBestCoordinators(state, hiredCoordIds);
 
     const visitedSteps: string[] = [state.offseason.stepId];
     while (state.offseason.stepId !== "CUT_DOWNS") {
@@ -138,8 +141,13 @@ export function runGoldenSeason({
 
     let stageGuard = 0;
     while (state.careerStage !== "REGULAR_SEASON" && stageGuard < 8) {
-      state = dispatch(state, { type: "ADVANCE_CAREER_STAGE" });
+      state = dispatch(state, { type: "AUTO_ADVANCE_STAGE_IF_READY" });
       stageGuard += 1;
+    }
+    if (state.careerStage !== "REGULAR_SEASON") {
+      throw new Error(
+        `Failed to reach REGULAR_SEASON after advancing career stage ${stageGuard} times (careerStage=${state.careerStage})`,
+      );
     }
 
     if (stopAt === "OFFSEASON_DONE") {
@@ -151,16 +159,17 @@ export function runGoldenSeason({
         record: { wins: 0, losses: 0 },
         standingsCount: state.currentStandings.length,
       };
-      return {
+      const result = {
         finalState: state,
         summary,
         determinismHash: stableDeterminismHash(state),
         integrityHash: stableIntegrityHash(state),
         stateHash: `${stableDeterminismHash(state)}:${stableIntegrityHash(state)}`,
-        strategy: effectiveStrategy,
         visitedSteps,
         personnelCount: getPersonnel().length,
       };
+      releaseHiredCoords();
+      return result;
     }
 
     let lastWeek = Number(state.hub.regularSeasonWeek ?? 1);
@@ -181,6 +190,12 @@ export function runGoldenSeason({
       if (stopAt === "POSTSEASON" && state.careerStage === "SEASON_AWARDS") break;
       if (!stopAt && state.careerStage === "SEASON_AWARDS") break;
     }
+    if (advanceGuard >= 40) {
+      const expected = stopAt === "WEEK_9"
+        ? `weeklyResults.length >= 9 (got ${state.weeklyResults?.length ?? 0})`
+        : `careerStage === "SEASON_AWARDS" for stopAt=${stopAt ?? "full"} (got ${state.careerStage})`;
+      throw new Error(`Week-advance loop hit guard limit without reaching stop condition: ${expected}`);
+    }
 
     validateNoDuplicateRosterIds(state);
     validateStandingsInvariant(state);
@@ -200,15 +215,16 @@ export function runGoldenSeason({
 
     const determinismHash = stableDeterminismHash(state);
     const integrityHash = stableIntegrityHash(state);
-    return {
+    const result = {
       finalState: state,
       summary,
       determinismHash,
       integrityHash,
       stateHash: `${determinismHash}:${integrityHash}`,
-      strategy: effectiveStrategy,
       visitedSteps,
       personnelCount: getPersonnel().length,
     };
+    releaseHiredCoords();
+    return result;
   });
 }

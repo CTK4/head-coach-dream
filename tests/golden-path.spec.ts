@@ -14,7 +14,7 @@ test("golden path smoke (mobile): new career -> advance week -> reload", async (
   await page.locator('[data-test="background-continue"]').first().click();
 
   for (let interviewIndex = 0; interviewIndex < 3; interviewIndex += 1) {
-    await page.locator('[data-test^="interview-team-"]').first().click();
+    await page.locator('[data-test^="interview-team-"]').nth(interviewIndex).click();
     for (let answerIndex = 0; answerIndex < 5; answerIndex += 1) {
       await page.locator('[data-test="interview-answer-0"]').click();
     }
