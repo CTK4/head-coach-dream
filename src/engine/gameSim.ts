@@ -798,7 +798,11 @@ function resolveWithPAS(
       },
     };
     const contact = resolveContact(contactInput, contactRng);
-    yards = Math.max(yards, contact.yacYards);
+    if (sim.distance <= 2 || sim.ballOn >= 96) {
+      yards += contact.yacYards;
+    } else {
+      yards = contact.yacYards;
+    }
     const runFumble = resolveFumble(
       {
         carrier: { balanceZ: ratingZ(contactInput.ballcarrier.balance), strengthZ: ratingZ(contactInput.ballcarrier.strength), fatigue01: contactInput.ballcarrier.fatigue01 },
