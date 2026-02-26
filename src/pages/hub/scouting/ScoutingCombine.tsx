@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDraftClass, useGame } from "@/context/GameContext";
-import {
-  COMBINE_DEFAULT_INTERVIEW_TOKENS,
-  COMBINE_FOCUS_HOURS_COST,
-  COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
-} from "@/engine/scouting/combineConstants";
+import { COMBINE_DEFAULT_INTERVIEW_TOKENS, COMBINE_FOCUS_HOURS_COST, COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
@@ -296,22 +292,23 @@ export default function ScoutingCombine() {
             const charRange = formatRange(trueCharacterScore, reveal.characterRevealPct);
             const iqRange = formatRange(trueIntelligenceScore, reveal.intelligenceRevealPct);
             return (
-              <div key={prospect.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <button type="button" className="truncate text-left font-semibold text-sky-300 hover:underline" onClick={() => openProspectProfile(prospect.id)}>
-                      {prospect.draft.name}
-                    </button>
-                    <div className="text-xs opacity-70">{getPositionLabel(prospect.draft.pos)} • Interviews: {prospect.interviewCount}</div>
-                    <div className="mt-1 text-xs opacity-80">
-                      <div className="mb-1">Character Reveal: {reveal.characterRevealPct}%</div>
-                      <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-emerald-400" style={{ width: `${reveal.characterRevealPct}%` }} /></div>
-                    </div>
-                    <div className="mt-1 text-xs opacity-80">
-                      <div className="mb-1">Football IQ Reveal: {reveal.intelligenceRevealPct}%</div>
-                      <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
-                    </div>
-                    <div className="mt-1 text-xs opacity-70">Character: {charRange} • Football IQ: {iqRange}</div>
+              <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">
+                    <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(prospect.id)}>{prospect.draft.name}</button>{" "}
+                    <span className="opacity-70">{getPositionLabel(prospect.draft.pos)}</span>
+                  </div>
+                  <div className="text-xs opacity-70">Interviews: {prospect.interviewCount}</div>
+                  <div className="mt-1 text-xs opacity-80">
+                    <div className="mb-1">Character Reveal: {reveal.characterRevealPct}%</div>
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-emerald-400" style={{ width: `${reveal.characterRevealPct}%` }} /></div>
+                  </div>
+                  <div className="mt-1 text-xs opacity-80">
+                    <div className="mb-1">Football IQ Reveal: {reveal.intelligenceRevealPct}%</div>
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
+                  </div>
+                  <div className="mt-1 text-xs opacity-70">
+                    Character: {charRange} • Football IQ: {iqRange} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
                   <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
