@@ -56,6 +56,10 @@ import LoadSave from "@/pages/LoadSave";
 import SaveModeSelect from "@/pages/SaveModeSelect";
 import StoryInterview from "@/pages/story/StoryInterview";
 import FreePlaySetup from "@/pages/FreePlaySetup";
+import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ROUTES } from "@/routes/appRoutes";
+import { useState } from "react";
 
 const queryClient = new QueryClient();
 
@@ -120,6 +124,16 @@ function RootEntry() {
   return <Landing />;
 }
 
+function StoryRouteShell() {
+  const [storyError, setStoryError] = useState<Error | null>(null);
+
+  return (
+    <ErrorBoundary fallback={<StoryErrorScreen error={storyError} />} onError={(error) => setStoryError(error)}>
+      <StoryInterview />
+    </ErrorBoundary>
+  );
+}
+
 // Scouting Routes Wrapper
 function ScoutingRoutes() {
     return (
@@ -155,11 +169,11 @@ const App = () => (
             <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
             <Route path="/onboarding/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
 
-            <Route path="/" element={<RootEntry />} />
-            <Route path="/load-save" element={<LoadSave />} />
-            <Route path="/new-save" element={<SaveModeSelect />} />
-            <Route path="/story/interview" element={<StoryInterview />} />
-            <Route path="/free-play/setup" element={<FreePlaySetup />} />
+            <Route path={ROUTES.root} element={<RootEntry />} />
+            <Route path={ROUTES.loadSave} element={<LoadSave />} />
+            <Route path={ROUTES.saveMode} element={<SaveModeSelect />} />
+            <Route path={ROUTES.storyInterview} element={<StoryRouteShell />} />
+            <Route path={ROUTES.freePlaySetup} element={<FreePlaySetup />} />
             <Route path="/background" element={<Navigate to="/onboarding/background" replace />} />
             <Route path="/interviews" element={<Navigate to="/onboarding/interviews" replace />} />
             <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />
