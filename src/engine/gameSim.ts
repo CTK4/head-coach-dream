@@ -758,7 +758,6 @@ function resolveWithPAS(
   let incomplete = false;
   let outcomeLabel = "normal";
 
-  const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
 
   if (isRun) {
@@ -777,7 +776,9 @@ function resolveWithPAS(
       },
     };
     const contact = resolveContact(contactInput, contactRng);
-    yards = contact.yacYards;
+    // Pre-contact yards: triangular(-3, 0, 4) allows TFL/stuffs behind LOS
+    const preContactYards = Math.round(tri(rng, -3, 0, 4));
+    yards = preContactYards + contact.yacYards;
     turnover = contact.fumble && contact.recoveredBy === "DEFENSE";
     outcomeLabel = turnover ? "turnover" : contact.tackled ? "success" : contact.yacYards >= 12 ? "explosive" : "success";
     resolverTags.push(...contact.resultTags);
@@ -818,6 +819,7 @@ function resolveWithPAS(
     : outcomeLabel === "incomplete" ? "FAILURE"
     : "SUCCESS";
 
+  const baseTags = buildResultTags(playType, look, pasComp, outcome, aggression);
   const tags = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
 
   if (sim.ballOn + yards >= 100 && !turnover) {
