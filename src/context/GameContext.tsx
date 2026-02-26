@@ -6547,6 +6547,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const personnelPackage = action.payload.personnelPackage ?? "11";
       if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
       const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage);
+      // Log snap resolution on drive changes and for the first two plays of each drive to sample early-drive behavior.
       if ((stepped.sim.driveNumber ?? 0) !== (state.game.driveNumber ?? 0) || (stepped.sim.playNumberInDrive ?? 0) <= 1) {
         logInfo("game.sim.snap.resolved", { phase: state.phase, season: state.season, week: state.week, driveIndex: stepped.sim.driveNumber, playIndex: stepped.sim.playNumberInDrive, saveId: getActiveSaveId(), meta: { ended: stepped.ended, playType: action.payload.playType } });
       }

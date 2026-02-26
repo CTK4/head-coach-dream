@@ -62,7 +62,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={this.handleReload}>Reload App</Button>
-                <Button variant="secondary" onClick={this.props.onExportDebugBundle}>Export Debug Bundle</Button>
+                <Button variant="secondary" onClick={this.props.onExportDebugBundle} disabled={!this.props.onExportDebugBundle}>Export Debug Bundle</Button>
                 <Button variant="outline" onClick={this.handleResetToMainMenu}>Reset to Main Menu</Button>
               </div>
             </CardContent>

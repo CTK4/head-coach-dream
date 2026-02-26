@@ -27,6 +27,6 @@ export function advanceWeek(state: GameState): GameState {
     return out;
   } catch (error) {
     logError('engine.advance_week.failure', { phase: state.phase, season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
-    return state;
+    throw error;
   }
 }
