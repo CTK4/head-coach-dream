@@ -7,6 +7,9 @@ import type { LeaguePhase, LeaguePlayoffs } from "@/engine/leaguePhase";
 import { CURRENT_SEASON_YEAR } from "@/config/season";
 import { getTeamById, getTeamRosterPlayers } from "@/data/leagueDb";
 import { computeStandings, type TeamStanding } from "@/engine/standings";
+import { computeDefensiveEffects, defaultDefensiveScheme } from "@/systems/defensivePlaycalling";
+import { computeWeeklyPowerRankings, type PowerRankingRow } from "@/systems/powerRankings";
+import { createAwardsState, finalizeAwards, updateAwardsRace, type AwardsState } from "@/systems/awardsEngine";
 
 /**
  * AUDIT NOTES (pre-change findings requested by task):
@@ -73,6 +76,9 @@ export interface WeekResult {
   allGameResults: AIGameResult[];
   updatedStandings: TeamStanding[];
   statLeaders: LeagueStatLeaders;
+  powerRankings?: PowerRankingRow[];
+  awardsRace?: AwardsState;
+  awardsWinners?: ReturnType<typeof finalizeAwards>;
 }
 
 export function initLeagueState(teamIds: string[], season = CURRENT_SEASON_YEAR, tradeDeadlineWeek = 10): LeagueState {
@@ -189,10 +195,13 @@ export function simulateAIGame(homeTeamId: string, awayTeamId: string, seed: num
   const homeScore = Math.max(6, Math.round(24 + spread + gaussian(rand) * 8));
   const awayScore = Math.max(3, Math.round(22 - spread + gaussian(rand) * 8));
 
-  const homePassingYards = Math.max(120, Math.round(220 + (homeRating - 70) * 4 + gaussian(rand) * 30));
-  const awayPassingYards = Math.max(120, Math.round(220 + (awayRating - 70) * 4 + gaussian(rand) * 30));
-  const homeRushingYards = Math.max(55, Math.round(95 + (homeRating - 70) * 2 + gaussian(rand) * 22));
-  const awayRushingYards = Math.max(55, Math.round(95 + (awayRating - 70) * 2 + gaussian(rand) * 22));
+  const homeDef = computeDefensiveEffects(defaultDefensiveScheme(seed ^ week ^ homeTeamId.length));
+  const awayDef = computeDefensiveEffects(defaultDefensiveScheme(seed ^ (week * 13) ^ awayTeamId.length));
+
+  const homePassingYards = Math.max(120, Math.round((220 + (homeRating - 70) * 4 + gaussian(rand) * 30) * awayDef.completionMultiplier));
+  const awayPassingYards = Math.max(120, Math.round((220 + (awayRating - 70) * 4 + gaussian(rand) * 30) * homeDef.completionMultiplier));
+  const homeRushingYards = Math.max(55, Math.round((95 + (homeRating - 70) * 2 + gaussian(rand) * 22) * awayDef.runYpcMultiplier));
+  const awayRushingYards = Math.max(55, Math.round((95 + (awayRating - 70) * 2 + gaussian(rand) * 22) * homeDef.runYpcMultiplier));
 
   const homeRusher = topName(homeTeamId, ["RB", "HB"]);
   const awayRusher = topName(awayTeamId, ["RB", "HB"]);
@@ -281,7 +290,7 @@ export function simulateWeek(params: {
 }): WeekResult {
   const { schedule, gameType, week, userHomeTeamId, userAwayTeamId, userScore, seed, previousStandings, priorWeekResults } = params;
   const ws = gameType === "PRESEASON" ? schedule.preseasonWeeks.find((w) => w.week === week) : schedule.regularSeasonWeeks.find((w) => w.week === week);
-  if (!ws) return { week, userGameId: "", allGameResults: [], updatedStandings: previousStandings, statLeaders: computeLeagueStatLeaders(priorWeekResults.flatMap((r) => r.allGameResults)) };
+  if (!ws) return { week, userGameId: "", allGameResults: [], updatedStandings: previousStandings, statLeaders: computeLeagueStatLeaders(priorWeekResults.flatMap((r) => r.allGameResults)), powerRankings: [], awardsRace: createAwardsState() };
 
   const allGameResults: AIGameResult[] = ws.matchups.map((m) => {
     const isUserGame =
@@ -299,9 +308,43 @@ export function simulateWeek(params: {
   const updatedStandings = computeStandings(allGameResults, previousStandings);
   const seasonResults = [...priorWeekResults.flatMap((r) => r.allGameResults), ...allGameResults];
   const statLeaders = computeLeagueStatLeaders(seasonResults);
+  const powerRankings = computeWeeklyPowerRankings(updatedStandings.map((s) => {
+    const games = Math.max(1, Number(s.wins ?? 0) + Number(s.losses ?? 0));
+    const recent = (s.lastFive ?? []).slice(-4);
+    const recentWins = recent.filter((v) => v === "W").length;
+    return {
+      teamId: s.teamId,
+      wins: Number(s.wins ?? 0),
+      losses: Number(s.losses ?? 0),
+      pointsFor: Number(s.pointsFor ?? 0),
+      pointsAgainst: Number(s.pointsAgainst ?? 0),
+      strengthOfSchedule: 0.5,
+      last4Wins: recentWins,
+      last4Games: recent.length || Math.min(4, games),
+      offensiveEfficiency: Number(s.pointsFor ?? 0) / (games * 35),
+      defensiveEfficiency: 1 - Number(s.pointsAgainst ?? 0) / (games * 35),
+    };
+  }));
+
+  const awardsSource = statLeaders.passingYards.map((qb) => ({
+    id: `${qb.teamId}:${qb.playerName}`,
+    name: qb.playerName,
+    teamId: qb.teamId,
+    position: "QB",
+    teamWins: Number(updatedStandings.find((s) => s.teamId === qb.teamId)?.wins ?? 0),
+    passYards: qb.value,
+    passTds: Math.round(qb.value / 120),
+    ints: Math.round(qb.value / 420),
+    totalYards: qb.value,
+    totalTds: Math.round(qb.value / 100),
+    explosivePlays: Math.round(qb.value / 90),
+    snaps: week * 60,
+  }));
+  const awardsRace = updateAwardsRace(priorWeekResults.at(-1)?.awardsRace ?? createAwardsState(), awardsSource);
+  const awardsWinners = week >= REGULAR_SEASON_WEEKS ? finalizeAwards(awardsRace) : undefined;
   const userGame = allGameResults.find((g) => (g.homeTeamId === userHomeTeamId && g.awayTeamId === userAwayTeamId) || (g.homeTeamId === userAwayTeamId && g.awayTeamId === userHomeTeamId));
 
-  return { week, userGameId: userGame?.gameId ?? "", allGameResults, updatedStandings, statLeaders };
+  return { week, userGameId: userGame?.gameId ?? "", allGameResults, updatedStandings, statLeaders, powerRankings, awardsRace, awardsWinners };
 }
 
 export function standingsToRecord(standings: TeamStanding[]): Record<string, TeamStandingRecord> {
