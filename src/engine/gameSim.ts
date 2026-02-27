@@ -142,6 +142,19 @@ export type GameBoxScore = {
 export type AggressionLevel = "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
 export type TempoMode = "NORMAL" | "HURRY_UP" | "MILK";
 
+export type OffensiveFocus = "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
+export type DefensiveFocus = "BALANCED" | "STOP_RUN" | "STOP_PASS";
+export type PressureRate = "LOW" | "NORMAL" | "HIGH";
+
+export type TeamGameplan = {
+  offensiveFocus?: OffensiveFocus;
+  defensiveFocus?: DefensiveFocus;
+  pressureRate?: PressureRate;
+  tempo?: "NORMAL" | "FAST" | "SLOW";
+  aggression?: AggressionLevel;
+  scriptedOpening?: PlayType[];
+};
+
 export type PlayEvaluation = {
   playType: PlayType;
   expectedSuccessProbability: number;
@@ -246,6 +259,8 @@ export type GameSim = {
   coachTenureYear: number;
   coachUnlockedPerkIds?: string[];
   lastPlayResult?: PlayResult;
+  homeGameplan?: TeamGameplan;
+  awayGameplan?: TeamGameplan;
 };
 
 const EXPLANATION_BANK: Record<"NEGATIVE" | "FAILURE" | "SUCCESS" | "EXPLOSIVE", string[]> = {
@@ -1090,7 +1105,7 @@ function isGranularPlay(playType: PlayType): boolean {
     || playType === "QUICK_GAME" || playType === "DROPBACK" || playType === "SCREEN";
 }
 
-function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string) {
+function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}) {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
     return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE") };
@@ -1099,10 +1114,14 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
   // ── PAS-driven resolution for granular play types ──────────────────────
   if (isGranularPlay(playType) || playType === "PLAY_ACTION") {
     const look = sim.defLook ?? computeDefensiveLook(sim, rng);
-    const aggression = sim.aggression ?? "NORMAL";
+    const aggression = opts.aggression ?? sim.aggression ?? "NORMAL";
     const isRunP = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER";
 
-    const resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey);
+    let resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey);
+    const defensePlan = defenseGameplan(sim);
+    if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
+    if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
+    if (defensePlan?.pressureRate === "HIGH" && !isRunP) resolved = { ...resolved, sack: resolved.sack || rng() < 0.12 };
     const { yards, tags, sack, incomplete, turnover: isTO } = resolved;
 
     // Update stats
@@ -1230,8 +1249,11 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
 function applySnapLoopTime(sim: GameSim, rng: () => number): GameSim {
   const snapLeft = chooseSnapWithLeft(sim.clock, rng, scriptMode(sim));
   const runoff = betweenPlaysRunoff(sim.clock, rng, snapLeft);
-  if (runoff <= 0) return sim;
-  return { ...sim, clock: applyTwoMinuteGate(sim.clock, rng, runoff).clock };
+  const planTempo = offenseGameplan(sim)?.tempo;
+  const tempoFactor = planTempo === "FAST" ? 0.85 : planTempo === "SLOW" ? 1.15 : 1;
+  const adjustedRunoff = Math.max(0, Math.round(runoff * tempoFactor));
+  if (adjustedRunoff <= 0) return sim;
+  return { ...sim, clock: applyTwoMinuteGate(sim.clock, rng, adjustedRunoff).clock };
 }
 
 function applyTimeWithGate(sim: GameSim, rng: () => number, seconds: number): GameSim {
@@ -1314,9 +1336,12 @@ export function recommendFourthDown(sim: GameSim): FourthDownRecommendation {
 
 function decideFourthDown(sim: GameSim): PlayType {
   const rec = recommendFourthDown(sim);
-  return rec.best === "RUN" || rec.best === "SHORT_PASS" || rec.best === "DEEP_PASS" || rec.best === "PLAY_ACTION"
+  const aggressivePlan = gameplanAggression(sim) === "AGGRESSIVE";
+  const shouldForceGo = aggressivePlan && rec.breakevenGoRate <= 0.58;
+  const picked = shouldForceGo ? goPlayForDistance(sim.distance, urgency(sim)) : rec.best;
+  return picked === "RUN" || picked === "SHORT_PASS" || picked === "DEEP_PASS" || picked === "PLAY_ACTION"
     ? goPlayForDistance(sim.distance, urgency(sim))
-    : rec.best;
+    : picked;
 }
 
 export function initGameSim(params: {
@@ -1336,6 +1361,8 @@ export function initGameSim(params: {
   lateGamePracticeRetentionBonus?: number;
   coachArchetypeId?: string;
   coachTenureYear?: number;
+  homeGameplan?: TeamGameplan;
+  awayGameplan?: TeamGameplan;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1373,7 +1400,29 @@ export function initGameSim(params: {
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
     coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],
+    homeGameplan: params.homeGameplan,
+    awayGameplan: params.awayGameplan,
   };
+}
+
+
+function offenseGameplan(sim: GameSim): TeamGameplan | undefined {
+  return sim.possession === "HOME" ? sim.homeGameplan : sim.awayGameplan;
+}
+
+function defenseGameplan(sim: GameSim): TeamGameplan | undefined {
+  return sim.possession === "HOME" ? sim.awayGameplan : sim.homeGameplan;
+}
+
+function gameplanAdjustedTempo(sim: GameSim): TempoMode {
+  const plan = offenseGameplan(sim);
+  if (plan?.tempo === "FAST") return "HURRY_UP";
+  if (plan?.tempo === "SLOW") return "MILK";
+  return sim.tempo;
+}
+
+function gameplanAggression(sim: GameSim): AggressionLevel {
+  return offenseGameplan(sim)?.aggression ?? sim.aggression;
 }
 
 function trackedForPlay(playType: PlayType): FatigueTrackedPosition[] {
@@ -1441,7 +1490,9 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     s = fgAttempt(s, rng);
     tag = "SCORE";
   } else {
-    const resolved = resolveNormalPlay(s, rng, playType, snapKey);
+    const planTempo = gameplanAdjustedTempo(s);
+    const planAggression = gameplanAggression(s);
+    const resolved = resolveNormalPlay(s, rng, playType, snapKey, { aggression: planAggression, tempo: planTempo });
     s = resolved.sim;
     tag = resolved.tag;
     live = resolved.live;
@@ -1491,23 +1542,41 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
 }
 
+function pickFromWeights(sim: GameSim, runWeight: number, passWeight: number): PlayType {
+  const total = Math.max(0.001, runWeight + passWeight);
+  const roll = contextualRng(sim.seed, `autopick:${sim.driveNumber}:${sim.playNumberInDrive + 1}`)() * total;
+  return roll <= runWeight ? "INSIDE_ZONE" : "DROPBACK";
+}
+
 export function autoPickPlay(sim: GameSim): PlayType {
   const q = sim.clock.quarter;
   const t = sim.clock.timeRemainingSec;
   const diff = sim.homeScore - sim.awayScore;
   const myDiff = sim.possession === "HOME" ? diff : -diff;
+  const plan = offenseGameplan(sim);
 
   if (sim.down === 4) return decideFourthDown(sim);
   if ((q === 2 || q === 4) && t <= 15 && myDiff < 0 && !sim.clock.clockRunning) return "SPIKE";
   if (q === 4 && myDiff > 0 && t <= 120) return "KNEEL";
   if (q === 4 && myDiff < 0 && t <= 90) return sim.distance >= 8 ? "DROPBACK" : "QUICK_GAME";
-  if (sim.distance >= 9) return "DROPBACK";
-  if (sim.distance <= 3) return "INSIDE_ZONE";
-  if (sim.distance <= 6) return "QUICK_GAME";
-  return "DROPBACK";
+
+  const script = plan?.scriptedOpening ?? [];
+  if (sim.playNumberInDrive < 5 && script[sim.playNumberInDrive]) return script[sim.playNumberInDrive];
+
+  let runWeight = sim.distance <= 3 ? 0.7 : sim.distance <= 6 ? 0.45 : 0.2;
+  let passWeight = 1 - runWeight;
+  if (plan?.offensiveFocus === "RUN_HEAVY") {
+    runWeight *= 1.15;
+    passWeight *= 0.9;
+  } else if (plan?.offensiveFocus === "PASS_HEAVY") {
+    runWeight *= 0.9;
+    passWeight *= 1.15;
+  }
+
+  return pickFromWeights(sim, runWeight, passWeight);
 }
 
-export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number }) {
+export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: TeamGameplan; awayGameplan?: TeamGameplan }) {
   let sim = initGameSim({ ...params });
   sim = { ...sim, clock: { ...sim.clock, clockRunning: false, restartMode: "SNAP" } };
 
