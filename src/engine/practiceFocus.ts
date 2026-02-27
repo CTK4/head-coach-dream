@@ -40,6 +40,8 @@ export const PRACTICE_POINTS_MIN = 5;
 export const PRACTICE_POINTS_MAX = 8;
 export const PRACTICE_POINTS_BUDGET = 6;
 export const FAMILIARITY_VARIANCE_BAND = 1;
+/** Scale factor that converts per-play mental-error and neglect modifiers into execution points. */
+export const PRACTICE_EXEC_SCALE = 8;
 
 export const DEFAULT_PRACTICE_PLAN: PracticePlan = {
   weeklyBudget: PRACTICE_POINTS_BUDGET,

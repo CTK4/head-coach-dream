@@ -99,7 +99,7 @@ export function evaluateContractOffer(params: OfferDecisionParams): OfferDecisio
   const termDelta = -yearPenalty;
   scoreFactors.push({ label: "Contract term", delta: termDelta });
 
-  const interestDelta = ((clamp(params.interest, 0, 100) / 100) - 0.5) * 0.4;
+  const interestDelta = ((clamp(params.interest, 0, 100) / 100) - 0.5) * 0.6;
   scoreFactors.push({ label: "Team interest", delta: interestDelta });
 
   const contextAxes: Array<[string, number | undefined, number]> = [

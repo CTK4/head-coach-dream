@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "copilot/**", "codex/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate JSON
+        run: node scripts/validateJson.mjs
+
+      - name: Smoke test
+        run: npm run smoke
+
+      - name: Unit tests
+        run: npx vitest run

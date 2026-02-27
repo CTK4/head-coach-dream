@@ -60,6 +60,7 @@ import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, type TradeDeadlineError } from "@/engine/tradeDeadline";
 import {
   DEFAULT_PRACTICE_PLAN,
+  PRACTICE_EXEC_SCALE,
   applyPracticeFatigue,
   buildNextNeglectTracker,
   getEffectPreview,
@@ -1104,7 +1105,7 @@ export function applyPracticePlanForWeek(state: GameState, teamId: string, week:
       ...state,
       playerFatigueById: fatigue,
       playerDevXpById: dev,
-      weeklyFamiliarityBonus: summary.avgFamiliarityGain,
+      weeklyFamiliarityBonus: summary.avgFamiliarityGain + summary.schemeConceptBonus + Math.max(0, -summary.mentalErrorMod * PRACTICE_EXEC_SCALE) - summary.neglectPenalty * PRACTICE_EXEC_SCALE,
       weeklyMentalErrorMod: summary.mentalErrorMod,
       weeklySchemeConceptBonus: summary.schemeConceptBonus,
       weeklyLateGameRetentionBonus: summary.lateGameRetentionBonus,
@@ -6583,7 +6584,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           awayRatings: computeTeamGameRatings(action.payload.opponentTeamId),
           trackedPlayers,
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
-          practiceExecutionBonus: base.weeklyFamiliarityBonus + base.weeklySchemeConceptBonus + Math.max(0, -base.weeklyMentalErrorMod * 8) - base.cumulativeNeglectPenalty * 8,
+          practiceExecutionBonus: base.weeklyFamiliarityBonus,
           lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
           coachArchetypeId: base.coach?.archetypeId,
           coachTenureYear: base.coach?.tenureYear,
