@@ -22,13 +22,13 @@ export interface RootState {
 
 function rankTeamsByRecord(state: RootState): Array<{ teamId: string; record: TeamRecord; seed: number }> {
   return Object.entries(state.standings)
-    .sort(([, a], [, b]) => {
+    .sort(([idA, a], [idB, b]) => {
       if (b.w !== a.w) return b.w - a.w;
       const diffA = a.pf - a.pa;
       const diffB = b.pf - b.pa;
       if (diffB !== diffA) return diffB - diffA;
       if (b.pf !== a.pf) return b.pf - a.pf;
-      return 0;
+      return idA.localeCompare(idB);
     })
     .map(([teamId, record], idx) => ({ teamId, record, seed: idx + 1 }));
 }
@@ -69,26 +69,21 @@ function moveToPhase(state: RootState, phase: LeaguePhase): RootState {
   return { ...state, league: { ...state.league, phase } };
 }
 
-function simulateWeeklyGames(state: RootState): RootState {
-  return state;
-}
-
 function handleRegularSeasonGameResolution(state: RootState): RootState {
-  const updated = simulateWeeklyGames(state);
-  const isLastWeek = updated.league.weekIndex >= REGULAR_SEASON_WEEKS - 1;
+  const isLastWeek = state.league.weekIndex >= REGULAR_SEASON_WEEKS - 1;
 
   if (!isLastWeek) {
     return {
-      ...updated,
+      ...state,
       league: {
-        ...updated.league,
-        weekIndex: updated.league.weekIndex + 1,
+        ...state.league,
+        weekIndex: state.league.weekIndex + 1,
         phase: "REGULAR_SEASON",
       },
     };
   }
 
-  return seedPlayoffs(updated);
+  return seedPlayoffs(state);
 }
 
 function winnersFrom(results: Record<string, { winner: string }>, roundGames: Matchup[]): Array<{ teamId: string; seed: number }> {
@@ -128,10 +123,26 @@ function handlePlayoffRound(state: RootState): RootState {
   }
 
   if (state.league.phase === "CONFERENCE") {
-    const winners = winnersFrom(playoffs.results, playoffs.bracket.conference);
-    if (!winners.length) return state;
-    const championship = { id: "SB", home: winners[0].teamId, away: winners[0].teamId, homeSeed: winners[0].seed, awaySeed: winners[0].seed };
+    const winners = reseed(winnersFrom(playoffs.results, playoffs.bracket.conference));
+    if (winners.length === 0) return state;
+    if (winners.length < 2) {
+      // Single conference winner implies overall champion; no separate championship matchup.
+      return { ...state, league: { ...state.league, phase: "SEASON_COMPLETE" } };
+    }
+    const championship = { id: "SB", home: winners[0].teamId, away: winners[1].teamId, homeSeed: winners[0].seed, awaySeed: winners[1].seed };
     return { ...state, playoffs: { ...playoffs, bracket: { ...playoffs.bracket, championship } }, league: { ...state.league, phase: "CHAMPIONSHIP", playoffRound: 4 } };
+  }
+
+  if (state.league.phase === "CHAMPIONSHIP") {
+    const championship = playoffs.bracket.championship;
+    if (!championship) {
+      return state;
+    }
+    const championshipResult = playoffs.results[championship.id];
+    if (!championshipResult?.winner) {
+      return state;
+    }
+    return { ...state, league: { ...state.league, phase: "SEASON_COMPLETE" } };
   }
 
   return { ...state, league: { ...state.league, phase: "SEASON_COMPLETE" } };
@@ -188,6 +199,8 @@ export function advanceLeaguePhase(state: RootState): RootState {
       return handlePlayoffRound(state);
     case "SEASON_COMPLETE":
       return beginOffseason(state);
+    case "STAFF_EVAL":
+      return moveToPhase(state, "RE_SIGN");
     case "RE_SIGN":
       return moveToFranchiseTag(state);
     case "FRANCHISE_TAG":
@@ -198,6 +211,10 @@ export function advanceLeaguePhase(state: RootState): RootState {
       return finalizePostDraft(state);
     case "POST_DRAFT":
       return moveToPreseason(state);
+    case "PRESEASON":
+      return moveToPhase(state, "CUTDOWN");
+    case "CUTDOWN":
+      return moveToPhase(state, "REGULAR_SEASON");
     default:
       return state;
   }

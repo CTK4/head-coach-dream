@@ -31,7 +31,7 @@ describe("gameplan integration", () => {
     expect(stopPass.stats.home.passYards).toBeLessThan(neutral.stats.home.passYards);
   });
 
-  it("scripted opening is forced for first 5 snaps", () => {
+  it("scripted opening is forced for first 5 snaps of first drive only", () => {
     const scripted = ["INSIDE_ZONE", "DROPBACK", "SCREEN", "POWER", "QUICK_GAME"] as const;
     const sim = initGameSim({
       homeTeamId: "A",
@@ -40,9 +40,16 @@ describe("gameplan integration", () => {
       homeGameplan: { scriptedOpening: [...scripted] },
     });
 
+    // First 5 snaps of the game's first drive should follow the scripted opening.
     scripted.forEach((play, idx) => {
-      const pick = autoPickPlay({ ...sim, playNumberInDrive: idx });
+      const pick = autoPickPlay({ ...sim, driveNumber: 1, playNumberInDrive: idx });
       expect(pick).toBe(play);
     });
+
+    // On a second drive (driveNumber > 1), the script should NOT re-apply.
+    const secondDrivePicks = scripted.map((_, idx) =>
+      autoPickPlay({ ...sim, driveNumber: 2, playNumberInDrive: idx, down: 1, distance: 5 }),
+    );
+    expect(secondDrivePicks).not.toEqual(scripted);
   });
 });
