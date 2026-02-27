@@ -80,6 +80,7 @@ export default function Hub() {
       : []),
     ...(showReSign ? [{ id: "roster", title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
     ...(showTrades ? [{ id: "strategy", title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
+    ...(state.careerStage === "PLAYOFFS" ? [{ id: "hall_of_fame", title: "Playoffs", to: "/hub/playoffs", imageUrl: HUB_TILE_IMAGES.hall_of_fame }] : []),
   ];
 
   const mainTiles: HubTileConfig[] = [
@@ -105,6 +106,7 @@ export default function Hub() {
       badgeKind: "unread",
       cornerBubbleCount: Math.min(badgeCounts.newsUnread, 9),
     },
+    { id: "strategy", title: "Schedule", subtitle: "Slate + Results", to: "/hub/schedule", imageUrl: HUB_TILE_IMAGES.strategy },
     { id: "coachs_office", title: "Coach's Office", subtitle: "Profiles + Skill Tree", to: "/coachs-office", imageUrl: HUB_TILE_IMAGES.coachs_office },
     { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
     { id: "hall_of_fame", title: "League History", subtitle: "Champions + MVPs + Legends", to: "/hub/league-history", imageUrl: HUB_TILE_IMAGES.hall_of_fame },

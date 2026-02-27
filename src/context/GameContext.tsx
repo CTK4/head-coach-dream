@@ -45,7 +45,8 @@ import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } f
 import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
 import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
 import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
-import { simulatePlayoffs } from "@/engine/playoffsSim";
+import { advancePlayoffRound, buildPlayoffBracket, buildPostseasonResults, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
+import type { PlayoffsState } from "@/engine/postseason";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
@@ -145,7 +146,8 @@ export type CareerStage =
   | "TRAINING_CAMP"
   | "PRESEASON"
   | "CUTDOWNS"
-  | "REGULAR_SEASON";
+  | "REGULAR_SEASON"
+  | "PLAYOFFS";
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
@@ -273,6 +275,7 @@ const CAREER_STAGE_ORDER: CareerStage[] = [
   "PRESEASON",
   "CUTDOWNS",
   "REGULAR_SEASON",
+  "PLAYOFFS",
 ];
 
 export type InterviewResult = {
@@ -741,6 +744,7 @@ export type GameState = {
   playerAgeOffsetById: Record<string, number>;
   finances: TeamFinances;
   league: LeagueState;
+  playoffs: PlayoffsState | null;
   currentStandings: TeamStanding[];
   weeklyResults: WeekResult[];
   leagueStatLeaders: LeagueStatLeaders;
@@ -871,10 +875,15 @@ export type GameAction =
   | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
-  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number; gameType?: GameType; week?: number } }
+  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
+  | { type: "PLAYOFFS_INIT_BRACKET" }
+  | { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" }
+  | { type: "PLAYOFFS_MARK_GAME_FINAL"; payload: { gameId: string; homeScore: number; awayScore: number; winnerTeamId: string } }
+  | { type: "PLAYOFFS_ADVANCE_ROUND" }
+  | { type: "PLAYOFFS_COMPLETE_SEASON" }
   | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
   | { type: "OFFSEASON_APPLY_TASK_EFFECT"; payload: { taskId: OffseasonTaskId } }
   | { type: "OFFSEASON_COMPLETE_STEP"; payload: { stepId: OffseasonStepId } }
@@ -1271,6 +1280,7 @@ function createInitialState(): GameState {
       postJune1Sim: false,
     },
     league: initLeagueState(teams, saveSeed),
+    playoffs: null,
     currentStandings: initTeamStandings(teams),
     weeklyResults: [],
     leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
@@ -2715,9 +2725,13 @@ function computeSeasonSummary(state: GameState): SeasonSummary {
     ? "champion"
     : postseasonResult?.eliminatedIn === "SUPER_BOWL"
       ? "superbowlLoss"
-      : postseasonResult?.madePlayoffs
-        ? "divisional"
-        : "missed";
+      : postseasonResult?.eliminatedIn === "CONF_FINALS"
+        ? "conference"
+        : postseasonResult?.eliminatedIn === "DIVISIONAL"
+          ? "divisional"
+          : postseasonResult?.eliminatedIn === "WILD_CARD"
+            ? "wildCard"
+            : "missed";
 
   const volatilityEvents = (state.memoryLog ?? []).filter((event) => String(event.type ?? "").toLowerCase().includes("volatility") && Number(event.season) === Number(state.season)).length;
 
@@ -6906,6 +6920,81 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       return runDevAction(state, action.payload.action, action.payload.payload);
     }
+    case "PLAYOFFS_INIT_BRACKET": {
+      const playoffs = buildPlayoffBracket({ league: state.league, season: Number(state.season ?? 2026) });
+      return { ...state, playoffs, careerStage: "PLAYOFFS" };
+    }
+    case "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND": {
+      if (!state.playoffs) return state;
+      const userTeamId = state.acceptedOffer?.teamId;
+      const simmed = simulateCpuPlayoffGamesForRound({ playoffs: state.playoffs, userTeamId, seed: Number(state.careerSeed ?? state.saveSeed ?? 1) ^ hashStr(`playoffs:${state.playoffs.round}`) });
+      return { ...state, playoffs: { ...state.playoffs, completedGames: simmed.completedGames, pendingUserGame: simmed.pendingUserGame } };
+    }
+    case "PLAYOFFS_MARK_GAME_FINAL": {
+      if (!state.playoffs) return state;
+      return {
+        ...state,
+        playoffs: {
+          ...state.playoffs,
+          pendingUserGame: undefined,
+          completedGames: {
+            ...state.playoffs.completedGames,
+            [action.payload.gameId]: {
+              homeScore: action.payload.homeScore,
+              awayScore: action.payload.awayScore,
+              winnerTeamId: action.payload.winnerTeamId,
+            },
+          },
+        },
+      };
+    }
+    case "PLAYOFFS_ADVANCE_ROUND": {
+      if (!state.playoffs) return state;
+      const advanced = advancePlayoffRound(state.playoffs);
+      return { ...state, playoffs: advanced };
+    }
+    case "PLAYOFFS_COMPLETE_SEASON": {
+      if (!state.playoffs) return state;
+      const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
+      let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason }, careerStage: "SEASON_AWARDS" };
+      out = applySeasonMilestoneAwards(out);
+      const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
+      const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
+      const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
+      for (const ps of seasonStats) {
+        const pid = String((ps as any).playerId ?? "");
+        if (!pid) continue;
+        nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
+      }
+      const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
+      const careerById = { ...(out.playerCareerStatsById ?? {}) };
+      for (const ps of seasonStats) {
+        const pid = String((ps as any).playerId ?? "");
+        if (!pid) continue;
+        const cur = { playerId: pid, careerStats: careerById[pid] };
+        const updated = finalizeCareerStats(cur, ps);
+        careerById[pid] = updated.careerStats;
+      }
+      const nextSeason = Number(out.season ?? 2026) + 1;
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const nextSchedule = generateLeagueSchedule(teams, Number(out.saveSeed ?? 1) + nextSeason * 1337);
+      return {
+        ...out,
+        coach: coachWithCareer,
+        playerSeasonStatsById: nextSeasonStatsById,
+        playerCareerStatsById: careerById,
+        leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
+        season: nextSeason,
+        week: 0,
+        hub: {
+          ...out.hub,
+          schedule: nextSchedule,
+          preseasonWeek: 1,
+          regularSeasonWeek: 1,
+          news: [{ id: `NEWS_${Date.now()}`, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: Date.now(), category: "LEAGUE" }, ...(out.hub.news ?? [])],
+        },
+      };
+    }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
       logInfo("game.sim.start", { phase: state.phase, season: state.season, week: state.week, driveIndex: state.game.driveNumber, playIndex: state.game.playNumberInDrive, saveId: getActiveSaveId(), meta: { gameType, opponentTeamId: action.payload.opponentTeamId } });
@@ -6927,6 +7016,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           seed: (base.careerSeed ?? base.saveSeed) ^ hashStr(`game:${gameType}:${action.payload.weekNumber ?? action.payload.week ?? 0}:${teamId}:${action.payload.opponentTeamId}`),
           weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
+          playoffGameId: action.payload.playoffGameId,
           homeRatings: computeTeamGameRatings(base, teamId),
           awayRatings: computeTeamGameRatings(base, action.payload.opponentTeamId),
           trackedPlayers,
@@ -6959,6 +7049,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
       if (!appliedPlayWeek.applied) return state;
       nextWithPractice = appliedPlayWeek.state;
+
+      if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
+        const winnerTeamId = state.game.homeScore >= state.game.awayScore ? state.game.homeTeamId : state.game.awayTeamId;
+        const finalizedBox = (stepped.sim as any).boxScore;
+        let out = gameReducer({
+          ...nextWithPractice,
+          gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
+          game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        }, { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: state.game.homeScore, awayScore: state.game.awayScore, winnerTeamId } });
+        out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+        const games = out.playoffs ? getPlayoffRoundGames(out.playoffs) : [];
+        const isRoundDone = out.playoffs ? games.every((g) => Boolean(out.playoffs?.completedGames[g.gameId])) : false;
+        if (isRoundDone) {
+          if (out.playoffs?.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+          out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
+          out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+          const games2 = out.playoffs ? getPlayoffRoundGames(out.playoffs) : [];
+          if ((out.playoffs?.round === "SUPER_BOWL") && games2.length > 0 && games2.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]))) {
+            return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+          }
+        }
+        return out;
+      }
 
       const schedule = state.hub.schedule;
       if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
@@ -7107,60 +7220,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
         if (week >= REGULAR_SEASON_WEEKS) {
           out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
-          const { postseason, championTeamId } = simulatePlayoffs({
-            league: out.league,
-            season: Number(out.season ?? 2026),
-            seed: Number(out.careerSeed ?? out.saveSeed ?? 1) ^ hashStr(`migrate:postseason`),
-          });
-          out = { ...out, league: { ...out.league, postseason } };
-          out = applySeasonMilestoneAwards(out);
-          const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
-          const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
-          const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
-          for (const ps of seasonStats) {
-            const pid = String((ps as any).playerId ?? "");
-            if (!pid) continue;
-            nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
-          }
-          const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
-          const careerById = { ...(out.playerCareerStatsById ?? {}) };
-          for (const ps of seasonStats) {
-            const pid = String((ps as any).playerId ?? "");
-            if (!pid) continue;
-            const cur = { playerId: pid, careerStats: careerById[pid] };
-            const updated = finalizeCareerStats(cur, ps);
-            careerById[pid] = updated.careerStats;
-          }
-          out = { ...out, coach: coachWithCareer, playerSeasonStatsById: nextSeasonStatsById, playerCareerStatsById: careerById, leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord) };
-          const nextSeason = Number(out.season ?? 2026) + 1;
-          const teams = getTeams()
-            .filter((t) => t.isActive)
-            .map((t) => t.teamId);
-          const nextSchedule = generateLeagueSchedule(teams, Number(out.saveSeed ?? 1) + nextSeason * 1337);
-
-          out = {
-            ...out,
-            season: nextSeason,
-            week: 0,
-            league: out.league,
-            hub: {
-              ...out.hub,
-              schedule: nextSchedule,
-              preseasonWeek: 1,
-              regularSeasonWeek: 1,
-              news: [
-                {
-                  id: `NEWS_${Date.now()}`,
-                  title: `${championTeamId} crowned champion`,
-                  body: "The season is complete. Offseason begins now.",
-                  createdAt: Date.now(),
-                  category: "LEAGUE",
-                },
-                ...(out.hub.news ?? []),
-              ],
-            },
-            careerStage: "SEASON_AWARDS",
-          };
+          out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
+          out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
         }
       }
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
@@ -7568,6 +7629,7 @@ function loadState(): GameState {
         rejectionCountByPlayerId: { ...initial.resign.rejectionCountByPlayerId, ...((migrated as any).resign?.rejectionCountByPlayerId ?? {}) },
       },
       league: migrated.league ?? initial.league,
+      playoffs: (migrated as any).playoffs ?? initial.playoffs,
       game: { ...initial.game, ...migrated.game },
       gameHistory: Array.isArray((migrated as any).gameHistory) ? (migrated as any).gameHistory : [],
       playerSeasonStatsById: { ...(initial.playerSeasonStatsById ?? {}), ...((migrated as any).playerSeasonStatsById ?? {}) },
