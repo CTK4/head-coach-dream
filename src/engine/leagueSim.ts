@@ -3,6 +3,7 @@ import type { GameType, LeagueSchedule, Matchup } from "@/engine/schedule";
 import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
 import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
 import type { PostseasonState } from "@/engine/postseason";
+import type { LeaguePhase, LeaguePlayoffs } from "@/engine/leaguePhase";
 import { CURRENT_SEASON_YEAR } from "@/config/season";
 import { getTeamById, getTeamRosterPlayers } from "@/data/leagueDb";
 import { computeStandings, type TeamStanding } from "@/engine/standings";
@@ -28,6 +29,10 @@ export type WeekResultRecord = {
 };
 
 export type LeagueState = {
+  phase: LeaguePhase;
+  weekIndex: number;
+  playoffRound?: number;
+  playoffs: LeaguePlayoffs;
   standings: Record<string, TeamStandingRecord>;
   results: WeekResultRecord[];
   gmByTeamId: Record<string, string>;
@@ -87,7 +92,21 @@ export function initLeagueState(teamIds: string[], season = CURRENT_SEASON_YEAR,
   const gmByTeamId: Record<string, string> = {};
   for (let i = 0; i < teamIds.length; i += 1) gmByTeamId[teamIds[i]] = gmPool[(season + i) % gmPool.length];
 
-  return { standings, results: [], gmByTeamId, postseason: { season, resultsByTeamId: {} }, week: 1, tradeDeadlineWeek };
+  return {
+    phase: "PRESEASON",
+    weekIndex: 1,
+    playoffs: {
+      bracket: { wildCard: [], divisional: [], conference: [], championship: null },
+      results: {},
+      activeSeasonTeams: [...teamIds],
+    },
+    standings,
+    results: [],
+    gmByTeamId,
+    postseason: { season, resultsByTeamId: {} },
+    week: 1,
+    tradeDeadlineWeek,
+  };
 }
 
 function applyResult(standings: Record<string, TeamStandingRecord>, r: WeekResultRecord): void {
