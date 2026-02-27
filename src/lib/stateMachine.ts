@@ -55,7 +55,7 @@ export class StateMachine {
 
     if (p.includes("RETENTION") || p.includes("RESIGN") || p.includes("PHASE_2_RETENTION")) return PhaseKeyEnum.PHASE_2_RETENTION;
     if (p.includes("COMBINE")) return PhaseKeyEnum.PHASE_3_COMBINE;
-    if (p.includes("FREE_AGENCY")) return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
+    if (p.includes("FREE_AGENCY") || p.includes("TAMPERING")) return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
     if (p.includes("DRAFT")) return PhaseKeyEnum.DRAFT;
     if (p.includes("REGULAR") || p.includes("WEEK")) return PhaseKeyEnum.REGULAR_SEASON_WEEK;
     return PhaseKeyEnum.UNKNOWN;

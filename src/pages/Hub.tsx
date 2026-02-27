@@ -24,6 +24,7 @@ type HubTileConfig = {
   badgeKind?: HubBadgeKind;
   cornerBubbleCount?: number;
   imageObjectPosition?: string;
+  dataTest?: string;
 };
 
 function clampInt(n: number, min: number, max: number) {
@@ -42,6 +43,8 @@ export default function Hub() {
   }, [state.unreadNewsCount]);
 
   const nextStage = nextStageForNavigate(state.careerStage);
+  const missingCoordinators = !state.staff.ocId || !state.staff.dcId || !state.staff.stcId;
+  const canHireCoordinatorsInHub = ["OFFSEASON_HUB", "RESIGN", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUTDOWNS"].includes(state.careerStage);
   const showTrades = isTradesAllowed(state);
   const showReSign = isReSignAllowed(state);
   const nextLabel = stageLabel(nextStage);
@@ -72,6 +75,9 @@ export default function Hub() {
 
   const optionalTiles: HubTileConfig[] = [
     ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts", title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
+    ...(missingCoordinators && canHireCoordinatorsInHub
+      ? [{ id: "staff", title: "Hire Coordinators", subtitle: "OC · DC · STC", to: "/hub/coordinator-hiring", imageUrl: HUB_TILE_IMAGES.staff, dataTest: "hub-hire-coordinators" }]
+      : []),
     ...(showReSign ? [{ id: "roster", title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
     ...(showTrades ? [{ id: "strategy", title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
   ];
@@ -114,7 +120,9 @@ export default function Hub() {
 
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           {optionalTiles.map((tile) => (
-            <HubTile key={`${tile.id}-${tile.to}`} {...tile} />
+            <div key={`${tile.id}-${tile.to}`} data-test={tile.dataTest}>
+              <HubTile {...tile} />
+            </div>
           ))}
           {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
           {mainTiles.map((tile) => (
