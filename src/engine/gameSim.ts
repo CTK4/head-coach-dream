@@ -14,6 +14,7 @@ import { ratingZ } from "@/engine/physics/ratingsToKinematics";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
+import type { WeeklyGameplan } from "@/engine/gameplan";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -258,6 +259,8 @@ export type GameSim = {
   coachArchetypeId?: string;
   coachTenureYear: number;
   coachUnlockedPerkIds?: string[];
+  homeGameplan?: WeeklyGameplan;
+  awayGameplan?: WeeklyGameplan;
   lastPlayResult?: PlayResult;
   homeGameplan?: TeamGameplan;
   awayGameplan?: TeamGameplan;
@@ -1367,8 +1370,8 @@ export function initGameSim(params: {
   lateGamePracticeRetentionBonus?: number;
   coachArchetypeId?: string;
   coachTenureYear?: number;
-  homeGameplan?: TeamGameplan;
-  awayGameplan?: TeamGameplan;
+  homeGameplan?: WeeklyGameplan;
+  awayGameplan?: WeeklyGameplan;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1555,6 +1558,10 @@ function pickFromWeights(sim: GameSim, runWeight: number, passWeight: number): P
 }
 
 export function autoPickPlay(sim: GameSim): PlayType {
+  const offensePlan = sim.possession === "HOME" ? sim.homeGameplan : sim.awayGameplan;
+  if ((sim.driveNumber <= 2 || (sim.driveNumber === 1 && sim.playNumberInDrive < 5)) && offensePlan?.scriptedOpening?.[sim.playNumberInDrive]) {
+    return offensePlan.scriptedOpening[sim.playNumberInDrive];
+  }
   const q = sim.clock.quarter;
   const t = sim.clock.timeRemainingSec;
   const diff = sim.homeScore - sim.awayScore;
@@ -1580,6 +1587,10 @@ export function autoPickPlay(sim: GameSim): PlayType {
   }
 
   return pickFromWeights(sim, runWeight, passWeight);
+  if (sim.distance >= 9) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "QUICK_GAME" : "DROPBACK";
+  if (sim.distance <= 3) return offensePlan?.offensiveFocus === "PASS_HEAVY" ? "QUICK_GAME" : "INSIDE_ZONE";
+  if (sim.distance <= 6) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "QUICK_GAME";
+  return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "DROPBACK";
 }
 
 export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: TeamGameplan; awayGameplan?: TeamGameplan }) {

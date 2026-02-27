@@ -10,6 +10,7 @@ export default function PlayoffsPage() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   if (state.careerStage !== "PLAYOFFS") return <Navigate to="/hub" replace />;
+  if (!["WILD_CARD", "DIVISIONAL", "CONFERENCE", "CHAMPIONSHIP"].includes(state.league.phase)) return <Navigate to="/hub" replace />;
   const playoffs = state.playoffs;
   if (!playoffs) return <div className="p-4">No playoff bracket available.</div>;
 
@@ -25,6 +26,10 @@ export default function PlayoffsPage() {
     if (!pending) return;
     const myTeam = state.acceptedOffer?.teamId;
     const opp = pending.homeTeamId === myTeam ? pending.awayTeamId : pending.homeTeamId;
+    if (state.teamGameplans?.[String(state.acceptedOffer?.teamId ?? "")]?.locked !== true) {
+      navigate("/hub/gameplan");
+      return;
+    }
     dispatch({ type: "START_GAME", payload: { opponentTeamId: opp, weekType: "PLAYOFFS", weekNumber: 1, playoffGameId: pending.gameId } });
     navigate("/hub/playcall");
   };
