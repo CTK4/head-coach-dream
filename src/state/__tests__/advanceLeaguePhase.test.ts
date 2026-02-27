@@ -62,9 +62,7 @@ describe("advanceLeaguePhase", () => {
     const conf = state.playoffs!.bracket.conference;
     state = { ...state, playoffs: { ...state.playoffs!, results: { ...state.playoffs!.results, [conf[0].id]: { winner: conf[0].home } } } };
     state = advanceLeaguePhase(state);
-    expect(state.league.phase).toBe("CHAMPIONSHIP");
-
-    state = advanceLeaguePhase(state);
+    // Single conference game → 1 winner → champion, go directly to SEASON_COMPLETE
     expect(state.league.phase).toBe("SEASON_COMPLETE");
   });
 
@@ -72,7 +70,8 @@ describe("advanceLeaguePhase", () => {
     let state: RootState = { ...baseState(), league: { phase: "SEASON_COMPLETE", weekIndex: 16, seasonYear: 2026 } };
     state = advanceLeaguePhase(state);
     expect(state.league.phase).toBe("STAFF_EVAL");
-    state = { ...state, league: { ...state.league, phase: "RE_SIGN" } };
+    state = advanceLeaguePhase(state);
+    expect(state.league.phase).toBe("RE_SIGN");
     state = advanceLeaguePhase(state);
     expect(state.league.phase).toBe("FRANCHISE_TAG");
     state = advanceLeaguePhase(state);
@@ -84,5 +83,9 @@ describe("advanceLeaguePhase", () => {
     state = advanceLeaguePhase(state);
     expect(state.league.phase).toBe("PRESEASON");
     expect(state.league.seasonYear).toBe(2027);
+    state = advanceLeaguePhase(state);
+    expect(state.league.phase).toBe("CUTDOWN");
+    state = advanceLeaguePhase(state);
+    expect(state.league.phase).toBe("REGULAR_SEASON");
   });
 });

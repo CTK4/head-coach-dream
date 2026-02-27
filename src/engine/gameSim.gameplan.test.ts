@@ -44,5 +44,11 @@ describe("gameplan integration", () => {
       const pick = autoPickPlay({ ...sim, playNumberInDrive: idx });
       expect(pick).toBe(play);
     });
+
+    // Script should NOT re-apply in a subsequent drive (driveNumber > 1)
+    const secondDrivePicks = scripted.map((_, idx) =>
+      autoPickPlay({ ...sim, driveNumber: 2, playNumberInDrive: idx }),
+    );
+    expect(secondDrivePicks).not.toEqual([...scripted]);
   });
 });

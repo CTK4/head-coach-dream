@@ -1108,7 +1108,7 @@ function isGranularPlay(playType: PlayType): boolean {
     || playType === "QUICK_GAME" || playType === "DROPBACK" || playType === "SCREEN";
 }
 
-function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}) {
+function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel } = {}) {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
     return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE") };
@@ -1123,8 +1123,14 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     let resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey);
     const defensePlan = defenseGameplan(sim);
     if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
-    if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
-    if (defensePlan?.pressureRate === "HIGH" && !isRunP) resolved = { ...resolved, sack: resolved.sack || rng() < 0.12 };
+    if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.9) };
+    if (defensePlan?.pressureRate === "HIGH" && !isRunP) {
+      const forcedSack = resolved.sack || rng() < 0.12;
+      if (forcedSack) {
+        const lossYards = resolved.yards <= 0 ? resolved.yards : -Math.max(1, Math.abs(resolved.yards));
+        resolved = { ...resolved, sack: true, incomplete: false, yards: lossYards };
+      }
+    }
     const { yards, tags, sack, incomplete, turnover: isTO } = resolved;
 
     // Update stats
@@ -1495,7 +1501,7 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   } else {
     const planTempo = gameplanAdjustedTempo(s);
     const planAggression = gameplanAggression(s);
-    const resolved = resolveNormalPlay(s, rng, playType, snapKey, { aggression: planAggression, tempo: planTempo });
+    const resolved = resolveNormalPlay(s, rng, playType, snapKey, { aggression: planAggression });
     s = resolved.sim;
     tag = resolved.tag;
     live = resolved.live;
@@ -1566,6 +1572,21 @@ export function autoPickPlay(sim: GameSim): PlayType {
   if ((q === 2 || q === 4) && t <= 15 && myDiff < 0 && !sim.clock.clockRunning) return "SPIKE";
   if (q === 4 && myDiff > 0 && t <= 120) return "KNEEL";
   if (q === 4 && myDiff < 0 && t <= 90) return sim.distance >= 8 ? "DROPBACK" : "QUICK_GAME";
+
+  const script = plan?.scriptedOpening ?? [];
+  if (sim.driveNumber === 1 && sim.playNumberInDrive < 5 && script[sim.playNumberInDrive]) return script[sim.playNumberInDrive];
+
+  let runWeight = sim.distance <= 3 ? 0.7 : sim.distance <= 6 ? 0.45 : 0.2;
+  let passWeight = 1 - runWeight;
+  if (plan?.offensiveFocus === "RUN_HEAVY") {
+    runWeight *= 1.15;
+    passWeight *= 0.9;
+  } else if (plan?.offensiveFocus === "PASS_HEAVY") {
+    runWeight *= 0.9;
+    passWeight *= 1.15;
+  }
+
+  return pickFromWeights(sim, runWeight, passWeight);
   if (sim.distance >= 9) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "QUICK_GAME" : "DROPBACK";
   if (sim.distance <= 3) return offensePlan?.offensiveFocus === "PASS_HEAVY" ? "QUICK_GAME" : "INSIDE_ZONE";
   if (sim.distance <= 6) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "QUICK_GAME";
