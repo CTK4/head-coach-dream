@@ -6,6 +6,7 @@ import {
   clearPersonnelTeam,
   cutPlayerToFreeAgent,
   expireContract,
+  getContractById,
   getPersonnelById,
   getPersonnelContract,
   getPlayers,
@@ -2397,6 +2398,32 @@ function seasonRollover(state: GameState): GameState {
       playerTeamOverrides[pid] = "FREE_AGENT";
       delete playerContractOverrides[pid];
     }
+  }
+
+  for (const p of getPlayers()) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+
+    const effectiveTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    if (!effectiveTeamId || effectiveTeamId === "FREE_AGENT") continue;
+
+    const override = playerContractOverrides[playerId];
+    const overrideCoversNextSeason =
+      !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
+    if (overrideCoversNextSeason) continue;
+
+    const contractId = String((p as any).contractId ?? "");
+    if (!contractId) continue;
+
+    const contract = getContractById(contractId);
+    if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
+
+    const baseEndSeason = Number((contract as any).endSeason ?? 0);
+    if (nextSeason <= baseEndSeason) continue;
+
+    expireContract(contractId, baseEndSeason);
+    cutPlayerToFreeAgent(playerId);
+    playerTeamOverrides[playerId] = "FREE_AGENT";
   }
 
   let cash = state.finances.cash;
