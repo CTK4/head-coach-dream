@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
+import { getPlayersByTeam, getPlayers } from "@/data/leagueDb";
 import { IntelMeters } from "@/components/IntelMeters";
 import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 import { getPositionLabel } from "@/lib/displayLabels";
@@ -8,11 +9,31 @@ import { getPositionLabel } from "@/lib/displayLabels";
 const TABS = ["Top", "Offense", "Defense", "Special"];
 const groupTab = (pos: string) => (["QB", "RB", "WR", "TE", "OL"].includes(pos) ? "Offense" : ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? "Defense" : ["K", "P"].includes(pos) ? "Special" : "Top");
 
+export function selectFreeAgencyPool(state: any) {
+  return getEffectiveFreeAgents(state).map((p: any) => ({
+    id: String(p.playerId),
+    name: String(p.fullName),
+    pos: String(p.pos ?? "UNK").toUpperCase(),
+    age: Number(p.age ?? 0),
+    ovr: Number(p.overall ?? 0),
+  }));
+}
+
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
   const [tab, setTab] = useState("Top");
   const [hideSigned, setHideSigned] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const effectiveFaCount = getEffectiveFreeAgents(state).length;
+    if (effectiveFaCount > 0) return;
+    const baseFaCount = getPlayersByTeam("FREE_AGENT").length;
+    const totalPlayers = getPlayers().length;
+    const overrideCount = Object.keys(state.playerTeamOverrides ?? {}).length;
+    console.info(`[FA_DIAGNOSTIC] Empty FA pool detected: totalPlayers=${totalPlayers}, baseFa=${baseFaCount}, effectiveFa=${effectiveFaCount}, teamOverrides=${overrideCount}`);
+  }, [state]);
 
   useEffect(() => {
     if (state.freeAgency.initStatus !== "idle") return;
@@ -41,17 +62,7 @@ export default function FreeAgency() {
     };
   }, [dispatch, state.freeAgency.initStatus]);
 
-  const pool = useMemo(
-    () =>
-      getEffectiveFreeAgents(state).map((p: any) => ({
-        id: String(p.playerId),
-        name: String(p.fullName),
-        pos: String(p.pos ?? "UNK").toUpperCase(),
-        age: Number(p.age ?? 0),
-        ovr: Number(p.overall ?? 0),
-      })),
-    [state]
-  );
+  const pool = useMemo(() => selectFreeAgencyPool(state), [state]);
 
   const shown = useMemo(
     () =>

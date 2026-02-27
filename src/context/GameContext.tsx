@@ -49,7 +49,7 @@ import { simulatePlayoffs } from "@/engine/playoffsSim";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
-import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
 import { computeCapLedger } from "@/engine/capLedger";
@@ -2388,6 +2388,54 @@ function shouldRecomputeDepthOnWeekly(_state: GameState) {
   return false;
 }
 
+const MIN_FREE_AGENT_POOL = 80;
+
+function ensureMinimumFreeAgencyPool(state: GameState): GameState {
+  const existing = getEffectiveFreeAgents(state);
+  if (existing.length >= MIN_FREE_AGENT_POOL) return state;
+
+  const need = MIN_FREE_AGENT_POOL - existing.length;
+  const countsByTeam: Record<string, number> = {};
+  for (const p of getEffectivePlayers(state)) {
+    const teamId = String((p as any).teamId ?? "");
+    if (!teamId || teamId === "FREE_AGENT") continue;
+    countsByTeam[teamId] = (countsByTeam[teamId] ?? 0) + 1;
+  }
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const candidates = getEffectivePlayers(state)
+    .filter((p: any) => {
+      const teamId = String(p.teamId ?? "");
+      if (!teamId || teamId === "FREE_AGENT") return false;
+      if (teamId === userTeamId) return false;
+      return (countsByTeam[teamId] ?? 0) > 53;
+    })
+    .slice()
+    .sort((a: any, b: any) => {
+      const ovrDiff = Number(a.overall ?? 0) - Number(b.overall ?? 0);
+      if (ovrDiff !== 0) return ovrDiff;
+      const ageDiff = Number(b.age ?? 0) - Number(a.age ?? 0);
+      if (ageDiff !== 0) return ageDiff;
+      return String(a.playerId).localeCompare(String(b.playerId));
+    });
+
+  if (!candidates.length) return state;
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  let moved = 0;
+  for (const p of candidates) {
+    if (moved >= need) break;
+    const teamId = String((p as any).teamId ?? "");
+    if ((countsByTeam[teamId] ?? 0) <= 53) continue;
+    countsByTeam[teamId] -= 1;
+    playerTeamOverrides[String((p as any).playerId)] = "FREE_AGENT";
+    moved += 1;
+  }
+
+  if (moved === 0) return state;
+  return { ...state, playerTeamOverrides };
+}
+
 function seasonRollover(state: GameState): GameState {
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
@@ -2424,7 +2472,6 @@ function seasonRollover(state: GameState): GameState {
     if (nextSeason <= baseEndSeason) continue;
 
     expireContract(contractId, baseEndSeason);
-    cutPlayerToFreeAgent(playerId);
     playerTeamOverrides[playerId] = "FREE_AGENT";
   }
 
@@ -3742,7 +3789,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const fresh = createInitialState();
-      return {
+      const next = {
         ...fresh,
         phase: "CREATE",
         acceptedOffer: action.payload.offer,
@@ -3757,6 +3804,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           teamLocked: true,
         },
       };
+      return ensureMinimumFreeAgencyPool(next as GameState);
     }
     case "INIT_FREE_PLAY_CAREER": {
       const { teamId, teamName, offer } = action.payload;
@@ -3802,7 +3850,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           cash: financeRow?.cash ?? state.teamFinances?.cash ?? 0,
         },
       };
-      return applyFinances(next as GameState);
+      return ensureMinimumFreeAgencyPool(applyFinances(next as GameState));
     }
     case "SET_COACH": {
       const nextCoach = { ...state.coach, ...action.payload };
@@ -7127,6 +7175,13 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     resign: (oldState as any).resign ?? { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     ui: (oldState as any).ui ?? {},
   };
+
+  if (s.offseason?.stepId === OffseasonStepEnum.TAMPERING) {
+    s.offseason = { ...s.offseason, stepId: OffseasonStepEnum.FREE_AGENCY };
+  }
+  if (s.careerStage === "TAMPERING") {
+    s.careerStage = "FREE_AGENCY";
+  }
   const scoutingState = (s as any).scoutingState;
   if (scoutingState?.combine) {
     const legacyDay = Number(scoutingState.combine.day ?? 1);
