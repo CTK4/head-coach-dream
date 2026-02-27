@@ -127,6 +127,7 @@ import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassId
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
+import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -667,6 +668,10 @@ export type GameState = {
   orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
   staffOffers: StaffOffer[];
+  playbooks: {
+    offensePlaybookId?: OffenseSchemeId;
+    defensePlaybookId?: DefenseSchemeId;
+  };
   scheme?: {
     offense?: {
       style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
@@ -850,6 +855,7 @@ export type GameAction =
   | { type: "STAFF_COUNTER_OFFER"; payload: { offerId: string } }
   | { type: "STAFF_COUNTER_OFFER_RESPONSE"; payload: { offerId: string; accepted: boolean } }
   | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
+  | { type: "SET_PLAYBOOK"; payload: { side: "OFFENSE" | "DEFENSE"; playbookId: string } }
   | { type: "SET_STRATEGY_PRIORITIES"; payload: { positions: PriorityPos[] } }
   | { type: "SET_GM_MODE"; payload: { gmMode: GmMode } }
   | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
@@ -892,6 +898,8 @@ export type GameAction =
   | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 } }
   | { type: "SCOUT_COMBINE_FOCUS"; payload: { prospectId: string } }
   | { type: "SCOUT_COMBINE_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_COMBINE_SELECT"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_COMBINE_RUN_INTERVIEWS"; payload: { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
   | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
@@ -1223,6 +1231,10 @@ function createInitialState(): GameState {
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
     staffOffers: [],
+    playbooks: {
+      offensePlaybookId: DEFAULT_OFFENSE_SCHEME_ID,
+      defensePlaybookId: DEFAULT_DEFENSE_SCHEME_ID,
+    },
     scheme: {
       offense: { style: "BALANCED", tempo: "NORMAL", schemeId: "PRO_STYLE_BALANCED" },
       defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
@@ -4029,7 +4041,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
     case "SET_SCHEME":
-      return { ...state, scheme: { ...state.scheme, ...action.payload } };
+      return {
+        ...state,
+        scheme: { ...state.scheme, ...action.payload },
+        playbooks: {
+          ...state.playbooks,
+          offensePlaybookId: action.payload.offense?.schemeId ?? state.playbooks.offensePlaybookId,
+          defensePlaybookId: action.payload.defense?.schemeId ?? state.playbooks.defensePlaybookId,
+        },
+      };
     case "SET_STRATEGY_PRIORITIES": {
       const positions = normalizePriorityList(action.payload.positions);
       return { ...state, strategy: { ...state.strategy, draftFaPriorities: positions } };
@@ -4206,6 +4226,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       });
 
       nextState = addStaffSalaryAndCash({ ...nextState, staff }, action.payload.personId, action.payload.salary);
+      const person = getPersonnelById(action.payload.personId) as any;
+      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
+      let nextPlaybooks = { ...nextState.playbooks };
+      if (action.payload.role === "OC" && !nextPlaybooks.offensePlaybookId) {
+        nextPlaybooks.offensePlaybookId = (schemeRaw || DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId;
+      }
+      if (action.payload.role === "DC" && !nextPlaybooks.defensePlaybookId) {
+        nextPlaybooks.defensePlaybookId = (schemeRaw || DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId;
+      }
+      nextState = { ...nextState, playbooks: nextPlaybooks };
 
       const staffComplete = !!(staff.ocId && staff.dcId && staff.stcId);
 
@@ -4235,6 +4265,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         phase: staffComplete ? "HUB" : nextState.phase,
         careerStage: staffComplete ? "OFFSEASON_HUB" : nextState.careerStage,
         memoryLog: addMemoryEvent(nextState, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
+      };
+    }
+
+    case "SET_PLAYBOOK": {
+      if (action.payload.side === "OFFENSE") {
+        return {
+          ...state,
+          playbooks: { ...state.playbooks, offensePlaybookId: action.payload.playbookId as OffenseSchemeId },
+          scheme: { ...state.scheme, offense: { ...state.scheme?.offense, schemeId: action.payload.playbookId as OffenseSchemeId } as any },
+        };
+      }
+      return {
+        ...state,
+        playbooks: { ...state.playbooks, defensePlaybookId: action.payload.playbookId as DefenseSchemeId },
+        scheme: { ...state.scheme, defense: { ...state.scheme?.defense, schemeId: action.payload.playbookId as DefenseSchemeId } as any },
       };
     }
     case "ASSISTANT_ATTEMPT_HIRE": {
@@ -4789,7 +4834,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           scoutProfiles,
           myBoardOrder: draftClass.map((p) => String(p.id)),
           bigBoard: { tiers, tierByProspectId: tierBy },
-          combine: { generated: false, day: 1, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
+          combine: { generated: false, day: 1, selectedByDay: {}, interviewResultsByProspectId: {}, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
           interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {} },
           medical: { requests: {} },
@@ -5075,6 +5120,58 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           combine: {
             ...s.combine,
             recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
+          },
+        },
+      };
+    }
+
+
+    case "SCOUT_COMBINE_SELECT": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const day = s.combine.day;
+      const category = action.payload.category;
+      const selectedByDay = { ...(s.combine.selectedByDay ?? {}) };
+      const daySelections = { ...(selectedByDay[day] ?? {}) };
+      const current = [...(daySelections[category] ?? [])];
+      const has = current.includes(action.payload.prospectId);
+      const next = has ? current.filter((id) => id !== action.payload.prospectId) : current.length >= 10 ? current : [...current, action.payload.prospectId];
+      daySelections[category] = next;
+      selectedByDay[day] = daySelections;
+      return { ...state, scoutingState: { ...s, combine: { ...s.combine, selectedByDay } } };
+    }
+
+    case "SCOUT_COMBINE_RUN_INTERVIEWS": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const day = s.combine.day;
+      const category = action.payload.category;
+      const selected = s.combine.selectedByDay?.[day]?.[category] ?? [];
+      if (!selected.length) return state;
+      const interviewResultsByProspectId = { ...(s.combine.interviewResultsByProspectId ?? {}) };
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      for (const prospectId of selected) {
+        const current = interviewResultsByProspectId[prospectId] ?? {};
+        const pct = Math.round(15 + detRand2(state.saveSeed, `combine:interview:${day}:${category}:${prospectId}`) * 75);
+        interviewResultsByProspectId[prospectId] = category === "IQ"
+          ? { ...current, intelligencePct: pct, notes: `${category}: ${pct}%` }
+          : { ...current, characterPct: pct, notes: `${category}: ${pct}%` };
+      }
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            interviewResultsByProspectId,
+            recapByDay: {
+              ...s.combine.recapByDay,
+              [day]: {
+                ...recap,
+                interviewedProspectIds: Array.from(new Set([...(recap.interviewedProspectIds ?? []), ...selected])),
+                interviewsUsed: (recap.interviewsUsed ?? 0) + selected.length,
+              },
+            },
           },
         },
       };
@@ -7099,6 +7196,10 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         schemeId: oldState.scheme?.defense?.schemeId ?? "MULTIPLE_HYBRID",
       },
     },
+    playbooks: {
+      offensePlaybookId: ((oldState as any).playbooks?.offensePlaybookId ?? oldState.scheme?.offense?.schemeId ?? DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId,
+      defensePlaybookId: ((oldState as any).playbooks?.defensePlaybookId ?? oldState.scheme?.defense?.schemeId ?? DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId,
+    },
     strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
     hub: {
@@ -7215,6 +7316,8 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     scoutingState.combine = {
       ...scoutingState.combine,
       day: normalizedDay,
+      selectedByDay: scoutingState.combine.selectedByDay ?? {},
+      interviewResultsByProspectId: scoutingState.combine.interviewResultsByProspectId ?? {},
       days: nextDays,
       prospects,
       recapByDay: Object.fromEntries(

@@ -267,9 +267,9 @@ export default function ScoutingCombine() {
                     type="button"
                     className={`min-h-11 rounded border px-3 text-xs sm:text-sm ${addInterviewDisabled ? "cursor-not-allowed border-white/10 text-white/40" : "border-amber-500 text-amber-200"}`}
                     disabled={addInterviewDisabled}
-                    onClick={() => dispatch({ type: "SCOUT_COMBINE_INTERVIEW", payload: { prospectId: id, category: iqReveal <= charReveal ? "IQ" : "LEADERSHIP" } })}
+                    onClick={() => dispatch({ type: "SCOUT_COMBINE_SELECT", payload: { prospectId: id, category: iqReveal <= charReveal ? "IQ" : "LEADERSHIP" } })}
                   >
-                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : !interviewsEnabled ? "DAY 4 ONLY" : "[ADD INTERVIEW]"}
+                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : !interviewsEnabled ? "DAY 4 ONLY" : "[SELECT]"}
                   </button>
                   <button type="button" className="min-h-11 rounded border border-sky-500 px-3 text-xs text-sky-200 sm:text-sm" onClick={() => openProspectProfile(id)}>
                     [VIEW PROFILE]
@@ -287,10 +287,8 @@ export default function ScoutingCombine() {
           {shortlist.map((prospect) => {
             const combinedReveal = Math.max(prospect.profile.clarity.CHAR ?? 0, prospect.profile.clarity.FIT ?? 0);
             const reveal = scouting.interviews.modelARevealByProspectId?.[prospect.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-            const trueCharacterScore = scouting.trueProfiles[prospect.id]?.trueAttributes?.character ?? 50;
-            const trueIntelligenceScore = scouting.trueProfiles[prospect.id]?.trueAttributes?.intelligence ?? 50;
-            const charRange = formatRange(trueCharacterScore, reveal.characterRevealPct);
-            const iqRange = formatRange(trueIntelligenceScore, reveal.intelligenceRevealPct);
+            const charRange = getDeterministicRevealRange(65, reveal.characterRevealPct);
+            const iqRange = getDeterministicRevealRange(65, reveal.intelligenceRevealPct);
             return (
               <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <div className="min-w-0">
@@ -308,7 +306,7 @@ export default function ScoutingCombine() {
                     <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
                   </div>
                   <div className="mt-1 text-xs opacity-70">
-                    Character: {charRange} • Football IQ: {iqRange} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
+                    Character: {charRange.low}-{charRange.high} • Football IQ: {iqRange.low}-{iqRange.high} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
                   <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
@@ -348,10 +346,17 @@ export default function ScoutingCombine() {
             onClick={() => {
               if (!bestAutoSuggest) return;
               const category = (bestAutoSuggest.profile.clarity.FIT ?? 0) <= (bestAutoSuggest.profile.clarity.CHAR ?? 0) ? "IQ" : "LEADERSHIP";
-              dispatch({ type: "SCOUT_COMBINE_INTERVIEW", payload: { prospectId: bestAutoSuggest.id, category } });
+              dispatch({ type: "SCOUT_COMBINE_SELECT", payload: { prospectId: bestAutoSuggest.id, category } });
             }}
           >
             AUTO SUGGEST
+          </button>
+          <button
+            type="button"
+            className="min-h-11 rounded border border-emerald-500 px-4 text-sm text-emerald-200"
+            onClick={() => dispatch({ type: "SCOUT_COMBINE_RUN_INTERVIEWS", payload: { category: "IQ" } })}
+          >
+            RUN INTERVIEWS
           </button>
           <div className={`text-sm font-semibold ${urgencyTone}`}>Token urgency: {urgencyText} ({interviewsRemaining} left)</div>
         </div>

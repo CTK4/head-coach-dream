@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
-import { recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
-import { evaluatePlayConcepts, recommendFourthDown } from "@/engine/gameSim";
+import { evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
 import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type DefensivePackage, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
+import { getOffensePlaybookPlays, hasDefensePlaybook } from "@/engine/playbooks/playbookCatalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -318,6 +318,8 @@ const Playcall = () => {
   const [tempo, setTempo] = useState<TempoMode>("NORMAL");
   const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
   const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
+  const offensePlaybookId = state.playbooks?.offensePlaybookId;
+  const defensePlaybookId = state.playbooks?.defensePlaybookId;
 
   const teamId = state.acceptedOffer?.teamId;
   const g = state.game;
@@ -335,7 +337,9 @@ const Playcall = () => {
   );
 
   const rankedCards = useMemo(() => {
-    const evaluations = evaluatePlayConcepts(g, PLAYBOOK.map((p) => p.id), { aggression, tempo, personnelPackage, look: g.defLook });
+    if (!offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId)) return [];
+    const allowedPlayIds = getOffensePlaybookPlays(offensePlaybookId);
+    const evaluations = evaluatePlayConcepts(g, allowedPlayIds, { aggression, tempo, personnelPackage, look: g.defLook });
     return evaluations
       .map((evaluation) => ({
         evaluation,
@@ -351,6 +355,7 @@ const Playcall = () => {
   };
 
   const selectedCard = rankedCards.find((c) => c.play.id === selectedPlayId) ?? rankedCards[0];
+  const missingPlaybookSelection = !offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId);
 
   const exit = () => {
     dispatch({ type: "EXIT_GAME" });
@@ -372,6 +377,10 @@ const Playcall = () => {
 
   const homeName = team?.name ?? "Home";
   const awayName = opp?.name ?? "Away";
+
+  if (missingPlaybookSelection) {
+    return <div className="min-h-screen p-4 md:p-8 text-amber-300 font-semibold">Select Playbook before calling plays.</div>;
+  }
 
   return (
     <div className="min-h-screen p-4 md:p-8">

@@ -56,6 +56,8 @@ export type CombineDayRecap = {
 export type CombineState = {
   generated: boolean;
   day: 1 | 2 | 3 | 4;
+  selectedByDay: Record<number, Record<string, string[]>>;
+  interviewResultsByProspectId: Record<string, { characterPct?: number; intelligencePct?: number; notes?: string }>;
   days: Record<1 | 2 | 3 | 4, CombineDay>;
   prospects: Record<string, CombineProspectState>;
   resultsByProspectId: Record<string, CombineResult>;
