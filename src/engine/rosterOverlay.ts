@@ -213,6 +213,8 @@ export function getEffectivePlayer(state: GameState, playerId: string): any | un
 
 export function getEffectiveFreeAgents(state: GameState): any[] {
   return getEffectivePlayers(state).filter((p: any) => {
+    const playerId = String(p.playerId ?? "");
+    if (state.franchiseTags[playerId]?.season && Number(state.franchiseTags[playerId].season) >= Number(state.season)) return false;
     const teamId = String(p.teamId ?? "").toUpperCase();
     const status = String(p.status ?? "").toUpperCase();
     return teamId === "" || teamId === "FREE_AGENT" || status === "FREE_AGENT";

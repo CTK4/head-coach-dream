@@ -57,6 +57,7 @@ export default function ResignPlayers() {
         return { p, end: Number(summary?.endSeason ?? -1) };
       })
       .filter((r) => r.end === Number(state.season))
+      .filter((r) => state.franchiseTags[String(r.p.playerId)]?.season !== Number(state.season) + 1)
       .sort((a, b) => Number(b.p.overall ?? 0) - Number(a.p.overall ?? 0));
   }, [state, teamId]);
 
@@ -186,7 +187,7 @@ export default function ResignPlayers() {
                     </div>
                     <Slider
                       value={[draftOffer.years]}
-                      min={2}
+                      min={1}
                       max={5}
                       step={1}
                       onValueChange={(v) => setDraftOffer((cur) => (cur ? { ...cur, years: v[0] ?? cur.years } : cur))}
