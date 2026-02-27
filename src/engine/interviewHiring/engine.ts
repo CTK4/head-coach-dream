@@ -45,9 +45,13 @@ function getTeamPoolQuestions(teamConfig: TeamConfig): InterviewQuestion[] {
   return teamConfig.team_pool.questions;
 }
 
+function normalizeAsker(asker?: string): string {
+  return asker?.trim().toLowerCase() ?? "";
+}
+
 function hasRequiredAskers(questions: InterviewQuestion[], constraints: { min_owner_questions?: number; min_gm_questions?: number } = {}) {
-  const ownerCount = questions.filter((q) => q.asker?.toLowerCase() === "owner").length;
-  const gmCount = questions.filter((q) => q.asker?.toLowerCase() === "gm").length;
+  const ownerCount = questions.filter((q) => normalizeAsker(q.asker) === "owner").length;
+  const gmCount = questions.filter((q) => normalizeAsker(q.asker) === "gm").length;
   return ownerCount >= (constraints.min_owner_questions ?? 0) && gmCount >= (constraints.min_gm_questions ?? 0);
 }
 
@@ -74,22 +78,58 @@ export function generateInterview(teamConfig: TeamConfig, seed: number): Intervi
   );
 
   const pool = getTeamPoolQuestions(teamConfig);
-  let teamSelected: InterviewQuestion[] = [];
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = weightedNoReplacement(
-      pool,
-      (question) => teamRules.selection.asker_weighting?.[question.asker?.toLowerCase() ?? ""] ?? 1,
-      teamRules.count,
-      rng,
+  const minOwner = teamRules.constraints?.min_owner_questions ?? 0;
+  const minGm = teamRules.constraints?.min_gm_questions ?? 0;
+
+  const ownerPool = pool.filter((question) => normalizeAsker(question.asker) === "owner");
+  const gmPool = pool.filter((question) => normalizeAsker(question.asker) === "gm");
+
+  if (ownerPool.length < minOwner || gmPool.length < minGm) {
+    throw new Error(
+      `Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}': requires OWNER>=${minOwner}, GM>=${minGm}, available OWNER=${ownerPool.length}, GM=${gmPool.length}.`,
     );
-    if (hasRequiredAskers(candidate, teamRules.constraints)) {
-      teamSelected = candidate;
-      break;
-    }
   }
 
-  if (!teamSelected.length) {
-    throw new Error(`Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}' after deterministic retries.`);
+  const teamSelected: InterviewQuestion[] = [
+    ...weightedNoReplacement(
+      ownerPool,
+      (question) => teamRules.selection.asker_weighting?.[question.asker ?? ""] ?? teamRules.selection.asker_weighting?.OWNER ?? 1,
+      minOwner,
+      rng,
+    ),
+    ...weightedNoReplacement(
+      gmPool,
+      (question) => teamRules.selection.asker_weighting?.[question.asker ?? ""] ?? teamRules.selection.asker_weighting?.GM ?? 1,
+      minGm,
+      rng,
+    ),
+  ];
+
+  const selectedIds = new Set(teamSelected.map((question) => question.question_id));
+  const remainingPool = pool.filter((question) => !selectedIds.has(question.question_id));
+  const remainingCount = teamRules.count - teamSelected.length;
+  if (remainingCount > 0) {
+    teamSelected.push(
+      ...weightedNoReplacement(
+        remainingPool,
+        (question) => {
+          const rawAsker = question.asker ?? "";
+          const normalized = normalizeAsker(rawAsker);
+          return (
+            teamRules.selection.asker_weighting?.[rawAsker] ??
+            teamRules.selection.asker_weighting?.[normalized] ??
+            teamRules.selection.asker_weighting?.[rawAsker.toUpperCase()] ??
+            1
+          );
+        },
+        remainingCount,
+        rng,
+      ),
+    );
+  }
+
+  if (!teamSelected.length || !hasRequiredAskers(teamSelected, teamRules.constraints)) {
+    throw new Error(`Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}' with stratified selection.`);
   }
 
   return {
