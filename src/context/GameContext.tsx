@@ -9,6 +9,7 @@ import {
   getContractById,
   getPersonnelById,
   getPersonnelContract,
+  getPersonnel,
   getPlayers,
   getPlayersByTeam,
   getTeamFinancesRow,
@@ -2426,6 +2427,35 @@ function seasonRollover(state: GameState): GameState {
     playerTeamOverrides[playerId] = "FREE_AGENT";
   }
 
+  const expiredStaffIds = new Set<string>();
+  for (const person of getPersonnel()) {
+    const personId = String((person as any).personId ?? "");
+    if (!personId) continue;
+    const contract = getPersonnelContract(personId);
+    if (!contract) continue;
+    const contractEndSeason = Number(contract.endSeason ?? nextSeason);
+    if (nextSeason <= contractEndSeason) continue;
+    clearPersonnelTeam(personId);
+    expireContract(String(contract.contractId ?? ""), contractEndSeason);
+    expiredStaffIds.add(personId);
+  }
+
+  const staff = { ...state.staff };
+  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
+  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
+  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
+
+  const assistantStaff = { ...state.assistantStaff };
+  for (const [slot, personId] of Object.entries(assistantStaff)) {
+    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
+  }
+
+  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
+  for (const personId of expiredStaffIds) {
+    delete staffBudgetByPersonId[personId];
+  }
+  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
+
   let cash = state.finances.cash;
   if (teamId) {
     for (const [pid, o] of Object.entries(playerContractOverrides)) {
@@ -2472,6 +2502,9 @@ function seasonRollover(state: GameState): GameState {
     resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     playerTeamOverrides,
     playerContractOverrides,
+    staff,
+    assistantStaff,
+    staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
     finances: { ...state.finances, cash },
   });
 }
@@ -5779,7 +5812,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
       if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
 
-      const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: toTeamId }, tradeError: undefined };
+      const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: toTeamId };
+      const depthForUserTeam = autoFillDepthChartGaps({ ...state, playerTeamOverrides }, String(teamId));
+      const depthForDestination = autoFillDepthChartGaps({ ...state, playerTeamOverrides }, toTeamId);
+      const nextState = {
+        ...state,
+        playerTeamOverrides,
+        depthChart: {
+          ...state.depthChart,
+          startersByPos: depthForUserTeam,
+          lockedBySlot: Object.fromEntries(
+            Object.entries(state.depthChart.lockedBySlot ?? {}).filter(([slot, pid]) => String(depthForUserTeam[slot] ?? "") === String(pid)),
+          ),
+        },
+        leagueDepthCharts: {
+          ...(state.leagueDepthCharts ?? {}),
+          [String(teamId)]: { ...(state.leagueDepthCharts?.[String(teamId)] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForUserTeam },
+          [toTeamId]: { ...(state.leagueDepthCharts?.[toTeamId] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForDestination },
+        },
+        tradeError: undefined,
+      };
       const next = applyFinances(nextState);
       const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
       const tag = currentWeek <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)";
@@ -6292,10 +6344,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (activeCount !== 53) return state;
 
       const cuts = Object.keys(state.rosterMgmt.cuts);
-      for (const pid of cuts) cutPlayerToFreeAgent(pid);
+      const playerTeamOverrides = { ...state.playerTeamOverrides };
+      const playerContractOverrides = { ...state.playerContractOverrides };
+      for (const pid of cuts) {
+        cutPlayerToFreeAgent(pid);
+        playerTeamOverrides[pid] = "FREE_AGENT";
+        delete playerContractOverrides[pid];
+      }
 
       return {
         ...state,
+        playerTeamOverrides,
+        playerContractOverrides,
         rosterMgmt: { ...state.rosterMgmt, finalized: true },
         memoryLog: addMemoryEvent(state, "FINAL_CUTS", { cutCount: cuts.length }),
       };
@@ -6606,8 +6666,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           seed: (base.careerSeed ?? base.saveSeed) ^ hashStr(`game:${gameType}:${action.payload.weekNumber ?? action.payload.week ?? 0}:${teamId}:${action.payload.opponentTeamId}`),
           weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
-          homeRatings: computeTeamGameRatings(teamId),
-          awayRatings: computeTeamGameRatings(action.payload.opponentTeamId),
+          homeRatings: computeTeamGameRatings(base, teamId),
+          awayRatings: computeTeamGameRatings(base, action.payload.opponentTeamId),
           trackedPlayers,
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
           practiceExecutionBonus: base.weeklyFamiliarityBonus + base.weeklySchemeConceptBonus + Math.max(0, -base.weeklyMentalErrorMod * 8) - base.cumulativeNeglectPenalty * 8,

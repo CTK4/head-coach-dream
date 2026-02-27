@@ -1,4 +1,6 @@
+import type { GameState } from "@/context/GameContext";
 import { getPlayersByTeam } from "@/data/leagueDb";
+import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 
 export type TeamGameRatings = {
   /** Quarterback processing / decision-making (55–85) */
@@ -36,8 +38,13 @@ function scale(raw: number): number {
 }
 
 /** Compute position-group ratings for a team from their roster. */
-export function computeTeamGameRatings(teamId: string): TeamGameRatings {
-  const players = getPlayersByTeam(teamId);
+export function computeTeamGameRatings(teamId: string): TeamGameRatings;
+export function computeTeamGameRatings(state: GameState, teamId: string): TeamGameRatings;
+export function computeTeamGameRatings(stateOrTeamId: GameState | string, maybeTeamId?: string): TeamGameRatings {
+  const teamId = typeof stateOrTeamId === "string" ? stateOrTeamId : String(maybeTeamId ?? "");
+  const players = typeof stateOrTeamId === "string"
+    ? getPlayersByTeam(teamId)
+    : getEffectivePlayersByTeam(stateOrTeamId, teamId);
 
   // Build per-group overalls in a single pass over the roster.
   const groups = {
