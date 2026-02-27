@@ -72,6 +72,7 @@ const RegularSeason = () => {
 
   if (state.careerStage === "PLAYOFFS") return <Navigate to="/hub/playoffs" replace />;
   if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub/offseason" replace />;
+  if (state.league.phase === "REGULAR_SEASON_GAMEPLAN") return <Navigate to="/hub/gameplan" replace />;
 
   const initialAlloc = useMemo(
     () => normalizePracticeAllocation(state.practicePlan?.allocation ?? DEFAULT_PRACTICE_PLAN.allocation, PRACTICE_POINTS_BUDGET),
@@ -120,6 +121,11 @@ const RegularSeason = () => {
 
   const kickoff = () => {
     if (!opponentId || !current) return;
+    if (state.league.phase === "REGULAR_SEASON") {
+      dispatch({ type: "ADVANCE_WEEK" });
+      navigate("/hub/gameplan");
+      return;
+    }
     dispatch({ type: "START_GAME", payload: { opponentTeamId: opponentId, weekType: "REGULAR_SEASON", weekNumber: current.week } });
     navigate("/hub/playcall");
   };

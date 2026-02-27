@@ -14,6 +14,7 @@ import { ratingZ } from "@/engine/physics/ratingsToKinematics";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
+import type { WeeklyGameplan } from "@/engine/gameplan";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -245,6 +246,8 @@ export type GameSim = {
   coachArchetypeId?: string;
   coachTenureYear: number;
   coachUnlockedPerkIds?: string[];
+  homeGameplan?: WeeklyGameplan;
+  awayGameplan?: WeeklyGameplan;
   lastPlayResult?: PlayResult;
 };
 
@@ -1336,6 +1339,8 @@ export function initGameSim(params: {
   lateGamePracticeRetentionBonus?: number;
   coachArchetypeId?: string;
   coachTenureYear?: number;
+  homeGameplan?: WeeklyGameplan;
+  awayGameplan?: WeeklyGameplan;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1373,6 +1378,8 @@ export function initGameSim(params: {
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
     coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],
+    homeGameplan: params.homeGameplan,
+    awayGameplan: params.awayGameplan,
   };
 }
 
@@ -1492,6 +1499,10 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
 }
 
 export function autoPickPlay(sim: GameSim): PlayType {
+  const offensePlan = sim.possession === "HOME" ? sim.homeGameplan : sim.awayGameplan;
+  if ((sim.driveNumber <= 2 || (sim.driveNumber === 1 && sim.playNumberInDrive < 5)) && offensePlan?.scriptedOpening?.[sim.playNumberInDrive]) {
+    return offensePlan.scriptedOpening[sim.playNumberInDrive];
+  }
   const q = sim.clock.quarter;
   const t = sim.clock.timeRemainingSec;
   const diff = sim.homeScore - sim.awayScore;
@@ -1501,10 +1512,10 @@ export function autoPickPlay(sim: GameSim): PlayType {
   if ((q === 2 || q === 4) && t <= 15 && myDiff < 0 && !sim.clock.clockRunning) return "SPIKE";
   if (q === 4 && myDiff > 0 && t <= 120) return "KNEEL";
   if (q === 4 && myDiff < 0 && t <= 90) return sim.distance >= 8 ? "DROPBACK" : "QUICK_GAME";
-  if (sim.distance >= 9) return "DROPBACK";
-  if (sim.distance <= 3) return "INSIDE_ZONE";
-  if (sim.distance <= 6) return "QUICK_GAME";
-  return "DROPBACK";
+  if (sim.distance >= 9) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "QUICK_GAME" : "DROPBACK";
+  if (sim.distance <= 3) return offensePlan?.offensiveFocus === "PASS_HEAVY" ? "QUICK_GAME" : "INSIDE_ZONE";
+  if (sim.distance <= 6) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "QUICK_GAME";
+  return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "DROPBACK";
 }
 
 export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number }) {

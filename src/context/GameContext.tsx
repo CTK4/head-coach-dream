@@ -47,6 +47,8 @@ import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/
 import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
 import { advancePlayoffRound, buildPlayoffBracket, buildPostseasonResults, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
 import type { PlayoffsState } from "@/engine/postseason";
+import { advanceLeaguePhase, type LeaguePhase, type PlayoffMatchup } from "@/engine/leaguePhase";
+import { DEFAULT_WEEKLY_GAMEPLAN, buildCpuGameplan, type WeeklyGameplan } from "@/engine/gameplan";
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
@@ -744,6 +746,7 @@ export type GameState = {
   playerAgeOffsetById: Record<string, number>;
   finances: TeamFinances;
   league: LeagueState;
+  teamGameplans: Record<string, WeeklyGameplan | undefined>;
   playoffs: PlayoffsState | null;
   currentStandings: TeamStanding[];
   weeklyResults: WeekResult[];
@@ -884,6 +887,9 @@ export type GameAction =
   | { type: "PLAYOFFS_MARK_GAME_FINAL"; payload: { gameId: string; homeScore: number; awayScore: number; winnerTeamId: string } }
   | { type: "PLAYOFFS_ADVANCE_ROUND" }
   | { type: "PLAYOFFS_COMPLETE_SEASON" }
+  | { type: "SET_TEAM_GAMEPLAN"; payload: { teamId: string; gameplan: WeeklyGameplan } }
+  | { type: "LOCK_TEAM_GAMEPLAN"; payload: { teamId: string } }
+  | { type: "ADVANCE_LEAGUE_PHASE" }
   | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
   | { type: "OFFSEASON_APPLY_TASK_EFFECT"; payload: { taskId: OffseasonTaskId } }
   | { type: "OFFSEASON_COMPLETE_STEP"; payload: { stepId: OffseasonStepId } }
@@ -1280,6 +1286,7 @@ function createInitialState(): GameState {
       postJune1Sim: false,
     },
     league: initLeagueState(teams, saveSeed),
+    teamGameplans: {},
     playoffs: null,
     currentStandings: initTeamStandings(teams),
     weeklyResults: [],
@@ -4027,6 +4034,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_PHASE":
       logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
+    case "ADVANCE_LEAGUE_PHASE": {
+      return { ...state, league: { ...state.league, phase: advanceLeaguePhase(state.league.phase as LeaguePhase) } };
+    }
+    case "SET_TEAM_GAMEPLAN": {
+      return { ...state, teamGameplans: { ...(state.teamGameplans ?? {}), [action.payload.teamId]: action.payload.gameplan } };
+    }
+    case "LOCK_TEAM_GAMEPLAN": {
+      const current = state.teamGameplans?.[action.payload.teamId] ?? DEFAULT_WEEKLY_GAMEPLAN;
+      return { ...state, teamGameplans: { ...(state.teamGameplans ?? {}), [action.payload.teamId]: { ...current, locked: true } } };
+    }
     case "SET_CAREER_STAGE": {
       const prevStage = state.careerStage;
       const nextStage = action.payload;
@@ -6951,12 +6968,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "PLAYOFFS_ADVANCE_ROUND": {
       if (!state.playoffs) return state;
       const advanced = advancePlayoffRound(state.playoffs);
-      return { ...state, playoffs: advanced };
+      const phaseMap: Record<string, LeaguePhase> = { WILD_CARD: "WILD_CARD", DIVISIONAL: "DIVISIONAL", CONF_FINALS: "CONFERENCE", SUPER_BOWL: "CHAMPIONSHIP" };
+      return { ...state, playoffs: advanced, league: { ...state.league, phase: phaseMap[advanced.round] ?? state.league.phase } };
     }
     case "PLAYOFFS_COMPLETE_SEASON": {
       if (!state.playoffs) return state;
       const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
-      let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason }, careerStage: "SEASON_AWARDS" };
+      let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason, phase: "SEASON_COMPLETE" }, careerStage: "SEASON_AWARDS" };
       out = applySeasonMilestoneAwards(out);
       const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
       const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
@@ -7006,9 +7024,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       const teamId = base.acceptedOffer?.teamId;
       if (!teamId) return base;
+      if ((gameType === "REGULAR_SEASON" || gameType === "PLAYOFFS") && base.league.phase !== "REGULAR_SEASON_GAME" && base.league.phase !== "WILD_CARD" && base.league.phase !== "DIVISIONAL" && base.league.phase !== "CONFERENCE" && base.league.phase !== "CHAMPIONSHIP") {
+        return base;
+      }
+      if ((gameType === "REGULAR_SEASON" || gameType === "PLAYOFFS") && base.teamGameplans?.[teamId]?.locked !== true) {
+        return base;
+      }
       const trackedPlayers = { HOME: buildTrackedPlayers(teamId), AWAY: buildTrackedPlayers(action.payload.opponentTeamId) };
       return {
         ...base,
+        league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
         contextFlags: applyFlagsToContext(base.coach),
         game: initGameSim({
           homeTeamId: teamId,
@@ -7026,6 +7051,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           coachArchetypeId: base.coach?.archetypeId,
           coachTenureYear: base.coach?.tenureYear,
           coachUnlockedPerkIds: base.coach?.unlockedPerkIds,
+          homeGameplan: base.teamGameplans?.[teamId],
+          awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
         }),
       };
     }
@@ -7128,7 +7155,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const finalizedBox = (stepped.sim as any).boxScore;
       let nextState = {
         ...nextWithPractice,
-        league,
+        teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
+        league: { ...league, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase },
         currentStandings: weekResult.updatedStandings,
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
@@ -7165,6 +7193,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const matchup = getTeamMatchup(weekSchedule, teamId);
       if (!matchup) return state;
+
+      if (gameType === "REGULAR_SEASON" && state.league.phase === "REGULAR_SEASON") {
+        const cpuPlans = Object.fromEntries(
+          getTeams()
+            .filter((t) => t.isActive)
+            .map((t) => [t.teamId, t.teamId === teamId ? (state.teamGameplans?.[teamId] ?? DEFAULT_WEEKLY_GAMEPLAN) : buildCpuGameplan({ seed: state.saveSeed, teamId: t.teamId, weekIndex: week, strengthDelta: 0 })]),
+        );
+        return { ...state, teamGameplans: cpuPlans, league: { ...state.league, phase: "REGULAR_SEASON_GAMEPLAN" } };
+      }
+      if (gameType === "REGULAR_SEASON" && state.league.phase === "REGULAR_SEASON_GAMEPLAN") {
+        return { ...state, league: { ...state.league, phase: "REGULAR_SEASON_GAME" } };
+      }
 
       const weekResult = simulateWeek({
         schedule,
@@ -7222,6 +7262,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
           out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
           out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+          out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
         }
       }
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
@@ -7407,6 +7448,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         postJune1Sim: false,
       },
     league: normalizedLeague,
+    teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
     game,
     playerFatigueById: Object.fromEntries(getPlayers().map((pl) => {
       const v = (oldState as any).playerFatigueById?.[String(pl.playerId)];
