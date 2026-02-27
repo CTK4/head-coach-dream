@@ -473,9 +473,16 @@ export type PlayerContractOverride = {
   signingBonus: number;
   guaranteedAtSigning?: number;
   prorationBySeason?: Record<number, number>;
+  contractType?: "STANDARD" | "FRANCHISE_TAG";
 };
 
-export type TransactionType = "CUT" | "TRADE" | "VOID";
+export type FranchiseTagRecord = {
+  season: number;
+  amount: number;
+  timesUsed: number;
+};
+
+export type TransactionType = "CUT" | "TRADE" | "VOID" | "TAG";
 export type AccelerationType = "PRE_JUNE_1" | "POST_JUNE_1" | "NONE";
 export type Transaction = {
   id: string;
@@ -746,6 +753,7 @@ export type GameState = {
   nextPlayerId: number;
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
+  franchiseTags: Record<string, FranchiseTagRecord>;
   playerFatigueById: Record<string, PersistedFatigue>;
   practicePlan: PracticePlan;
   practicePlanConfirmed: boolean;
@@ -876,6 +884,7 @@ export type GameAction =
   | { type: "SHOW_OFFER_RESULT_MODAL"; payload: { title: string; message: string; variant: "success" | "danger" } }
   | { type: "HIDE_OFFER_RESULT_MODAL" }
   | { type: "TAG_APPLY"; payload: TagApplied }
+  | { type: "APPLY_FRANCHISE_TAG"; payload: { playerId: string } }
   | { type: "TAG_REMOVE" }
   | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
@@ -1281,6 +1290,7 @@ function createInitialState(): GameState {
     nextPlayerId: maxExistingPlayerNumericId() + 1,
     playerTeamOverrides: {},
     playerContractOverrides: {},
+    franchiseTags: {},
     playerFatigueById: {},
     practicePlan: DEFAULT_PRACTICE_PLAN,
     practicePlanConfirmed: false,
@@ -1463,7 +1473,7 @@ function buildResignOffer(state: GameState, playerId: string, createdFrom: Resig
 }
 
 function contractOverrideFromOffer(state: GameState, offer: ResignOffer): PlayerContractOverride {
-  const years = Math.max(2, Math.min(5, offer.years));
+  const years = Math.max(1, Math.min(5, offer.years));
   const totalCash = offer.apy * years;
 
   const signingBonus = Math.round((totalCash * offer.guaranteesPct * 0.40) / 50_000) * 50_000;
@@ -1480,7 +1490,7 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
 
   return {
     startSeason: state.season + 1,
-    endSeason: state.season + years,
+    endSeason: state.season + years - 1,
     salaries,
     signingBonus,
   };
@@ -1790,6 +1800,117 @@ function qbGateAllowsAcquisition(state: GameState, teamId: string, role: "STARTE
     return apy <= cap * 0.06;
   }
   return false;
+}
+
+const FRANCHISE_TAG_BASE_BY_POS: Record<string, number> = {
+  QB: 38_000_000,
+  EDGE: 24_000_000,
+  WR: 22_000_000,
+  CB: 20_000_000,
+  LT: 21_000_000,
+  OL: 19_000_000,
+  DL: 18_000_000,
+  LB: 16_000_000,
+  RB: 13_000_000,
+  TE: 14_000_000,
+  S: 15_000_000,
+  K: 7_000_000,
+  P: 5_000_000,
+  UNK: 12_000_000,
+};
+
+function resolveFranchiseTagAmount(state: GameState, player: any): number {
+  const pos = normalizePos(String(player?.pos ?? "UNK"));
+  const marketGuess = projectedMarketApy(pos, Number(player?.overall ?? 60), Number(player?.age ?? 26));
+  const table = FRANCHISE_TAG_BASE_BY_POS[pos] ?? FRANCHISE_TAG_BASE_BY_POS.UNK;
+  return moneyRound(Math.max(table, marketGuess));
+}
+
+function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagType = "FRANCHISE_NON_EX"): GameState {
+  const playerId = String(playerIdRaw);
+  const teamId = String(state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "");
+  if (!teamId) throw new Error("NO_USER_TEAM");
+
+  const player = getPlayers().find((x: any) => String(x.playerId) === playerId);
+  if (!player) throw new Error("PLAYER_NOT_FOUND");
+
+  const effectiveTeamId = String(state.playerTeamOverrides[playerId] ?? (player as any).teamId ?? "");
+  if (effectiveTeamId !== teamId) throw new Error("TAG_PLAYER_NOT_ON_USER_TEAM");
+
+  const nextSeason = Number(state.season) + 1;
+  if (state.franchiseTags[playerId]?.season === nextSeason) throw new Error("TAG_ALREADY_APPLIED");
+
+  const summary = getContractSummaryForPlayer(state, playerId);
+  if (!summary || Number(summary.endSeason) !== Number(state.season)) throw new Error("TAG_PLAYER_NOT_EXPIRING");
+
+  const amount = resolveFranchiseTagAmount(state, player);
+  const priorTag = state.franchiseTags[playerId];
+  const franchiseTags = {
+    ...state.franchiseTags,
+    [playerId]: { season: nextSeason, amount, timesUsed: Number(priorTag?.timesUsed ?? 0) + 1 },
+  };
+
+  const playerContractOverrides = {
+    ...state.playerContractOverrides,
+    [playerId]: {
+      startSeason: nextSeason,
+      endSeason: nextSeason,
+      salaries: [amount],
+      signingBonus: 0,
+      guaranteedAtSigning: amount,
+      contractType: "FRANCHISE_TAG" as const,
+    },
+  };
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: teamId };
+  const decisions = { ...state.offseasonData.resigning.decisions } as Record<string, ResignDecision>;
+  delete decisions[playerId];
+
+  const tx: Transaction = {
+    id: `TX_TAG_${nextSeason}_${playerId}`,
+    type: "TAG",
+    playerId,
+    playerName: String((player as any)?.fullName ?? "Player"),
+    playerPos: String((player as any)?.pos ?? "UNK"),
+    fromTeamId: teamId,
+    toTeamId: teamId,
+    season: state.season,
+    week: state.week,
+    june1Designation: "NONE",
+    notes: `Franchise tag applied for ${nextSeason}`,
+    deadCapThisYear: 0,
+    deadCapNextYear: 0,
+    remainingProration: 0,
+    contractSnapshot: {
+      startSeason: nextSeason,
+      endSeason: nextSeason,
+      signingBonus: 0,
+      salaries: [amount],
+    },
+  };
+
+  const next = applyFinances({
+    ...state,
+    playerTeamOverrides,
+    playerContractOverrides,
+    franchiseTags,
+    offseasonData: {
+      ...state.offseasonData,
+      resigning: { decisions },
+      tagCenter: {
+        applied: {
+          playerId,
+          type: tagType,
+          cost: amount,
+          teamId,
+          appliedWeek: state.week ?? 0,
+        },
+      },
+    },
+    transactions: [...(state.transactions ?? []), tx],
+  });
+
+  return pushNews(next, `Franchise tag applied: ${String((player as any)?.fullName ?? "Player")} (${Math.round(amount / 1_000_000)}M).`);
 }
 
 function noteR1QBDraft(state: GameState, teamId: string, round: number, posRaw: string): GameState {
@@ -4646,37 +4767,31 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!applied) return state;
 
       const pco = { ...state.playerContractOverrides };
+      const franchiseTags = { ...state.franchiseTags };
       const o = pco[applied.playerId];
-      if (o?.startSeason === state.season && o?.endSeason === state.season && o?.signingBonus === 0 && o?.salaries?.length === 1) {
+      const taggedSeason = franchiseTags[applied.playerId]?.season;
+      if (o?.contractType === "FRANCHISE_TAG" || (taggedSeason != null && o?.startSeason === taggedSeason && o?.endSeason === taggedSeason)) {
         delete pco[applied.playerId];
       }
+      delete franchiseTags[applied.playerId];
 
       return applyFinances({
         ...state,
         offseasonData: { ...state.offseasonData, tagCenter: { applied: undefined } },
         playerContractOverrides: pco,
+        franchiseTags,
       });
     }
+    case "APPLY_FRANCHISE_TAG":
     case "TAG_APPLY": {
-      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
-      if (!teamId) return state;
-
-      const current = state.offseasonData.tagCenter.applied;
-      if (current && current.playerId !== action.payload.playerId) return state;
-
-      const cost = Math.max(0, Math.round(action.payload.cost / 50_000) * 50_000);
-
-      const pco = { ...state.playerContractOverrides };
-      pco[action.payload.playerId] = { startSeason: state.season, endSeason: state.season, salaries: [cost], signingBonus: 0 };
-
-      return applyFinances({
-        ...state,
-        offseasonData: {
-          ...state.offseasonData,
-          tagCenter: { applied: { ...action.payload, cost, teamId: String(teamId), appliedWeek: state.week ?? 0 } },
-        },
-        playerContractOverrides: pco,
-      });
+      const playerId = action.type === "TAG_APPLY" ? action.payload.playerId : action.payload.playerId;
+      try {
+        const tagType = action.type === "TAG_APPLY" ? action.payload.type : "FRANCHISE_NON_EX";
+        return applyFranchiseTag(state, playerId, tagType);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "TAG_FAILED";
+        return pushNews(state, `Franchise tag failed: ${reason}.`);
+      }
     }
     case "CONTRACT_RESTRUCTURE_APPLY": {
       const teamId = state.acceptedOffer?.teamId;
@@ -7361,6 +7476,7 @@ function loadState(): GameState {
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
       nextPlayerId: Number((migrated as any).nextPlayerId ?? initial.nextPlayerId),
       playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
+      franchiseTags: { ...initial.franchiseTags, ...((migrated as any).franchiseTags ?? {}) },
       playerContractOverrides: Object.fromEntries(
         Object.entries({ ...initial.playerContractOverrides, ...migrated.playerContractOverrides }).map(([k, v]: any) => {
           if (Array.isArray(v?.salaries)) return [k, v];
