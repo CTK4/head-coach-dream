@@ -90,6 +90,54 @@ describe("interview hiring engine", () => {
     expect(result.band).toBe("REJECTED");
   });
 
+
+
+  it("scores Atlanta interview with option deltas, rebuild clarity mapping, and risk flags", () => {
+    const config = getTeamConfig("ATLANTA_APEX");
+    const session = generateInterview(config, createInterviewSeed(303, 404, 1, 2, 0));
+    const answers = Object.fromEntries(session.questions.map((q) => [q.question.question_id, q.question.options[0].choice_id]));
+    const initial = config.scoring.init as Record<string, number | string[]>;
+
+    const result = scoreInterview(config, session.questions, answers, 2024);
+
+    expect(Number.isFinite(result.metrics.owner_approval)).toBe(true);
+    expect(Number.isFinite(result.metrics.gm_approval)).toBe(true);
+    expect(result.metrics.owner_approval).not.toBe(initial.owner_approval);
+    expect(result.metrics.gm_approval).not.toBe(initial.gm_approval);
+
+    const beforeRebuild = Number(initial.rebuild_clarity);
+    expect(Number.isFinite(result.metrics.rebuild_clarity)).toBe(true);
+    expect(result.metrics.rebuild_clarity).not.toBe(beforeRebuild);
+
+    const riskQuestion = {
+      question_id: "ATL_RISK",
+      asker: "OWNER",
+      prompt: "Risk control",
+      options: [
+        {
+          choice_id: "A",
+          text: "No structure",
+          tags: [],
+          delta: { owner: -3, gm: -2, riskFlag: "NO_STRUCTURE" } as unknown as Record<string, number>,
+        },
+      ],
+    };
+
+    const riskResult = scoreInterview(
+      config,
+      [
+        { source: "team_pool" as const, question: { ...riskQuestion, question_id: "ATL_RISK_1" } },
+        { source: "team_pool" as const, question: { ...riskQuestion, question_id: "ATL_RISK_2" } },
+      ],
+      { ATL_RISK_1: "A", ATL_RISK_2: "A" },
+      88,
+    );
+
+    expect(riskResult.flags.some((flag) => flag === "NO_STRUCTURE" || flag === "CHAOTIC_DIRECTION")).toBe(true);
+    expect(Number.isFinite(result.hireScore)).toBe(true);
+    expect(["HIRED", "BORDERLINE", "REJECTED"]).toContain(result.band);
+  });
+
   it("borderline weighted coinflip is deterministic", () => {
     const config = getTeamConfig("BIRMINGHAM_VULCANS");
     const session = generateInterview(config, createInterviewSeed(500, 900, 1, 1, 0));
