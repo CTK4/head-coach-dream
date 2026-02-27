@@ -272,11 +272,15 @@ function MixBar({ run, pass }: { run: number; pass: number }) {
 }
 
 export default function PlaybookScreen() {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const [side, setSide] = useState<Side>("OFFENSE");
 
   const coordinator = useMemo(() => findCoordinatorSystem(state, side), [state, side]);
-  const activeScheme = useMemo(() => canonicalSchemeId(coordinator.systemRaw, side), [coordinator.systemRaw, side]);
+  const coordinatorScheme = useMemo(() => canonicalSchemeId(coordinator.systemRaw, side), [coordinator.systemRaw, side]);
+  const activeScheme = useMemo(() => {
+    if (side === "OFFENSE") return (state.playbooks?.offensePlaybookId as OffenseSchemeId | undefined) ?? coordinatorScheme;
+    return (state.playbooks?.defensePlaybookId as DefenseSchemeId | undefined) ?? coordinatorScheme;
+  }, [coordinatorScheme, side, state.playbooks?.defensePlaybookId, state.playbooks?.offensePlaybookId]);
   const schemes = side === "OFFENSE" ? OFFENSE_SCHEMES : DEFENSE_SCHEMES;
   const meta = schemes.find((scheme) => scheme.id === activeScheme) ?? schemes[0];
 
@@ -313,6 +317,9 @@ export default function PlaybookScreen() {
               <CardContent className="space-y-2 text-sm">
                 <div>
                   Active Scheme: <span className="font-semibold text-slate-100">{getSchemeDisplayName(activeScheme)}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Selected ID: <span className="font-mono">{side === "OFFENSE" ? state.playbooks?.offensePlaybookId ?? "(unset)" : state.playbooks?.defensePlaybookId ?? "(unset)"}</span>
                 </div>
                 <div>
                   {side === "OFFENSE" ? "OC" : "DC"}: <span className="font-semibold">{coordinator.coachName}</span>
@@ -361,7 +368,7 @@ export default function PlaybookScreen() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-semibold text-sm">{scheme.label}</div>
-                      {isActive ? <Badge className="bg-accent text-black">ACTIVE</Badge> : null}
+                      {isActive ? <Badge className="bg-accent text-black">ACTIVE</Badge> : <button className="rounded border border-white/20 px-2 py-0.5 text-[10px]" onClick={() => dispatch({ type: "SET_PLAYBOOK", payload: { side, playbookId: scheme.id } })}>SELECT</button>}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">{scheme.description}</div>
                   </div>

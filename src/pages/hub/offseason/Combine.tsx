@@ -7,10 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { useGame } from "@/context/GameContext";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
+import { getScoutViewProspect } from "@/engine/scouting/scoutView";
 
 export default function Combine() {
   const { state, dispatch } = useGame();
@@ -96,6 +93,7 @@ export default function Combine() {
                 const vert = p.vert != null ? String(p.vert) : "—";
                 const bench = p.bench != null ? String(p.bench) : "—";
                 const combineScore10 = computeCombineScore(p as Record<string, unknown>).combineScore10;
+                const scoutView = getScoutViewProspect(state, String(p.id ?? p.playerId ?? ""));
 
                 return (
                   <div
@@ -114,7 +112,7 @@ export default function Combine() {
                         40 {forty} · Vert {vert} · Bench {bench} · CS {formatCombineScore10(combineScore10)}
                       </div>
                     </div>
-                    <Badge variant="secondary">Tier {clamp(Number(p.tier ?? 60), 1, 99)}</Badge>
+                    <Badge variant="secondary">Est {scoutView ? `${scoutView.estOverallRange[0]}-${scoutView.estOverallRange[1]}` : "—"} ({scoutView?.confidence ?? 0}%)</Badge>
                   </div>
                 );
               })
