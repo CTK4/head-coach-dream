@@ -87,8 +87,8 @@ function toOfferItem(offer: StoryOffer): OfferItem {
 }
 
 function asEngineQuestionSource(questions: InterviewQuestion[]): EngineSelectedQuestion[] {
-  return questions.map((question, index) => ({
-    source: index < 3 ? "contextual" : "team_pool",
+  return questions.map((question) => ({
+    source: question.sourceBucket === "contextual" ? "contextual" : "team_pool",
     question,
   }));
 }
