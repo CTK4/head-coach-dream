@@ -285,7 +285,7 @@ export default function AssistantHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="mt-1 text-xs text-muted-foreground">Offer Level: {LEVEL_LABEL[level]}</div>
-            <div className="text-xs text-muted-foreground">Counter-offers are not interactive yet (stubbed for a future update).</div>
+            <div className="text-xs text-muted-foreground">Counter-offers will be resolved automatically.</div>
           </div>
         </div>
 
