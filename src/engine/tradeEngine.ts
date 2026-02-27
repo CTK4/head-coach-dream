@@ -1,4 +1,5 @@
 import type { TradeProposal, TradeResponse } from "@/types/trades";
+import { calculateTradeValue } from "@/systems/tradeValuation";
 
 /**
  * Trade engine audit summary:
@@ -69,11 +70,11 @@ function rand01(key: string): number {
 }
 
 export function playerTradeValue(p: TradePlayer): number {
-  if (p.isPick) return Number(p.overall ?? 300);
-  const ovr = Number(p.overall ?? 60);
-  const age = Number(p.age ?? 26);
-  const ageAdj = clamp(1.08 - (age - 24) * 0.02, 0.78, 1.12);
-  return Math.round(ovr * 10 * ageAdj);
+  return calculateTradeValue({
+    overall: Number(p.overall ?? 60),
+    age: Number(p.age ?? 26),
+    isPick: Boolean(p.isPick),
+  }, { teamStage: "competitive", positionalNeed: 0.5 });
 }
 
 export function packageValue(players: TradePlayer[]): number {

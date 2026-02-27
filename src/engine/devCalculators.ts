@@ -1,4 +1,5 @@
 import { getPerkDevelopmentMultiplier, type CoachPerkCarrier } from "@/engine/perkWiring";
+import { computeSnapBasedDevelopmentDelta, type SnapCounts } from "@/systems/snapProgression";
 
 export type PracticeFocusLevel = "LOW" | "NORMAL" | "HIGH";
 
@@ -51,6 +52,12 @@ export function computeSeasonDevelopmentDelta(player: {
   overall?: unknown;
   dev?: unknown;
   practiceFocus?: PracticeFocusLevel;
+  offensiveSnaps?: unknown;
+  defensiveSnaps?: unknown;
+  specialTeamsSnaps?: unknown;
+  efficiencyScore?: unknown;
+  teamSuccess?: unknown;
+  injurySetback?: unknown;
 }, coach?: CoachPerkCarrier): number {
   const age = Number(player.age ?? 24);
   const overall = Number(player.overall ?? 65);
@@ -62,5 +69,22 @@ export function computeSeasonDevelopmentDelta(player: {
   const overallDrag = overall >= 90 ? -0.6 : overall >= 83 ? -0.25 : 0.2;
   const base = (youthCurve + overallDrag) * devMult * practiceMult * perkMult;
   const rounded = Math.round(base);
-  return Math.max(-3, Math.min(4, rounded));
+
+  const snapCounts: SnapCounts = {
+    offensiveSnaps: Number(player.offensiveSnaps ?? 0),
+    defensiveSnaps: Number(player.defensiveSnaps ?? 0),
+    specialTeamsSnaps: Number(player.specialTeamsSnaps ?? 0),
+  };
+  const snapDelta = computeSnapBasedDevelopmentDelta({
+    age,
+    devTrait: String(player.dev ?? ""),
+    overall,
+    snaps: snapCounts,
+    maxTeamSnaps: 1200,
+    efficiencyScore: Number(player.efficiencyScore ?? 0.5),
+    teamSuccess: Number(player.teamSuccess ?? 0.5),
+    injurySetback: Number(player.injurySetback ?? 0),
+  });
+
+  return Math.max(-4, Math.min(5, Math.round((rounded + snapDelta) / 2)));
 }
