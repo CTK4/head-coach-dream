@@ -799,6 +799,12 @@ function resolveWithPAS(
     };
     const contact = resolveContact(contactInput, contactRng);
     yards = Math.max(yards, contact.yacYards);
+    // Apply RB fatigue as a direct yards reduction (after contact resolution to preserve RNG sequence)
+    {
+      const rbPlayerId = sim.trackedPlayers[sim.possession]?.RB;
+      const rbFatigueLevel = rbPlayerId ? clampFatigue(sim.playerFatigue[rbPlayerId] ?? 50) : 50;
+      yards = Math.max(-8, yards - Math.floor(Math.max(0, rbFatigueLevel - 40) * 0.04));
+    }
     const runFumble = resolveFumble(
       {
         carrier: { balanceZ: ratingZ(contactInput.ballcarrier.balance), strengthZ: ratingZ(contactInput.ballcarrier.strength), fatigue01: contactInput.ballcarrier.fatigue01 },

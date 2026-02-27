@@ -12,7 +12,7 @@ export function normalizeProspectPosition(rawPos: string, taxonomy: ProspectPosi
   const tokenSet = new Set(tokens);
   const compact = tokens.join("");
 
-  const hasAny = (...values: string[]) => values.some((v) => tokenSet.has(v) || compact.includes(v));
+  const hasAny = (...values: string[]) => values.some((v) => tokenSet.has(v));
 
   let normalized = tokens[0] ?? "ATH";
 
