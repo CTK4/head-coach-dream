@@ -18,7 +18,11 @@ const DELTA_TO_METRIC_CANDIDATES: Record<string, string[]> = {
   qbPlan: ["qb_plan_clarity"],
   assetDiscipline: ["asset_discipline_score"],
   authority: ["authority_score"],
+  rebuildClarity: ["rebuild_clarity"],
   continuity: ["continuity_score"],
+  continuity_score: ["continuity_score", "continuity"],
+  discipline: ["discipline_score"],
+  discipline_score: ["discipline_score", "discipline"],
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -184,12 +188,24 @@ export function scoreInterview(
       }
     };
 
-    if (source === "contextual" && selected.delta) {
-      applyDelta(selected.delta);
+    const explicitDelta = (selected.delta ?? (selected as QuestionOption & { deltas?: Record<string, number | string> }).deltas) as
+      | Record<string, number | string>
+      | undefined;
+    if (explicitDelta) {
+      applyDelta(explicitDelta);
     }
 
     const appliedTags: string[] = [];
-    if (source === "team_pool") {
+    if (!explicitDelta && source === "team_pool") {
+      for (const tag of selected.tags ?? []) {
+        const tagDelta = teamConfig.tag_deltas[tag];
+        if (!tagDelta) continue;
+        applyDelta(tagDelta);
+        appliedTags.push(tag);
+      }
+    }
+
+    if (!explicitDelta && source === "contextual") {
       for (const tag of selected.tags ?? []) {
         const tagDelta = teamConfig.tag_deltas[tag];
         if (!tagDelta) continue;

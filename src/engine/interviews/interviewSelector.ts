@@ -1,4 +1,4 @@
-import interviewBankJson from "@/data/ugf_interview_bank_150.json";
+import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
 import { XorShift32 } from "@/engine/interviewHiring/rng";
 import type { TeamConfig } from "@/engine/interviewHiring/types";
 
@@ -8,6 +8,7 @@ export type InterviewQuestion = {
   prompt: string;
   options: Array<{ choice_id: string; text: string; tags?: string[]; delta?: Record<string, number>; riskFlag?: string }>;
   question_key?: string;
+  sourceBucket?: "contextual" | "team_pool" | "fallback_pool";
 };
 
 export type SelectedInterview = {
@@ -24,8 +25,7 @@ type SelectInterviewQuestionsParams = {
 };
 
 type TeamPoolQuestion = InterviewQuestion & { asker: "OWNER" | "GM" };
-
-const interviewBank = interviewBankJson as { systems: TeamConfig[] };
+const STORY_FALLBACK_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "BIRMINGHAM_VULCANS"] as const;
 
 export function stableTeamHash(teamId: string): number {
   let hash = 2166136261;
@@ -98,14 +98,6 @@ function dedupeByQuestionId<T extends { question_id: string }>(questions: T[]): 
   return [...map.values()];
 }
 
-function getTeamConfig(teamId: string): TeamConfig {
-  const found = interviewBank.systems.find((system) => system.team?.team_id === teamId);
-  if (!found) {
-    throw new Error(`Story interview team config missing for '${teamId}'.`);
-  }
-  return found;
-}
-
 function asInterviewQuestion(question: TeamConfig["contextual_pool"]["questions"][number]): InterviewQuestion {
   return {
     question_id: question.question_id,
@@ -115,7 +107,7 @@ function asInterviewQuestion(question: TeamConfig["contextual_pool"]["questions"
       choice_id: option.choice_id,
       text: option.text,
       tags: option.tags,
-      delta: option.delta,
+      delta: option.delta ?? (option as { deltas?: Record<string, number> }).deltas,
       riskFlag:
         typeof (option.delta as Record<string, unknown> | undefined)?.riskFlag === "string"
           ? String((option.delta as Record<string, unknown>).riskFlag)
@@ -123,6 +115,10 @@ function asInterviewQuestion(question: TeamConfig["contextual_pool"]["questions"
     })),
     question_key: question.question_key,
   };
+}
+
+function withSourceBucket(questions: InterviewQuestion[], sourceBucket: InterviewQuestion["sourceBucket"]): InterviewQuestion[] {
+  return questions.map((question) => ({ ...question, sourceBucket }));
 }
 
 export function selectInterviewQuestions(params: SelectInterviewQuestionsParams): SelectedInterview {
@@ -182,8 +178,36 @@ export function selectInterviewQuestions(params: SelectInterviewQuestionsParams)
     selectedTeam.push(...tail);
   }
 
+  const contextualFallbackPool = contextualPool.filter(
+    (question) => !contextual.some((picked) => picked.question_id === question.question_id),
+  );
+  const fallbackContextual = weightedNoReplacement(contextualFallbackPool, () => 1, Math.max(0, 3 - selectedTeam.length), rng);
+  if (fallbackContextual.length) {
+    selectedTeam.push(...(fallbackContextual as TeamPoolQuestion[]));
+  }
+
+  if (selectedTeam.length < 3) {
+    for (const fallbackTeamId of STORY_FALLBACK_TEAM_IDS) {
+      if (fallbackTeamId === teamId) continue;
+      const fallbackConfig = getTeamConfig(fallbackTeamId);
+      const fallbackPool = dedupeByQuestionId((fallbackConfig.team_pool.questions ?? []).map(asInterviewQuestion)).filter(
+        (question) => !selectedTeam.some((picked) => picked.question_id === question.question_id),
+      );
+      if (!fallbackPool.length) continue;
+      const fallbackPicks = weightedNoReplacement(fallbackPool, () => 1, 3 - selectedTeam.length, rng);
+      selectedTeam.push(...(fallbackPicks as TeamPoolQuestion[]));
+      if (selectedTeam.length >= 3) break;
+    }
+  }
+
+  const teamPoolIds = new Set(rawTeamPool.map((question) => question.question_id));
+  const normalizedTeam = selectedTeam.slice(0, 3).map((question) => ({
+    ...question,
+    sourceBucket: teamPoolIds.has(question.question_id) ? "team_pool" : "fallback_pool",
+  }));
+
   return {
     teamId,
-    questions: [...contextual, ...selectedTeam].slice(0, 6),
+    questions: [...withSourceBucket(contextual, "contextual"), ...normalizedTeam].slice(0, 6),
   };
 }
