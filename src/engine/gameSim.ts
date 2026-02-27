@@ -207,7 +207,8 @@ export type GameSim = {
   lastResult?: string;
   lastResultTags?: ResultTag[];
   seed: number;
-  weekType?: "PRESEASON" | "REGULAR_SEASON";
+  weekType?: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
+  playoffGameId?: string;
   weekNumber?: number;
   driveNumber: number;
   playNumberInDrive: number;
@@ -1322,7 +1323,8 @@ export function initGameSim(params: {
   homeTeamId: string;
   awayTeamId: string;
   seed: number;
-  weekType?: "PRESEASON" | "REGULAR_SEASON";
+  weekType?: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
+  playoffGameId?: string;
   weekNumber?: number;
   homeRatings?: TeamGameRatings;
   awayRatings?: TeamGameRatings;

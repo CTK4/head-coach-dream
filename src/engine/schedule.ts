@@ -1,4 +1,4 @@
-export type GameType = "PRESEASON" | "REGULAR_SEASON";
+export type GameType = "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
 
 export type Matchup = {
   homeTeamId: string;

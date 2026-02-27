@@ -70,6 +70,7 @@ const RegularSeason = () => {
   const { state, dispatch, getCurrentTeamMatchup } = useGame();
   const navigate = useNavigate();
 
+  if (state.careerStage === "PLAYOFFS") return <Navigate to="/hub/playoffs" replace />;
   if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub/offseason" replace />;
 
   const initialAlloc = useMemo(
