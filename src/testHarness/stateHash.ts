@@ -11,6 +11,7 @@ function sanitize(value: unknown): JsonLike {
     const out: Record<string, JsonLike> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (k === "lastPlayed" || k === "ui" || k === "uiToast") continue;
+      if (v === undefined) continue;
       out[k] = sanitize(v);
     }
     return out;
