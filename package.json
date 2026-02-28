@@ -14,7 +14,8 @@
     "repair:leagueDb": "node scripts/repairLeagueDbJson.mjs",
     "smoke": "node scripts/smokeTest.mjs",
     "test:ui": "playwright test",
-    "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs"
+    "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

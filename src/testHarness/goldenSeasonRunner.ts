@@ -1,6 +1,7 @@
 import { gameReducer, type GameAction, type GameState, type OfferItem } from "@/context/GameContext";
 import { getPersonnel, getPersonnelFreeAgents, getPlayersByTeam } from "@/data/leagueDb";
 import { ENABLE_TAMPERING_STEP } from "@/engine/offseason";
+import { getPlayoffRoundGames } from "@/engine/playoffsSim";
 import { StateMachine } from "@/lib/stateMachine";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
@@ -129,7 +130,30 @@ function advanceUntilSeasonAwards(state: GameState): GameState {
   let out = state;
   let guard = 0;
   while (out.careerStage !== "SEASON_AWARDS" && guard < 40) {
-    out = dispatch(out, { type: "ADVANCE_WEEK" });
+    if (out.careerStage === "PLAYOFFS" && out.playoffs) {
+      // Auto-sim pending user game (home team wins) to keep progress deterministic
+      if (out.playoffs.pendingUserGame) {
+        const pg = out.playoffs.pendingUserGame;
+        out = dispatch(out, {
+          type: "PLAYOFFS_MARK_GAME_FINAL",
+          payload: { gameId: pg.gameId, homeScore: 28, awayScore: 14, winnerTeamId: pg.homeTeamId },
+        });
+      }
+      const currentGames = getPlayoffRoundGames(out.playoffs);
+      const allDone = currentGames.length > 0 && currentGames.every((g) => out.playoffs!.completedGames[g.gameId]);
+      if (allDone) {
+        if (out.playoffs.round === "SUPER_BOWL") {
+          out = dispatch(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+        } else {
+          out = dispatch(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
+          out = dispatch(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+        }
+      } else {
+        out = dispatch(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+      }
+    } else {
+      out = dispatch(out, { type: "ADVANCE_WEEK" });
+    }
     guard += 1;
   }
   if (out.careerStage !== "SEASON_AWARDS") throw new Error("Unable to reach SEASON_AWARDS deterministically");

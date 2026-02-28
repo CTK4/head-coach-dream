@@ -7,10 +7,9 @@ import {
   migratePracticePlan,
   resolveInstallFamiliarity,
 } from "@/engine/practiceFocus";
-import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, migrateSave } from "@/context/GameContext";
-import { DEFAULT_PRACTICE_PLAN, getEffectPreview, getPracticeEffect, resolveInstallFamiliarity } from "@/engine/practiceFocus";
 import { applyPracticePlanForWeek, applyPracticePlanForWeekAtomic, gameReducer, migrateSave } from "@/context/GameContext";
 import type { GameState } from "@/context/GameContext";
+import { DEFAULT_WEEKLY_GAMEPLAN } from "@/engine/gameplan";
 import { getTeams, getPlayers } from "@/data/leagueDb";
 
 function baselineState(teamId: string): GameState {
@@ -90,12 +89,15 @@ describe("practice integration", () => {
   it("applied practice familiarity carries into game sim bonus", () => {
     const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
     const opponent = getTeams().find((t) => t.teamId !== teamId)?.teamId ?? "ATLANTA_APEX";
+    const base = baselineState(teamId);
     const seeded: GameState = {
-      ...baselineState(teamId),
+      ...base,
       acceptedOffer: { teamId } as unknown as GameState["acceptedOffer"],
       weeklyFamiliarityBonus: 0,
       practicePlan: { primaryFocus: "Install", intensity: "High" },
       playerFamiliarityById: {},
+      league: { ...base.league, phase: "REGULAR_SEASON_GAME" },
+      teamGameplans: { [teamId]: { ...DEFAULT_WEEKLY_GAMEPLAN, locked: true } },
     };
 
     const withPractice = applyPracticePlanForWeek(seeded, teamId, 3).nextState;
