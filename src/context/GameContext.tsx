@@ -40,7 +40,8 @@ import type { TeamStanding } from "@/engine/standings";
 import { checkMilestones } from "@/engine/milestones";
 import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { generateOffers } from "@/engine/offers";
-import { genFreeAgents, runLeagueAging } from "@/engine/offseasonGen";
+import { genFreeAgents } from "@/engine/offseasonGen";
+import { CORE_ATTRIBUTE_KEYS, calculateProgressionDelta, defaultDevelopmentTrait, type DevelopmentProfile, type SeasonStats, type SnapCounts } from "@/engine/snapBasedProgression";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
 import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
 import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
@@ -577,6 +578,9 @@ export type PlayerAccolades = {
 };
 
 export type PersistedFatigue = { fatigue: number; last3SnapLoads: number[] };
+export type PersistedSnapCounts = SnapCounts;
+export type PersistedSeasonStats = SeasonStats;
+export type PersistedDevelopment = DevelopmentProfile;
 
 export type PendingTradeOffer = {
   id: string;
@@ -743,7 +747,11 @@ export type GameState = {
   newsHistory: LeagueNewsItem[];
   retiredPlayers: RetiredPlayerRecord[];
   playerAgingDeltasById: Record<string, number>;
+  playerAttributeDeltasById: Record<string, Record<string, number>>;
   playerAgeOffsetById: Record<string, number>;
+  playerSnapCountsById: Record<string, PersistedSnapCounts>;
+  playerProgressionSeasonStatsById: Record<string, PersistedSeasonStats>;
+  playerDevelopmentById: Record<string, PersistedDevelopment>;
   finances: TeamFinances;
   league: LeagueState;
   teamGameplans: Record<string, WeeklyGameplan | undefined>;
@@ -1272,7 +1280,11 @@ function createInitialState(): GameState {
     newsHistory: [],
     retiredPlayers: [],
     playerAgingDeltasById: {},
+    playerAttributeDeltasById: {},
     playerAgeOffsetById: {},
+    playerSnapCountsById: {},
+    playerProgressionSeasonStatsById: {},
+    playerDevelopmentById: {},
     finances: {
       cap: 250_000_000,
       carryover: 0,
@@ -2138,32 +2150,64 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
 
   const teams = getTeams().filter((t) => t.isActive).map((t) => ({
     teamId: String(t.teamId),
-    roster: getEffectivePlayersByTeam(state, String(t.teamId)).map((p: any) => ({
-      playerId: String(p.playerId),
-      fullName: String(p.fullName ?? p.name ?? "Unknown"),
-      pos: String(p.pos ?? "UNK"),
-      age: Number(p.age ?? 22),
-      overall: Number(p.overall ?? 60),
-    })),
+    roster: getEffectivePlayersByTeam(state, String(t.teamId)).map((p: any) => {
+      const playerId = String(p.playerId);
+      const snap = state.playerSnapCountsById?.[playerId] ?? { offense: 0, defense: 0, specialTeams: 0 };
+      const perf = state.playerProgressionSeasonStatsById?.[playerId] ?? {
+        gamesPlayed: Number(p.gamesPlayed ?? 0),
+        starts: Number(p.starts ?? 0),
+        performanceScore: 0.5,
+      };
+      const injuryGamesMissed = (state.injuries ?? []).filter((inj) => String(inj.playerId) === playerId).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0);
+      const development = state.playerDevelopmentById?.[playerId] ?? {
+        trait: defaultDevelopmentTrait(playerId, state.saveSeed),
+        hiddenDev: true,
+        highSnapSeasons: 0,
+      };
+      return {
+        playerId,
+        fullName: String(p.fullName ?? p.name ?? "Unknown"),
+        pos: String(p.pos ?? "UNK"),
+        age: Number(p.age ?? 22),
+        overall: Number(p.overall ?? 60),
+        snapCounts: snap,
+        seasonStats: { ...perf, performanceScore: clamp01(Number(perf.performanceScore ?? 0.5)), injuryGamesMissed },
+        development,
+      };
+    }),
   }));
 
-  const { updatedTeams, retirees, agingDeltas } = runLeagueAging(teams);
   const deltaById = { ...(state.playerAgingDeltasById ?? {}) };
+  const attributeDeltasById = { ...(state.playerAttributeDeltasById ?? {}) };
   const ageOffsetById = { ...(state.playerAgeOffsetById ?? {}) };
-  for (const d of agingDeltas) {
-    deltaById[d.playerId] = Number(deltaById[d.playerId] ?? 0) + Number(d.delta ?? 0);
-    ageOffsetById[d.playerId] = Number(ageOffsetById[d.playerId] ?? 0) + 1;
+  const devById = { ...(state.playerDevelopmentById ?? {}) };
+  const retirees: Array<{ playerId: string; fullName: string; pos?: string; age: number; overall: number }> = [];
+
+  for (const team of teams) {
+    const teamTotalSnaps = Math.max(1, team.roster.reduce((sum, pl) => sum + Number(pl.snapCounts.offense ?? 0) + Number(pl.snapCounts.defense ?? 0) + Number(pl.snapCounts.specialTeams ?? 0), 0));
+    for (const pl of team.roster) {
+      const result = calculateProgressionDelta(pl, teamTotalSnaps);
+      deltaById[pl.playerId] = Number(deltaById[pl.playerId] ?? 0) + Number(result.delta);
+      ageOffsetById[pl.playerId] = Number(ageOffsetById[pl.playerId] ?? 0) + 1;
+      const playerAttr = { ...(attributeDeltasById[pl.playerId] ?? {}) };
+      for (const key of CORE_ATTRIBUTE_KEYS) playerAttr[key] = Number(playerAttr[key] ?? 0) + Number(result.delta);
+      attributeDeltasById[pl.playerId] = playerAttr;
+      devById[pl.playerId] = {
+        ...(pl.development ?? { trait: defaultDevelopmentTrait(pl.playerId, state.saveSeed), hiddenDev: true, highSnapSeasons: 0 }),
+        hiddenDev: result.revealed ? false : Boolean(pl.development.hiddenDev),
+        highSnapSeasons: result.nextHighSnapSeasons,
+      };
+
+      const nextAge = Number(pl.age ?? 0) + 1;
+      const nextOverall = Math.max(40, Math.min(99, Number(pl.overall ?? 0) + Number(result.delta)));
+      if (nextAge >= 40 || (nextAge >= 36 && nextOverall < 70) || (nextAge >= 33 && nextOverall < 65) || (nextAge >= 30 && nextOverall < 60)) {
+        retirees.push({ playerId: pl.playerId, fullName: pl.fullName, pos: pl.pos, age: nextAge, overall: nextOverall });
+      }
+    }
   }
 
   const playerTeamOverrides = { ...state.playerTeamOverrides };
   for (const r of retirees) playerTeamOverrides[String(r.playerId)] = "RETIRED";
-
-  const updatedById = new Map(updatedTeams.flatMap((t) => t.roster.map((p) => [String(p.playerId), p] as const)));
-  const rookies = state.rookies.map((r) => {
-    const aged = updatedById.get(String(r.playerId));
-    if (!aged) return r;
-    return { ...r, age: Number(aged.age ?? r.age), ovr: Number(aged.overall ?? r.ovr) };
-  });
 
   const retiredPlayers = [
     ...(state.retiredPlayers ?? []),
@@ -2177,7 +2221,7 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
     })),
   ];
 
-  const retirementNews = generateRetirementNews(retirees, {
+  const retirementNews = generateRetirementNews(retirees as any[], {
     week: 0,
     season: Number(state.season),
     userTeamId: String(state.acceptedOffer?.teamId ?? ""),
@@ -2185,15 +2229,18 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
 
   return {
     ...state,
-    rookies,
     playerTeamOverrides,
     playerAgingDeltasById: deltaById,
+    playerAttributeDeltasById: attributeDeltasById,
     playerAgeOffsetById: ageOffsetById,
+    playerDevelopmentById: devById,
+    playerSnapCountsById: {},
+    playerProgressionSeasonStatsById: {},
     retiredPlayers,
     offseasonNews: [...retirementNews, ...(state.offseasonNews ?? [])].slice(0, 300),
     newsHistory: appendNewsHistory(state.newsHistory ?? [], retirementNews),
     hub: { ...state.hub, news: state.hub.news },
-    memoryLog: addMemoryEvent(state, "LEAGUE_AGING", { retirees: retirees.length, deltas: agingDeltas.length }),
+    memoryLog: addMemoryEvent(state, "LEAGUE_AGING", { retirees: retirees.length, deltas: Object.keys(deltaById).length }),
   };
 }
 
@@ -6996,10 +7043,32 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const nextSeason = Number(out.season ?? 2026) + 1;
       const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
       const nextSchedule = generateLeagueSchedule(teams, Number(out.saveSeed ?? 1) + nextSeason * 1337);
+      const progressionSeasonStatsById = { ...(out.playerProgressionSeasonStatsById ?? {}) };
+      const snapCountsById = { ...(out.playerSnapCountsById ?? {}) };
+      for (const p of getEffectivePlayers(out)) {
+        const pid = String((p as any).playerId ?? "");
+        if (!pid) continue;
+        const last3 = out.playerFatigueById?.[pid]?.last3SnapLoads ?? [];
+        const avgLoad = last3.length ? last3.reduce((a, b) => a + Number(b ?? 0), 0) / last3.length : 0;
+        const pos = String((p as any).pos ?? "").toUpperCase();
+        snapCountsById[pid] = ["QB", "RB", "WR", "TE", "OL"].includes(pos)
+          ? { offense: Math.round(avgLoad * 17), defense: 0, specialTeams: Math.round(avgLoad * 2) }
+          : ["DL", "EDGE", "LB", "CB", "S", "DB", "DE", "DT"].includes(pos)
+            ? { offense: 0, defense: Math.round(avgLoad * 17), specialTeams: Math.round(avgLoad * 2) }
+            : { offense: 0, defense: 0, specialTeams: Math.round(avgLoad * 17) };
+        progressionSeasonStatsById[pid] = progressionSeasonStatsById[pid] ?? {
+          gamesPlayed: Math.min(17, Math.max(0, last3.length ? 17 : 0)),
+          starts: avgLoad > 45 ? 17 : avgLoad > 20 ? 8 : 0,
+          performanceScore: clamp01((Number((p as any).overall ?? 60) - 55) / 45),
+          injuryGamesMissed: (out.injuries ?? []).filter((inj) => String(inj.playerId) === pid).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0),
+        };
+      }
       return {
         ...out,
         coach: coachWithCareer,
         playerSeasonStatsById: nextSeasonStatsById,
+        playerProgressionSeasonStatsById: progressionSeasonStatsById,
+        playerSnapCountsById: snapCountsById,
         playerCareerStatsById: careerById,
         leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
         season: nextSeason,
@@ -7432,7 +7501,11 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     newsHistory: Array.isArray((oldState as any).newsHistory) ? (oldState as any).newsHistory : [],
     retiredPlayers: Array.isArray((oldState as any).retiredPlayers) ? (oldState as any).retiredPlayers : [],
     playerAgingDeltasById: { ...((oldState as any).playerAgingDeltasById ?? {}) },
+    playerAttributeDeltasById: { ...((oldState as any).playerAttributeDeltasById ?? {}) },
     playerAgeOffsetById: { ...((oldState as any).playerAgeOffsetById ?? {}) },
+    playerSnapCountsById: { ...((oldState as any).playerSnapCountsById ?? {}) },
+    playerProgressionSeasonStatsById: { ...((oldState as any).playerProgressionSeasonStatsById ?? {}) },
+    playerDevelopmentById: { ...((oldState as any).playerDevelopmentById ?? {}) },
     finances:
       (oldState as any).finances ??
       {
@@ -7596,7 +7669,11 @@ function loadState(): GameState {
       newsHistory: Array.isArray((migrated as any).newsHistory) ? (migrated as any).newsHistory : [],
       retiredPlayers: Array.isArray((migrated as any).retiredPlayers) ? (migrated as any).retiredPlayers : [],
       playerAgingDeltasById: { ...(initial.playerAgingDeltasById ?? {}), ...((migrated as any).playerAgingDeltasById ?? {}) },
+      playerAttributeDeltasById: { ...(initial.playerAttributeDeltasById ?? {}), ...((migrated as any).playerAttributeDeltasById ?? {}) },
       playerAgeOffsetById: { ...(initial.playerAgeOffsetById ?? {}), ...((migrated as any).playerAgeOffsetById ?? {}) },
+      playerSnapCountsById: { ...(initial.playerSnapCountsById ?? {}), ...((migrated as any).playerSnapCountsById ?? {}) },
+      playerProgressionSeasonStatsById: { ...(initial.playerProgressionSeasonStatsById ?? {}), ...((migrated as any).playerProgressionSeasonStatsById ?? {}) },
+      playerDevelopmentById: { ...(initial.playerDevelopmentById ?? {}), ...((migrated as any).playerDevelopmentById ?? {}) },
       finances: { ...initial.finances, ...(migrated as any).finances },
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
