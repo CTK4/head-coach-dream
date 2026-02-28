@@ -154,6 +154,216 @@ export type CareerStage =
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
+export type WeekKey = `${number}-W${number}`;
+export type TeamId = string;
+export type PlayerId = string;
+export type CoachId = string;
+
+export type OwnerGoalSet = {
+  minWins: number;
+  playoffRoundTarget: "MISS" | "WILD_CARD" | "DIVISIONAL" | "CONF_TITLE" | "CHAMPION";
+  topUnitTarget?: { unit: "OFFENSE" | "DEFENSE" | "ST"; rankMax: number };
+  disciplineTarget?: { maxPenaltiesRank?: number };
+  financeTarget?: { capOverageAllowed: number; deadCapMax: number };
+};
+
+export type OwnerExpectationsConfig = {
+  patience: number;
+  spendTolerance: number;
+  riskTolerance: number;
+  rebuildPreference: "WIN_NOW" | "BALANCED" | "REBUILD";
+  identityPreference?: { offense?: string; defense?: string };
+  goalsBySeason: Record<string, OwnerGoalSet>;
+};
+
+export type OwnerUltimatum = { year: number; trigger: string; resolved: boolean };
+export type OwnerState = {
+  approval: number;
+  pressure: number;
+  trust: number;
+  lastEvaluation?: { year: number; summary: string; delta: number };
+  ultimatums: OwnerUltimatum[];
+  currentGoals?: OwnerGoalSet;
+};
+
+export type Coach = {
+  coachId: CoachId;
+  name: string;
+  role: "HC" | "OC" | "DC" | "ST" | "POSITION";
+  side?: "OFFENSE" | "DEFENSE" | "ST";
+  schemePrefs?: { offense?: string; defense?: string };
+  traits: string[];
+  ratings: { teaching: number; strategy: number; discipline: number; recruiting: number };
+  reputation: number;
+  career: {
+    yearsExp: number;
+    treeRootCoachId?: CoachId;
+    history: Array<{ year: number; teamId: TeamId; role: string; resultSummary: string }>;
+  };
+  contract: { years: number; salary: number };
+};
+
+export type TeamStaff = {
+  hc: CoachId;
+  oc: CoachId;
+  dc: CoachId;
+  st: CoachId;
+  assistants: CoachId[];
+};
+
+export type CoachMarketItem = {
+  coachId: CoachId;
+  askingRole: "HC" | "OC" | "DC" | "ST";
+  interest: number;
+  expectedYears: number;
+  expectedSalary: number;
+  reasons: string[];
+};
+
+export type CoachingState = {
+  coachesById: Record<CoachId, Coach>;
+  staffByTeamId: Record<TeamId, TeamStaff>;
+  market: {
+    weekKey: WeekKey;
+    candidates: CoachMarketItem[];
+    pendingOffers: Array<{
+      offerId: string;
+      coachId: CoachId;
+      teamId: TeamId;
+      role: "HC" | "OC" | "DC" | "ST";
+      years: number;
+      salary: number;
+      status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+    }>;
+    poaching: Array<{
+      eventId: string;
+      coachId: CoachId;
+      fromTeamId: TeamId;
+      toTeamId?: TeamId;
+      role: "OC" | "DC" | "ST";
+      status: "RUMOR" | "OFFERED" | "LEFT" | "STAYED";
+    }>;
+  };
+};
+
+export type WireCategory = "MEDIA" | "OWNER" | "INJURY" | "COACHING" | "TRANSACTION" | "GAME" | "DYNASTY";
+export type WireItem = {
+  id: string;
+  weekKey: WeekKey;
+  ts: number;
+  category: WireCategory;
+  headline: string;
+  body?: string;
+  tags?: string[];
+  teamIds?: TeamId[];
+  playerIds?: PlayerId[];
+  coachIds?: CoachId[];
+  tone?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+};
+
+export type MediaStory = {
+  storyId: string;
+  weekKey: WeekKey;
+  headline: string;
+  body: string;
+  tags: string[];
+  teams: TeamId[];
+  players?: PlayerId[];
+  tone: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+  heatDelta?: number;
+  moraleDelta?: number;
+};
+
+export type MediaState = { storiesByWeek: Record<WeekKey, MediaStory[]> };
+export type WireState = { items: WireItem[]; lastPruneWeekKey?: WeekKey };
+
+export type PlayerInjury = {
+  injuryType: string;
+  severity: number;
+  expectedWeeks: number;
+  remainingWeeks: number;
+  riskOfReinjury: number;
+  cleared: boolean;
+};
+
+export type PlayerMedical = {
+  durability: number;
+  injuryHistory: Array<{ type: string; weekKey: WeekKey; severity: number; gamesMissed: number }>;
+  current?: PlayerInjury;
+};
+
+export type MedicalStaff = {
+  diagnosis: number;
+  rehab: number;
+  prevention: number;
+  riskTolerance: number;
+};
+
+export type InjuryReport = {
+  playerId: PlayerId;
+  teamId: TeamId;
+  weekKey: WeekKey;
+  status: "OUT" | "DOUBTFUL" | "QUESTIONABLE" | "PROBABLE" | "CLEARED";
+  displayedWeeksRange: [number, number];
+  recommendation: "HOLD" | "LIMITED" | "RUSH_BACK";
+};
+
+export type MedicalState = {
+  playerMedicalById: Record<PlayerId, PlayerMedical>;
+  staffByTeamId: Record<TeamId, MedicalStaff>;
+  injuryReportsByWeek: Record<WeekKey, InjuryReport[]>;
+};
+
+export type SidelineAdjustments = {
+  offense: {
+    tempo: "SLOW" | "NORMAL" | "NO_HUDDLE";
+    aggressiveness: number;
+    runBias: number;
+    passProtection: "BASE" | "MAX_PROTECT" | "SLIDE_LEFT" | "SLIDE_RIGHT";
+    targetFocus?: PlayerId;
+  };
+  defense: {
+    shellPreference: "AUTO" | "SINGLE_HIGH" | "TWO_HIGH";
+    blitzRate: number;
+    spyQB: boolean;
+    bracket?: PlayerId;
+    runFit: "LIGHT_BOX" | "NORMAL" | "HEAVY_BOX";
+  };
+  specialTeams: {
+    returnAggression: number;
+    puntStrategy: "NORMAL" | "PIN_DEEP" | "RUGBY" | "FAKE_ALERT";
+  };
+};
+
+export type LiveGameState = {
+  gameId: string;
+  weekKey: WeekKey;
+  homeTeamId: TeamId;
+  awayTeamId: TeamId;
+  userTeamId: TeamId;
+  sideline: SidelineAdjustments;
+  gameplanSideline: SidelineAdjustments;
+};
+
+export type DynastySeasonLog = {
+  year: number;
+  wins: number;
+  playoffResult: string;
+  awards: string[];
+  rankOff?: number;
+  rankDef?: number;
+  rankST?: number;
+  ownerOutcome: "EXTENDED" | "WARNED" | "ULTIMATUM" | "FIRED" | "STABLE";
+  legacyDelta: number;
+};
+
+export type DynastyProfile = {
+  legacyScore: number;
+  seasonLog: DynastySeasonLog[];
+  milestones: Array<{ key: string; achievedYear: number }>;
+  unlockedCosmetics?: string[];
+};
+
 export type GmMode = "REBUILD" | "RELOAD" | "CONTEND";
 
 export type PriorityPos = "QB" | "RB" | "WR" | "TE" | "OL" | "DL" | "EDGE" | "LB" | "CB" | "S" | "K" | "P";
@@ -664,6 +874,14 @@ export type GameState = {
   };
   autonomyRating?: number;
   ownerPatience?: number;
+  teamOwnerExpectationsByTeamId: Record<TeamId, OwnerExpectationsConfig>;
+  ownerState: OwnerState;
+  coaching: CoachingState;
+  media: MediaState;
+  wire: WireState;
+  medical: MedicalState;
+  liveGames: Record<string, LiveGameState>;
+  dynasty: DynastyProfile;
   season: number;
   week?: number;
   schemaVersion: number;
@@ -1036,6 +1254,31 @@ export type GameAction =
   | { type: "CLEAR_FEEDBACK_QUEUE" }
   | { type: "CLEAR_PENDING_INJURY_ALERT" }
   | { type: "DEV_APPLY_GATE"; payload: { gate: DevGate; options?: { reset?: boolean; saveAfter?: boolean } } }
+  | { type: "OWNER_INIT_SEASON_GOALS"; payload: { year: number; teamId: TeamId } }
+  | { type: "OWNER_WEEKLY_EVALUATE"; payload: { weekKey: WeekKey; teamId: TeamId; deltas: { approval: number; pressure: number; trust: number }; reasons: string[] } }
+  | { type: "OWNER_ENDSEASON_EVALUATE"; payload: { year: number; teamId: TeamId; result: { goalScore: number; ownerOutcome: "EXTENDED" | "WARNED" | "ULTIMATUM" | "FIRED" | "STABLE"; delta: number; summary: string; trigger?: string } } }
+  | { type: "COACHING_BOOTSTRAP"; payload: { seed: number } }
+  | { type: "COACHING_GENERATE_MARKET"; payload: { weekKey: WeekKey; teamId: TeamId; roles: Array<"HC" | "OC" | "DC" | "ST"> } }
+  | { type: "COACHING_MAKE_OFFER"; payload: { offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number } }
+  | { type: "COACHING_RESOLVE_OFFERS"; payload: { weekKey: WeekKey } }
+  | { type: "COACHING_ASSIGN_STAFF_ROLE"; payload: { teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; coachId: CoachId } }
+  | { type: "COACHING_POACHING_GENERATE"; payload: { weekKey: WeekKey } }
+  | { type: "COACHING_POACHING_RESOLVE"; payload: { weekKey: WeekKey } }
+  | { type: "COACH_CAREER_APPEND_HISTORY"; payload: { coachId: CoachId; entry: { year: number; teamId: TeamId; role: string; resultSummary: string } } }
+  | { type: "WIRE_APPEND"; payload: { item: WireItem } }
+  | { type: "WIRE_BULK_APPEND"; payload: { items: WireItem[] } }
+  | { type: "WIRE_PRUNE"; payload: { keepLastN: number } }
+  | { type: "MEDIA_GENERATE_WEEKLY_STORIES"; payload: { weekKey: WeekKey; seed: number } }
+  | { type: "MEDICAL_GENERATE_WEEKLY_INJURIES"; payload: { weekKey: WeekKey; seed: number } }
+  | { type: "MEDICAL_TICK_RECOVERY"; payload: { weekKey: WeekKey } }
+  | { type: "MEDICAL_SET_RETURN_DECISION"; payload: { playerId: PlayerId; teamId: TeamId; decision: "HOLD" | "LIMITED" | "RUSH_BACK"; weekKey: WeekKey } }
+  | { type: "MEDICAL_CLEAR_PLAYER"; payload: { playerId: PlayerId; weekKey: WeekKey } }
+  | { type: "LIVEGAME_INIT"; payload: { gameId: string; weekKey: WeekKey; homeTeamId: TeamId; awayTeamId: TeamId; userTeamId: TeamId; initialSideline?: Partial<SidelineAdjustments> } }
+  | { type: "SIDELINE_SET"; payload: { gameId: string; patch: Partial<SidelineAdjustments> } }
+  | { type: "SIDELINE_RESET_TO_GAMEPLAN"; payload: { gameId: string } }
+  | { type: "DYNASTY_INIT"; payload: { seed: number } }
+  | { type: "DYNASTY_ENDSEASON_SCORE"; payload: { year: number; teamId: TeamId; inputs: { wins: number; playoffResult: string; awards: string[]; powerRanks?: { off?: number; def?: number; st?: number }; ownerOutcome: DynastySeasonLog["ownerOutcome"]; mediaTags: string[]; capDisaster?: boolean } } }
+  | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
   | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
   | { type: "RESET" };
 
@@ -1181,6 +1424,37 @@ function createInitialAssistantStaff(): AssistantStaff {
   return {};
 }
 
+
+function toWeekKey(year: number, weekIndex: number): WeekKey {
+  return `${year}-W${weekIndex}`;
+}
+
+function seedFor(leagueSeed: number, a: number, b: number, c: number): number {
+  return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
+}
+
+const DEFAULT_SIDELINE: SidelineAdjustments = {
+  offense: { tempo: "NORMAL", aggressiveness: 50, runBias: 50, passProtection: "BASE" },
+  defense: { shellPreference: "AUTO", blitzRate: 35, spyQB: false, runFit: "NORMAL" },
+  specialTeams: { returnAggression: 50, puntStrategy: "NORMAL" },
+};
+
+function defaultOwnerGoals(): OwnerGoalSet {
+  return { minWins: 9, playoffRoundTarget: "WILD_CARD", topUnitTarget: { unit: "OFFENSE", rankMax: 16 } };
+}
+
+function defaultOwnerState(): OwnerState {
+  return { approval: 60, pressure: 40, trust: 55, ultimatums: [], currentGoals: defaultOwnerGoals() };
+}
+
+function defaultMedicalStaffByTeamId(teamIds: TeamId[]): Record<TeamId, MedicalStaff> {
+  return Object.fromEntries(teamIds.map((teamId) => [teamId, { diagnosis: 60, rehab: 60, prevention: 60, riskTolerance: 50 }]));
+}
+
+function defaultDynastyProfile(): DynastyProfile {
+  return { legacyScore: 0, seasonLog: [], milestones: [], unlockedCosmetics: [] };
+}
+
 function createInitialState(): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   const saveSeed = Date.now();
@@ -1252,6 +1526,18 @@ function createInitialState(): GameState {
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
+    teamOwnerExpectationsByTeamId: {},
+    ownerState: defaultOwnerState(),
+    coaching: {
+      coachesById: {},
+      staffByTeamId: {},
+      market: { weekKey: toWeekKey(2026, 0), candidates: [], pendingOffers: [], poaching: [] },
+    },
+    media: { storiesByWeek: {} },
+    wire: { items: [] },
+    medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
+    liveGames: {},
+    dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
     buyouts: { bySeason: {} },
@@ -1356,7 +1642,12 @@ function createInitialState(): GameState {
     hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
-  return ensureAccolades(bootstrapAccolades(base));
+  let initialized = ensureAccolades(bootstrapAccolades(base));
+  initialized = gameReducer(initialized, { type: "COACHING_BOOTSTRAP", payload: { seed: initialized.saveSeed } });
+  initialized = gameReducer(initialized, { type: "DYNASTY_INIT", payload: { seed: initialized.saveSeed } });
+  const userTeamId = initialized.acceptedOffer?.teamId;
+  if (userTeamId) initialized = gameReducer(initialized, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: initialized.season, teamId: userTeamId } });
+  return initialized;
 }
 
 function hashStr(s: string): number {
@@ -2728,7 +3019,7 @@ function seasonRollover(state: GameState): GameState {
 
   const schedule = createSchedule(state.saveSeed ^ nextSeason);
 
-  return applyFinances({
+  let next = applyFinances({
     ...state,
     season: nextSeason,
     week: 1,
@@ -2767,7 +3058,15 @@ function seasonRollover(state: GameState): GameState {
     staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
     finances: { ...state.finances, cash },
   });
+
+  if (teamId) {
+    next = gameReducer(next, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: nextSeason, teamId } });
+  }
+  next = gameReducer(next, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: toWeekKey(nextSeason, 0), seed: seedFor(next.saveSeed, nextSeason, 0, 101) } });
+  next = gameReducer(next, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(nextSeason, 0) } });
+  return next;
 }
+
 
 function computeSeasonSummary(state: GameState): SeasonSummary {
   const teamId = state.acceptedOffer?.teamId ?? "";
@@ -3999,6 +4298,25 @@ function patiencePenalty(args: {
   const attemptCost = Math.max(0, attempts - 1) * 4;
   const baseCost = 3;
   return clamp(Math.round(baseCost + yearsCost + salaryCost + autoCost + attemptCost), 0, 35);
+}
+
+
+function clampRange(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function mergeSideline(base: SidelineAdjustments, patch?: Partial<SidelineAdjustments>): SidelineAdjustments {
+  if (!patch) return base;
+  return {
+    offense: { ...base.offense, ...(patch.offense ?? {}) },
+    defense: { ...base.defense, ...(patch.defense ?? {}) },
+    specialTeams: { ...base.specialTeams, ...(patch.specialTeams ?? {}) },
+  };
+}
+
+function deterministicRand(seed: number): number {
+  const x = Math.sin(seed >>> 0) * 10000;
+  return x - Math.floor(x);
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -7085,7 +7403,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           injuryGamesMissed: (out.injuries ?? []).filter((inj) => String(inj.playerId) === pid).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0),
         };
       }
-      return {
+      let completed: GameState = {
         ...out,
         coach: coachWithCareer,
         playerSeasonStatsById: nextSeasonStatsById,
@@ -7103,6 +7421,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           news: [{ id: `NEWS_${Date.now()}`, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: Date.now(), category: "LEAGUE" }, ...(out.hub.news ?? [])],
         },
       };
+      const teamId = completed.acceptedOffer?.teamId ?? "";
+      const row = completed.currentStandings.find((r) => String(r.teamId) === String(teamId));
+      const wins = Number(row?.w ?? 0);
+      const ownerOutcome: DynastySeasonLog["ownerOutcome"] = completed.ownerState.approval < 25 ? "FIRED" : completed.ownerState.approval < 45 ? "ULTIMATUM" : "STABLE";
+      completed = gameReducer(completed, { type: "OWNER_ENDSEASON_EVALUATE", payload: { year: completed.season - 1, teamId, result: { goalScore: wins, ownerOutcome, delta: wins >= 9 ? 4 : -4, summary: wins >= 9 ? "Met seasonal baseline" : "Missed seasonal baseline", trigger: wins < 6 ? "Sub-6-win season" : undefined } } });
+      completed = gameReducer(completed, { type: "DYNASTY_ENDSEASON_SCORE", payload: { year: completed.season - 1, teamId, inputs: { wins, playoffResult: ownerOutcome === "FIRED" ? "MISS" : "WILD_CARD", awards: [], powerRanks: { off: completed.lastSeasonSummary?.offenseRank, def: completed.lastSeasonSummary?.defenseRank, st: completed.lastSeasonSummary?.specialTeamsRank }, ownerOutcome, mediaTags: ["season_complete"] } } });
+      completed = gameReducer(completed, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(completed.season, 0) } });
+      completed = gameReducer(completed, { type: "COACHING_POACHING_RESOLVE", payload: { weekKey: toWeekKey(completed.season, 0) } });
+      return completed;
     }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
@@ -7122,7 +7449,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return base;
       }
       const trackedPlayers = { HOME: buildTrackedPlayers(teamId), AWAY: buildTrackedPlayers(action.payload.opponentTeamId) };
-      return {
+      let started: GameState = {
         ...base,
         league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
         contextFlags: applyFlagsToContext(base.coach),
@@ -7146,6 +7473,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
         }),
       };
+      started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
+      return started;
     }
     case "RESOLVE_PLAY": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
@@ -7336,6 +7665,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!appliedAdvance.applied) return state;
       out = appliedAdvance.state;
       out = resolveInjuriesEngine(out);
+      const weekKey = toWeekKey(out.season, week);
+      out = gameReducer(out, { type: "MEDICAL_TICK_RECOVERY", payload: { weekKey } });
+      out = gameReducer(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey, seed: seedFor(out.saveSeed, out.season, week, 202) } });
+      out = gameReducer(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey, seed: seedFor(out.saveSeed, out.season, week, 101) } });
+      const didWin = Boolean((weekResult as any).userResult?.didWin);
+      const ownerDeltas = { approval: didWin ? 1 : -2, pressure: didWin ? -1 : 2, trust: didWin ? 1 : -1 };
+      out = gameReducer(out, { type: "OWNER_WEEKLY_EVALUATE", payload: { weekKey, teamId, deltas: ownerDeltas, reasons: [didWin ? "Won game" : "Lost game"] } });
+      if (week % 4 === 0) out = gameReducer(out, { type: "WIRE_PRUNE", payload: { keepLastN: 250 } });
       if (Number(out.league.week ?? week + 1) > Number(out.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK)) {
         // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
         const cancelled = cancelPendingTradesAtDeadline(out.pendingTradeOffers ?? []);
@@ -7373,6 +7710,287 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       logInfo("sim.week.end", { phase: out.phase, season: out.season, week: out.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { standings: out.currentStandings.length, careerStage: out.careerStage } });
       return out;
     }
+    case "OWNER_INIT_SEASON_GOALS": {
+      const { year, teamId } = action.payload;
+      const cfg = state.teamOwnerExpectationsByTeamId?.[teamId];
+      const goals = cfg?.goalsBySeason?.[String(year)] ?? defaultOwnerGoals();
+      return { ...state, ownerState: { ...state.ownerState, currentGoals: goals } };
+    }
+    case "OWNER_WEEKLY_EVALUATE": {
+      const { deltas } = action.payload;
+      return {
+        ...state,
+        ownerState: {
+          ...state.ownerState,
+          approval: clampRange((state.ownerState?.approval ?? 60) + deltas.approval),
+          pressure: clampRange((state.ownerState?.pressure ?? 40) + deltas.pressure),
+          trust: clampRange((state.ownerState?.trust ?? 55) + deltas.trust),
+        },
+      };
+    }
+    case "OWNER_ENDSEASON_EVALUATE": {
+      const { year, result } = action.payload;
+      let next: GameState = {
+        ...state,
+        ownerState: {
+          ...state.ownerState,
+          approval: clampRange((state.ownerState?.approval ?? 60) + result.delta),
+          pressure: clampRange((state.ownerState?.pressure ?? 40) + (result.ownerOutcome === "FIRED" ? 25 : -10)),
+          trust: clampRange((state.ownerState?.trust ?? 55) + result.delta),
+          lastEvaluation: { year, summary: result.summary, delta: result.delta },
+          ultimatums:
+            result.ownerOutcome === "ULTIMATUM"
+              ? [...(state.ownerState?.ultimatums ?? []), { year, trigger: result.trigger ?? "Performance target missed", resolved: false }]
+              : state.ownerState?.ultimatums ?? [],
+        },
+      };
+      if (result.ownerOutcome === "FIRED") {
+        const weekKey = toWeekKey(year, 99);
+        next = gameReducer(next, {
+          type: "WIRE_APPEND",
+          payload: {
+            item: {
+              id: `wire-owner-fired-${year}`,
+              weekKey,
+              ts: seedFor(next.saveSeed, year, 99, 999),
+              category: "OWNER",
+              headline: `${next.coach.name || "Head coach"} fired by ownership`,
+              tone: "NEGATIVE",
+              teamIds: [action.payload.teamId],
+            },
+          },
+        });
+        next = gameReducer(next, { type: "COACHING_GENERATE_MARKET", payload: { weekKey, teamId: action.payload.teamId, roles: ["HC"] } });
+      }
+      return next;
+    }
+    case "COACHING_BOOTSTRAP": {
+      if (Object.keys(state.coaching.coachesById ?? {}).length > 0 && Object.keys(state.coaching.staffByTeamId ?? {}).length > 0) return state;
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const coachesById: Record<CoachId, Coach> = {};
+      const staffByTeamId: Record<TeamId, TeamStaff> = {};
+      for (const teamId of teams) {
+        const mk = (role: "HC" | "OC" | "DC" | "ST") => {
+          const coachId = `${teamId}_${role}`;
+          coachesById[coachId] = {
+            coachId,
+            name: `${teamId.replace(/_/g, " ")} ${role}`,
+            role,
+            side: role === "OC" ? "OFFENSE" : role === "DC" ? "DEFENSE" : "ST",
+            traits: ["steady"],
+            ratings: { teaching: 60, strategy: 60, discipline: 60, recruiting: 55 },
+            reputation: 50,
+            career: { yearsExp: 3, history: [] },
+            contract: { years: 2, salary: 2_000_000 },
+          };
+          return coachId;
+        };
+        staffByTeamId[teamId] = { hc: mk("HC"), oc: mk("OC"), dc: mk("DC"), st: mk("ST"), assistants: [] };
+      }
+      return {
+        ...state,
+        coaching: {
+          ...state.coaching,
+          coachesById: { ...coachesById, ...(state.coaching.coachesById ?? {}) },
+          staffByTeamId: { ...staffByTeamId, ...(state.coaching.staffByTeamId ?? {}) },
+        },
+        medical: { ...state.medical, staffByTeamId: { ...defaultMedicalStaffByTeamId(teams), ...(state.medical?.staffByTeamId ?? {}) } },
+      };
+    }
+    case "COACHING_GENERATE_MARKET": {
+      const { weekKey, roles } = action.payload;
+      const pool = Object.values(state.coaching.coachesById ?? {}).filter((c) => roles.includes(c.role as any));
+      const candidates: CoachMarketItem[] = pool.slice(0, 12).map((coach, idx) => ({
+        coachId: coach.coachId,
+        askingRole: coach.role === "POSITION" ? "OC" : (coach.role as "HC" | "OC" | "DC" | "ST"),
+        interest: clampRange(45 + idx * 3),
+        expectedYears: 2 + (idx % 3),
+        expectedSalary: 1_500_000 + idx * 200_000,
+        reasons: ["Scheme fit", "Career growth"],
+      }));
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey, candidates } } };
+    }
+    case "COACHING_MAKE_OFFER": {
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, pendingOffers: [...state.coaching.market.pendingOffers, { ...action.payload, status: "PENDING" }] } } };
+    }
+    case "COACHING_RESOLVE_OFFERS": {
+      const pendingOffers = state.coaching.market.pendingOffers.map((offer) => {
+        if (offer.status !== "PENDING") return offer;
+        const roll = deterministicRand(seedFor(state.saveSeed, state.season, offer.salary, offer.years));
+        return { ...offer, status: roll > 0.45 ? "ACCEPTED" : "DECLINED" };
+      });
+      let next = { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, pendingOffers } } };
+      for (const offer of pendingOffers.filter((o) => o.status === "ACCEPTED")) {
+        next = gameReducer(next, { type: "COACHING_ASSIGN_STAFF_ROLE", payload: { teamId: offer.teamId, role: offer.role, coachId: offer.coachId } });
+      }
+      return next;
+    }
+    case "COACHING_ASSIGN_STAFF_ROLE": {
+      const cur = state.coaching.staffByTeamId[action.payload.teamId] ?? { hc: "", oc: "", dc: "", st: "", assistants: [] };
+      const nextTeamStaff = { ...cur };
+      if (action.payload.role === "HC") nextTeamStaff.hc = action.payload.coachId;
+      if (action.payload.role === "OC") nextTeamStaff.oc = action.payload.coachId;
+      if (action.payload.role === "DC") nextTeamStaff.dc = action.payload.coachId;
+      if (action.payload.role === "ST") nextTeamStaff.st = action.payload.coachId;
+      return { ...state, coaching: { ...state.coaching, staffByTeamId: { ...state.coaching.staffByTeamId, [action.payload.teamId]: nextTeamStaff } } };
+    }
+    case "COACHING_POACHING_GENERATE": {
+      const staff = Object.entries(state.coaching.staffByTeamId ?? {}).flatMap(([teamId, set]) => [
+        { coachId: set.oc, fromTeamId: teamId, role: "OC" as const },
+        { coachId: set.dc, fromTeamId: teamId, role: "DC" as const },
+        { coachId: set.st, fromTeamId: teamId, role: "ST" as const },
+      ]).filter((x) => x.coachId);
+      const poaching = staff.slice(0, 6).map((x, idx) => ({ eventId: `poach-${action.payload.weekKey}-${idx}`, coachId: x.coachId, fromTeamId: x.fromTeamId, role: x.role, status: "RUMOR" as const }));
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
+    }
+    case "COACHING_POACHING_RESOLVE": {
+      const poaching = state.coaching.market.poaching.map((event, idx) => {
+        const leaves = deterministicRand(seedFor(state.saveSeed, state.season, idx, 404)) > 0.5;
+        return { ...event, status: leaves ? "LEFT" : "STAYED", toTeamId: leaves ? state.acceptedOffer?.teamId : undefined };
+      });
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
+    }
+    case "COACH_CAREER_APPEND_HISTORY": {
+      const coach = state.coaching.coachesById[action.payload.coachId];
+      if (!coach) return state;
+      return {
+        ...state,
+        coaching: {
+          ...state.coaching,
+          coachesById: {
+            ...state.coaching.coachesById,
+            [action.payload.coachId]: {
+              ...coach,
+              career: { ...coach.career, history: [...coach.career.history, action.payload.entry] },
+            },
+          },
+        },
+      };
+    }
+    case "WIRE_APPEND":
+      return { ...state, wire: { ...state.wire, items: [...state.wire.items, action.payload.item] } };
+    case "WIRE_BULK_APPEND":
+      return { ...state, wire: { ...state.wire, items: [...state.wire.items, ...action.payload.items] } };
+    case "WIRE_PRUNE": {
+      const keepLastN = Math.max(1, action.payload.keepLastN);
+      return { ...state, wire: { items: state.wire.items.slice(-keepLastN), lastPruneWeekKey: toWeekKey(state.season, state.hub.regularSeasonWeek) } };
+    }
+    case "MEDIA_GENERATE_WEEKLY_STORIES": {
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const stories: MediaStory[] = teams.slice(0, 4).map((teamId, idx) => ({
+        storyId: `story-${action.payload.weekKey}-${idx}`,
+        weekKey: action.payload.weekKey,
+        headline: `${teamId.replace(/_/g, " ")} trending ${idx % 2 ? "up" : "down"}`,
+        body: "Weekly narrative generated from team momentum and injury context.",
+        tags: ["weekly", idx % 2 ? "momentum" : "concern"],
+        teams: [teamId],
+        tone: idx % 2 ? "POSITIVE" : "NEGATIVE",
+        heatDelta: idx % 2 ? 3 : -2,
+      }));
+      const wireItems: WireItem[] = stories.map((story, idx) => ({ id: `wire-media-${story.storyId}`, weekKey: story.weekKey, ts: action.payload.seed + idx, category: "MEDIA", headline: story.headline, body: story.body, tags: story.tags, teamIds: story.teams, tone: story.tone }));
+      return {
+        ...state,
+        media: { ...state.media, storiesByWeek: { ...state.media.storiesByWeek, [action.payload.weekKey]: stories } },
+        wire: { ...state.wire, items: [...state.wire.items, ...wireItems] },
+      };
+    }
+    case "MEDICAL_TICK_RECOVERY": {
+      const nextById: Record<PlayerId, PlayerMedical> = { ...(state.medical.playerMedicalById ?? {}) };
+      for (const [playerId, med] of Object.entries(nextById)) {
+        if (!med.current || med.current.cleared) continue;
+        const teamId = String((getPlayers().find((p: any) => String((p as any).playerId) === playerId) as any)?.teamId ?? "");
+        const rehab = state.medical.staffByTeamId[teamId]?.rehab ?? 50;
+        const tick = rehab >= 65 ? 2 : 1;
+        med.current = { ...med.current, remainingWeeks: Math.max(0, med.current.remainingWeeks - tick), cleared: med.current.remainingWeeks - tick <= 0 };
+      }
+      return { ...state, medical: { ...state.medical, playerMedicalById: nextById } };
+    }
+    case "MEDICAL_GENERATE_WEEKLY_INJURIES": {
+      const activePlayers = getPlayers().filter((p: any) => String((p as any).teamId ?? "") !== "FREE_AGENT");
+      const nextPlayerMedicalById: Record<PlayerId, PlayerMedical> = { ...(state.medical.playerMedicalById ?? {}) };
+      const reports: InjuryReport[] = [];
+      for (let i = 0; i < Math.min(8, activePlayers.length); i++) {
+        const player = activePlayers[(action.payload.seed + i * 37) % activePlayers.length] as any;
+        const playerId = String(player.playerId);
+        const teamId = String(player.teamId);
+        const severity = 1 + ((action.payload.seed + i) % 10);
+        const expectedWeeks = Math.max(1, Math.ceil(severity / 2));
+        const truth: PlayerInjury = { injuryType: "Soft tissue", severity, expectedWeeks, remainingWeeks: expectedWeeks, riskOfReinjury: clampRange(15 + severity * 6), cleared: false };
+        const min = Math.max(1, expectedWeeks - 1);
+        const max = expectedWeeks + 1;
+        nextPlayerMedicalById[playerId] = {
+          ...(nextPlayerMedicalById[playerId] ?? { durability: clampRange(50 + ((action.payload.seed + i * 13) % 40)), injuryHistory: [] }),
+          current: truth,
+          injuryHistory: [...(nextPlayerMedicalById[playerId]?.injuryHistory ?? []), { type: truth.injuryType, weekKey: action.payload.weekKey, severity, gamesMissed: expectedWeeks }],
+        };
+        reports.push({ playerId, teamId, weekKey: action.payload.weekKey, status: severity >= 8 ? "OUT" : severity >= 6 ? "DOUBTFUL" : "QUESTIONABLE", displayedWeeksRange: [min, max], recommendation: severity >= 8 ? "HOLD" : "LIMITED" });
+      }
+      const wire = reports.slice(0, 5).map((r, idx) => ({ id: `wire-injury-${r.playerId}-${action.payload.weekKey}-${idx}`, weekKey: action.payload.weekKey, ts: action.payload.seed + idx, category: "INJURY" as const, headline: `Injury update: ${r.playerId} ${r.status.toLowerCase()}`, playerIds: [r.playerId], teamIds: [r.teamId], tone: "NEGATIVE" as const }));
+      return { ...state, medical: { ...state.medical, playerMedicalById: nextPlayerMedicalById, injuryReportsByWeek: { ...state.medical.injuryReportsByWeek, [action.payload.weekKey]: reports } }, wire: { ...state.wire, items: [...state.wire.items, ...wire] } };
+    }
+    case "MEDICAL_SET_RETURN_DECISION": {
+      const med = state.medical.playerMedicalById[action.payload.playerId];
+      if (!med?.current) return state;
+      const bump = action.payload.decision === "RUSH_BACK" ? 20 : action.payload.decision === "LIMITED" ? 5 : -10;
+      const clearNow = action.payload.decision === "RUSH_BACK" && med.current.remainingWeeks <= 1;
+      return {
+        ...state,
+        medical: {
+          ...state.medical,
+          playerMedicalById: {
+            ...state.medical.playerMedicalById,
+            [action.payload.playerId]: { ...med, current: { ...med.current, riskOfReinjury: clampRange(med.current.riskOfReinjury + bump), cleared: clearNow ? true : med.current.cleared } },
+          },
+        },
+      };
+    }
+    case "MEDICAL_CLEAR_PLAYER": {
+      const med = state.medical.playerMedicalById[action.payload.playerId];
+      if (!med?.current) return state;
+      return { ...state, medical: { ...state.medical, playerMedicalById: { ...state.medical.playerMedicalById, [action.payload.playerId]: { ...med, current: { ...med.current, cleared: true, remainingWeeks: 0 } } } } };
+    }
+    case "LIVEGAME_INIT": {
+      const sideline = mergeSideline(DEFAULT_SIDELINE, action.payload.initialSideline);
+      const live: LiveGameState = { ...action.payload, sideline, gameplanSideline: sideline };
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: live } };
+    }
+    case "SIDELINE_SET": {
+      const live = state.liveGames[action.payload.gameId];
+      if (!live) return state;
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: { ...live, sideline: mergeSideline(live.sideline, action.payload.patch) } } };
+    }
+    case "SIDELINE_RESET_TO_GAMEPLAN": {
+      const live = state.liveGames[action.payload.gameId];
+      if (!live) return state;
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: { ...live, sideline: { ...live.gameplanSideline } } } };
+    }
+    case "DYNASTY_INIT":
+      return state.dynasty ? state : { ...state, dynasty: defaultDynastyProfile() };
+    case "DYNASTY_ENDSEASON_SCORE": {
+      const { year, inputs } = action.payload;
+      const playoffBonus = inputs.playoffResult === "CHAMPION" ? 25 : inputs.playoffResult === "CONF_TITLE" ? 14 : inputs.playoffResult === "DIVISIONAL" ? 8 : 0;
+      const rankBonus = Math.max(0, 12 - Number(inputs.powerRanks?.off ?? 20)) + Math.max(0, 12 - Number(inputs.powerRanks?.def ?? 20));
+      const ownerPenalty = inputs.ownerOutcome === "FIRED" ? -20 : inputs.ownerOutcome === "ULTIMATUM" ? -10 : 0;
+      const mediaBonus = (inputs.mediaTags ?? []).length;
+      const legacyDelta = Math.round(inputs.wins * 0.9 + playoffBonus + rankBonus + mediaBonus + ownerPenalty + (inputs.capDisaster ? -12 : 0));
+      const log: DynastySeasonLog = { year, wins: inputs.wins, playoffResult: inputs.playoffResult, awards: inputs.awards, rankOff: inputs.powerRanks?.off, rankDef: inputs.powerRanks?.def, rankST: inputs.powerRanks?.st, ownerOutcome: inputs.ownerOutcome, legacyDelta };
+      return {
+        ...state,
+        dynasty: { ...state.dynasty, legacyScore: (state.dynasty?.legacyScore ?? 0) + legacyDelta, seasonLog: [...(state.dynasty?.seasonLog ?? []), log] },
+        wire: {
+          ...state.wire,
+          items: [
+            ...state.wire.items,
+            { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: seedFor(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
+          ],
+        },
+      };
+    }
+    case "DYNASTY_ADD_MILESTONE": {
+      if ((state.dynasty?.milestones ?? []).some((m) => m.key === action.payload.key)) return state;
+      return { ...state, dynasty: { ...state.dynasty, milestones: [...(state.dynasty?.milestones ?? []), action.payload] } };
+    }
+
     case "SHOW_OFFER_RESULT_MODAL": {
       const { title, message, variant } = action.payload;
       return { ...state, ui: { ...state.ui, offerResultModal: { open: true, title, message, variant, ts: Date.now() } } };
@@ -7703,6 +8321,26 @@ function loadState(): GameState {
       staffOffers: Array.isArray((migrated as any).staffOffers) ? (migrated as any).staffOffers : [],
       firing: { ...initial.firing, ...migrated.firing },
       owner: { ...initial.owner, ...migrated.owner },
+      teamOwnerExpectationsByTeamId: { ...initial.teamOwnerExpectationsByTeamId, ...((migrated as any).teamOwnerExpectationsByTeamId ?? {}) },
+      ownerState: { ...initial.ownerState, ...((migrated as any).ownerState ?? {}) },
+      coaching: {
+        ...initial.coaching,
+        ...((migrated as any).coaching ?? {}),
+        coachesById: { ...initial.coaching.coachesById, ...((migrated as any).coaching?.coachesById ?? {}) },
+        staffByTeamId: { ...initial.coaching.staffByTeamId, ...((migrated as any).coaching?.staffByTeamId ?? {}) },
+        market: { ...initial.coaching.market, ...((migrated as any).coaching?.market ?? {}) },
+      },
+      media: { ...initial.media, ...((migrated as any).media ?? {}), storiesByWeek: { ...initial.media.storiesByWeek, ...((migrated as any).media?.storiesByWeek ?? {}) } },
+      wire: { ...initial.wire, ...((migrated as any).wire ?? {}), items: Array.isArray((migrated as any).wire?.items) ? (migrated as any).wire.items : initial.wire.items },
+      medical: {
+        ...initial.medical,
+        ...((migrated as any).medical ?? {}),
+        playerMedicalById: { ...initial.medical.playerMedicalById, ...((migrated as any).medical?.playerMedicalById ?? {}) },
+        staffByTeamId: { ...initial.medical.staffByTeamId, ...((migrated as any).medical?.staffByTeamId ?? {}) },
+        injuryReportsByWeek: { ...initial.medical.injuryReportsByWeek, ...((migrated as any).medical?.injuryReportsByWeek ?? {}) },
+      },
+      liveGames: { ...initial.liveGames, ...((migrated as any).liveGames ?? {}) },
+      dynasty: { ...initial.dynasty, ...((migrated as any).dynasty ?? {}), seasonLog: Array.isArray((migrated as any).dynasty?.seasonLog) ? (migrated as any).dynasty.seasonLog : initial.dynasty.seasonLog, milestones: Array.isArray((migrated as any).dynasty?.milestones) ? (migrated as any).dynasty.milestones : initial.dynasty.milestones },
       teamFinances: {
         ...initial.teamFinances,
         ...migrated.teamFinances,
