@@ -1519,9 +1519,24 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
 
   return {
     startSeason: state.season + 1,
-    endSeason: state.season + years - 1,
+    endSeason: state.season + years,
     salaries,
     signingBonus,
+  };
+}
+
+function sanitizeResignOffer(offer: ResignOffer): ResignOffer | null {
+  const years = Math.floor(Number(offer?.years));
+  const apy = Math.round(Number(offer?.apy));
+  if (!Number.isFinite(years) || years < 1) return null;
+  if (!Number.isFinite(apy) || apy <= 0) return null;
+
+  return {
+    ...offer,
+    years: Math.min(5, years),
+    apy,
+    guaranteesPct: clamp01(Number(offer?.guaranteesPct ?? 0)),
+    discountPct: Number(offer?.discountPct ?? 0),
   };
 }
 
@@ -4693,6 +4708,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "RESIGN_SUBMIT_OFFER": {
       const { playerId, offer } = action.payload;
+      const normalizedOffer = sanitizeResignOffer(offer);
+      if (!normalizedOffer) return state;
       const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
       if (!teamId) return state;
       const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
@@ -4709,7 +4726,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           overall: Number(p.overall ?? p.ovr ?? 60),
           position: String(p.pos ?? "UNK"),
         },
-        offer: { years: Number(offer.years ?? 2), aav: Number(offer.apy ?? 0), guarantees: Number(offer.guaranteesPct ?? 0) },
+        offer: {
+          years: Number(normalizedOffer.years),
+          aav: Number(normalizedOffer.apy),
+          guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+        },
         context: {
           saveSeed: Number(state.saveSeed ?? 1),
           season: Number(state.season ?? 2026),
@@ -4755,7 +4776,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      const ovr = contractOverrideFromOffer(state, offer);
+      const ovr = contractOverrideFromOffer(state, normalizedOffer);
       const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
       const decisions = { ...state.offseasonData.resigning.decisions } as any;
       delete decisions[String(playerId)];
@@ -4794,7 +4815,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const cur: any = state.offseasonData.resigning.decisions?.[String(playerId)];
       if (!cur?.offer) return state;
 
-      const offer = cur.offer as ResignOffer;
+      const offer = sanitizeResignOffer(cur.offer as ResignOffer);
+      if (!offer) return state;
 
       const ovr = contractOverrideFromOffer(state, offer);
       const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
