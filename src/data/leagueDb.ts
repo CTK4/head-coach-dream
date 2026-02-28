@@ -26,6 +26,9 @@ export type PlayerRow = {
   contractId?: string;
   Archetype?: string;
   Traits?: string;
+  snapCounts?: { offense: number; defense: number; specialTeams: number };
+  seasonStats?: { gamesPlayed: number; starts: number; performanceScore: number; injuryGamesMissed?: number };
+  development?: { trait: "normal" | "impact" | "elite" | "generational"; hiddenDev: boolean; highSnapSeasons?: number };
   [key: string]: unknown;
 };
 

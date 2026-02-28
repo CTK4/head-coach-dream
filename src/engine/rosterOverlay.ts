@@ -1,4 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
+import { CORE_ATTRIBUTE_KEYS } from "@/engine/snapBasedProgression";
 import { getPlayerById, getContractById, getPlayers } from "@/data/leagueDb";
 
 export function normalizePos(pos: string): string {
@@ -179,8 +180,20 @@ export function getEffectivePlayers(state: GameState): any[] {
     const playerId = String(p.playerId);
     const delta = Number(state.playerAgingDeltasById?.[playerId] ?? 0);
     const ageOffset = Number(state.playerAgeOffsetById?.[playerId] ?? 0);
+    const attrDeltas = state.playerAttributeDeltasById?.[playerId] ?? {};
+    const snapCounts = state.playerSnapCountsById?.[playerId] ?? { offense: 0, defense: 0, specialTeams: 0 };
+    const seasonStats = state.playerProgressionSeasonStatsById?.[playerId] ?? { gamesPlayed: 0, starts: 0, performanceScore: 0.5 };
+    const development = state.playerDevelopmentById?.[playerId] ?? p.development ?? { trait: "normal", hiddenDev: true, highSnapSeasons: 0 };
+    const withAttrs = { ...p } as any;
+    for (const key of CORE_ATTRIBUTE_KEYS) {
+      if (withAttrs[key] == null) continue;
+      withAttrs[key] = Math.max(40, Math.min(99, Number(withAttrs[key]) + Number(attrDeltas[key] ?? 0)));
+    }
     return {
-      ...p,
+      ...withAttrs,
+      snapCounts,
+      seasonStats,
+      development,
       overall: Math.max(40, Math.min(99, Number(p.overall ?? 60) + delta)),
       age: Number(p.age ?? 22) + ageOffset,
       teamId: state.playerTeamOverrides[playerId] ?? p.teamId,
@@ -197,6 +210,9 @@ export function getEffectivePlayers(state: GameState): any[] {
     teamId: state.playerTeamOverrides[String(r.playerId)] ?? String(r.teamId ?? ""),
     status: "ACTIVE",
     isRookie: true,
+    snapCounts: state.playerSnapCountsById?.[String(r.playerId)] ?? { offense: 0, defense: 0, specialTeams: 0 },
+    seasonStats: state.playerProgressionSeasonStatsById?.[String(r.playerId)] ?? { gamesPlayed: 0, starts: 0, performanceScore: 0.5 },
+    development: state.playerDevelopmentById?.[String(r.playerId)] ?? { trait: "normal", hiddenDev: true, highSnapSeasons: 0 },
   }));
 
   return [...base, ...rookies];
