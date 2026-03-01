@@ -11,6 +11,10 @@
 - No negative win/loss values in summary outputs.
 - User roster has no duplicate player IDs and remains in allowed bounds.
 - Save/load round-trips preserve state hash and phase/stage checkpoints.
+- Re-sign expiry invariant: expiring players not re-signed and not tagged are moved to FA exactly once before FA opens.
+- One-year re-sign invariant: `years=1` produces a new override contract with `endSeason === startSeason` and survives save/load.
+- Franchise-tag invariant: tagged players receive a one-year `FRANCHISE_TAG` override and are excluded from resign and FA pools.
+- Free-agency population invariant: FA pool uses effective overlay source-of-truth and deterministic safeguard seeding when below minimum depth.
 
 ## Required Automated Tests
 - `src/testHarness/__tests__/goldenSeason.test.ts`

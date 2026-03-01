@@ -1132,6 +1132,7 @@ export type GameAction =
   | { type: "HIDE_OFFER_RESULT_MODAL" }
   | { type: "TAG_APPLY"; payload: TagApplied }
   | { type: "APPLY_FRANCHISE_TAG"; payload: { playerId: string } }
+  | { type: "EXPIRE_EXPIRING_CONTRACTS_TO_FA"; payload: { nextSeason: number } }
   | { type: "TAG_REMOVE" }
   | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
   | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
@@ -1805,12 +1806,29 @@ function buildResignOffer(state: GameState, playerId: string, createdFrom: Resig
 }
 
 function contractOverrideFromOffer(state: GameState, offer: ResignOffer): PlayerContractOverride {
-  const years = Math.max(1, Math.min(5, offer.years));
-  const totalCash = offer.apy * years;
+  return createContractOverride({
+    startSeason: state.season + 1,
+    years: offer.years,
+    salary: offer.apy,
+    guarantees: offer.guaranteesPct,
+    type: "STANDARD",
+  });
+}
 
-  const signingBonus = Math.round((totalCash * offer.guaranteesPct * 0.40) / 50_000) * 50_000;
+function createContractOverride(args: {
+  startSeason: number;
+  years: number;
+  salary: number;
+  guarantees: number;
+  type?: "STANDARD" | "FRANCHISE_TAG";
+}): PlayerContractOverride {
+  const years = Math.max(1, Math.min(5, Math.floor(Number(args.years) || 1)));
+  const apy = Math.max(0, Math.round(Number(args.salary) || 0));
+  const guaranteesPct = clamp01(Number(args.guarantees ?? 0));
+  const totalCash = apy * years;
+
+  const signingBonus = Math.round((totalCash * guaranteesPct * 0.40) / 50_000) * 50_000;
   const remaining = Math.max(0, totalCash - signingBonus);
-
   const salaries: number[] = [];
   for (let i = 0; i < years; i++) {
     const step = 1 + i * 0.03;
@@ -1821,10 +1839,11 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
   salaries[salaries.length - 1] = Math.round((salaries[salaries.length - 1] + drift) / 50_000) * 50_000;
 
   return {
-    startSeason: state.season + 1,
-    endSeason: state.season + years,
+    startSeason: args.startSeason,
+    endSeason: args.startSeason + years - 1,
     salaries,
     signingBonus,
+    ...(args.type ? { contractType: args.type } : {}),
   };
 }
 
@@ -2200,12 +2219,14 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
   const playerContractOverrides = {
     ...state.playerContractOverrides,
     [playerId]: {
-      startSeason: nextSeason,
-      endSeason: nextSeason,
-      salaries: [amount],
-      signingBonus: 0,
+      ...createContractOverride({
+        startSeason: nextSeason,
+        years: 1,
+        salary: amount,
+        guarantees: 1,
+        type: "FRANCHISE_TAG",
+      }),
       guaranteedAtSigning: amount,
-      contractType: "FRANCHISE_TAG" as const,
     },
   };
 
@@ -2906,6 +2927,7 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
   }
 
   const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const seedBase = Number(state.saveSeed ?? 1) ^ Number(state.season ?? 0) ^ 999;
   const candidates = getEffectivePlayers(state)
     .filter((p: any) => {
       const teamId = String(p.teamId ?? "");
@@ -2919,6 +2941,9 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
       if (ovrDiff !== 0) return ovrDiff;
       const ageDiff = Number(b.age ?? 0) - Number(a.age ?? 0);
       if (ageDiff !== 0) return ageDiff;
+      const aKey = detRand2(seedBase, `fa-safeguard:${String(a.playerId)}`);
+      const bKey = detRand2(seedBase, `fa-safeguard:${String(b.playerId)}`);
+      if (aKey !== bKey) return aKey - bKey;
       return String(a.playerId).localeCompare(String(b.playerId));
     });
 
@@ -2939,19 +2964,43 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
   return { ...state, playerTeamOverrides };
 }
 
+function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: number): GameState {
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  const playerContractOverrides = { ...state.playerContractOverrides };
+
+  for (const p of getPlayers()) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+
+    const currentTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    if (!currentTeamId || currentTeamId === "FREE_AGENT") continue;
+
+    const tagged = state.franchiseTags[playerId];
+    if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
+
+    const override = playerContractOverrides[playerId];
+    const overrideCoversNextSeason = !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
+    if (overrideCoversNextSeason) continue;
+
+    const summary = getContractSummaryForPlayer(state, playerId);
+    if (!summary) continue;
+
+    if (Number(summary.endSeason) < nextSeason) {
+      playerTeamOverrides[playerId] = "FREE_AGENT";
+      if (override && !overrideCoversNextSeason) delete playerContractOverrides[playerId];
+    }
+  }
+
+  return { ...state, playerTeamOverrides, playerContractOverrides };
+}
+
 function seasonRollover(state: GameState): GameState {
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
-  const playerTeamOverrides = { ...state.playerTeamOverrides };
-  const playerContractOverrides = { ...state.playerContractOverrides };
-
-  for (const [pid, o] of Object.entries(playerContractOverrides)) {
-    if (nextSeason > o.endSeason) {
-      playerTeamOverrides[pid] = "FREE_AGENT";
-      delete playerContractOverrides[pid];
-    }
-  }
+  const expiredState = expireExpiringContractsToFreeAgency(state, nextSeason);
+  const playerTeamOverrides = { ...expiredState.playerTeamOverrides };
+  const playerContractOverrides = { ...expiredState.playerContractOverrides };
 
   for (const p of getPlayers()) {
     const playerId = String((p as any).playerId ?? "");
@@ -5037,6 +5086,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       logInfo("offseason.step.transition", { phase: state.phase, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: cur, to: nextStep } });
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      if (cur === OffseasonStepEnum.RESIGNING) {
+        next = gameReducer(next, { type: "EXPIRE_EXPIRING_CONTRACTS_TO_FA", payload: { nextSeason: state.season + 1 } });
+      }
       if (nextStep === OffseasonStepEnum.COMBINE) next = ensureOffseasonCombineData(next);
       next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
       if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
@@ -5224,6 +5276,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           rosterAudit: { cutDesignations },
         },
       };
+    }
+    case "EXPIRE_EXPIRING_CONTRACTS_TO_FA": {
+      return expireExpiringContractsToFreeAgency(state, Number(action.payload.nextSeason));
     }
     case "TAG_REMOVE": {
       const applied = state.offseasonData.tagCenter.applied;
@@ -8281,6 +8336,11 @@ function readCapModeFromUrl(): boolean | null {
   if (v.toLowerCase() === "postjune1") return true;
   if (v.toLowerCase() === "standard") return false;
   return null;
+}
+
+
+export function createInitialStateForTests(): GameState {
+  return createInitialState();
 }
 
 function applyCapModeQuery(state: GameState): GameState {
