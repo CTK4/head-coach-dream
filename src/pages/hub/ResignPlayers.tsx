@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getPlayers } from "@/data/leagueDb";
 import { getDepthSlotLabel, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,9 @@ export default function ResignPlayers() {
   const [draftOffer, setDraftOffer] = useState<ResignOffer | null>(null);
 
   const expiring = useMemo(() => {
-    const players = getPlayers().filter((p) => String(state.playerTeamOverrides[String(p.playerId)] ?? p.teamId) === String(teamId));
+    const rosterIndex = buildRosterIndex(state);
+    const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
+    const players = getPlayers().filter((p) => onTeam.has(String(p.playerId)));
     return players
       .map((p) => {
         const summary = getContractSummaryForPlayer(state, String(p.playerId));

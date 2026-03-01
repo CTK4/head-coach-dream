@@ -5,6 +5,7 @@ import { normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverla
 import { getPositionLabel } from "@/lib/displayLabels";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { resolveTagCost, posTagGroup } from "@/engine/tagValues";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import { LockedPhaseCard } from "@/components/hub/LockedPhaseCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -86,12 +87,11 @@ export default function TagCenter() {
   const eligible = useMemo(() => {
     const contracts = getContracts();
     const ps = getPlayers();
+    const rosterIndex = buildRosterIndex(state);
+    const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
 
     return ps
-      .filter(
-        (p: any) =>
-          String(state.playerTeamOverrides?.[String(p.playerId)] ?? p.teamId) === String(teamId),
-      )
+      .filter((p: any) => onTeam.has(String(p.playerId)))
       .map((p: any) => {
         const c = contracts.find((x: any) => x.contractId === p.contractId);
         const end = Number(c?.endSeason ?? state.season);
