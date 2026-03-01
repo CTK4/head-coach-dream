@@ -971,6 +971,7 @@ export type GameState = {
   playbooks: {
     offensePlaybookId?: OffenseSchemeId;
     defensePlaybookId?: DefenseSchemeId;
+    userOverride?: { offense: boolean; defense: boolean };
   };
   scheme?: {
     offense?: {
@@ -1631,6 +1632,7 @@ function createInitialState(): GameState {
     playbooks: {
       offensePlaybookId: DEFAULT_OFFENSE_SCHEME_ID,
       defensePlaybookId: DEFAULT_DEFENSE_SCHEME_ID,
+      userOverride: { offense: false, defense: false },
     },
     scheme: {
       offense: { style: "BALANCED", tempo: "NORMAL", schemeId: "PRO_STYLE_BALANCED" },
@@ -4904,11 +4906,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       nextState = addStaffSalaryAndCash({ ...nextState, staff }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
       const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
-      let nextPlaybooks = { ...nextState.playbooks };
-      if (action.payload.role === "OC" && !nextPlaybooks.offensePlaybookId) {
+      let nextPlaybooks = {
+        ...nextState.playbooks,
+        userOverride: {
+          offense: Boolean(nextState.playbooks.userOverride?.offense),
+          defense: Boolean(nextState.playbooks.userOverride?.defense),
+        },
+      };
+      if (action.payload.role === "OC" && !nextPlaybooks.userOverride.offense) {
         nextPlaybooks.offensePlaybookId = (schemeRaw || DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId;
       }
-      if (action.payload.role === "DC" && !nextPlaybooks.defensePlaybookId) {
+      if (action.payload.role === "DC" && !nextPlaybooks.userOverride.defense) {
         nextPlaybooks.defensePlaybookId = (schemeRaw || DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId;
       }
       nextState = { ...nextState, playbooks: nextPlaybooks };
@@ -4948,13 +4956,27 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (action.payload.side === "OFFENSE") {
         return {
           ...state,
-          playbooks: { ...state.playbooks, offensePlaybookId: action.payload.playbookId as OffenseSchemeId },
+          playbooks: {
+            ...state.playbooks,
+            offensePlaybookId: action.payload.playbookId as OffenseSchemeId,
+            userOverride: {
+              offense: true,
+              defense: Boolean(state.playbooks.userOverride?.defense),
+            },
+          },
           scheme: { ...state.scheme, offense: { ...state.scheme?.offense, schemeId: action.payload.playbookId as OffenseSchemeId } as any },
         };
       }
       return {
         ...state,
-        playbooks: { ...state.playbooks, defensePlaybookId: action.payload.playbookId as DefenseSchemeId },
+        playbooks: {
+          ...state.playbooks,
+          defensePlaybookId: action.payload.playbookId as DefenseSchemeId,
+          userOverride: {
+            offense: Boolean(state.playbooks.userOverride?.offense),
+            defense: true,
+          },
+        },
         scheme: { ...state.scheme, defense: { ...state.scheme?.defense, schemeId: action.payload.playbookId as DefenseSchemeId } as any },
       };
     }
@@ -8391,6 +8413,10 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     playbooks: {
       offensePlaybookId: ((oldState as any).playbooks?.offensePlaybookId ?? oldState.scheme?.offense?.schemeId ?? DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId,
       defensePlaybookId: ((oldState as any).playbooks?.defensePlaybookId ?? oldState.scheme?.defense?.schemeId ?? DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId,
+      userOverride: {
+        offense: Boolean((oldState as any).playbooks?.userOverride?.offense),
+        defense: Boolean((oldState as any).playbooks?.userOverride?.defense),
+      },
     },
     strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
     scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },

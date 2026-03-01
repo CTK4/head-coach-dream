@@ -1,5 +1,5 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
+import AirRaidPlaybook from "../../AirRaidPlaybook";
 
 export default function AIR_RAID() {
-  return <OffensePlaybookTemplate schemeId="AIR_RAID" />;
+  return <AirRaidPlaybook />;
 }
