@@ -193,8 +193,10 @@ export function getEffectivePlayers(state: GameState): any[] {
       if (withAttrs[key] == null) continue;
       withAttrs[key] = Math.max(40, Math.min(99, Number(withAttrs[key]) + Number(attrDeltas[key] ?? 0)));
     }
+    const attrOverride = state.playerAttrOverrides?.[playerId] ?? {};
     return {
       ...withAttrs,
+      ...attrOverride,
       snapCounts,
       seasonStats,
       development,
