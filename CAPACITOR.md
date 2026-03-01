@@ -1,42 +1,25 @@
-# Capacitor setup
+# Capacitor commands
 
-This project uses Capacitor to package the Vite web app for native Android and iOS.
-
-## Install dependencies
+Run these commands exactly from the repo root:
 
 ```bash
-npm install
-npm i @capacitor/core
-npm i -D @capacitor/cli
-npm i @capacitor/android @capacitor/ios
-```
-
-## Add native platforms
-
-```bash
+npm ci
+npm run build
 npx cap add android
 npx cap add ios
-```
-
-## Build and sync web assets
-
-```bash
-npm run build
-npm run cap:sync
-```
-
-## Open native projects
-
-```bash
+npx cap sync
 npm run cap:open:android
 npm run cap:open:ios
 ```
 
-## One-command platform sync after a web build
+## NPM scripts
 
 ```bash
+npm run cap:sync
 npm run cap:build:android
 npm run cap:build:ios
 ```
 
-> ⚠️ `webDir` in `capacitor.config.ts` must match your web build output directory. This repo uses Vite, so it is set to `dist`.
+Notes:
+- `webDir` is `dist` in `capacitor.config.ts` to match `vite build` output.
+- `base: './'` is set in `vite.config.ts` to avoid asset-path issues in Capacitor WebViews.
