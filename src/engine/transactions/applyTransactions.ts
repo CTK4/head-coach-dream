@@ -1,6 +1,7 @@
 import type { GameState } from "@/context/GameContext";
 import { getPlayers } from "@/data/leagueDb";
-import { getTransactionState, sortTransactionEvents, type TransactionEvent } from "./transactionLedger";
+import { getTransactionState, sortTransactionEvents } from "./transactionLedger";
+import type { TransactionEvent } from "./types";
 
 export type RosterIndex = {
   teamToPlayers: Record<string, string[]>;
@@ -20,8 +21,6 @@ function applyMovement(playerToTeam: Record<string, string | "FREE_AGENT">, even
     case "SIGN_FA":
     case "DRAFT_PICK":
     case "ROOKIE_SIGN":
-    case "WAIVER_CLAIM":
-    case "CONTRACT_EXTEND":
       for (const playerId of event.playerIds) playerToTeam[String(playerId)] = normTeamId(event.teamId);
       break;
     case "CUT":
@@ -35,9 +34,9 @@ function applyMovement(playerToTeam: Record<string, string | "FREE_AGENT">, even
       }
       break;
     }
-    case "MIGRATION_OVERRIDE":
+    case "MIGRATION":
       for (const playerId of event.playerIds) {
-        if (event.details?.source === "playerTeamOverrides") playerToTeam[String(playerId)] = normTeamId(event.details?.teamId ?? event.teamId);
+        playerToTeam[String(playerId)] = normTeamId(event.details?.teamId ?? event.teamId);
       }
       break;
     default:
@@ -47,15 +46,11 @@ function applyMovement(playerToTeam: Record<string, string | "FREE_AGENT">, even
 
 export function buildRosterIndex(state: GameState): RosterIndex {
   const playerToTeam: Record<string, string | "FREE_AGENT"> = {};
-  for (const p of getPlayers()) {
-    playerToTeam[String(p.playerId)] = normTeamId(p.teamId);
-  }
-  for (const r of state.rookies ?? []) {
-    playerToTeam[String(r.playerId)] = normTeamId(r.teamId);
-  }
+  for (const p of getPlayers()) playerToTeam[String(p.playerId)] = normTeamId(p.teamId);
+  for (const r of state.rookies ?? []) playerToTeam[String(r.playerId)] = normTeamId(r.teamId);
 
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
-  for (const event of events) applyMovement(playerToTeam, event);
+  for (const event of events) applyMovement(playerToTeam, event as TransactionEvent);
 
   const teamToPlayers: Record<string, string[]> = {};
   const freeAgents: string[] = [];
@@ -66,9 +61,5 @@ export function buildRosterIndex(state: GameState): RosterIndex {
 
   for (const key of Object.keys(teamToPlayers)) teamToPlayers[key] = [...new Set(teamToPlayers[key])].sort();
 
-  return {
-    teamToPlayers,
-    freeAgents: [...new Set(freeAgents)].sort(),
-    playerToTeam,
-  };
+  return { teamToPlayers, freeAgents: [...new Set(freeAgents)].sort(), playerToTeam };
 }

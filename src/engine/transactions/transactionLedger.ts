@@ -1,37 +1,15 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
+import type { TransactionEvent, TransactionLedger } from "./types";
 
-export type TxKind =
-  | "RESIGN"
-  | "FRANCHISE_TAG"
-  | "CUT"
-  | "RELEASE"
-  | "SIGN_FA"
-  | "TRADE"
-  | "DRAFT_PICK"
-  | "ROOKIE_SIGN"
-  | "WAIVER_CLAIM"
-  | "CONTRACT_EXTEND"
-  | "MIGRATION_OVERRIDE";
-
-export type TransactionEvent = {
-  txId: string;
-  season: number;
-  weekIndex: number;
-  ts: number;
-  kind: TxKind;
-  teamId: string;
-  otherTeamId?: string;
-  playerIds: string[];
-  details: Record<string, any>;
-};
-
-export type TransactionState = {
-  events: TransactionEvent[];
-  lastTxId?: number;
-};
+export type TransactionState = TransactionLedger;
 
 export function getTransactionState(state: Pick<GameState, "transactions"> & { transactionLedger?: TransactionState }): TransactionState {
-  return state.transactionLedger ?? { events: [], lastTxId: 0 };
+  const cur = state.transactionLedger as any;
+  return {
+    events: cur?.events ?? [],
+    counter: Number(cur?.counter ?? cur?.lastTxId ?? 0),
+    migrationComplete: Boolean(cur?.migrationComplete ?? false),
+  };
 }
 
 export function sortTransactionEvents(events: TransactionEvent[]): TransactionEvent[] {
@@ -41,23 +19,6 @@ export function sortTransactionEvents(events: TransactionEvent[]): TransactionEv
     if (a.ts !== b.ts) return a.ts - b.ts;
     return a.txId.localeCompare(b.txId);
   });
-}
-
-export function appendTransactionEvent(state: GameState, draft: Omit<TransactionEvent, "txId" | "ts"> & { ts?: number }): GameState {
-  const ledger = getTransactionState(state);
-  const nextId = Number(ledger.lastTxId ?? 0) + 1;
-  const event: TransactionEvent = {
-    ...draft,
-    txId: `TX_${String(nextId).padStart(8, "0")}`,
-    ts: Number(draft.ts ?? state.season * 10_000 + (state.week ?? 0) * 10 + nextId),
-  };
-  return {
-    ...state,
-    transactionLedger: {
-      events: sortTransactionEvents([...(ledger.events ?? []), event]),
-      lastTxId: nextId,
-    },
-  };
 }
 
 export function buildMigrationEvents(state: GameState): TransactionEvent[] {
@@ -72,10 +33,10 @@ export function buildMigrationEvents(state: GameState): TransactionEvent[] {
       season,
       weekIndex,
       ts: season * 10_000 + weekIndex * 100 + seq,
-      kind: "MIGRATION_OVERRIDE",
+      kind: "MIGRATION",
       teamId: String(teamId ?? "FREE_AGENT"),
       playerIds: [String(playerId)],
-      details: { source: "playerTeamOverrides", teamId: String(teamId ?? "FREE_AGENT") },
+      details: { teamId: String(teamId ?? "FREE_AGENT") },
     });
   }
   for (const [playerId, contract] of Object.entries(state.playerContractOverrides ?? {}) as Array<[string, PlayerContractOverride]>) {
@@ -85,10 +46,10 @@ export function buildMigrationEvents(state: GameState): TransactionEvent[] {
       season,
       weekIndex,
       ts: season * 10_000 + weekIndex * 100 + seq,
-      kind: "MIGRATION_OVERRIDE",
+      kind: "MIGRATION",
       teamId: String(state.playerTeamOverrides?.[playerId] ?? "FREE_AGENT"),
       playerIds: [String(playerId)],
-      details: { source: "playerContractOverrides", contract },
+      details: { contract },
     });
   }
   return sortTransactionEvents(events);

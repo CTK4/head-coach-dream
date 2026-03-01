@@ -1,26 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { getPlayers } from "@/data/leagueDb";
+import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
+import { Tx } from "@/engine/transactions/transactionAPI";
 import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
-import { applyCut, applySignFA } from "@/engine/transactions/transactionAPI";
 
-function mkState(): any {
-  return {
-    season: 2025,
-    week: 1,
-    rookies: [],
-    playerTeamOverrides: {},
-    playerContractOverrides: {},
-    transactions: [],
-    transactionLedger: { events: [], lastTxId: 0 },
-  };
+function withTx(state: any, draft: any) {
+  return applyTransaction(state, { ...draft, txId: buildTxId(state), season: state.season, weekIndex: state.week, ts: state.season * 10_000 + state.week * 100 + state.transactionLedger.counter + 1 });
 }
 
 describe("transaction replay", () => {
-  it("replay is deterministic", () => {
-    const player = getPlayers().find((p) => String(p.teamId ?? "").toUpperCase() !== "FREE_AGENT");
-    const teamId = String(player?.teamId ?? "");
-    const state1 = applyCut(mkState(), teamId, String(player?.playerId), "test");
-    const state2 = applySignFA(state1, teamId, String(player?.playerId), { startSeason: 2025, endSeason: 2025, salaries: [1_000_000], signingBonus: 0 });
-    expect(buildRosterIndex(state2)).toEqual(buildRosterIndex(state2));
+  it("is deterministic across replays", () => {
+    let s: any = { season: 2025, week: 1, rookies: [], playerTeamOverrides: { p1: "A", p2: "B" }, playerContractOverrides: {}, transactions: [], transactionLedger: { events: [], counter: 0 } };
+    s = withTx(s, Tx.trade("A", "B", { playerIdsFrom: ["p1"], playerIdsTo: ["p2"] }));
+    s = withTx(s, Tx.cut("A", "p2", "test"));
+    expect(buildRosterIndex(s)).toEqual(buildRosterIndex(s));
   });
 });

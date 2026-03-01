@@ -39,12 +39,12 @@ export function buildContractIndex(state: GameState): ContractIndex {
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
   for (const event of events) {
     const contract = event.details?.contract;
-    if (event.kind === "MIGRATION_OVERRIDE" && event.details?.source === "playerContractOverrides") {
+    if (event.kind === "MIGRATION" && event.details?.contract) {
       out[String(event.playerIds[0])] = normalizeContract(event.details.contract, Number(state.season ?? 1));
       continue;
     }
     if (!contract) continue;
-    if (["RESIGN", "SIGN_FA", "FRANCHISE_TAG", "ROOKIE_SIGN", "CONTRACT_EXTEND"].includes(event.kind)) {
+    if (["RESIGN", "SIGN_FA", "FRANCHISE_TAG", "ROOKIE_SIGN"].includes(event.kind)) {
       for (const playerId of event.playerIds) out[String(playerId)] = normalizeContract(contract, Number(state.season ?? 1));
     }
   }
