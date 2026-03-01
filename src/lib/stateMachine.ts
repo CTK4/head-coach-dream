@@ -65,7 +65,6 @@ export class StateMachine {
     const base: OffseasonStepId[] = [
       OffseasonStepEnum.RESIGNING,
       OffseasonStepEnum.COMBINE,
-      ...(config.enableTamperingStep ? [OffseasonStepEnum.TAMPERING] : []),
       OffseasonStepEnum.FREE_AGENCY,
       OffseasonStepEnum.PRE_DRAFT,
       OffseasonStepEnum.DRAFT,
@@ -77,7 +76,10 @@ export class StateMachine {
   }
 
   static nextOffseasonStepId(current: OffseasonStepId, config: StateMachineConfig): OffseasonStepId | null {
-    if (!config.enableTamperingStep && (current === OffseasonStepEnum.COMBINE || current === OffseasonStepEnum.TAMPERING)) {
+    if (!config.enableTamperingStep && current === "TAMPERING") {
+      return OffseasonStepEnum.FREE_AGENCY;
+    }
+    if (current === OffseasonStepEnum.COMBINE) {
       return OffseasonStepEnum.FREE_AGENCY;
     }
     const steps = StateMachine.getOffseasonSequence(config);
