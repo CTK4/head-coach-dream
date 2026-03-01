@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import GameLog from "@/components/GameLog/GameLog";
 import { adaptDriveLog } from "@/components/GameLog/adaptDriveLog";
 import PlayRibbon from "@/components/game/PlayRibbon";
+import DefensiveCallDrawer from "@/components/game/DefensiveCallDrawer";
 
 // ─── Play catalog ──────────────────────────────────────────────────────────
 
@@ -354,8 +356,18 @@ const Playcall = () => {
     force((x) => x + 1);
   };
 
+  const handleDefensiveConfirm = (call: DefensiveCall | "AUTO") => {
+    if (call === "AUTO") {
+      dispatch({ type: "CLEAR_DEFENSIVE_CALL" });
+    } else {
+      dispatch({ type: "SET_DEFENSIVE_CALL", payload: { call } });
+    }
+    if (selectedCard?.play.id) handlePlay(selectedCard.play.id);
+  };
+
   const selectedCard = rankedCards.find((c) => c.play.id === selectedPlayId) ?? rankedCards[0];
   const missingPlaybookSelection = !offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId);
+  const needsDefensiveCall = Boolean(g.needsDefensiveCall && g.defensiveCallSituation);
 
   const exit = () => {
     dispatch({ type: "EXIT_GAME" });
@@ -515,6 +527,17 @@ const Playcall = () => {
                       ))}
                     </div>
                   </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Defense Control</p>
+                  <div className="flex gap-1">
+                    {(["OFF", "KEY_DOWNS", "ALWAYS"] as const).map((mode) => (
+                      <Button key={mode} size="sm" variant={g.defenseUserMode === mode ? "default" : "outline"} onClick={() => dispatch({ type: "SET_DEFENSE_USER_MODE", payload: { mode } })}>
+                        {mode === "KEY_DOWNS" ? "Key Downs" : mode}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tempo</p>
                     <div className="flex gap-1">
@@ -570,7 +593,7 @@ const Playcall = () => {
               </div>
               <div className="flex items-center justify-between rounded border p-3">
                 <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
-                <Button size="sm" disabled={!selectedCard} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Recommended stem updates instantly from card selection. Two-tap flow: select then confirm.</p>
@@ -599,6 +622,13 @@ const Playcall = () => {
         </Card>
 
       </div>
+      {g.defensiveCallSituation ? (
+        <DefensiveCallDrawer
+          open={needsDefensiveCall}
+          situation={g.defensiveCallSituation}
+          onConfirm={handleDefensiveConfirm}
+        />
+      ) : null}
     </div>
   );
 };
