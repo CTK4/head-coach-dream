@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { HubShell } from "@/components/franchise-hub/HubShell";
 import { Avatar } from "@/components/common/Avatar";
+import { CoordinatorCandidateDrawer } from "@/components/staff/CoordinatorCandidateDrawer";
+import { DEFENSE_SCHEMES, OFFENSE_SCHEMES, canonicalSchemeId, getSchemeMeta, type Side } from "@/lib/schemeCatalog";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -24,6 +26,7 @@ export default function CoordinatorHiring() {
   const [role, setRole] = useState<"OC" | "DC" | "STC">("OC");
   const [levelIdx, setLevelIdx] = useState(1);
   const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [offerYears, setOfferYears] = useState(3);
   const [offerSalaryValue, setOfferSalaryValue] = useState(0);
 
@@ -118,6 +121,57 @@ export default function CoordinatorHiring() {
 
   const wrapInShell = state.phase === "COORD_HIRING" && !location?.pathname?.startsWith?.("/hub/");
 
+  const selectedCandidate = useMemo(() => candidates.find((candidate) => candidate.p.personId === selectedCandidateId) ?? null, [candidates, selectedCandidateId]);
+
+  const getSchemeDetails = (schemeRaw: unknown) => {
+    if (role === "STC") {
+      const stLabel = String(schemeRaw ?? "Special Teams");
+      return {
+        schemeLabel: stLabel,
+        schemeIdOrRaw: stLabel,
+        description: "Special teams approach and game-management emphasis.",
+        tags: ["Special Teams"],
+      };
+    }
+
+    const side: Side = role === "OC" ? "OFFENSE" : "DEFENSE";
+    const knownSchemes = side === "OFFENSE" ? OFFENSE_SCHEMES : DEFENSE_SCHEMES;
+    const schemeId = canonicalSchemeId(schemeRaw, side);
+    const schemeMeta = getSchemeMeta(schemeId);
+    const rawText = typeof schemeRaw === "string" ? schemeRaw.trim() : "";
+    if (!rawText) {
+      return {
+        schemeLabel: String(schemeRaw ?? "Unknown Scheme"),
+        schemeIdOrRaw: String(schemeRaw ?? "UNKNOWN_SCHEME"),
+        description: "Scheme data missing from scouting report.",
+        tags: ["Unknown Scheme"],
+      };
+    }
+
+    const rawToken = rawText.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+    const isKnownRaw = knownSchemes.some((scheme) => scheme.id === rawToken || scheme.label.toUpperCase().replace(/[^A-Z0-9]+/g, "_") === rawToken);
+    const unknownFallback =
+      !isKnownRaw &&
+      ((side === "OFFENSE" && schemeId === "PRO_STYLE_BALANCED" && !rawToken.includes("PRO") && !rawToken.includes("BALANCED")) ||
+        (side === "DEFENSE" && schemeId === "MULTIPLE_HYBRID" && !rawToken.includes("MULTIPLE") && !rawToken.includes("HYBRID")));
+
+    if (unknownFallback) {
+      return {
+        schemeLabel: rawText,
+        schemeIdOrRaw: rawText,
+        description: "Scheme is not in the current catalog.",
+        tags: ["Unknown Scheme"],
+      };
+    }
+
+    return {
+      schemeLabel: schemeMeta.label,
+      schemeIdOrRaw: schemeId,
+      description: schemeMeta.description,
+      tags: schemeMeta.tags,
+    };
+  };
+
   const content = (
     <div className="space-y-4">
       <Card>
@@ -170,21 +224,48 @@ export default function CoordinatorHiring() {
               const latest = latestOfferByPerson[p.personId];
               const isEditing = editingCandidateId === p.personId;
               return (
-                <div key={p.personId} className="border rounded-md px-3 py-2 space-y-3">
+                <div
+                  key={p.personId}
+                  data-test={`coord-candidate-${p.personId}`}
+                  className="border rounded-md px-3 py-2 space-y-3 cursor-pointer"
+                  onClick={() => setSelectedCandidateId(p.personId)}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex items-center gap-3">
                       <Avatar entity={{ type: "personnel", id: String(p.personId), name: String(p.fullName ?? "Coach"), avatarUrl: p.avatarUrl }} size={40} />
                       <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          {p.fullName} <span className="text-muted-foreground">({String(p.scheme ?? "-")})</span>
-                        </div>
+                        {(() => {
+                          const scheme = getSchemeDetails(p.scheme);
+                          return (
+                            <>
+                              <div className="font-medium truncate">{p.fullName}</div>
+                              <div data-test="coord-scheme-label" className="text-sm leading-5 whitespace-normal break-words">{scheme.schemeLabel}</div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {scheme.tags.slice(0, 4).map((tag) => (
+                                  <Badge key={tag} variant="outline" className="text-[10px]">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                              {scheme.description ? <div className="mt-1 text-xs text-muted-foreground line-clamp-1">{scheme.description}</div> : null}
+                            </>
+                          );
+                        })()}
                         <div className="text-xs text-muted-foreground">Rep {Number(p.reputation ?? 0)} · Suggested {money(salary)} · Expected {money(exp)}</div>
                         {latest?.status === "REJECTED" ? <div className="text-xs text-amber-300 mt-1">{latest.reason}</div> : null}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {safety ? <Badge variant="outline">{emergency ? "Emergency" : "Safety"}</Badge> : null}
-                      <Button size="sm" variant="outline" onClick={() => openOfferEditor(candidate)} disabled={roleFilled}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openOfferEditor(candidate);
+                        }}
+                        disabled={roleFilled}
+                      >
                         Create Offer
                       </Button>
                     </div>
@@ -214,10 +295,10 @@ export default function CoordinatorHiring() {
                           className="mt-1 w-32 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
                         />
                       </label>
-                      <Button size="sm" onClick={() => submitOffer(p.personId)} disabled={offerSalaryValue <= 0}>
+                      <Button size="sm" onClick={(event) => { event.stopPropagation(); submitOffer(p.personId); }} disabled={offerSalaryValue <= 0}>
                         Submit Offer
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingCandidateId(null)}>
+                      <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); setEditingCandidateId(null); }}>
                         Cancel
                       </Button>
                     </div>
@@ -230,6 +311,23 @@ export default function CoordinatorHiring() {
           )}
         </CardContent>
       </Card>
+
+      <CoordinatorCandidateDrawer
+        open={selectedCandidateId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCandidateId(null);
+        }}
+        candidate={
+          selectedCandidate
+            ? {
+                name: String(selectedCandidate.p.fullName ?? "Coach"),
+                role,
+                reputation: Number(selectedCandidate.p.reputation ?? 0),
+                ...getSchemeDetails(selectedCandidate.p.scheme),
+              }
+            : null
+        }
+      />
     </div>
   );
 
