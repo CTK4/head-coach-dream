@@ -133,6 +133,7 @@ import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
+import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -1068,6 +1069,7 @@ export type GameState = {
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
   transactions: Transaction[];
+  transactionLedger?: TransactionState;
   userTeamId?: string;
   teamId?: string;
   playerMorale?: Record<string, number>;
@@ -1704,6 +1706,7 @@ function createInitialState(): GameState {
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     transactions: [],
+    transactionLedger: { events: [], lastTxId: 0 },
     feedbackQueue: [],
     feedbackHistory: [],
     pendingInjuryAlert: undefined,
@@ -8704,6 +8707,7 @@ function loadState(): GameState {
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
       transactions: (migrated as any).transactions ?? [],
+      transactionLedger: (migrated as any).transactionLedger ?? initial.transactionLedger,
       feedbackQueue: Array.isArray((migrated as any).feedbackQueue) ? (migrated as any).feedbackQueue : [],
       feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
       pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
@@ -8713,6 +8717,20 @@ function loadState(): GameState {
       lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
       storySetup: (migrated as any).storySetup,
     };
+    if (!out.transactionLedger?.events?.length) {
+      const migrationEvents = buildMigrationEvents(out);
+      if (migrationEvents.length > 0) {
+        out = {
+          ...out,
+          transactionLedger: {
+            events: migrationEvents,
+            lastTxId: migrationEvents.length,
+          },
+          playerTeamOverrides: {},
+          playerContractOverrides: {},
+        };
+      }
+    }
     out = ensureAccolades(bootstrapAccolades(out));
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
