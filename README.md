@@ -70,33 +70,6 @@ This project is built with:
 
 This project is configured for [Vercel](https://vercel.com) deployment. Import the repository in Vercel and it will be deployed automatically on every push to the main branch.
 
-## Cloudflare R2 Assets
-
-This app can load static assets from Cloudflare R2 using Vite environment variables.
-
-A Worker is included at `workers/r2-assets` that publicly serves five R2 buckets with these routes:
-
-- `/avatars/<key>`
-- `/badges/<key>`
-- `/icons/<key>`
-- `/placeholders/<key>`
-- `/utility/<key>`
-
-Set these environment variables in your frontend deployment to your Worker base URL:
-
-- `VITE_R2_AVATARS_BASE_URL=https://<worker-host>/avatars`
-- `VITE_R2_BADGES_BASE_URL=https://<worker-host>/badges`
-- `VITE_R2_ICONS_BASE_URL=https://<worker-host>/icons`
-- `VITE_R2_PLACEHOLDERS_BASE_URL=https://<worker-host>/placeholders`
-- `VITE_R2_UTILITY_BASE_URL=https://<worker-host>/utility`
-
-Where `<worker-host>` is either:
-
-- `https://<worker-name>.<subdomain>.workers.dev` (workers.dev)
-- `https://assets.example.com` (custom domain)
-
-The Worker preserves object content headers via `writeHttpMetadata`, returns `404` for missing keys/routes, and sets cache policy `public, max-age=31536000, immutable`.
-
 ## Contributor guidelines
 
 - Never render enum constants or internal IDs directly in UI text (e.g. `AIR_RAID`, `teamId`, `QB`, raw status codes).
