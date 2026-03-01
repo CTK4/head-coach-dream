@@ -7,6 +7,10 @@ import { resolveContact, type ContactInput } from "@/engine/physics/contactResol
 import { resolveCatchPoint, type CatchInput } from "@/engine/physics/catchPointResolver";
 import { resolvePassRush } from "@/engine/physics/passRushResolver";
 import { resolveQbBallistics } from "@/engine/physics/qbBallistics";
+import { QB_TUNING } from "@/config/qbTuning";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
+import { getQbSchemeFitMultiplier } from "@/engine/qb/qbSchemeFit";
+import { getPlayerById } from "@/data/leagueDb";
 import { resolvePile } from "@/engine/physics/pileResolver";
 import { resolveFumble } from "@/engine/physics/fumbleResolver";
 import { resolveFieldGoal, resolvePunt } from "@/engine/physics/kickResolver";
@@ -36,6 +40,8 @@ export type PlayType =
   | "DEEP_PASS"
   // Multi-purpose
   | "PLAY_ACTION"
+  | "RPO_READ"
+  | "QB_KEEP"
   // Specials
   | "SPIKE"
   | "KNEEL"
@@ -258,6 +264,7 @@ export type GameSim = {
   situationWindowCounts: Partial<Record<SituationBucket, SituationWindowCount>>;
   observedSnaps: number;
   practiceExecutionBonus: number;
+  qbRunContactsByPlayerId: Record<string, number>;
   lateGamePracticeRetentionBonus: number;
   coachArchetypeId?: string;
   coachTenureYear: number;
@@ -394,7 +401,7 @@ function sigmoid(x: number): number {
  */
 function callVsLook(playType: PlayType, look: DefensiveLook): number {
   const { shell, box, blitz } = look;
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isScreen = playType === "SCREEN";
   const isQuick = playType === "QUICK_GAME";
   const isPlayAction = playType === "PLAY_ACTION";
@@ -450,8 +457,13 @@ function callVsLook(playType: PlayType, look: DefensiveLook): number {
 
 /** MatchupEdge from team ratings. Returns roughly [-1, +1]. */
 function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRatings): number {
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
+  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
+  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
+  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
 
   if (isRun) {
     const olVsRunDef = (off.olPassBlock - def.runStop) / 15; // OL run-block vs DL run-stop
@@ -472,7 +484,7 @@ function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRati
 /** SituationFit: positive when play fits the situation. */
 function situationFit(playType: PlayType, sim: GameSim): number {
   const { down, distance, ballOn, clock } = sim;
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isScreen = playType === "SCREEN";
   const isPA = playType === "PLAY_ACTION";
 
@@ -542,9 +554,14 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
   const me = off && def ? matchupEdge(playType, off, def) : 0;
   const sf = situationFit(playType, sim);
   const exec = executionState(sim, playType, matchup);
+  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
+  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
+  const schemeId = sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId;
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, schemeId as any);
 
   // PAS = weighted sum
-  const pas = 0.35 * cvl + 0.35 * me + 0.2 * sf + 0.1 * exec;
+  const pas = 0.35 * cvl + 0.35 * me + 0.2 * sf + 0.1 * (exec * schemeFit);
   return { pas, cvl, me, sf };
 }
 
@@ -682,8 +699,13 @@ function buildResultTags(
   const tags: ResultTag[] = [];
   const { cvl, me, sf } = pasComponents;
   const { shell, box, blitz } = look;
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
+  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
+  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
+  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
 
   // Pick the largest contributing factor
   const factors: { key: string; val: number }[] = [
@@ -783,8 +805,13 @@ function resolveWithPAS(
   );
   const pas = pasComp.pas + passivePas + perkPas;
 
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
+  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
+  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
+  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
 
   let yards = 0;
   let turnover = false;
@@ -872,21 +899,45 @@ function resolveWithPAS(
       resolverTags.push(...sackFumble.resultTags);
       outcomeLabel = "negative";
     } else {
+      const pressureTriggered = rushOutcome.pressured || rushOutcome.debug.pPressure > QB_TUNING.PRESSURE_THRESHOLD;
+      const scrambleDiscipline = Number(qb?.scrambleDiscipline ?? 55);
+      const throwOnRun = pressureTriggered && (["DUAL_THREAT","SCRAMBLER","IMPROVISER"].includes(qbTag)) && scrambleDiscipline >= QB_TUNING.DISCIPLINE_HIGH_THRESHOLD;
+      const shouldScramble = pressureTriggered && (["DUAL_THREAT","SCRAMBLER","IMPROVISER"].includes(qbTag)) && scrambleDiscipline < QB_TUNING.SCRAMBLE_DISCIPLINE_BREAKPOINT;
+      if (shouldScramble) {
+        const escapeRoll = contextualRng(sim.seed, `${snapKey}:qb-escape`)();
+        const escapeChance = clamp((Number(qb?.elusiveness ?? 70) - (sim.possession === "HOME" ? sim.awayRatings?.dlPassRush ?? 72 : sim.homeRatings?.dlPassRush ?? 72)) / 120 + 0.45, 0.1, 0.85) * schemeFit;
+        if (escapeRoll < escapeChance) {
+          const qbContact = resolveContact({
+            ballcarrier: { weightLb: Number(qb?.weight ?? 215), strength: Number(qb?.truckContactBalance ?? 66), balance: Number(qb?.truckContactBalance ?? 66), agility: Number(qb?.elusiveness ?? 74), accel: Number(qb?.acceleration ?? 74), tackling: 25, heightIn: 74, jump: 70, fatigue01: 0.24 },
+            tackler: { weightLb: 232, strength: 76, balance: 66, agility: 68, accel: 72, tackling: 75, heightIn: 74, jump: 70, fatigue01: 0.22 },
+            move: { type: "NONE", timing01: 0.5 },
+            context: { angleDeg: 30, padLevelOff01: 0.5, padLevelDef01: 0.65, shortYardage: sim.distance <= 2, pile: false, surface: "DRY" },
+          }, contextualRng(sim.seed, `${snapKey}:qb-contact`));
+          yards = Math.max(0, qbContact.yacYards);
+          outcomeLabel = yards >= 12 ? "explosive" : "success";
+          if (qbId) sim.qbRunContactsByPlayerId[qbId] = (sim.qbRunContactsByPlayerId[qbId] ?? 0) + (qbContact.tackled ? 1 : 0);
+          resolverTags.push(...qbContact.resultTags, { kind: "EXECUTION", text: "QB_SCRAMBLE" });
+        } else {
+          sack = true;
+          yards = -Math.round(tri(rng, 3, 6, 10));
+          outcomeLabel = "negative";
+        }
+      } else {
       const ballistics = resolveQbBallistics(
         {
-          qb: { arm: 78, accuracy: 76, release: 77, spin: 75, fatigue01: 0.22 },
-          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: "LOW", precipTier: "NONE", throwOnRun: playType === "PLAY_ACTION" && look.blitz === "LIKELY" },
+          qb: { arm: Number(qb?.armStrength ?? 78), accuracy: Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76), release: Number(qb?.anticipation ?? 77), spin: 75, fatigue01: 0.22 },
+          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: "LOW", precipTier: "NONE", throwOnRun: throwOnRun || (playType === "PLAY_ACTION" && look.blitz === "LIKELY") },
         },
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
       const catchInput: CatchInput = {
-        qb: { accuracy: 76, arm: 78, decision: Math.round(74 * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
+        qb: { accuracy: Math.round(Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) * schemeFit), arm: Number(qb?.armStrength ?? 78), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
         wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
         cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
         context: {
           targetDepth: playType === "SCREEN" || playType === "QUICK_GAME" ? "SHORT" : playType === "DROPBACK" ? "MID" : "DEEP",
-          separationYds: playType === "SCREEN" ? 1.8 : 1.1,
+          separationYds: (playType === "SCREEN" ? 1.8 : 1.1) + (throwOnRun ? 0.25 : 0),
           routeBreakSeverity01: playType === "QUICK_GAME" ? 0.35 : playType === "DROPBACK" ? 0.55 : 0.42,
           highPoint: playType === "DROPBACK",
           contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
@@ -902,6 +953,7 @@ function resolveWithPAS(
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
+      }
     }
   }
 
@@ -1411,6 +1463,7 @@ export function initGameSim(params: {
     situationWindowCounts: {},
     observedSnaps: 0,
     practiceExecutionBonus: params.practiceExecutionBonus ?? 0,
+    qbRunContactsByPlayerId: {},
     lateGamePracticeRetentionBonus: params.lateGamePracticeRetentionBonus ?? 0,
     coachArchetypeId: params.coachArchetypeId,
     coachTenureYear: Math.max(1, Number(params.coachTenureYear ?? 1)),
@@ -1444,7 +1497,7 @@ function gameplanAggression(sim: GameSim): AggressionLevel {
 }
 
 function trackedForPlay(playType: PlayType): FatigueTrackedPosition[] {
-  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN";
+  const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   return isRun ? ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"] : ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"];
 }
 

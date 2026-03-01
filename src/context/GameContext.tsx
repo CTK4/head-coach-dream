@@ -137,6 +137,7 @@ import { buildMigrationEvents, type TransactionState } from "@/engine/transactio
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
+import type { PlayerRow } from "@/data/leagueDb";
 import type { TransactionEvent } from "@/engine/transactions/types";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
@@ -1058,6 +1059,8 @@ export type GameState = {
   nextPlayerId: number;
   playerTeamOverrides: Record<string, string>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
+  playerAttrOverrides: Record<string, Partial<PlayerRow>>;
+  qbRunContactExposureByPlayerId: Record<string, number>;
   franchiseTags: Record<string, FranchiseTagRecord>;
   playerFatigueById: Record<string, PersistedFatigue>;
   practicePlan: PracticePlan;
@@ -1357,6 +1360,7 @@ export type GameAction =
   | { type: "DYNASTY_ENDSEASON_SCORE"; payload: { year: number; teamId: TeamId; inputs: { wins: number; playoffResult: string; awards: string[]; powerRanks?: { off?: number; def?: number; st?: number }; ownerOutcome: DynastySeasonLog["ownerOutcome"]; mediaTags: string[]; capDisaster?: boolean } } }
   | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
   | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
+  | { type: "SET_PLAYER_ATTR_OVERRIDE"; payload: { playerId: string; patch: Partial<PlayerRow> } }
   | { type: "RESET" };
 
 
@@ -1698,6 +1702,8 @@ function createInitialState(): GameState {
     nextPlayerId: maxExistingPlayerNumericId() + 1,
     playerTeamOverrides: {},
     playerContractOverrides: {},
+    playerAttrOverrides: {},
+    qbRunContactExposureByPlayerId: {},
     franchiseTags: {},
     playerFatigueById: {},
     practicePlan: DEFAULT_PRACTICE_PLAN,
@@ -5495,9 +5501,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         const medTier = medR < 0.62 ? "GREEN" : medR < 0.82 ? "YELLOW" : medR < 0.93 ? "ORANGE" : medR < 0.985 ? "RED" : "BLACK";
         const charTier = charR < 0.08 ? "BLUE" : charR < 0.72 ? "GREEN" : charR < 0.86 ? "YELLOW" : charR < 0.94 ? "ORANGE" : charR < 0.985 ? "RED" : "BLACK";
 
+        const qbLike = String(p.pos ?? "").toUpperCase() === "QB";
+        const qbAttr = qbLike ? {
+          armStrength: Math.round(65 + seed(`true:arm:${p.id}`) * 30),
+          accuracyShort: Math.round(62 + seed(`true:accS:${p.id}`) * 34),
+          accuracyMid: Math.round(60 + seed(`true:accM:${p.id}`) * 34),
+          accuracyDeep: Math.round(56 + seed(`true:accD:${p.id}`) * 36),
+          decisionSpeed: Math.round(58 + seed(`true:dec:${p.id}`) * 35),
+          pocketPresence: Math.round(58 + seed(`true:pocket:${p.id}`) * 35),
+          speed: Math.round(58 + seed(`true:spd:${p.id}`) * 38),
+          acceleration: Math.round(58 + seed(`true:accel:${p.id}`) * 38),
+          elusiveness: Math.round(55 + seed(`true:elu:${p.id}`) * 40),
+          readSpeed: Math.round(55 + seed(`true:read:${p.id}`) * 40),
+          rpoRating: Math.round(50 + seed(`true:rpo:${p.id}`) * 44),
+          scrambleDiscipline: Math.round(50 + seed(`true:scrd:${p.id}`) * 44),
+          armOnRunAccuracy: Math.round(50 + seed(`true:runAcc:${p.id}`) * 44),
+        } : {};
         trueProfiles[p.id] = {
           trueOVR: Math.round(p.grade),
-          trueAttributes: { character: trueCharacterScore, intelligence: trueIntelligenceScore },
+          trueAttributes: { character: trueCharacterScore, intelligence: trueIntelligenceScore, ...qbAttr },
           trueMedical: { tier: medTier as any, recurrence01: Math.round(seed(`true:rec:${p.id}`) * 100) / 100, degenerative: seed(`true:deg:${p.id}`) < 0.06 },
           trueCharacter: {
             tier: charTier as any,
@@ -5513,6 +5535,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           seed: (kk: string) => seed(kk),
           gm,
           windowKey,
+          divergenceWidth: String(p.pos ?? "").toUpperCase() === "QB" ? getQbScoutingDivergenceByArchetype(resolveQbArchetypeTag({ ...(trueProfiles[p.id].trueAttributes ?? {}), pos: "QB", playerId: p.id, fullName: p.name } as any)) : undefined,
         });
       }
 
@@ -7779,7 +7802,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       const next = upsertGameFatigueState({ ...state, game: stepped.sim }, stepped.sim);
       if (!stepped.ended) return next;
-      const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}) };
+      const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}), qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(stepped.sim.qbRunContactsByPlayerId ?? {}) } };
       let nextWithPractice = nextWithRecovery;
       const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
       if (!appliedPlayWeek.applied) return state;
@@ -7948,6 +7971,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         newsHistory: appendWeeklyNews(state, weekResult, week),
         hub,
         playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
+        qbRunContactExposureByPlayerId: { ...(state.qbRunContactExposureByPlayerId ?? {}), ...(state.game.qbRunContactsByPlayerId ?? {}) },
       };
       const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
       if (!appliedAdvance.applied) return state;
@@ -8285,6 +8309,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "HIDE_OFFER_RESULT_MODAL": {
       return { ...state, ui: { ...state.ui, offerResultModal: undefined } };
+    }
+    case "SET_PLAYER_ATTR_OVERRIDE": {
+      const { playerId, patch } = action.payload;
+      return {
+        ...state,
+        playerAttrOverrides: {
+          ...state.playerAttrOverrides,
+          [playerId]: { ...(state.playerAttrOverrides?.[playerId] ?? {}), ...patch },
+        },
+      };
     }
     case "RESET":
       return createInitialState();
@@ -8726,6 +8760,8 @@ function loadState(): GameState {
           return [k, { startSeason: Number(v?.startSeason ?? initial.season), endSeason: Number(v?.endSeason ?? initial.season), salaries: Array.from({ length: years }, () => aav), signingBonus: Number(v?.signingBonus ?? 0) }];
         }),
       ) as Record<string, PlayerContractOverride>,
+      playerAttrOverrides: { ...(initial as any).playerAttrOverrides, ...((migrated as any).playerAttrOverrides ?? {}) },
+      qbRunContactExposureByPlayerId: { ...(initial as any).qbRunContactExposureByPlayerId, ...((migrated as any).qbRunContactExposureByPlayerId ?? {}) },
       playerFatigueById: Object.fromEntries(
         Object.entries((migrated as any).playerFatigueById ?? {}).map(([k, v]: [string, any]) => [k, { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }]),
       ) as Record<string, PersistedFatigue>,

@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
+import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
 import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type DefensivePackage, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
@@ -27,6 +29,7 @@ const RUN_PLAYS: PlayDef[] = [
 ];
 
 const PASS_PLAYS: PlayDef[] = [
+  { id: "RPO_READ", label: "RPO Read", icon: "🧠", desc: "Read conflict defender; throw or keep" },
   { id: "QUICK_GAME", label: "Quick Game", icon: "⚡", desc: "Hot routes & slants; beats blitz and man press" },
   { id: "DROPBACK", label: "Dropback Pass", icon: "📡", desc: "Full route tree; needs pass protection" },
   { id: "PLAY_ACTION", label: "Play Action", icon: "🎭", desc: "Fake run to open downfield; beats single-high" },
@@ -333,6 +336,13 @@ const Playcall = () => {
   const isOver = g.clock.quarter === 4 && g.clock.timeRemainingSec === 0;
   const canShowPlay = useMemo(() => !invalid && !isOver, [invalid, isOver]);
 
+  const userTeamQbArchetype = useMemo(() => {
+    if (!teamId) return "GAME_MANAGER" as const;
+    const qb = getEffectivePlayersByTeam(state, teamId).filter((p: any) => String(p.pos ?? "").toUpperCase() === "QB").sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
+    return qb ? resolveQbArchetypeTag(qb as any) : "GAME_MANAGER" as const;
+  }, [state, teamId]);
+  const canCallRpo = userTeamQbArchetype === "DUAL_THREAT" || userTeamQbArchetype === "SCRAMBLER";
+
   const rec = useMemo(
     () => (g.down === 4 ? recommendFourthDown(g) : null),
     [g]
@@ -340,7 +350,7 @@ const Playcall = () => {
 
   const rankedCards = useMemo(() => {
     if (!offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId)) return [];
-    const allowedPlayIds = getOffensePlaybookPlays(offensePlaybookId);
+    const allowedPlayIds = getOffensePlaybookPlays(offensePlaybookId).filter((id) => canCallRpo || id !== "RPO_READ");
     const evaluations = evaluatePlayConcepts(g, allowedPlayIds, { aggression, tempo, personnelPackage, look: g.defLook });
     return evaluations
       .map((evaluation) => ({
@@ -348,7 +358,7 @@ const Playcall = () => {
         play: PLAYBOOK.find((p) => p.id === evaluation.playType) ?? PLAYBOOK[0],
       }))
       .sort((a, b) => b.evaluation.score - a.evaluation.score);
-  }, [g, aggression, tempo, personnelPackage]);
+  }, [g, aggression, tempo, personnelPackage, canCallRpo, offensePlaybookId, defensePlaybookId]);
 
   const handlePlay = (playType: PlayType) => {
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
