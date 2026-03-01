@@ -26,6 +26,7 @@ import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
+import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import {
   initLeagueState,
@@ -1106,6 +1107,9 @@ export type GameAction =
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
+  | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
+  | { type: "SET_DEFENSIVE_CALL"; payload: { call: DefensiveCall } }
+  | { type: "CLEAR_DEFENSIVE_CALL" }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
   | { type: "PLAYOFFS_INIT_BRACKET" }
@@ -7531,6 +7535,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
       return started;
     }
+    case "SET_DEFENSE_USER_MODE": {
+      return { ...state, game: { ...state.game, defenseUserMode: action.payload.mode } };
+    }
+    case "SET_DEFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingDefensiveCall: action.payload.call, needsDefensiveCall: false, forceAutoDefenseCall: false } };
+    }
+    case "CLEAR_DEFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingDefensiveCall: undefined, needsDefensiveCall: false, forceAutoDefenseCall: true } };
+    }
     case "RESOLVE_PLAY": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
       const gameWithToggles = {
@@ -7540,7 +7553,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
       const personnelPackage = action.payload.personnelPackage ?? "11";
       if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
-      const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage);
+      const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage, {
+        userControlsDefense: gameWithToggles.possession !== "HOME",
+      });
       if ((stepped.sim.driveNumber ?? 0) !== (state.game.driveNumber ?? 0) || (stepped.sim.playNumberInDrive ?? 0) <= 1) {
         logInfo("game.sim.snap.resolved", { phase: state.phase, season: state.season, week: state.week, driveIndex: stepped.sim.driveNumber, playIndex: stepped.sim.playNumberInDrive, saveId: getActiveSaveId(), meta: { ended: stepped.ended, playType: action.payload.playType } });
       }

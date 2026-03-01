@@ -11,6 +11,9 @@ import { resolvePile } from "@/engine/physics/pileResolver";
 import { resolveFumble } from "@/engine/physics/fumbleResolver";
 import { resolveFieldGoal, resolvePunt } from "@/engine/physics/kickResolver";
 import { ratingZ } from "@/engine/physics/ratingsToKinematics";
+import { aiSelectDefensiveCall } from "@/engine/defense/aiSelectDefensiveCall";
+import { applyDefensiveCallMultipliers, type DefensiveCall } from "@/engine/defense/defensiveCalls";
+import { isKeyDefenseSituation } from "@/engine/defense/isKeyDefenseSituation";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
@@ -264,6 +267,12 @@ export type GameSim = {
   lastPlayResult?: PlayResult;
   homeGameplan?: TeamGameplan;
   awayGameplan?: TeamGameplan;
+  defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
+  pendingDefensiveCall?: DefensiveCall;
+  lastDefensiveCall?: DefensiveCall;
+  needsDefensiveCall?: boolean;
+  defensiveCallSituation?: { down: number; distance: number; yardLine: number; quarter: number; clockSec: number };
+  forceAutoDefenseCall?: boolean;
 };
 
 const EXPLANATION_BANK: Record<"NEGATIVE" | "FAILURE" | "SUCCESS" | "EXPLOSIVE", string[]> = {
@@ -759,6 +768,7 @@ function resolveWithPAS(
   look: DefensiveLook,
   aggression: AggressionLevel,
   snapKey: string,
+  defensiveCall?: DefensiveCall,
 ): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
   const passive = resolveArchetypePassives(
@@ -785,6 +795,8 @@ function resolveWithPAS(
 
   const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
+  const callFx = applyDefensiveCallMultipliers(defensiveCall);
+  if (callFx.debug.length) resolverTags.push({ kind: "SITUATION", text: `DEF_CALL:${callFx.debug.join(",")}` });
 
   if (isRun) {
     if (sim.distance <= 2 || sim.ballOn >= 96) {
@@ -805,7 +817,7 @@ function resolveWithPAS(
     const contactRng = contextualRng(sim.seed, `${snapKey}:contact`);
     const contactInput: ContactInput = {
       ballcarrier: { weightLb: 215, strength: 74, balance: 73, agility: 77, accel: 78, tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
-      tackler: { weightLb: look.box === "HEAVY" ? 248 : 228, strength: look.box === "HEAVY" ? 80 : 74, balance: 66, agility: 69, accel: 70, tackling: look.blitz === "LIKELY" ? 78 : 72, heightIn: 74, jump: 70, fatigue01: 0.22 },
+      tackler: { weightLb: look.box === "HEAVY" ? 248 : 228, strength: Math.round((look.box === "HEAVY" ? 80 : 74) * callFx.runStuff), balance: 66, agility: 69, accel: 70, tackling: look.blitz === "LIKELY" ? 78 : 72, heightIn: 74, jump: 70, fatigue01: 0.22 },
       move: { type: playType === "OUTSIDE_ZONE" ? "JUKE" : playType === "POWER" ? "STIFF_ARM" : "NONE", timing01: 0.55 },
       context: {
         angleDeg: look.blitz === "LIKELY" ? 18 : look.shell === "SINGLE_HIGH" ? 34 : 46,
@@ -838,7 +850,7 @@ function resolveWithPAS(
   } else if (isPass) {
     const rushOutcome = resolvePassRush(
       {
-        rusher: { speed: look.blitz === "LIKELY" ? 83 : 77, accel: 79, strength: 78, technique: 76, bend: 80, fatigue01: 0.2 },
+        rusher: { speed: Math.round((look.blitz === "LIKELY" ? 83 : 77) * callFx.passRushWin), accel: 79, strength: 78, technique: 76, bend: 80, fatigue01: 0.2 },
         blocker: { passPro: 74, footwork: 73, anchor: 75, fatigue01: 0.2 },
         context: { rushAngleDeg: look.shell === "SINGLE_HIGH" ? 28 : 41, depthYds: playType === "DROPBACK" ? 9 : 6, chipHelp: playType === "SCREEN", quickGame: playType === "QUICK_GAME" },
       },
@@ -869,8 +881,8 @@ function resolveWithPAS(
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
       const catchInput: CatchInput = {
-        qb: { accuracy: 76, arm: 78, decision: 74, pressure01: look.blitz === "LIKELY" ? 0.62 : 0.34, fatigue01: 0.22 },
-        wr: { heightIn: 73, weightLb: 198, speed: 84, hands: 79, jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
+        qb: { accuracy: 76, arm: 78, decision: Math.round(74 * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
+        wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
         cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
         context: {
           targetDepth: playType === "SCREEN" || playType === "QUICK_GAME" ? "SHORT" : playType === "DROPBACK" ? "MID" : "DEEP",
@@ -887,8 +899,8 @@ function resolveWithPAS(
       const catchOutcome = resolveCatchPoint(catchInput, catchRng);
       incomplete = !catchOutcome.completed;
       turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
-      yards = catchOutcome.completed ? catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4) : 0;
-      outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= 18 ? "explosive" : "success";
+      yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
+      outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
     }
   }
@@ -1120,7 +1132,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     const aggression = opts.aggression ?? sim.aggression ?? "NORMAL";
     const isRunP = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER";
 
-    let resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey);
+    let resolved = resolveWithPAS(sim, rng, playType, look, aggression, snapKey, sim.lastDefensiveCall);
     const defensePlan = defenseGameplan(sim);
     if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
     if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
@@ -1405,6 +1417,9 @@ export function initGameSim(params: {
     coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],
     homeGameplan: params.homeGameplan,
     awayGameplan: params.awayGameplan,
+    defenseUserMode: "KEY_DOWNS",
+    needsDefensiveCall: false,
+    forceAutoDefenseCall: false,
   };
 }
 
@@ -1454,7 +1469,7 @@ function applySnapFatigue(sim: GameSim, playType: PlayType): GameSim {
   return { ...sim, playerFatigue: nextFatigue, snapLoadThisGame: nextLoads };
 }
 
-export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: PersonnelPackage = "11"): PlayResolution {
+export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: PersonnelPackage = "11", opts: { userControlsDefense?: boolean } = {}): PlayResolution {
   const downBefore = sim.down;
   const distanceBefore = sim.distance;
   const ballBefore = sim.ballOn;
@@ -1475,12 +1490,39 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   const snapSeed = hashSeed(s.seed, gameKey, s.driveNumber, s.playNumberInDrive + 1);
   const rng = contextualRng(snapSeed, snapKey);
 
+  const defensiveSituation = { down: s.down, distance: s.distance, yardLine: 100 - s.ballOn, quarter: Number(s.clock.quarter), clockSec: s.clock.timeRemainingSec };
+  const shouldPromptDefenseCall = Boolean(opts.userControlsDefense)
+    && (s.defenseUserMode === "ALWAYS" || (s.defenseUserMode === "KEY_DOWNS" && isKeyDefenseSituation(defensiveSituation)));
+  if (shouldPromptDefenseCall && !s.pendingDefensiveCall && !s.forceAutoDefenseCall) {
+    return {
+      sim: { ...s, needsDefensiveCall: true, defensiveCallSituation: defensiveSituation },
+      ended: false,
+    };
+  }
+
+  const activeDefensiveCall = s.pendingDefensiveCall ?? aiSelectDefensiveCall({
+    rng,
+    defenseScheme: { baseShell: "COVER_3", blitzRate: 52, manRate: 38, front: "MULTIPLE" },
+    situation: defensiveSituation,
+  });
+
   // Generate defensive look for this snap (use existing defLook if pre-set, else generate)
   const reactions = getDefensiveReaction(s.down, s.distance, personnelPackage);
   const defRoll = contextualRng(s.seed, `def-package-${s.driveNumber}-${s.playNumberInDrive + 1}`)();
   const selectedDefensivePackage = selectDefensivePackageFromRoll(reactions, defRoll);
   const look = s.defLook ?? computeDefensiveLook(s, rng);
-  s = { ...s, defLook: look, currentPersonnelPackage: personnelPackage, likelyDefensiveReactions: reactions, selectedDefensivePackage };
+  s = {
+    ...s,
+    defLook: look,
+    currentPersonnelPackage: personnelPackage,
+    likelyDefensiveReactions: reactions,
+    selectedDefensivePackage,
+    lastDefensiveCall: activeDefensiveCall,
+    pendingDefensiveCall: undefined,
+    needsDefensiveCall: false,
+    forceAutoDefenseCall: false,
+    defensiveCallSituation: undefined,
+  };
 
   let tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE" = "IN_BOUNDS";
   let live = 0;
