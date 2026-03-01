@@ -12,7 +12,6 @@ import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logError } from "@/lib/logger";
 import CreateCoach from "./pages/CreateCoach";
 import ChooseBackground from "./pages/ChooseBackground";
-import Interviews from "./pages/Interviews";
 import Offers from "./pages/Offers";
 import CoordinatorHiring from "./pages/CoordinatorHiring";
 import Hub from "./pages/Hub";
@@ -52,7 +51,6 @@ import PressFeedbackDemo from "./pages/PressFeedbackDemo";
 import FrontOffice from "@/pages/hub/FrontOffice";
 import CoachOfficeRoutes from "@/pages/hub/CoachOfficeRoutes";
 import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
-import InterviewRunner from "@/pages/InterviewRunner";
 import Landing from "@/pages/Landing";
 import LoadSave from "@/pages/LoadSave";
 import SaveModeSelect from "@/pages/SaveModeSelect";
@@ -77,7 +75,7 @@ const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : n
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
   if (!requiredPhase.includes(state.phase)) {
-    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/onboarding/interviews", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators", HUB: "/hub" };
+    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators", HUB: "/hub" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
   return <>{children}</>;
@@ -86,7 +84,7 @@ function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; req
 function HubGate({ children }: { children: React.ReactNode }) {
   const { state } = useGame();
   if (state.phase !== "HUB") {
-    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/onboarding/interviews", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators" };
+    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
   return <>{children}</>;
@@ -95,6 +93,15 @@ function HubGate({ children }: { children: React.ReactNode }) {
 const LegacyHubScoutingRedirect = () => <Navigate to={`/scouting${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
 const LegacyHubOffseasonRedirect = () => <Navigate to={`/offseason${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
 const LegacyHubPlayerRedirect = () => { const { playerId } = useParams(); return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />; };
+
+function OnboardingRouteGuard({ children }: { children: React.ReactNode }) {
+  const { state } = useGame();
+  const hasStoryLock = state.storySetup?.teamLocked === true;
+  if (!hasStoryLock && !state.acceptedOffer) {
+    return <Navigate to={ROUTES.saveMode} replace />;
+  }
+  return <>{children}</>;
+}
 
 function RootEntry() {
   const { state } = useGame();
@@ -129,10 +136,9 @@ function AppRoutes() {
     <BrowserRouter>
       {DevPanel ? <Suspense fallback={null}><DevPanel /></Suspense> : null}
       <Routes>
-        <Route path="/onboarding" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
+        <Route path="/onboarding" element={<OnboardingRouteGuard><PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate></OnboardingRouteGuard>} />
         <Route path="/onboarding/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
-        <Route path="/onboarding/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
-        <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
+                <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
         <Route path="/onboarding/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
         <Route path={ROUTES.root} element={<RootEntry />} />
         <Route path={ROUTES.loadSave} element={<LoadSave />} />
@@ -140,8 +146,7 @@ function AppRoutes() {
         <Route path={ROUTES.storyInterview} element={<StoryRouteShell />} />
         <Route path={ROUTES.freePlaySetup} element={<FreePlaySetup />} />
         <Route path="/background" element={<Navigate to="/onboarding/background" replace />} />
-        <Route path="/interviews" element={<Navigate to="/onboarding/interviews" replace />} />
-        <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />
+                <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />
         <Route path="/coordinators" element={<Navigate to="/onboarding/coordinators" replace />} />
         <Route element={<HubGate><AppShell /></HubGate>}>
           <Route path="/hub" element={<Hub />} /><Route path="/staff/*" element={<StaffRoutes />} /><Route path="/roster/*" element={<RosterRoutes />} /><Route path="/contracts/*" element={<ContractsRoutes />} /><Route path="/strategy/*" element={<StrategyRoutes />} /><Route path="/scouting/*" element={<ScoutingRoutes />} />
@@ -151,7 +156,6 @@ function AppRoutes() {
           <Route path="/hub/preseason" element={<PreseasonWeek />} /><Route path="/hub/regular-season" element={<RegularSeason />} /><Route path="/hub/gameplan" element={<GameplanPage />} /><Route path="/hub/playoffs" element={<PlayoffsPage />} /><Route path="/hub/playoffs/bracket" element={<PlayoffBracketPage />} /><Route path="/hub/playoffs/game/:id" element={<PlayoffGamePage />} /><Route path="/hub/schedule" element={<ScheduleHome />} /><Route path="/hub/schedule/week/:weekNumber" element={<WeekSlate />} /><Route path="/hub/schedule/team/:teamId" element={<TeamSchedule />} /><Route path="/hub/schedule/game/:gameKey" element={<GameDetails />} /><Route path="/hub/playcall" element={<Playcall />} /><Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} /><Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} /><Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} /><Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} /><Route path="/hub/development" element={<Navigate to="/roster/development" replace />} /><Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} /><Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} /><Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} /><Route path="/hub/coordinator-hiring" element={<CoordinatorHiring />} /><Route path="/hub/hall-of-fame" element={<HallOfFame />} /><Route path="/hub/league-history" element={<LeagueHistory />} /><Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} /><Route path="/hub/tampering" element={<Navigate to="/free-agency" replace />} /><Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} /><Route path="/skill-tree" element={<SkillTree />} /><Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} /><Route path="/contracts/cap-baseline" element={<CapBaseline />} /><Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
         </Route>
         <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
-        <Route path="/interview/:teamId" element={<InterviewRunner />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
