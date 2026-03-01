@@ -11,6 +11,51 @@ describe("playbooks + combine wiring", () => {
     expect(state.playbooks.defensePlaybookId).toBe("TAMPA_2");
   });
 
+
+  it("auto-switches OC playbook on hire when user has not overridden", () => {
+    let state = migrateSave({}) as GameState;
+    state = {
+      ...state,
+      playbooks: {
+        ...state.playbooks,
+        offensePlaybookId: "PRO_STYLE_BALANCED",
+        userOverride: { offense: false, defense: false },
+      },
+    };
+
+    const airRaidOc = state.staffMarket.find((person) => person.role === "OC" && person.scheme === "AIR_RAID");
+    expect(airRaidOc).toBeTruthy();
+
+    state = gameReducer(state, {
+      type: "HIRE_STAFF",
+      payload: { role: "OC", personId: String(airRaidOc!.personId), salary: 1_000_000 },
+    });
+
+    expect(state.playbooks.offensePlaybookId).toBe("AIR_RAID");
+  });
+
+  it("does not auto-switch OC playbook on hire when user override is set", () => {
+    let state = migrateSave({}) as GameState;
+    state = {
+      ...state,
+      playbooks: {
+        ...state.playbooks,
+        offensePlaybookId: "WEST_COAST",
+        userOverride: { offense: true, defense: false },
+      },
+    };
+
+    const airRaidOc = state.staffMarket.find((person) => person.role === "OC" && person.scheme === "AIR_RAID");
+    expect(airRaidOc).toBeTruthy();
+
+    state = gameReducer(state, {
+      type: "HIRE_STAFF",
+      payload: { role: "OC", personId: String(airRaidOc!.personId), salary: 1_000_000 },
+    });
+
+    expect(state.playbooks.offensePlaybookId).toBe("WEST_COAST");
+  });
+
   it("selects and runs combine interviews deterministically", () => {
     let state = migrateSave({ saveSeed: 12345, teamId: "CHI", userTeamId: "CHI" }) as GameState;
     state = gameReducer(state, { type: "SCOUT_INIT" });

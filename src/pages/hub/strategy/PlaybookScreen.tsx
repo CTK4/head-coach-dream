@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { getPersonnelById } from "@/data/leagueDb";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +44,7 @@ import {
 } from "./playbooks/schemeDisplay";
 
 import { DEFENSE_SCHEMES, OFFENSE_SCHEMES, canonicalSchemeId, type Side } from "@/lib/schemeCatalog";
+import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID } from "@/lib/schemeLabels";
 
 function deepGet(obj: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, key) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[key] : undefined), obj);
@@ -71,9 +73,29 @@ function getCoachName(value: unknown): string | undefined {
   return undefined;
 }
 
-function findCoordinatorSystem(state: unknown, side: Side): { systemRaw: string; source: string; coachName: string } {
+export function findCoordinatorSystem(state: unknown, side: Side): { systemRaw: string; source: string; coachName: string } {
   const role = side === "OFFENSE" ? "OC" : "DC";
   const defaultName = side === "OFFENSE" ? "Offensive Coordinator" : "Defensive Coordinator";
+
+  const staffPersonIdPath = side === "OFFENSE" ? "staff.ocId" : "staff.dcId";
+  const staffPersonId = toNonEmptyString(deepGet(state, staffPersonIdPath));
+  if (staffPersonId) {
+    const personnel = getPersonnelById(staffPersonId);
+    const personnelSystem = toNonEmptyString(personnel?.scheme) ?? toNonEmptyString((personnel as Record<string, unknown> | undefined)?.systemId);
+    if (personnelSystem) {
+      return {
+        systemRaw: personnelSystem,
+        source: `${staffPersonIdPath}->personnel.scheme`,
+        coachName: toNonEmptyString(personnel?.fullName) ?? defaultName,
+      };
+    }
+
+    return {
+      systemRaw: side === "OFFENSE" ? DEFAULT_OFFENSE_SCHEME_ID : DEFAULT_DEFENSE_SCHEME_ID,
+      source: `${staffPersonIdPath}->default`,
+      coachName: toNonEmptyString(personnel?.fullName) ?? defaultName,
+    };
+  }
 
   const checks: Array<{ systemPath: string; namePath?: string }> = [
     { systemPath: `staff.coordinators.${role}.system`, namePath: `staff.coordinators.${role}.name` },
@@ -107,7 +129,7 @@ function findCoordinatorSystem(state: unknown, side: Side): { systemRaw: string;
 
   const fallbackPath = side === "OFFENSE" ? "scheme.offense.style" : "scheme.defense.style";
   return {
-    systemRaw: toNonEmptyString(deepGet(state, fallbackPath)) ?? (side === "OFFENSE" ? "PRO_STYLE_BALANCED" : "MULTIPLE_HYBRID"),
+    systemRaw: toNonEmptyString(deepGet(state, fallbackPath)) ?? (side === "OFFENSE" ? DEFAULT_OFFENSE_SCHEME_ID : DEFAULT_DEFENSE_SCHEME_ID),
     source: fallbackPath,
     coachName: defaultName,
   };
