@@ -121,6 +121,8 @@ import {
 } from "@/engine/draftSim";
 import { buildRookieContract } from "@/engine/contracts/rookieContract";
 import { generateDraftClass } from "@/engine/draftClass/generateDraftClass";
+import { generateDraftClass as generateParameterizedDraftClass, type GeneratedPlayer } from "@/engine/playerGenerator";
+import type { ClassYear } from "@/data/playerGeneratorConfig";
 import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
@@ -1060,6 +1062,7 @@ export type GameState = {
   leagueRecords: LeagueRecords;
   draft: DraftState;
   upcomingDraftClass: import("@/engine/draftSim").Prospect[];
+  futureClasses: Partial<Record<ClassYear, GeneratedPlayer[]>>;
   rookies: RookiePlayer[];
   rookieContracts: Record<string, RookieContract>;
   nextPlayerId: number;
@@ -1284,6 +1287,7 @@ export type GameAction =
   | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
   | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
   | { type: "ADVANCE_SEASON" }
+  | { type: "PREGENERATE_FUTURE_CLASS"; payload: { classYear: ClassYear } }
   | { type: "DISMISS_SEASON_AWARDS" }
   | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
   | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
@@ -1703,6 +1707,7 @@ function createInitialState(): GameState {
       draftedCountsByTeamBucket: {},
     },
     upcomingDraftClass: generateDraftClass({ year: 2026, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
+    futureClasses: {},
     rookies: [],
     rookieContracts: {},
     nextPlayerId: maxExistingPlayerNumericId() + 1,
@@ -3221,6 +3226,8 @@ function seasonRollover(state: GameState): GameState {
   }
   next = gameReducer(next, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: toWeekKey(nextSeason, 0), seed: seedFor(next.saveSeed, nextSeason, 0, 101) } });
   next = gameReducer(next, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(nextSeason, 0) } });
+  next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 2) as ClassYear } });
+  next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 3) as ClassYear } });
   return next;
 }
 
@@ -7030,6 +7037,18 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "TRADE_PLAYER":
       return gameReducer(state, { type: "CUT_PLAYER", payload: action.payload });
 
+    case "PREGENERATE_FUTURE_CLASS": {
+      const classYear = action.payload.classYear;
+      const generated = generateParameterizedDraftClass(classYear, state.saveSeed ^ classYear);
+      return {
+        ...state,
+        futureClasses: {
+          ...(state.futureClasses ?? {}),
+          [classYear]: generated,
+        },
+      };
+    }
+
     case "ADVANCE_SEASON":
       return seasonRollover(state);
 
@@ -8601,6 +8620,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       appliedSelectionCount: 0,
     }) as DraftState,
     upcomingDraftClass: (oldState as any).upcomingDraftClass ?? generateDraftClass({ year: Number((oldState as any).season ?? 2026), count: 224, leagueSeed: saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
+    futureClasses: (oldState as any).futureClasses ?? {},
     rookies: oldState.rookies ?? [],
     rookieContracts: oldState.rookieContracts ?? {},
     nextPlayerId: Number((oldState as any).nextPlayerId ?? (maxExistingPlayerNumericId() + 1)),
@@ -8826,6 +8846,7 @@ function loadState(): GameState {
       leagueRecords: { ...defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
       draft: { ...initial.draft, ...migrated.draft },
       upcomingDraftClass: (migrated as any).upcomingDraftClass ?? initial.upcomingDraftClass,
+      futureClasses: (migrated as any).futureClasses ?? initial.futureClasses,
       rookies: migrated.rookies ?? initial.rookies,
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
       nextPlayerId: Number((migrated as any).nextPlayerId ?? initial.nextPlayerId),
