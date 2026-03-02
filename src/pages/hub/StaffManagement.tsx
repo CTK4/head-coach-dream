@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getPersonnelById, getPersonnelContract } from "@/data/leagueDb";
+import { getPersonnelById, getPersonnelContract, getTeamRosterPlayers } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,20 @@ import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { COACH_TRAITS, type CoachProfile } from "@/data/coachTraits";
+import { coachAttrModifier, coachFitScore } from "@/engine/coachImpact";
 
 function money(n: number) {
   return `$${(n / 1_000_000).toFixed(2)}M`;
 }
 
+function pct(n: number) {
+  return `${n >= 0 ? "+" : ""}${Math.round(n * 100)}%`;
+}
+
 type StaffItem = { label: string; personId?: string };
+
+const CANDIDATE_ROLES: CoachProfile["role"][] = ["OC", "DC", "QB_COACH", "WR_COACH", "OL_COACH", "RB_COACH", "LB_COACH", "DB_COACH", "DL_COACH", "ST_COACH"];
 
 export default function StaffManagement() {
   const { state, dispatch } = useGame();
@@ -26,6 +34,34 @@ export default function StaffManagement() {
   const [spreadSeasons, setSpreadSeasons] = useState<1 | 2>(2);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const isMobile = useIsMobile();
+
+  const rosterAvgAttrs = useMemo(() => {
+    const players = getTeamRosterPlayers(teamId);
+    const sums: Record<string, number> = {};
+    let count = 0;
+    for (const p of players) {
+      count += 1;
+      for (const [k, v] of Object.entries(p as Record<string, unknown>)) {
+        if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 99) {
+          sums[k] = (sums[k] ?? 0) + v;
+        }
+      }
+    }
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(sums)) out[k] = count ? v / count : 0;
+    return out;
+  }, [teamId]);
+
+  const candidateCoaches = useMemo<CoachProfile[]>(() => {
+    return CANDIDATE_ROLES.map((role, idx) => ({
+      coachId: `candidate_${role}_${idx}`,
+      name: `${role.replace("_", " ")} Candidate ${idx + 1}`,
+      role,
+      traits: [COACH_TRAITS[idx % COACH_TRAITS.length], COACH_TRAITS[(idx + 5) % COACH_TRAITS.length]],
+      tenureYears: 0,
+      salary: 1_500_000 + idx * 250_000,
+    }));
+  }, []);
 
   const staffItems: StaffItem[] = [
     { label: "Offensive Coordinator", personId: state.staff.ocId },
@@ -116,6 +152,62 @@ export default function StaffManagement() {
               Buyout: 2Y
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Coach Candidates</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4">
+          {candidateCoaches.map((coach) => {
+            const fit = coachFitScore(coach, rosterAvgAttrs);
+            const fitClass = fit >= 70 ? "bg-green-100 text-green-800" : fit >= 40 ? "bg-yellow-100 text-yellow-900" : "bg-red-100 text-red-800";
+            return (
+              <div key={coach.coachId} className="rounded-md border p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{coach.name}</div>
+                    <div className="text-xs text-muted-foreground">{coach.role} · {money(coach.salary)}</div>
+                  </div>
+                  <Badge className={fitClass}>Fit {fit}</Badge>
+                </div>
+
+                {coach.traits.map((trait) => {
+                  const boosted = Object.keys(trait.affinityMap).filter((k) => trait.affinityMap[k] === 1);
+                  const neglected = Object.keys(trait.affinityMap).filter((k) => trait.affinityMap[k] === -1);
+                  return (
+                    <div key={trait.id} className="rounded border p-2">
+                      <div className="text-sm font-medium">{trait.label}</div>
+                      <div className="text-xs text-muted-foreground mb-2">{trait.description}</div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <div className="font-semibold mb-1">Boosted Attributes</div>
+                          {boosted.map((attr) => (
+                            <div key={attr} className="flex justify-between"><span>{attr}</span><span>{pct(coachAttrModifier(coach, attr))}</span></div>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="font-semibold mb-1">Neglected Attributes</div>
+                          {neglected.map((attr) => (
+                            <div key={attr} className="flex justify-between"><span>{attr}</span><span>{pct(coachAttrModifier(coach, attr))}</span></div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <Button
+                  size="sm"
+                  onClick={() => dispatch({ type: "HIRE_COACH", payload: { coach } })}
+                  disabled={state.staffRoster.coaches.some((existing) => existing.role === coach.role)}
+                >
+                  Hire Coach
+                </Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 
