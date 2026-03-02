@@ -1,0 +1,45 @@
+import type { PlayerContractOverride } from "@/context/GameContext";
+import type { TransactionEvent } from "./types";
+
+type TradePackage = { playerIdsFrom: string[]; playerIdsTo: string[]; details?: Record<string, any> };
+
+export const Tx = {
+  resign(teamId: string, playerId: string, offer: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "RESIGN", teamId, playerIds: [playerId], details: { contract: offer } };
+  },
+  franchiseTag(teamId: string, playerId: string): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return {
+      kind: "FRANCHISE_TAG",
+      teamId,
+      playerIds: [playerId],
+      details: { contract: { startSeason: 0, endSeason: 0, salaries: [0], signingBonus: 0, contractType: "FRANCHISE_TAG" } },
+    };
+  },
+  cut(teamId: string, playerId: string, reason?: string): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "CUT", teamId, playerIds: [playerId], details: { reason } };
+  },
+  release(teamId: string, playerId: string, reason?: string): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "RELEASE", teamId, playerIds: [playerId], details: { reason } };
+  },
+  signFA(teamId: string, playerId: string, offer: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "SIGN_FA", teamId, playerIds: [playerId], details: { contract: offer } };
+  },
+  trade(teamAId: string, teamBId: string, pkg: TradePackage): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    const toTeamByPlayer: Record<string, string> = {};
+    for (const p of pkg.playerIdsFrom) toTeamByPlayer[p] = teamBId;
+    for (const p of pkg.playerIdsTo) toTeamByPlayer[p] = teamAId;
+    return {
+      kind: "TRADE",
+      teamId: teamAId,
+      otherTeamId: teamBId,
+      playerIds: [...pkg.playerIdsFrom, ...pkg.playerIdsTo],
+      details: { ...(pkg.details ?? {}), toTeamByPlayer },
+    };
+  },
+  draftPick(teamId: string, prospectId: string, pickMeta: Record<string, any>): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "DRAFT_PICK", teamId, playerIds: [prospectId], details: { pickMeta } };
+  },
+  rookieSign(teamId: string, playerId: string, rookieDeal: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return { kind: "ROOKIE_SIGN", teamId, playerIds: [playerId], details: { contract: rookieDeal } };
+  },
+};
