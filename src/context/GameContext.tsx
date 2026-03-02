@@ -57,6 +57,8 @@ import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
+import type { CoachProfile, StaffRoster } from "@/data/coachTraits";
+import { applyFullStaffImpact, coachesForPosition } from "@/engine/coachImpact";
 import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import { getGmTraits } from "@/engine/gmScouting";
@@ -974,6 +976,7 @@ export type GameState = {
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
+  staffRoster: StaffRoster;
   staffOffers: StaffOffer[];
   playbooks: {
     offensePlaybookId?: OffenseSchemeId;
@@ -1169,6 +1172,9 @@ export type GameAction =
   | { type: "NEGOTIATE_OFFER"; payload: { teamId: string; years: number; salary: number; autonomy: number } }
   | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
   | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
+  | { type: "HIRE_COACH"; payload: { coach: CoachProfile } }
+  | { type: "FIRE_COACH"; payload: { coachId: string } }
+  | { type: "INCREMENT_COACH_TENURE" }
   | { type: "CREATE_STAFF_OFFER"; payload: { roleType: "COORDINATOR" | "ASSISTANT"; role: "OC" | "DC" | "STC" | keyof AssistantStaff; personId: string; years: number; salary: number } }
   | { type: "STAFF_COUNTER_OFFER"; payload: { offerId: string } }
   | { type: "STAFF_COUNTER_OFFER_RESPONSE"; payload: { offerId: string; accepted: boolean } }
@@ -1638,6 +1644,7 @@ function createInitialState(): GameState {
     staff: {},
     orgRoles: {},
     assistantStaff: createInitialAssistantStaff(),
+    staffRoster: { teamId: "MILWAUKEE_NORTHSHORE", coaches: [] },
     staffOffers: [],
     playbooks: {
       offensePlaybookId: DEFAULT_OFFENSE_SCHEME_ID,
@@ -3906,9 +3913,32 @@ function applySeasonDevelopment(state: GameState): GameState {
     nextDevXp[playerId] = Number(nextDevXp[playerId] ?? 0) + delta;
   }
 
+  const nextAttrOverrides = { ...state.playerAttrOverrides };
+  for (const p of players) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+    const pos = normalizePos(String((p as any).pos ?? "UNK"));
+    const relevantStaff = coachesForPosition(state.staffRoster.coaches, pos);
+    if (!relevantStaff.length) continue;
+
+    const baseAttrs: Record<string, number> = {};
+    for (const [k, v] of Object.entries(p as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 99) {
+        baseAttrs[k] = v;
+      }
+    }
+
+    const impacted = applyFullStaffImpact(baseAttrs, relevantStaff);
+    nextAttrOverrides[playerId] = {
+      ...(nextAttrOverrides[playerId] ?? {}),
+      ...impacted,
+    };
+  }
+
   return {
     ...state,
     playerDevXpById: nextDevXp,
+    playerAttrOverrides: nextAttrOverrides,
     memoryLog: addMemoryEvent(state, "SEASON_DEVELOPMENT", { season: state.season, deltas }),
   };
 }
@@ -4542,6 +4572,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           gmName: action.payload.gmName,
           teamLocked: true,
         },
+        staffRoster: { teamId: action.payload.offer.teamId, coaches: [] },
       };
       return ensureMinimumFreeAgencyPool(next as GameState);
     }
@@ -4573,6 +4604,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           teamName,
           teamLocked: true as const,
         },
+        staffRoster: { teamId, coaches: state.staffRoster.coaches ?? [] },
         memoryLog: [...(state.memoryLog ?? []), { type: "HIRED_COACH", season: Number(state.season), week: state.week, payload: acceptedOffer }],
         phase: "HUB" as const,
         careerStage: "RESIGN" as const,
@@ -4809,6 +4841,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
+        userTeamId: teamId,
+        teamId,
+        staffRoster: { teamId, coaches: [] },
         memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
         teamFinances: {
@@ -5111,6 +5146,36 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         ...nextState,
         careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : nextState.careerStage,
         memoryLog: addMemoryEvent(nextState, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
+      };
+    }
+    case "HIRE_COACH": {
+      const { coach } = action.payload;
+      const roleExists = state.staffRoster.coaches.some((existing) => existing.role === coach.role);
+      if (roleExists) return state;
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: [...state.staffRoster.coaches, coach],
+        },
+      };
+    }
+    case "FIRE_COACH": {
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: state.staffRoster.coaches.filter((coach) => coach.coachId !== action.payload.coachId),
+        },
+      };
+    }
+    case "INCREMENT_COACH_TENURE": {
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: state.staffRoster.coaches.map((coach) => ({ ...coach, tenureYears: coach.tenureYears + 1 })),
+        },
       };
     }
     case "CREATE_STAFF_OFFER": {
@@ -8728,6 +8793,11 @@ function loadState(): GameState {
       staff: { ...initial.staff, ...migrated.staff },
       orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
       assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
+      staffRoster: {
+        ...initial.staffRoster,
+        ...((migrated as any).staffRoster ?? {}),
+        coaches: Array.isArray((migrated as any).staffRoster?.coaches) ? (migrated as any).staffRoster.coaches : initial.staffRoster.coaches,
+      },
       staffOffers: Array.isArray((migrated as any).staffOffers) ? (migrated as any).staffOffers : [],
       firing: { ...initial.firing, ...migrated.firing },
       owner: { ...initial.owner, ...migrated.owner },
