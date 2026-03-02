@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/table";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { computeHOFm } from "@/engine/hofMonitor";
+import { resolveQbArchetypeTag, getQbArchetypeBadge } from "@/engine/qb/qbArchetype";
+import { getQbSchemeFitMultiplier, getQbSchemeFitSignal } from "@/engine/qb/qbSchemeFit";
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -72,6 +74,12 @@ export default function PlayerProfile() {
     String(p.status ?? "").toUpperCase() === "FREE_AGENT";
   const depth = getDepthSlotLabel(state, playerId);
   const contract = getContractSummaryForPlayer(state, playerId);
+  const qbTag = pos === "QB" ? resolveQbArchetypeTag(p as any) : undefined;
+  const qbBadge = qbTag ? getQbArchetypeBadge(qbTag) : undefined;
+  const offenseSchemeId = state.scheme?.offense?.schemeId as any;
+  const qbFitMult = qbTag ? getQbSchemeFitMultiplier(qbTag, offenseSchemeId) : 1;
+  const qbFitSignal = qbTag ? getQbSchemeFitSignal(qbFitMult) : undefined;
+
 
   const careerStats = state.playerCareerStatsById?.[playerId];
   const careerSeasons = careerStats?.seasons ?? [];
@@ -119,6 +127,17 @@ export default function PlayerProfile() {
                   >
                     {isFA ? "Free Agent" : `Team: ${teamId}`}
                   </Badge>
+
+                  {qbBadge ? (
+                    <Badge variant="outline" title={qbBadge.tooltip} className="rounded-xl border-white/15 bg-white/5">
+                      {qbBadge.label}
+                    </Badge>
+                  ) : null}
+                  {qbFitSignal ? (
+                    <Badge variant="outline" className="rounded-xl border-white/15 bg-white/5">
+                      Scheme Fit: {qbFitSignal}
+                    </Badge>
+                  ) : null}
                 </div>
               </div>
 
@@ -141,6 +160,21 @@ export default function PlayerProfile() {
                   </Button>
                 ) : null}
 
+
+                {import.meta.env.DEV && qbTag ? (
+                  <select
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={String((p as any).qbArchetypeManualOverride ?? "")}
+                    onChange={(e) => dispatch({ type: "SET_PLAYER_ATTR_OVERRIDE", payload: { playerId, patch: { qbArchetypeManualOverride: (e.target.value || undefined) as any } } })}
+                  >
+                    <option value="">Auto Archetype</option>
+                    <option value="POCKET_PURE">Pocket Pure</option>
+                    <option value="DUAL_THREAT">Dual Threat</option>
+                    <option value="SCRAMBLER">Scrambler</option>
+                    <option value="GAME_MANAGER">Game Manager</option>
+                    <option value="IMPROVISER">Improviser</option>
+                  </select>
+                ) : null}
                 <Button
                   variant="secondary"
                   className="rounded-xl"

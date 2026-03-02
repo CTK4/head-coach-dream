@@ -1,4 +1,6 @@
 import leagueDbJson from "@/data/leagueDB.json";
+import { hashStr, mulberry32 } from "@/engine/scouting/rng";
+import type { QBArchetypeTag } from "@/config/qbTuning";
 import { normalizeCityState } from "@/lib/formatters";
 
 export type TeamRow = {
@@ -29,6 +31,26 @@ export type PlayerRow = {
   snapCounts?: { offense: number; defense: number; specialTeams: number };
   seasonStats?: { gamesPlayed: number; starts: number; performanceScore: number; injuryGamesMissed?: number };
   development?: { trait: "normal" | "impact" | "elite" | "generational"; hiddenDev: boolean; highSnapSeasons?: number };
+  armStrength?: number;
+  accuracyShort?: number;
+  accuracyMid?: number;
+  accuracyDeep?: number;
+  anticipation?: number;
+  decisionSpeed?: number;
+  pocketPresence?: number;
+  speed?: number;
+  acceleration?: number;
+  elusiveness?: number;
+  readSpeed?: number;
+  truckContactBalance?: number;
+  slideRate?: number;
+  rpoRating?: number;
+  scrambleDiscipline?: number;
+  pocketEscapeAngle?: "LEFT" | "RIGHT" | "BALANCED";
+  armOnRunAccuracy?: number;
+  qbArchetypeAutoTag?: QBArchetypeTag;
+  qbArchetypeManualOverride?: QBArchetypeTag;
+  qbArchetypeResolved?: QBArchetypeTag;
   [key: string]: unknown;
 };
 
@@ -110,7 +132,7 @@ function normalizeTeamRow(t: any): TeamRow {
 }
 
 function normalizePlayerRow(p: any): PlayerRow {
-  return {
+  const normalized: PlayerRow = {
     ...p,
     playerId: String(p.playerId ?? ""),
     fullName: String(p.fullName ?? p.name ?? ""),
@@ -124,6 +146,44 @@ function normalizePlayerRow(p: any): PlayerRow {
     contractId: p.contractId != null ? String(p.contractId) : undefined,
     Archetype: p.Archetype != null ? String(p.Archetype) : undefined,
     Traits: p.Traits != null ? String(p.Traits) : undefined,
+  };
+  return hydrateQbAttributes(normalized);
+}
+
+function toBounded(n: number): number {
+  return Math.max(40, Math.min(99, Math.round(n)));
+}
+
+function hydrateQbAttributes(p: PlayerRow): PlayerRow {
+  if (String(p.pos ?? "").toUpperCase() !== "QB") return p;
+  const seeded = mulberry32(hashStr(String(p.playerId)));
+  const ovr = Number(p.overall ?? 68);
+  const baseSpeed = Number(p.speed ?? p.Speed ?? 64);
+  const baseAccel = Number(p.acceleration ?? p.Acceleration ?? 64);
+  const baseAgility = Number(p.elusiveness ?? p.Agility ?? 64);
+  const awareness = Number(p.decisionSpeed ?? p.Awareness ?? ovr);
+  const mobilityHint = (baseSpeed + baseAccel + baseAgility) / 3;
+  const mobile = mobilityHint >= 78;
+  const pickAngle = seeded();
+  return {
+    ...p,
+    armStrength: p.armStrength ?? toBounded(ovr + (seeded() - 0.5) * 16),
+    accuracyShort: p.accuracyShort ?? toBounded(ovr + 4 + (seeded() - 0.5) * 14),
+    accuracyMid: p.accuracyMid ?? toBounded(ovr + 1 + (seeded() - 0.5) * 14),
+    accuracyDeep: p.accuracyDeep ?? toBounded(ovr - 3 + (seeded() - 0.5) * 18),
+    anticipation: p.anticipation ?? toBounded(awareness + (seeded() - 0.5) * 12),
+    decisionSpeed: p.decisionSpeed ?? toBounded(awareness + (seeded() - 0.5) * 10),
+    pocketPresence: p.pocketPresence ?? toBounded((mobile ? ovr - 4 : ovr + 3) + (seeded() - 0.5) * 12),
+    speed: p.speed ?? toBounded(baseSpeed + (mobile ? 6 : -8) + (seeded() - 0.5) * 8),
+    acceleration: p.acceleration ?? toBounded(baseAccel + (mobile ? 5 : -8) + (seeded() - 0.5) * 8),
+    elusiveness: p.elusiveness ?? toBounded(baseAgility + (mobile ? 4 : -10) + (seeded() - 0.5) * 10),
+    readSpeed: p.readSpeed ?? toBounded(awareness + (mobile ? 2 : -2) + (seeded() - 0.5) * 10),
+    truckContactBalance: p.truckContactBalance ?? toBounded(58 + (seeded() - 0.5) * 16),
+    slideRate: p.slideRate ?? toBounded((mobile ? 58 : 70) + (seeded() - 0.5) * 24),
+    rpoRating: p.rpoRating ?? toBounded((mobile ? 72 : 56) + (seeded() - 0.5) * 18),
+    scrambleDiscipline: p.scrambleDiscipline ?? toBounded((mobile ? 66 : 58) + (seeded() - 0.5) * 20),
+    pocketEscapeAngle: p.pocketEscapeAngle ?? (pickAngle < 0.33 ? "LEFT" : pickAngle < 0.66 ? "RIGHT" : "BALANCED"),
+    armOnRunAccuracy: p.armOnRunAccuracy ?? toBounded((mobile ? ovr + 1 : ovr - 8) + (seeded() - 0.5) * 16),
   };
 }
 
