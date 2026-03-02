@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { exportSave, importSave, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
-import { LATEST_SAVE_SCHEMA_VERSION } from "@/lib/migrations/saveSchema";
+import { LATEST_SAVE_SCHEMA_VERSION, validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 
 class LocalStorageMock {
   private store = new Map<string, string>();
@@ -19,7 +19,7 @@ class LocalStorageMock {
 }
 
 const baseState = {
-  phase: "OFFSEASON_HUB",
+  phase: "HUB",
   season: 2026,
   week: 1,
   coach: { name: "Coach Test" },
@@ -36,6 +36,125 @@ describe("saveManager", () => {
       value: new LocalStorageMock(),
       configurable: true,
       writable: true,
+    });
+  });
+
+  describe("validateCriticalSaveState — phase domain", () => {
+    it("accepts CREATE phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "CREATE" }).ok).toBe(true);
+    });
+
+    it("accepts BACKGROUND phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "BACKGROUND" }).ok).toBe(true);
+    });
+
+    it("accepts INTERVIEWS phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "INTERVIEWS" }).ok).toBe(true);
+    });
+
+    it("accepts OFFERS phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "OFFERS" }).ok).toBe(true);
+    });
+
+    it("accepts COORD_HIRING phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "COORD_HIRING" }).ok).toBe(true);
+    });
+
+    it("accepts HUB phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "HUB" }).ok).toBe(true);
+    });
+
+    it("rejects careerStage values used as phase", () => {
+      const invalidCareerPhases = ["OFFSEASON_HUB", "REGULAR_SEASON", "PLAYOFFS", "DRAFT", "PRESEASON", "SEASON_AWARDS"];
+      for (const phase of invalidCareerPhases) {
+        const result = validateCriticalSaveState({ ...baseState, phase });
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.code).toBe("INVALID_PHASE");
+        }
+      }
+    });
+
+    it("rejects empty or missing phase", () => {
+      const emptyPhase = validateCriticalSaveState({ ...baseState, phase: "" });
+      expect(emptyPhase.ok).toBe(false);
+      if (!emptyPhase.ok) {
+        expect(emptyPhase.code).toBe("INVALID_PHASE");
+      }
+
+      const missingPhaseState = { ...baseState } as any;
+      delete missingPhaseState.phase;
+      const missingPhase = validateCriticalSaveState(missingPhaseState);
+      expect(missingPhase.ok).toBe(false);
+      if (!missingPhase.ok) {
+        expect(missingPhase.code).toBe("INVALID_PHASE");
+      }
+    });
+
+    it("rejects unknown phase string", () => {
+      const result = validateCriticalSaveState({ ...baseState, phase: "BANANA" });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("INVALID_PHASE");
+      }
+    });
+  });
+
+  describe("validateCriticalSaveState — careerStage domain", () => {
+    it("accepts valid careerStage with HUB phase", () => {
+      expect(validateCriticalSaveState({ ...baseState, phase: "HUB", careerStage: "REGULAR_SEASON" }).ok).toBe(true);
+    });
+
+    it("accepts missing careerStage for backward compatibility", () => {
+      const state = { ...baseState } as any;
+      delete state.careerStage;
+      expect(validateCriticalSaveState(state).ok).toBe(true);
+    });
+
+    it("rejects invalid careerStage string", () => {
+      const result = validateCriticalSaveState({ ...baseState, careerStage: "BANANA" });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("INVALID_CAREER_STAGE");
+      }
+    });
+  });
+
+  describe("validateCriticalSaveState — real-world save shapes", () => {
+    it("accepts regular-season in-hub save", () => {
+      const result = validateCriticalSaveState({
+        ...baseState,
+        phase: "HUB",
+        careerStage: "REGULAR_SEASON",
+        season: 2026,
+        hub: { regularSeasonWeek: 8 },
+        acceptedOffer: { teamId: "MILWAUKEE_NORTHSHORE" },
+        coach: { name: "Coach Test" },
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("accepts playoff save", () => {
+      const result = validateCriticalSaveState({
+        ...baseState,
+        phase: "HUB",
+        careerStage: "PLAYOFFS",
+        hub: { regularSeasonWeek: 18 },
+        acceptedOffer: { teamId: "MILWAUKEE_NORTHSHORE" },
+        coach: { name: "Coach Test" },
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("accepts onboarding pre-hub save", () => {
+      const result = validateCriticalSaveState({
+        ...baseState,
+        phase: "CREATE",
+        season: 2026,
+        teamId: "MILWAUKEE_NORTHSHORE",
+        coach: { name: "Coach Test" },
+      });
+      expect(result.ok).toBe(true);
     });
   });
 

@@ -1,11 +1,11 @@
 import type { GameState } from "@/context/GameContext";
-import type { CareerStage } from "@/lib/stateMachine";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 1;
 
 export type SaveValidationErrorCode =
   | "INVALID_ROOT"
   | "INVALID_PHASE"
+  | "INVALID_CAREER_STAGE"
   | "INVALID_OFFSEASON_STEP"
   | "INVALID_SEASON"
   | "INVALID_WEEK"
@@ -16,23 +16,38 @@ export type SaveValidationResult =
   | { ok: true }
   | { ok: false; code: SaveValidationErrorCode; message: string };
 
-// ---------------------------------------------------------------------------
-// Valid phase set — derived from CareerStage so it cannot drift out of sync.
-// Additional runtime-only phases (GAME, RESULT, etc.) are added explicitly.
-// ---------------------------------------------------------------------------
+// Root cause note:
+// - `state.phase` is the app routing phase (GamePhase).
+// - `state.careerStage` is the career progression stage (CareerStage).
+// Mixing CareerStage values into phase validation and omitting "HUB" caused
+// active runtime saves to fail with INVALID_PHASE.
+const VALID_APP_PHASES = new Set<string>([
+  "CREATE",
+  "BACKGROUND",
+  "INTERVIEWS",
+  "OFFERS",
+  "COORD_HIRING",
+  "HUB",
+]);
 
-const CAREER_STAGE_PHASES: CareerStage[] = [
-  "OFFSEASON_HUB", "SEASON_AWARDS", "ASSISTANT_HIRING", "STAFF_CONSTRUCTION",
-  "ROSTER_REVIEW", "RESIGN", "COMBINE", "TAMPERING", "FREE_AGENCY", "PRE_DRAFT",
-  "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUTDOWNS", "REGULAR_SEASON",
-];
-
-// Phases that exist at runtime but are not CareerStage values
-const RUNTIME_ONLY_PHASES = [
-  "CREATE", "WEEK", "GAME", "RESULT", "OFFSEASON", "PLAYOFFS",
-] as const;
-
-const VALID_PHASES = new Set<string>([...CAREER_STAGE_PHASES, ...RUNTIME_ONLY_PHASES]);
+const VALID_CAREER_STAGES = new Set<string>([
+  "OFFSEASON_HUB",
+  "SEASON_AWARDS",
+  "ASSISTANT_HIRING",
+  "STAFF_CONSTRUCTION",
+  "ROSTER_REVIEW",
+  "RESIGN",
+  "COMBINE",
+  "TAMPERING",
+  "FREE_AGENCY",
+  "PRE_DRAFT",
+  "DRAFT",
+  "TRAINING_CAMP",
+  "PRESEASON",
+  "CUTDOWNS",
+  "REGULAR_SEASON",
+  "PLAYOFFS",
+]);
 
 // ---------------------------------------------------------------------------
 
@@ -96,9 +111,11 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   // Ensure top-level metadata is always present.
-  if (saveId && !(next as any).saveId) {
+  if (saveId) {
     (next as any).saveId = saveId;
   }
+
+  (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
 
   return next as GameState;
 }
@@ -109,8 +126,17 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
   const phase = String((state as any).phase ?? "");
-  if (!VALID_PHASES.has(phase)) {
-    return { ok: false, code: "INVALID_PHASE", message: "Save phase is invalid or missing." };
+  if (!VALID_APP_PHASES.has(phase)) {
+    return {
+      ok: false,
+      code: "INVALID_PHASE",
+      message: `Save phase '${phase}' is invalid or missing. Expected one of: ${[...VALID_APP_PHASES].join(", ")}.`,
+    };
+  }
+
+  const careerStage = String((state as any).careerStage ?? "");
+  if (careerStage && !VALID_CAREER_STAGES.has(careerStage)) {
+    return { ok: false, code: "INVALID_CAREER_STAGE", message: "Career stage is invalid." };
   }
 
   const offseasonStep = String((state as any).offseason?.stepId ?? "");
