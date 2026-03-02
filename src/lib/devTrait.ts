@@ -1,3 +1,5 @@
+export type DevTrait = "normal" | "impact" | "elite" | "generational";
+
 /**
  * devTrait.ts — Canonical development trait multipliers.
  *
@@ -69,4 +71,19 @@ export function getDevTraitResignMultiplier(devTrait?: string): number {
     case "UNKNOWN":
     default:       return 0.95;
   }
+}
+
+
+export function fromSnapDevTrait(t: DevTrait): number {
+  if (t === "generational") return 1.5;
+  if (t === "elite") return 1.25;
+  if (t === "impact") return 1.12;
+  return 1.0;
+}
+
+export function fromNumericDev(score: number): number {
+  if (score >= 80) return 1.25;
+  if (score >= 68) return 1.12;
+  if (score >= 50) return 1.0;
+  return 0.9;
 }

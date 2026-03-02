@@ -1,5 +1,7 @@
 export type DevTrait = "normal" | "impact" | "elite" | "generational";
 
+import { fromSnapDevTrait } from "@/lib/devTrait";
+
 export type SnapCounts = { offense: number; defense: number; specialTeams: number };
 export type SeasonStats = { gamesPlayed: number; starts: number; performanceScore: number; injuryGamesMissed?: number };
 export type DevelopmentProfile = { trait: DevTrait; hiddenDev: boolean; highSnapSeasons: number };
@@ -60,10 +62,7 @@ export function getPerformanceModifier(performanceScore: number): number {
 }
 
 export function getDevelopmentMultiplier(trait: DevTrait): number {
-  if (trait === "impact") return 1.2;
-  if (trait === "elite") return 1.35;
-  if (trait === "generational") return 1.5;
-  return 1;
+  return fromSnapDevTrait(trait);
 }
 
 function peakEndFor(position: string): number { return PEAK_BANDS[normalizePosGroup(position)][1]; }

@@ -139,6 +139,12 @@ import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import type { PlayerRow } from "@/data/leagueDb";
 import type { TransactionEvent } from "@/engine/transactions/types";
+import { offseasonReducer } from "@/context/offseasonReducer";
+import { draftReducer } from "@/context/draftReducer";
+import { seasonReducer } from "@/context/seasonReducer";
+import { freeAgencyReducer } from "@/context/freeAgencyReducer";
+import { buildCpuTeamContext } from "@/engine/cpuContext";
+import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -2431,12 +2437,26 @@ function cpuOfferTick(state: GameState, offerLimit = 70): GameState {
   for (const teamId of teamIds) {
     if (created >= offerLimit) break;
 
+    const cpuContext = buildCpuTeamContext(state, teamId);
+    const rankedTargets = rankFreeAgencyTargets(
+      cpuContext,
+      orderedFa.map((x) => ({
+        playerId: x.id,
+        pos: x.pos,
+        age: x.age,
+        overall: x.ovr,
+        devTrait: String((x.p as any)?.development?.trait ?? "normal"),
+      }))
+    );
+    const rankedTargetIds = new Set(rankedTargets.map((p) => p.playerId));
+    const orderedForTeam = orderedFa.filter((x) => rankedTargetIds.has(x.id));
+
     const needs = ["QB", "RB", "WR", "TE", "DL", "EDGE", "LB", "CB", "S", "K", "P"]
       .map((pos) => ({ pos, s: teamNeedsScore(state, teamId, pos) }))
       .sort((a, b) => b.s - a.s)
       .slice(0, 3);
 
-    let targets = orderedFa.filter((x) => needs.some((n) => n.s > 0.15 && n.pos === x.pos)).slice(0, 10);
+    let targets = orderedForTeam.filter((x) => needs.some((n) => n.s > 0.15 && n.pos === x.pos)).slice(0, 10);
     targets = targets.filter((x) => {
       if (x.pos !== "QB") return true;
       const { aav } = cpuOfferParams(next, teamId, x.p);
@@ -3239,6 +3259,7 @@ function computeSeasonSummary(state: GameState): SeasonSummary {
             : "missed";
 
   const volatilityEvents = (state.memoryLog ?? []).filter((event) => String(event.type ?? "").toLowerCase().includes("volatility") && Number(event.season) === Number(state.season)).length;
+  const leagueAwards = state.weeklyResults.at(-1)?.awardsWinners ?? undefined;
 
   return {
     tenureYear: Number(state.coach.tenureYear ?? 1),
@@ -3271,6 +3292,7 @@ function computeSeasonSummary(state: GameState): SeasonSummary {
     lockerRoomCred: Number(state.coach.lockerRoomCred ?? 50),
     volatilityEvents,
     archetypeId: state.coach.archetypeId,
+    leagueAwards,
   };
 }
 
@@ -3649,6 +3671,20 @@ function cpuDraftPickProspectId(
     .slice(0, 110);
 
   if (!rows.length) return null;
+
+  const board = buildCpuDraftBoard(
+    buildCpuTeamContext(state, teamId),
+    rows.map((r) => ({
+      playerId: String((r as any)["Player ID"]),
+      pos: posNormDraft(String((r as any)["POS"] ?? "UNK")),
+      age: Number((r as any)["Age"] ?? 22),
+      overall: Math.max(1, 100 - Math.round(Number((r as any)["Rank"] ?? 300) / 4)),
+      devTrait: "normal",
+    }))
+  );
+  if (board.length > 0) {
+    return board.find((p) => rows.some((r) => String((r as any)["Player ID"]) === p.playerId))?.playerId ?? null;
+  }
 
   let bestId = String((rows[0] as any)["Player ID"]);
   let bestScore = -1e9;
@@ -4472,6 +4508,23 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  const t = action.type;
+  if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE" || t === "CUT_SUBMIT") {
+    return offseasonReducer(state, action as GameAction);
+  }
+  if (t.startsWith("DRAFT_")) {
+    return draftReducer(state, action as GameAction);
+  }
+  if (t === "SIMULATE_WEEK" || t === "WEEK_COMPLETE" || t.startsWith("SEASON_") || t.startsWith("PLAYOFFS_") || t === "ADVANCE_PHASE") {
+    return seasonReducer(state, action as GameAction);
+  }
+  if (t.startsWith("FA_") || t.startsWith("FREE_AGENCY_")) {
+    return freeAgencyReducer(state, action as GameAction);
+  }
+  return gameReducerMonolith(state, action);
+}
+
+export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const fresh = createInitialState();
@@ -5170,7 +5223,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
     case "OFFSEASON_COMPLETE_STEP": {
       const stepsComplete = { ...state.offseason.stepsComplete, [action.payload.stepId]: true };
-      return { ...state, offseason: { ...state.offseason, stepsComplete } };
+      let next = { ...state, offseason: { ...state.offseason, stepsComplete } };
+      if (action.payload.stepId === "RESIGNING") {
+        const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+        for (const teamId of getAllTeamIds().filter((id) => id !== userTeamId)) {
+          const teamCtx = buildCpuTeamContext(next, teamId);
+          const expiring = getEffectivePlayersByTeam(next, teamId)
+            .filter((p: any) => {
+              const override = next.playerContractOverrides[String(p.playerId)];
+              const db = getContractById(String(p.playerId));
+              const endSeason = Number(override?.endSeason ?? db?.endSeason ?? -1);
+              return endSeason === next.season;
+            })
+            .map((p: any) => ({
+              playerId: String(p.playerId),
+              pos: String(p.pos ?? "UNK"),
+              age: Number(p.age ?? 26),
+              overall: Number(p.overall ?? p.ovr ?? 60),
+              devTrait: String((p as any)?.development?.trait ?? "normal"),
+            }));
+          const offers = cpuResignPlayers(teamCtx, expiring);
+          for (const offer of offers) {
+            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0 });
+            next = applyCanonicalTx(next, Tx.resign(teamId, String(offer.playerId), ovr));
+          }
+        }
+      }
+      return next;
     }
     case "OFFSEASON_SET_STEP": {
       const stepId = action.payload.stepId;
