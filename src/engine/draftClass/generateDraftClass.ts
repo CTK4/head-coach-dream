@@ -1,5 +1,6 @@
 import nameBank from "@/data/nameBank.json";
 import type { Prospect } from "@/engine/draftSim";
+import { generateDraftClass as generateParameterizedDraftClass } from "@/engine/playerGenerator";
 
 type NameRow = { name?: string; weight?: number };
 
@@ -39,7 +40,20 @@ function normalish(rand: () => number, mean: number, std: number) {
 const POSITIONS = ["QB", "RB", "WR", "TE", "OT", "OG", "C", "DE", "DT", "LB", "CB", "S", "K", "P"];
 const POS_WEIGHTS = [7, 12, 18, 8, 10, 8, 4, 10, 8, 11, 12, 10, 1, 1];
 
-export function generateDraftClass(params: { year: number; count: number; leagueSeed: number; saveSlotId: number }): Prospect[] {
+export function generateDraftClass(params: { year: number; count: number; leagueSeed: number; saveSlotId: number; currentSeason?: number }): Prospect[] {
+  const currentSeason = Number(params.currentSeason ?? params.year - 1);
+  if (params.year > currentSeason + 1) {
+    return generateParameterizedDraftClass(params.year, params.leagueSeed ^ params.saveSlotId, { totalPlayers: params.count }).map((player, i) => ({
+      prospectId: player.playerId,
+      rank: i + 1,
+      name: player.name,
+      pos: player.position,
+      college: "Unknown",
+      tier: player.ovr >= 84 ? "Tier 1" : player.ovr >= 78 ? "Tier 2" : player.ovr >= 70 ? "Tier 3" : "Tier 4",
+      age: 21 + (((params.leagueSeed ^ i) >>> 0) % 3),
+      forty: null,
+    }));
+  }
   const seed = (params.leagueSeed ^ Math.imul(params.year, 2654435761) ^ (params.saveSlotId << 8)) >>> 0;
   const rand = xorshift32(seed || 1);
   const sheets = (nameBank as any).sheets ?? {};
