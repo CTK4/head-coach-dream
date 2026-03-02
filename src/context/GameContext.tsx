@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useReducer } from "react";
+import React, { createContext, useContext, useEffect, useReducer, useRef } from "react";
 import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
 import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
@@ -9004,15 +9004,94 @@ const GameContext = createContext<GameContextType | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, undefined, loadState);
 
-  useEffect(() => {
+// —————————————————————————
+// Autosave: debounced and game-phase-aware.
+//
+// BEFORE: fired on every state change — including every RESOLVE_PLAY during
+// a game (~70 serialise+write calls per game → main-thread freeze on mobile
+// and risk of localStorage quota overflow).
+//
+// AFTER:
+//   • Mid-game plays are SKIPPED. The save fires once automatically when the
+//     game ends because that causes a state update where isGameInProgress is
+//     false. There is no safe resume point mid-drive anyway.
+//   • All other saves are DEBOUNCED (600 ms). This smooths out rapid
+//     consecutive updates (CPU draft advance bursts, FA bidding rounds, etc.)
+//     without losing data — the last state in the burst is written.
+//   • A visibilitychange listener flushes immediately when the tab hides,
+//     catching any pending debounced save before the browser suspends the tab.
+// —————————————————————————
+
+const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const AUTOSAVE_DEBOUNCE_MS = 600;
+
+// True when we are mid-play-by-play and saves should be suppressed.
+//
+// Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
+// RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
+// which triggers a save automatically (no extra wiring needed).
+//
+// Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
+// CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
+// playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
+const isGameInProgress =
+  state.league.phase === "REGULAR_SEASON_GAME" ||
+  (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
+
+useEffect(() => {
+  if (saveTimerRef.current !== null) {
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+  }
+
+  // Suppress saves entirely during active play-by-play.
+  if (isGameInProgress) return;
+
+  saveTimerRef.current = setTimeout(() => {
+    saveTimerRef.current = null;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       syncCurrentSave(state, getActiveSaveId() ?? undefined);
     } catch (error) {
-      logError("state.save.failure", { phase: state.phase, saveId: getActiveSaveId(), season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+      logError("state.save.failure", {
+        phase: state.phase,
+        saveId: getActiveSaveId(),
+        season: state.season,
+        week: state.week,
+        meta: { message: error instanceof Error ? error.message : String(error) },
+      });
       console.error("[state-save] Failed to persist save data", error);
     }
-  }, [state]);
+  }, AUTOSAVE_DEBOUNCE_MS);
+
+  return () => {
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  };
+}, [state, isGameInProgress]);
+
+// Flush immediately when the tab goes to background (catches any pending
+// debounced save before the browser suspends execution).
+useEffect(() => {
+  const handleVisibilityChange = () => {
+    if (document.visibilityState !== "hidden") return;
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (isGameInProgress) return; // mid-drive state is not resumable
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      syncCurrentSave(state, getActiveSaveId() ?? undefined);
+    } catch {
+      // Silent — can’t show UI in a visibilitychange handler.
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+}, [state, isGameInProgress]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
