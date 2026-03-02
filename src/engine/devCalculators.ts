@@ -1,5 +1,6 @@
 import { getPerkDevelopmentMultiplier, type CoachPerkCarrier } from "@/engine/perkWiring";
 import { computeSnapBasedDevelopmentDelta, type SnapCounts } from "@/systems/snapProgression";
+import { fromNumericDev, fromSnapDevTrait, getDevTraitProgressionMultiplier, type DevTrait } from "@/lib/devTrait";
 
 export type PracticeFocusLevel = "LOW" | "NORMAL" | "HIGH";
 
@@ -35,12 +36,16 @@ export function computeDevelopmentRate(baseRate: number, coach: CoachPerkCarrier
   return Number((baseRate * getPerkDevelopmentMultiplier(coach, player)).toFixed(4));
 }
 
-function devTraitMultiplier(devTrait: string): number {
-  const t = String(devTrait || "").toUpperCase();
-  if (t.includes("STAR") || t.includes("ELITE")) return 1.25;
-  if (t.includes("QUICK")) return 1.15;
-  if (t.includes("SLOW")) return 0.85;
-  return 1;
+function devTraitMultiplier(devTrait: string | number): number {
+  if (typeof devTrait === "number") return fromNumericDev(devTrait);
+  const raw = String(devTrait || "");
+  const snap = raw.toLowerCase();
+  if (snap === "normal" || snap === "impact" || snap === "elite" || snap === "generational") {
+    return fromSnapDevTrait(snap as DevTrait);
+  }
+  const asNum = Number(raw);
+  if (!Number.isNaN(asNum) && raw.trim() !== "") return fromNumericDev(asNum);
+  return getDevTraitProgressionMultiplier(raw);
 }
 
 function focusMultiplier(level: PracticeFocusLevel): number {
