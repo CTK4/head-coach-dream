@@ -9,6 +9,7 @@ import {
   getPersonnelById,
   getPersonnelContract,
   getPlayerById,
+  getPlayerContract,
   getPersonnel,
   getPlayers,
   getPlayersByTeam,
@@ -5354,7 +5355,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           const expiring = getEffectivePlayersByTeam(next, teamId)
             .filter((p: any) => {
               const override = next.playerContractOverrides[String(p.playerId)];
-              const db = getContractById(String(p.playerId));
+              const contractId = p.contractId ?? getPlayerById(String(p.playerId))?.contractId;
+              const db = contractId ? getContractById(String(contractId)) : getPlayerContract(String(p.playerId));
               const endSeason = Number(override?.endSeason ?? db?.endSeason ?? -1);
               return endSeason === next.season;
             })
