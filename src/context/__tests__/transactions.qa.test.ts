@@ -114,7 +114,7 @@ describe("transactions QA closure", () => {
     expect(cutCandidate).toBeTruthy();
     const before = computeTeamGameRatings(base, teamId);
 
-    const next = gameReducer(base, { type: "CUT_APPLY", payload: { playerId: String(cutCandidate.playerId) } });
+    const next = gameReducer(base, { type: "CUT_APPLY", payload: { teamId, playerId: String(cutCandidate.playerId), designation: "PRE_JUNE_1" } });
 
     expect(next.playerTeamOverrides[String(cutCandidate.playerId)]).toBe("FREE_AGENT");
     expect(getInjuryPlayersForTeam(next, teamId).map((p: any) => String(p.playerId))).not.toContain(String(cutCandidate.playerId));
