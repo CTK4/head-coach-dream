@@ -4,7 +4,6 @@ import draftClassJson from "@/data/draftClass.json";
 import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
 import {
   clearPersonnelTeam,
-  cutPlayerToFreeAgent,
   expireContract,
   getContractById,
   getPersonnelById,
@@ -16,6 +15,7 @@ import {
   getTeamRosterPlayers,
   getTeams,
   getTeamById,
+  replayPersonnelOverrides,
   setPersonnelTeamAndContract,
 } from "@/data/leagueDb";
 import type { CoachReputation } from "@/engine/reputation";
@@ -141,7 +141,7 @@ import { buildMigrationEvents, type TransactionState } from "@/engine/transactio
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
-import type { PlayerRow } from "@/data/leagueDb";
+import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import { offseasonReducer } from "@/context/offseasonReducer";
 import { draftReducer } from "@/context/draftReducer";
@@ -1070,6 +1070,8 @@ export type GameState = {
   rookieContracts: Record<string, RookieContract>;
   nextPlayerId: number;
   playerTeamOverrides: Record<string, string>;
+  personnelTeamOverrides: Record<string, import("@/data/leagueDb").PersonnelOverride>;
+  staffContractsByPersonId: Record<string, import("@/data/leagueDb").ContractRow>;
   playerContractOverrides: Record<string, PlayerContractOverride>;
   playerAttrOverrides: Record<string, Partial<PlayerRow>>;
   qbRunContactExposureByPlayerId: Record<string, number>;
@@ -1719,6 +1721,8 @@ function createInitialState(): GameState {
     rookieContracts: {},
     nextPlayerId: maxExistingPlayerNumericId() + 1,
     playerTeamOverrides: {},
+    personnelTeamOverrides: {},
+    staffContractsByPersonId: {},
     playerContractOverrides: {},
     playerAttrOverrides: {},
     qbRunContactExposureByPlayerId: {},
@@ -3145,6 +3149,8 @@ function seasonRollover(state: GameState): GameState {
   }
 
   const expiredStaffIds = new Set<string>();
+  const personnelOverrides_expire: Record<string, import("@/data/leagueDb").PersonnelOverride> = {};
+  const staffContractsByPersonId_expire: Record<string, ContractRow> = {};
   for (const person of getPersonnel()) {
     const personId = String((person as any).personId ?? "");
     if (!personId) continue;
@@ -3154,6 +3160,8 @@ function seasonRollover(state: GameState): GameState {
     if (nextSeason <= contractEndSeason) continue;
     clearPersonnelTeam(personId);
     expireContract(String(contract.contractId ?? ""), contractEndSeason);
+    personnelOverrides_expire[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
+    staffContractsByPersonId_expire[personId] = { ...contract, isExpired: true };
     expiredStaffIds.add(personId);
   }
 
@@ -3222,6 +3230,8 @@ function seasonRollover(state: GameState): GameState {
     resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     playerTeamOverrides,
     playerContractOverrides,
+    personnelTeamOverrides: { ...state.personnelTeamOverrides, ...personnelOverrides_expire },
+    staffContractsByPersonId: { ...state.staffContractsByPersonId, ...staffContractsByPersonId_expire },
     staff,
     assistantStaff,
     staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
@@ -5047,6 +5057,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       return {
         ...nextState,
+        personnelTeamOverrides: {
+          ...nextState.personnelTeamOverrides,
+          [action.payload.personId]: { teamId, status: "ACTIVE", contractId: res?.contractId },
+        },
+        staffContractsByPersonId: res?._contract
+          ? { ...nextState.staffContractsByPersonId, [action.payload.personId]: res._contract as ContractRow }
+          : nextState.staffContractsByPersonId,
         phase: staffComplete ? "HUB" : nextState.phase,
         careerStage: staffComplete ? "OFFSEASON_HUB" : nextState.careerStage,
         memoryLog: addMemoryEvent(nextState, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
@@ -5151,6 +5168,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       return {
         ...nextState,
+        personnelTeamOverrides: {
+          ...nextState.personnelTeamOverrides,
+          [action.payload.personId]: { teamId, status: "ACTIVE", contractId: res?.contractId },
+        },
+        staffContractsByPersonId: res?._contract
+          ? { ...nextState.staffContractsByPersonId, [action.payload.personId]: res._contract as ContractRow }
+          : nextState.staffContractsByPersonId,
         careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : nextState.careerStage,
         memoryLog: addMemoryEvent(nextState, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
       };
@@ -7489,7 +7513,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const playerTeamOverrides = { ...state.playerTeamOverrides };
       const playerContractOverrides = { ...state.playerContractOverrides };
       for (const pid of cuts) {
-        cutPlayerToFreeAgent(pid);
+        // playerTeamOverrides is the authoritative channel for effective player team reads.
         playerTeamOverrides[pid] = "FREE_AGENT";
         delete playerContractOverrides[pid];
       }
@@ -7521,6 +7545,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let next: GameState = refundStaffBudget(state, action.payload.personId);
       next = {
         ...next,
+        personnelTeamOverrides: {
+          ...next.personnelTeamOverrides,
+          [action.payload.personId]: { teamId: "FREE_AGENT", status: "FREE_AGENT" },
+        },
+        staffContractsByPersonId: c
+          ? { ...next.staffContractsByPersonId, [action.payload.personId]: { ...c, isExpired: true } as ContractRow }
+          : next.staffContractsByPersonId,
         owner: { ...next.owner, approval: clamp100(next.owner.approval - 8) },
         memoryLog: addMemoryEvent(state, "STAFF_FIRED", {
           ...action.payload,
@@ -8959,6 +8990,8 @@ function loadState(): GameState {
       rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
       nextPlayerId: Number((migrated as any).nextPlayerId ?? initial.nextPlayerId),
       playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
+      personnelTeamOverrides: { ...((migrated as any).personnelTeamOverrides ?? {}) },
+      staffContractsByPersonId: { ...((migrated as any).staffContractsByPersonId ?? {}) },
       franchiseTags: { ...initial.franchiseTags, ...((migrated as any).franchiseTags ?? {}) },
       playerContractOverrides: Object.fromEntries(
         Object.entries({ ...initial.playerContractOverrides, ...migrated.playerContractOverrides }).map(([k, v]: any) => {
@@ -9019,6 +9052,10 @@ function loadState(): GameState {
         };
       }
     }
+    replayPersonnelOverrides(
+      (out as any).personnelTeamOverrides ?? {},
+      (out as any).staffContractsByPersonId ?? {},
+    );
     out = ensureAccolades(bootstrapAccolades(out));
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
