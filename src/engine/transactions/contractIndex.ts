@@ -43,9 +43,16 @@ export function buildContractIndex(state: GameState): ContractIndex {
       out[String(event.playerIds[0])] = normalizeContract(event.details.contract, Number(state.season ?? 1));
       continue;
     }
-    if (!contract) continue;
     if (["RESIGN", "SIGN_FA", "FRANCHISE_TAG", "ROOKIE_SIGN"].includes(event.kind)) {
+      if (!contract) continue;
       for (const playerId of event.playerIds) out[String(playerId)] = normalizeContract(contract, Number(state.season ?? 1));
+      continue;
+    }
+    if (event.kind === "FRANCHISE_TAG_REMOVE") {
+      for (const playerId of event.playerIds) {
+        if (contract) out[String(playerId)] = normalizeContract(contract, Number(state.season ?? 1));
+        else delete out[String(playerId)];
+      }
     }
   }
   return out;

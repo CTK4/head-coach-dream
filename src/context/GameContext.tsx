@@ -144,9 +144,9 @@ import { buildMigrationEvents, type TransactionState } from "@/engine/transactio
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
+import { buildContractIndex } from "@/engine/transactions/contractIndex";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
-import type { TransactionEvent } from "@/engine/transactions/types";
 import { offseasonReducer } from "@/context/offseasonReducer";
 import { draftReducer } from "@/context/draftReducer";
 import { seasonReducer } from "@/context/seasonReducer";
@@ -476,7 +476,7 @@ type PreDraftReveal = {
 };
 
 export type TagType = "FRANCHISE_NON_EX" | "FRANCHISE_EX" | "TRANSITION";
-export type TagApplied = { playerId: string; type: TagType; cost: number; teamId?: string; appliedWeek?: number };
+export type TagApplied = { playerId: string; type: TagType; cost: number; teamId?: string; appliedWeek?: number; priorContract?: PlayerContractOverride };
 
 export type OrgRoles = {
   hcCoachId?: string;
@@ -2323,60 +2323,30 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
 
   const amount = resolveFranchiseTagAmount(state, player);
   const priorTag = state.franchiseTags[playerId];
-  const franchiseTags = {
-    ...state.franchiseTags,
-    [playerId]: { season: nextSeason, amount, timesUsed: Number(priorTag?.timesUsed ?? 0) + 1 },
-  };
-
-  const playerContractOverrides = {
-    ...state.playerContractOverrides,
-    [playerId]: {
-      ...createContractOverride({
-        startSeason: nextSeason,
-        years: 1,
-        salary: amount,
-        guarantees: 1,
-        type: "FRANCHISE_TAG",
-      }),
-      guaranteedAtSigning: amount,
-    },
-  };
-
-  const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: teamId };
-  const decisions = { ...state.offseasonData.resigning.decisions } as Record<string, ResignDecision>;
-  delete decisions[playerId];
-
-  const tx: Transaction = {
-    id: `TX_TAG_${nextSeason}_${playerId}`,
-    type: "TAG",
-    playerId,
-    playerName: String((player as any)?.fullName ?? "Player"),
-    playerPos: String((player as any)?.pos ?? "UNK"),
-    fromTeamId: teamId,
-    toTeamId: teamId,
-    season: state.season,
-    week: state.week,
-    june1Designation: "NONE",
-    notes: `Franchise tag applied for ${nextSeason}`,
-    deadCapThisYear: 0,
-    deadCapNextYear: 0,
-    remainingProration: 0,
-    contractSnapshot: {
+  const priorContract = buildContractIndex(state)[playerId];
+  const tagContract: PlayerContractOverride = {
+    ...createContractOverride({
       startSeason: nextSeason,
-      endSeason: nextSeason,
-      signingBonus: 0,
-      salaries: [amount],
-    },
+      years: 1,
+      salary: amount,
+      guarantees: 1,
+      type: "FRANCHISE_TAG",
+    }),
+    guaranteedAtSigning: amount,
   };
 
-  const next = applyFinances({
-    ...state,
-    playerTeamOverrides,
-    playerContractOverrides,
-    franchiseTags,
+  let next = applyCanonicalTx(state, Tx.franchiseTag(teamId, playerId, tagContract, priorContract));
+  next = applyFinances({
+    ...next,
+    franchiseTags: {
+      ...next.franchiseTags,
+      [playerId]: { season: nextSeason, amount, timesUsed: Number(priorTag?.timesUsed ?? 0) + 1 },
+    },
     offseasonData: {
-      ...state.offseasonData,
-      resigning: { decisions },
+      ...next.offseasonData,
+      resigning: {
+        decisions: Object.fromEntries(Object.entries(next.offseasonData.resigning.decisions).filter(([id]) => String(id) !== playerId)),
+      },
       tagCenter: {
         applied: {
           playerId,
@@ -2384,10 +2354,10 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
           cost: amount,
           teamId,
           appliedWeek: state.week ?? 0,
+          priorContract,
         },
       },
     },
-    transactions: [...(state.transactions ?? []), tx],
   });
 
   return pushNews(next, `Franchise tag applied: ${String((player as any)?.fullName ?? "Player")} (${Math.round(amount / 1_000_000)}M).`);
@@ -5594,19 +5564,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const applied = state.offseasonData.tagCenter.applied;
       if (!applied) return state;
 
-      const pco = { ...state.playerContractOverrides };
-      const franchiseTags = { ...state.franchiseTags };
-      const o = pco[applied.playerId];
-      const taggedSeason = franchiseTags[applied.playerId]?.season;
-      if (o?.contractType === "FRANCHISE_TAG" || (taggedSeason != null && o?.startSeason === taggedSeason && o?.endSeason === taggedSeason)) {
-        delete pco[applied.playerId];
-      }
+      let next = applyCanonicalTx(state, Tx.franchiseTagRemove(String(applied.teamId ?? state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? ""), applied.playerId, applied.priorContract));
+      const franchiseTags = { ...next.franchiseTags };
       delete franchiseTags[applied.playerId];
 
       return applyFinances({
-        ...state,
-        offseasonData: { ...state.offseasonData, tagCenter: { applied: undefined } },
-        playerContractOverrides: pco,
+        ...next,
+        offseasonData: { ...next.offseasonData, tagCenter: { applied: undefined } },
         franchiseTags,
       });
     }

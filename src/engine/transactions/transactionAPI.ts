@@ -7,12 +7,25 @@ export const Tx = {
   resign(teamId: string, playerId: string, offer: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
     return { kind: "RESIGN", teamId, playerIds: [playerId], details: { contract: offer } };
   },
-  franchiseTag(teamId: string, playerId: string): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+  franchiseTag(teamId: string, playerId: string, contract: PlayerContractOverride, priorContract?: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
     return {
       kind: "FRANCHISE_TAG",
       teamId,
       playerIds: [playerId],
-      details: { contract: { startSeason: 0, endSeason: 0, salaries: [0], signingBonus: 0, contractType: "FRANCHISE_TAG" } },
+      details: {
+        contract,
+        ...(priorContract ? { priorContract } : {}),
+      },
+    };
+  },
+  franchiseTagRemove(teamId: string, playerId: string, priorContract?: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
+    return {
+      kind: "FRANCHISE_TAG_REMOVE",
+      teamId,
+      playerIds: [playerId],
+      details: {
+        ...(priorContract ? { contract: priorContract } : {}),
+      },
     };
   },
   cut(teamId: string, playerId: string, reason?: string): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {

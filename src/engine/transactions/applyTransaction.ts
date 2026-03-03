@@ -47,6 +47,13 @@ export function applyTransaction(state: GameState, tx: TransactionEvent): GameSt
         delete contractOverrides[p];
       }
       break;
+    case "FRANCHISE_TAG_REMOVE":
+      for (const p of tx.playerIds) {
+        teamOverrides[p] = String(tx.teamId);
+        if (tx.details?.contract) setContract(p, tx.details.contract);
+        else delete contractOverrides[p];
+      }
+      break;
     case "TRADE": {
       const toTeamByPlayer = tx.details?.toTeamByPlayer ?? {};
       for (const p of tx.playerIds) teamOverrides[p] = String(toTeamByPlayer[p] ?? tx.otherTeamId ?? tx.teamId);
