@@ -53,21 +53,41 @@ function safeGetItem(key: string): string | null {
   }
 }
 
-function safeSetItem(key: string, value: string): boolean {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
+type StorageWriteResult = { ok: true } | { ok: false; error: Error };
+
+class SaveWriteError extends Error {
+  constructor(
+    message: string,
+    readonly operation: "set" | "remove",
+    readonly key: string,
+    readonly cause: Error,
+  ) {
+    super(message);
+    this.name = "SaveWriteError";
   }
 }
 
-function safeRemoveItem(key: string): void {
+function safeSetItem(key: string, value: string): StorageWriteResult {
+  try {
+    localStorage.setItem(key, value);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+  }
+}
+
+function safeRemoveItem(key: string): StorageWriteResult {
   try {
     localStorage.removeItem(key);
-  } catch {
-    // no-op
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
+}
+
+function assertStorageWrite(result: StorageWriteResult, operation: "set" | "remove", key: string, context: string): void {
+  if (result.ok) return;
+  throw new SaveWriteError(`Failed to ${operation} localStorage key \"${key}\" during ${context}.`, operation, key, result.error);
 }
 
 function parseSave(raw: string | null): GameState | null {
@@ -94,12 +114,12 @@ function commitAtomic(storageKey: string, serializedState: string): void {
   const tempKey = getTempKey(storageKey);
   const backupKey = getBackupKey(storageKey);
   const existing = safeGetItem(storageKey);
-  safeSetItem(tempKey, serializedState);
+  assertStorageWrite(safeSetItem(tempKey, serializedState), "set", tempKey, "temp write");
   if (existing !== null) {
-    safeSetItem(backupKey, existing);
+    assertStorageWrite(safeSetItem(backupKey, existing), "set", backupKey, "backup rotation");
   }
-  safeSetItem(storageKey, serializedState);
-  safeRemoveItem(tempKey);
+  assertStorageWrite(safeSetItem(storageKey, serializedState), "set", storageKey, "primary write");
+  assertStorageWrite(safeRemoveItem(tempKey), "remove", tempKey, "temp cleanup");
 }
 
 function toMetadata(saveId: string, state: GameState): SaveMetadata {
@@ -136,7 +156,7 @@ function readIndex(): SaveIndexRow[] {
 }
 
 function writeIndex(rows: SaveIndexRow[]) {
-  safeSetItem(SAVE_INDEX_KEY, JSON.stringify(rows));
+  assertStorageWrite(safeSetItem(SAVE_INDEX_KEY, JSON.stringify(rows)), "set", SAVE_INDEX_KEY, "index write");
 }
 
 export function getActiveSaveId(): string | null {
@@ -144,7 +164,7 @@ export function getActiveSaveId(): string | null {
 }
 
 export function setActiveSaveId(saveId: string) {
-  safeSetItem(SAVE_ACTIVE_ID_KEY, saveId);
+  assertStorageWrite(safeSetItem(SAVE_ACTIVE_ID_KEY, saveId), "set", SAVE_ACTIVE_ID_KEY, "active save update");
 }
 
 export function syncCurrentSave(state: GameState, saveId?: string) {
@@ -154,13 +174,13 @@ export function syncCurrentSave(state: GameState, saveId?: string) {
   const serialized = JSON.stringify(nextState);
 
   try {
-    setActiveSaveId(id);
     commitAtomic(storageKey, serialized);
     commitAtomic(LEGACY_KEY, serialized);
 
     const rows = readIndex().filter((row) => row.saveId !== id);
     rows.push({ ...toMetadata(id, nextState), storageKey });
     writeIndex(rows.sort((a, b) => b.lastPlayed - a.lastPlayed));
+    setActiveSaveId(id);
     logInfo("save.sync.success", { saveId: id, phase: state.phase, season: state.season, week: state.week });
   } catch (error) {
     logError("save.sync.failure", { saveId: id, phase: state.phase, season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
