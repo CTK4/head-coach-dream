@@ -110,6 +110,46 @@ function readAndValidateState(raw: string | null, saveId: string): { state: Game
   return { state: migrated };
 }
 
+function readSaveState(saveId: string):
+  | { ok: true; state: GameState; source: "primary" | "backup" }
+  | { ok: false; error: Omit<Extract<LoadSaveResult, { ok: false }>, "restoredFromBackup"> } {
+  const row = readIndex().find((s) => s.saveId === saveId);
+  const key = row?.storageKey ?? getStorageKey(saveId);
+
+  const primary = readAndValidateState(safeGetItem(key), saveId);
+  if (primary.state) {
+    return { ok: true, state: primary.state, source: "primary" };
+  }
+
+  const backup = readAndValidateState(safeGetItem(getBackupKey(key)), saveId);
+  if (backup.state) {
+    return { ok: true, state: backup.state, source: "backup" };
+  }
+
+  if (!safeGetItem(key)) {
+    return {
+      ok: false,
+      error: {
+        ok: false,
+        code: "MISSING_SAVE",
+        saveId,
+        message: "Save file is missing.",
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    error: {
+      ok: false,
+      code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE",
+      saveId,
+      validationCode: primary.validationCode ?? backup.validationCode,
+      message: "Save appears corrupted. Backup restore failed.",
+    },
+  };
+}
+
 function commitAtomic(storageKey: string, serializedState: string): void {
   const tempKey = getTempKey(storageKey);
   const backupKey = getBackupKey(storageKey);
@@ -197,48 +237,28 @@ export function listSaves(): SaveMetadata[] {
 export function loadSaveResult(saveId: string): LoadSaveResult {
   const row = readIndex().find((s) => s.saveId === saveId);
   const key = row?.storageKey ?? getStorageKey(saveId);
+  const readResult = readSaveState(saveId);
 
-  const primary = readAndValidateState(safeGetItem(key), saveId);
-  if (primary.state) {
-    const serialized = JSON.stringify(primary.state);
+  if (readResult.ok) {
+    const serialized = JSON.stringify(readResult.state);
     setActiveSaveId(saveId);
     commitAtomic(LEGACY_KEY, serialized);
     commitAtomic(key, serialized);
-    logInfo("save.load.success", { saveId, phase: primary.state.phase, season: primary.state.season, week: primary.state.week, meta: { source: "primary" } });
-    return { ok: true, state: primary.state };
+    if (readResult.source === "backup") {
+      logWarn("save.load.success_backup", { saveId, phase: readResult.state.phase, season: readResult.state.season, week: readResult.state.week });
+    } else {
+      logInfo("save.load.success", { saveId, phase: readResult.state.phase, season: readResult.state.season, week: readResult.state.week, meta: { source: readResult.source } });
+    }
+    return { ok: true, state: readResult.state };
   }
 
-  const backup = readAndValidateState(safeGetItem(getBackupKey(key)), saveId);
-  if (backup.state) {
-    const serialized = JSON.stringify(backup.state);
-    commitAtomic(key, serialized);
-    setActiveSaveId(saveId);
-    commitAtomic(LEGACY_KEY, serialized);
-    logWarn("save.load.success_backup", { saveId, phase: backup.state.phase, season: backup.state.season, week: backup.state.week });
-    return { ok: true, state: backup.state };
-  }
-
-  if (!safeGetItem(key)) {
+  if (readResult.error.code === "MISSING_SAVE") {
     logWarn("save.load.failure", { saveId, meta: { code: "MISSING_SAVE" } });
-    return {
-      ok: false,
-      code: "MISSING_SAVE",
-      saveId,
-      restoredFromBackup: false,
-      message: "Save file is missing.",
-    };
+  } else {
+    logError("save.load.failure", { saveId, meta: { code: readResult.error.code, validationCode: readResult.error.validationCode } });
   }
 
-  logError("save.load.failure", { saveId, meta: { code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE", validationCode: primary.validationCode ?? backup.validationCode } });
-
-  return {
-    ok: false,
-    code: primary.validationCode ? "INVALID_SAVE" : "CORRUPT_SAVE",
-    saveId,
-    restoredFromBackup: false,
-    validationCode: primary.validationCode ?? backup.validationCode,
-    message: "Save appears corrupted. Backup restore failed.",
-  };
+  return { ...readResult.error, restoredFromBackup: false };
 }
 
 export function getActiveSaveMetadata(): SaveMetadata | null {
@@ -253,7 +273,7 @@ export function loadSave(saveId: string): GameState | null {
 }
 
 export function exportSave(saveId: string): { blob: Blob; fileName: string } | null {
-  const result = loadSaveResult(saveId);
+  const result = readSaveState(saveId);
   if (!result.ok) return null;
   const state = migrateSaveSchema(result.state, saveId);
   const payload = JSON.stringify(state, null, 2);
