@@ -8027,21 +8027,40 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         const nextPre = Math.min(PRESEASON_WEEKS, hub.preseasonWeek);
         const finishedPreseason = nextPre >= PRESEASON_WEEKS;
         if (finishedPreseason) {
+          // FIX H2: Land on CUTDOWNS, not REGULAR_SEASON.
+          // - careerStage: "CUTDOWNS" so the hub routes to /hub/cutdowns.
+          // - PRESEASON: true  — preseason IS done.
+          // - CUT_DOWNS removed from stepsComplete — user must trim roster to 53.
           return {
             ...nextWithPractice,
             league,
             currentStandings: weekResult.updatedStandings,
             weeklyResults: [...state.weeklyResults, weekResult],
             leagueStatLeaders: weekResult.statLeaders,
-            newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
+            newsHistory: appendWeeklyNews(
+              state,
+              weekResult,
+              Number(state.game.weekNumber ?? state.hub.regularSeasonWeek),
+            ),
             hub: { ...hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
             offseason: {
               ...nextWithPractice.offseason,
               stepId: "CUT_DOWNS",
-              stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true, CUT_DOWNS: true },
+              stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true },
             },
-            careerStage: "REGULAR_SEASON",
-            game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+            careerStage: "CUTDOWNS",
+            game: initGameSim({
+              homeTeamId: state.game.homeTeamId,
+              awayTeamId: state.game.awayTeamId,
+              seed:
+                (state.careerSeed ?? state.saveSeed) ^
+                hashStr(
+                  `postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`,
+                ),
+              coachArchetypeId: state.coach.archetypeId,
+              coachTenureYear: state.coach.tenureYear,
+              coachUnlockedPerkIds: state.coach.unlockedPerkIds,
+            }),
           };
         }
       }
@@ -8168,6 +8187,25 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
         }
       }
+
+      // FIX H2: When simming the final preseason week, transition to CUTDOWNS.
+      // Previously this path left careerStage as "PRESEASON" indefinitely — the
+      // hub had no forward route because preseasonWeek was maxed but the stage
+      // never changed. Now mirrors the RESOLVE_PLAY path: land on CUTDOWNS so
+      // the user must trim to 53 before entering regular season week 1.
+      if (gameType === "PRESEASON" && out.hub.preseasonWeek >= PRESEASON_WEEKS) {
+        out = {
+          ...out,
+          careerStage: "CUTDOWNS",
+          offseason: {
+            ...out.offseason,
+            stepId: "CUT_DOWNS",
+            stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
+          },
+          hub: { ...out.hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+        };
+      }
+
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
       const nextHotSeat = computeHotSeatScore(out.coach, out);
       if (nextHotSeat.level !== out.hotSeatStatus.level && (nextHotSeat.level === "HOT" || nextHotSeat.level === "CRITICAL")) {
