@@ -25,7 +25,12 @@ export default function Offseason() {
   const step = state.offseason.stepId;
   const stepMeta = OFFSEASON_STEPS.find((s) => s.id === step) ?? OFFSEASON_STEPS[0];
   const goCurrent = () => navigate(stepRoute[step] ?? "/offseason/free-agency");
-  const ready = useMemo(() => !!state.staff?.ocId && !!state.staff?.dcId, [state.staff?.ocId, state.staff?.dcId]);
+  const ready = useMemo(
+    () =>
+      (!!state.staff?.ocId && !!state.staff?.dcId && !!state.staff?.stcId) ||
+      (!!state.orgRoles?.ocCoachId && !!state.orgRoles?.dcCoachId && !!state.orgRoles?.stcCoachId),
+    [state.staff?.ocId, state.staff?.dcId, state.staff?.stcId, state.orgRoles?.ocCoachId, state.orgRoles?.dcCoachId, state.orgRoles?.stcCoachId],
+  );
   const currentStepBlocked = !ready && !STEPS_OPEN_WITHOUT_COORDINATORS.has(step);
 
   return (
@@ -38,7 +43,7 @@ export default function Offseason() {
               Current: <span className="font-medium">{stepMeta.title}</span>
             </div>
             {!ready ? (
-              <div className="text-xs text-muted-foreground">Hire OC + DC first (Staff step).</div>
+              <div className="text-xs text-muted-foreground">Hire OC + DC + STC first (Staff step).</div>
             ) : null}
           </div>
           <div className="flex gap-2">
