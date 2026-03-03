@@ -2107,11 +2107,27 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
   const ovr: PlayerContractOverride = { startSeason: state.season, endSeason: state.season + years - 1, salaries, signingBonus };
   const cashY1 = (salaries[0] ?? 0) + signingBonus;
 
-  let next = applyCanonicalTx(state, Tx.signFA(signingTeamId, playerId, ovr));
-  next = applyFinances({
-    ...next,
-    finances: { ...next.finances, cash: next.finances.cash - cashY1 },
-  });
+  let next: GameState;
+  try {
+    next = applyCanonicalTx(state, Tx.signFA(signingTeamId, playerId, ovr));
+  } catch (error: any) {
+    return {
+      ...state,
+      uiToast: `Transaction blocked: ${String(error?.message ?? "invalid transaction")}`,
+      ui: {
+        ...state.ui,
+        offerResultModal: { open: true, title: "Signing Failed", message: "Unable to finalize signing transaction.", variant: "danger", ts: Date.now() },
+      },
+    };
+  }
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? state.userTeamId ?? "");
+  if (signingTeamId === userTeamId) {
+    next = applyFinances({
+      ...next,
+      finances: { ...next.finances, cash: next.finances.cash - cashY1 },
+    });
+  }
 
   const p: any = (getPlayers() as any[]).find((x: any) => String(x.playerId) === String(playerId));
   next = pushNews(next, `Signed: ${String(p?.fullName ?? "Player")} (${String(p?.pos ?? "")}) agrees to terms.`);
@@ -6826,7 +6842,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             });
             next.freeAgency.signingsByPlayerId[pid] = { teamId: winner.teamId, years: winner.years, aav: winner.aav, signingBonus: 0 };
             next.freeAgency.pendingCounterTeamByPlayerId[pid] = null;
-            next = winner.isUser ? signFromOffer(next, pid, winner, winner.teamId, winner.decisionReason ?? "Counter accepted") : faPush(next, `${String(p?.fullName ?? "Player")} counter accepted by ${winner.teamId}.`, pid);
+            next = signFromOffer(next, pid, winner, winner.teamId, winner.decisionReason ?? "Counter accepted");
             next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
             continue;
           }
@@ -6865,7 +6881,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             });
             if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
             next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
-            next = best.isUser ? signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer") : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
+            next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
           } else {
             next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const, decisionReason: o.isUser ? userDecision?.reason ?? "Offer not selected" : o.decisionReason } : o));
             if (userPending) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
@@ -6889,7 +6905,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             });
             if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
           next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
-          next = best.isUser ? signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer") : faPush(next, `${String(p?.fullName ?? "Player")} signed with ${best.teamId}.`, pid);
+          next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
         } else if (roll < acceptProb + counterProb) {
           const finalistTeams = Array.from(new Set(pending.filter((o) => Number(o.aav) >= Number(best.aav) * 0.9).sort((a, b) => b.aav - a.aav || b.years - a.years).slice(0, 3).map((o) => o.teamId)));
           const updatedBase = allOffers.map((o) => (o.status !== "PENDING" ? o : finalistTeams.includes(o.teamId) ? o : { ...o, status: "REJECTED" as const }));
@@ -6934,6 +6950,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "FA_RESOLVE_WEEK": {
       const offersByPlayerId = { ...state.freeAgency.offersByPlayerId };
       const signingsByPlayerId = { ...state.freeAgency.signingsByPlayerId };
+      let next: GameState = state;
 
       for (const [playerId, offers] of Object.entries(offersByPlayerId)) {
         if (signingsByPlayerId[playerId]) continue;
@@ -6957,11 +6974,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         signingsByPlayerId[playerId] = { teamId: best.teamId, years, aav: best.aav, signingBonus };
 
         if (best.isUser) {
-          const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
-          const ovr: PlayerContractOverride = { startSeason: state.season, endSeason: state.season + years - 1, salaries, signingBonus };
-          const cashY1 = (salaries[0] ?? 0) + signingBonus;
-          const nextState = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: best.teamId }, playerContractOverrides: { ...state.playerContractOverrides, [playerId]: ovr }, finances: { ...state.finances, cash: state.finances.cash - cashY1 }, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
-          return applyFinances(nextState);
+          next = signFromOffer(
+            {
+              ...next,
+              freeAgency: { ...next.freeAgency, offersByPlayerId, signingsByPlayerId },
+            },
+            playerId,
+            best,
+            best.teamId,
+            "Weekly resolve acceptance",
+          );
+          return next;
         }
       }
       return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
