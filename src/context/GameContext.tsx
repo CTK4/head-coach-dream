@@ -4539,6 +4539,28 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
   return { ...state, uiToast: `Transaction blocked: ${validation.errors[0] ?? "invalid state"}` };
 }
 
+function finalizeWeek(
+  state: GameState,
+  context: { season: number; week: number; gameType: GameType; weekKey: WeekKey; seed: number },
+): GameState {
+  let out = state;
+  const alreadyProcessed = Boolean(out.medical.injuryReportsByWeek[context.weekKey]) && Boolean(out.media.storiesByWeek[context.weekKey]);
+  if (!alreadyProcessed) {
+    out = resolveInjuriesEngine(out);
+    out = gameReducer(out, { type: "MEDICAL_TICK_RECOVERY", payload: { weekKey: context.weekKey } });
+    out = gameReducer(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey: context.weekKey, seed: seedFor(context.seed, context.season, context.week, 202) } });
+    out = gameReducer(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: context.weekKey, seed: seedFor(context.seed, context.season, context.week, 101) } });
+  }
+
+  if (context.gameType === "REGULAR_SEASON" && context.week >= REGULAR_SEASON_WEEKS) {
+    if (!out.playoffs) out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
+    out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+    if (out.league.phase !== "WILD_CARD") out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
+  }
+
+  return out;
+}
+
 export function gameReducer(state: GameState, action: GameAction): GameState {
   const t = action.type;
   if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE" || t === "CUT_SUBMIT") {
@@ -8113,6 +8135,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
       if (state.game.weekType === "REGULAR_SEASON") {
+        const weekKey = toWeekKey(nextState.season, Number(state.game.weekNumber));
+        nextState = finalizeWeek(nextState, {
+          season: nextState.season,
+          week: Number(state.game.weekNumber),
+          gameType: "REGULAR_SEASON",
+          weekKey,
+          seed: nextState.saveSeed,
+        });
         nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
         if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
           nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
@@ -8191,11 +8221,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
       if (!appliedAdvance.applied) return state;
       out = appliedAdvance.state;
-      out = resolveInjuriesEngine(out);
       const weekKey = toWeekKey(out.season, week);
-      out = gameReducer(out, { type: "MEDICAL_TICK_RECOVERY", payload: { weekKey } });
-      out = gameReducer(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey, seed: seedFor(out.saveSeed, out.season, week, 202) } });
-      out = gameReducer(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey, seed: seedFor(out.saveSeed, out.season, week, 101) } });
+      out = finalizeWeek(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed });
       const didWin = Boolean((weekResult as any).userResult?.didWin);
       const ownerDeltas = { approval: didWin ? 1 : -2, pressure: didWin ? -1 : 2, trust: didWin ? 1 : -1 };
       out = gameReducer(out, { type: "OWNER_WEEKLY_EVALUATE", payload: { weekKey, teamId, deltas: ownerDeltas, reasons: [didWin ? "Won game" : "Lost game"] } });
@@ -8215,9 +8242,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
         if (week >= REGULAR_SEASON_WEEKS) {
           out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
-          out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
-          out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-          out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
         }
       }
 
