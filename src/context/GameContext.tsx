@@ -5032,6 +5032,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             ? { ...nextState.staff, dcId: action.payload.personId }
             : { ...nextState.staff, stcId: action.payload.personId };
 
+      const orgRoles =
+        action.payload.role === "OC"
+          ? { ...nextState.orgRoles, ocCoachId: action.payload.personId }
+          : action.payload.role === "DC"
+            ? { ...nextState.orgRoles, dcCoachId: action.payload.personId }
+            : { ...nextState.orgRoles, stcCoachId: action.payload.personId };
+
       const res = setPersonnelTeamAndContract({
         personId: action.payload.personId,
         teamId,
@@ -5041,7 +5048,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         notes: `${action.payload.role} hired`,
       });
 
-      nextState = addStaffSalaryAndCash({ ...nextState, staff }, action.payload.personId, action.payload.salary);
+      nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
       const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
       let nextPlaybooks = {
@@ -5084,6 +5091,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       return {
         ...nextState,
+        staff,
+        orgRoles,
         personnelTeamOverrides: {
           ...nextState.personnelTeamOverrides,
           [action.payload.personId]: { teamId, status: "ACTIVE", contractId: res?.contractId },
