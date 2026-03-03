@@ -120,7 +120,14 @@ export default function Finances() {
                   <Button size="sm" variant="secondary" onClick={() => dispatch({ type: "TRADE_PLAYER", payload: { playerId: r.id } })}>
                     Trade
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => dispatch({ type: "CUT_PLAYER", payload: { playerId: r.id } })}>
+                  <Button size="sm" variant="destructive" onClick={() => dispatch({
+                    type: "CUT_APPLY",
+                    payload: {
+                      teamId: String(state.acceptedOffer?.teamId ?? ""),
+                      playerId: String(r.id),
+                      designation: "PRE_JUNE_1",
+                    },
+                  })}>
                     Cut
                   </Button>
                 </div>

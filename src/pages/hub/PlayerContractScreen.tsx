@@ -21,6 +21,10 @@ function fmt(n: number) {
   return `$${(Math.round(m * 10) / 10).toFixed(1)}M`;
 }
 
+export function buildContractReleaseAction(args: { teamId: string; playerId: string; designation: "PRE_JUNE_1" | "POST_JUNE_1" }) {
+  return { type: "CUT_APPLY" as const, payload: args };
+}
+
 export default function PlayerContractScreen() {
   const { state, dispatch } = useGame();
   const { playerId = "" } = useParams();
@@ -77,7 +81,13 @@ export default function PlayerContractScreen() {
   };
 
   const handleRelease = () => {
-    dispatch({ type: "CUT_PLAYER", payload: { playerId } });
+    const teamId = String(state.acceptedOffer?.teamId ?? "");
+    if (!teamId) return;
+    dispatch(buildContractReleaseAction({
+      teamId,
+      playerId,
+      designation: postJune1 ? "POST_JUNE_1" : "PRE_JUNE_1",
+    }));
     navigate(-1);
   };
 

@@ -1290,7 +1290,7 @@ export type GameAction =
   | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
   | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
   | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
-  | { type: "CUT_APPLY"; payload: { playerId: string } }
+  | { type: "CUT_APPLY"; payload: { teamId: string; playerId: string; designation?: "PRE_JUNE_1" | "POST_JUNE_1" } }
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
@@ -7027,10 +7027,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "CUT_APPLY": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = String(action.payload.teamId ?? state.acceptedOffer?.teamId ?? "");
       if (!teamId) return state;
 
-      const playerId = action.payload.playerId;
+      const playerId = String(action.payload.playerId);
 
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) {
         return pushNews(state, "Cut blocked: tagged player. Remove tag first.");
@@ -7039,7 +7039,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return pushNews(state, "Cut blocked: extension offer pending. Clear offer first.");
       }
 
-      const designation = state.offseasonData.rosterAudit.cutDesignations[playerId] ?? "NONE";
+      const designation = action.payload.designation ?? state.offseasonData.rosterAudit.cutDesignations[playerId] ?? "NONE";
       const summary = getContractSummaryForPlayer(state, playerId);
       const deadTotal = Math.round((summary?.deadCapIfCutNow ?? 0) / 50_000) * 50_000;
 
@@ -7113,32 +7113,21 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "CUT_PLAYER": {
-      const pid = action.payload.playerId;
-      const o = state.playerContractOverrides[pid];
-
-      const playerTeamOverrides = { ...state.playerTeamOverrides, [pid]: "FREE_AGENT" };
-      const playerContractOverrides = { ...state.playerContractOverrides };
-
-      if (o) {
-        const years = Math.max(1, o.salaries.length);
-        const pro = Math.round((o.signingBonus / years) / 50_000) * 50_000;
-        const yearsElapsed = Math.max(0, Math.min(years, state.season - o.startSeason + 1));
-        const paid = pro * yearsElapsed;
-        const unamort = Math.max(0, o.signingBonus - paid);
-        delete playerContractOverrides[pid];
-        return applyFinances({
-          ...state,
-          playerTeamOverrides,
-          playerContractOverrides,
-          finances: { ...state.finances, baseCommitted: state.finances.baseCommitted + unamort },
-        });
+      if (import.meta.env.DEV) {
+        throw new Error("CUT_PLAYER is deprecated. Dispatch CUT_APPLY from contract workflows instead.");
       }
-
-      return { ...state, playerTeamOverrides };
+      return state;
     }
 
     case "TRADE_PLAYER":
-      return gameReducer(state, { type: "CUT_PLAYER", payload: action.payload });
+      return gameReducer(state, {
+        type: "CUT_APPLY",
+        payload: {
+          teamId: String(state.acceptedOffer?.teamId ?? ""),
+          playerId: String(action.payload.playerId),
+          designation: "PRE_JUNE_1",
+        },
+      });
 
     case "PREGENERATE_FUTURE_CLASS": {
       const classYear = action.payload.classYear;
