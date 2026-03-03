@@ -164,6 +164,7 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
     return { ok: false, code: "INVALID_WEEK", message: "Week value is invalid." };
   }
 
+  // Keep a single declaration here; duplicate declarations break esbuild in production builds.
   const teamId = getUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };
