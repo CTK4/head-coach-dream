@@ -83,4 +83,22 @@ describe("offseason regression coverage", () => {
     expect(total).toBeGreaterThan(0);
     expect(effective).toBeGreaterThan(0);
   });
+
+  it("free agency completion allows advance to pre-draft", () => {
+    const base = initState();
+    const inFreeAgency: GameState = {
+      ...base,
+      careerStage: "FREE_AGENCY",
+      offseason: {
+        ...base.offseason,
+        stepId: OffseasonStepEnum.FREE_AGENCY,
+        stepsComplete: { ...base.offseason.stepsComplete, FREE_AGENCY: true },
+      },
+    };
+
+    const advanced = gameReducer(inFreeAgency, { type: "OFFSEASON_ADVANCE_STEP" });
+
+    expect(advanced.offseason.stepId).toBe(OffseasonStepEnum.PRE_DRAFT);
+    expect(advanced.careerStage).toBe("PRE_DRAFT");
+  });
 });
