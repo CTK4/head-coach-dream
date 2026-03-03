@@ -101,7 +101,8 @@ function FaTransactions() {
 
 export function FreeAgencyRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
+  const canAccessFreeAgency = state.careerStage === "FREE_AGENCY" || state.offseason?.stepId === "FREE_AGENCY";
+  if (!canAccessFreeAgency) return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="top" replace />} />
@@ -115,7 +116,8 @@ export function FreeAgencyRoutes() {
 
 export function ReSignRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "RESIGN") return <Navigate to="/hub" replace />;
+  const canAccessReSign = state.careerStage === "RESIGN" || state.offseason?.stepId === "RESIGNING";
+  if (!canAccessReSign) return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="expiring" replace />} />
