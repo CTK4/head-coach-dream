@@ -1206,6 +1206,7 @@ export type GameAction =
   | { type: "ADVANCE_WEEK" }
   | { type: "PLAYOFFS_INIT_BRACKET" }
   | { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" }
+  | { type: "PLAYOFFS_TICK" }
   | { type: "PLAYOFFS_MARK_GAME_FINAL"; payload: { gameId: string; homeScore: number; awayScore: number; winnerTeamId: string } }
   | { type: "PLAYOFFS_ADVANCE_ROUND" }
   | { type: "PLAYOFFS_COMPLETE_SEASON" }
@@ -7846,6 +7847,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const simmed = simulateCpuPlayoffGamesForRound({ playoffs: state.playoffs, userTeamId, seed: Number(state.careerSeed ?? state.saveSeed ?? 1) ^ hashStr(`playoffs:${state.playoffs.round}`) });
       return { ...state, playoffs: { ...state.playoffs, completedGames: simmed.completedGames, pendingUserGame: simmed.pendingUserGame } };
     }
+    case "PLAYOFFS_TICK": {
+      if (!state.playoffs) return state;
+      let out = state;
+      const safetyLimit = 5;
+      for (let i = 0; i < safetyLimit; i += 1) {
+        out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+        if (!out.playoffs) return out;
+        if (out.playoffs.pendingUserGame) return out;
+        const games = getPlayoffRoundGames(out.playoffs);
+        const isRoundDone = games.length > 0 && games.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]));
+        if (!isRoundDone) return out;
+        if (out.playoffs.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+        out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
+      }
+      return out;
+    }
     case "PLAYOFFS_MARK_GAME_FINAL": {
       if (!state.playoffs) return state;
       return {
@@ -7872,6 +7889,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "PLAYOFFS_COMPLETE_SEASON": {
       if (!state.playoffs) return state;
+      const superBowl = state.playoffs.bracket.superBowl;
+      if (!superBowl || !state.playoffs.completedGames[superBowl.gameId]) return state;
       const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
       let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason, phase: "SEASON_COMPLETE" }, careerStage: "SEASON_AWARDS" };
       out = applySeasonMilestoneAwards(out);
@@ -8036,19 +8055,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
           game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
         }, { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: state.game.homeScore, awayScore: state.game.awayScore, winnerTeamId } });
-        out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-        const games = out.playoffs ? getPlayoffRoundGames(out.playoffs) : [];
-        const isRoundDone = out.playoffs ? games.every((g) => Boolean(out.playoffs?.completedGames[g.gameId])) : false;
-        if (isRoundDone) {
-          if (out.playoffs?.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
-          out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
-          out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-          const games2 = out.playoffs ? getPlayoffRoundGames(out.playoffs) : [];
-          if ((out.playoffs?.round === "SUPER_BOWL") && games2.length > 0 && games2.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]))) {
-            return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
-          }
-        }
-        return out;
+        return gameReducer(out, { type: "PLAYOFFS_TICK" });
       }
 
       const schedule = state.hub.schedule;
@@ -8240,7 +8247,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         if (week >= REGULAR_SEASON_WEEKS) {
           out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
           out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
-          out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+          out = gameReducer(out, { type: "PLAYOFFS_TICK" });
           out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
         }
       }
