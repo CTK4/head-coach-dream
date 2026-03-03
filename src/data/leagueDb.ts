@@ -418,7 +418,7 @@ export function setPersonnelTeamAndContract(args: {
   years: number;
   salary: number;
   notes?: string;
-}): { contractId: string } | null {
+}): { contractId: string; _contract: ContractRow } | null {
   const p = getPersonnelById(args.personId);
   if (!p) return null;
 
@@ -447,7 +447,7 @@ export function setPersonnelTeamAndContract(args: {
   p.status = args.status ?? "ACTIVE";
   p.contractId = contractId;
 
-  return { contractId };
+  return { contractId, _contract: c };
 }
 
 export function expireContract(contractId: string, endSeason?: number): boolean {
@@ -507,4 +507,56 @@ export function getTeamSummary(teamId: string) {
 
 export function getTeamFinancesRow(teamId: string, season: number): TeamFinancesRow | undefined {
   return teamFinances.find((row) => String(row.teamId) === String(teamId) && Number(row.season) === Number(season));
+}
+
+export type PersonnelOverride = {
+  teamId: string;
+  status: string;
+  contractId?: string;
+};
+
+/**
+ * Replays personnelTeamOverrides and staffContractsByPersonId from saved state
+ * onto the module-level DB objects.
+ *
+ * Called once in loadState() after the save is merged. This means all existing
+ * consumers of getPersonnelById / getPersonnelFreeAgents / getPersonnelContract
+ * continue to work correctly without changes, because the DB reflects the
+ * saved state after load just as it did when the save was written.
+ *
+ * Design: keep DB mutations for current session; persist deltas in state and
+ * replay on reload.
+ */
+export function replayPersonnelOverrides(
+  overrides: Record<string, PersonnelOverride>,
+  contractsByPersonId: Record<string, ContractRow>,
+): void {
+  // Replay personnel team/status/contractId overrides
+  for (const [personId, override] of Object.entries(overrides)) {
+    const p = personnelById.get(personId);
+    if (!p) continue;
+    p.teamId = override.teamId;
+    p.status = override.status;
+    if (override.contractId) p.contractId = override.contractId;
+    personnelById.set(personId, p);
+  }
+
+  // Replay staff contracts (generated at runtime; not present in JSON)
+  for (const [personId, contract] of Object.entries(contractsByPersonId)) {
+    const existing = contractsById.get(contract.contractId);
+    if (!existing) {
+      contracts.push(contract);
+      contractsById.set(contract.contractId, contract);
+    } else {
+      Object.assign(existing, contract);
+      contractsById.set(contract.contractId, existing);
+    }
+
+    // Re-link on the person row so getPersonnelContract works
+    const p = personnelById.get(personId);
+    if (p) {
+      p.contractId = contract.contractId;
+      personnelById.set(personId, p);
+    }
+  }
 }
