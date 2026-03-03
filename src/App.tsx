@@ -59,6 +59,7 @@ import FreePlaySetup from "@/pages/FreePlaySetup";
 import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES } from "@/routes/appRoutes";
+import { getUserTeamId } from "@/lib/userTeam";
 import PlayoffsPage from "@/pages/hub/Playoffs";
 import GameplanPage from "@/pages/hub/Gameplan";
 import PlayoffBracketPage from "@/pages/hub/PlayoffBracket";
@@ -110,8 +111,12 @@ function RootEntry() {
     sessionStorage.removeItem("show_main_menu");
     return <Landing />;
   }
-  if (state.phase === "HUB" && state.coach?.name && state.careerStage) return <Navigate to="/hub" replace />;
+  if (shouldRouteRootToHub(state)) return <Navigate to="/hub" replace />;
   return <Landing />;
+}
+
+export function shouldRouteRootToHub(state: Parameters<typeof getUserTeamId>[0]) {
+  return state.phase === "HUB" && !!state.coach?.name && !!state.careerStage && !!getUserTeamId(state);
 }
 
 function StoryRouteShell() {

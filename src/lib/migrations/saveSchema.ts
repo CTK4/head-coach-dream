@@ -1,4 +1,5 @@
 import type { GameState } from "@/context/GameContext";
+import { getUserTeamId } from "@/lib/userTeam";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 1;
 
@@ -86,6 +87,10 @@ function migrateV0toV1(state: Partial<GameState>): Partial<GameState> {
   if (!Number.isFinite(Number(next.careerSeed))) {
     (next as any).careerSeed = Number((next as any).saveSeed ?? 1);
   }
+  if (!(next as any).userTeamId) {
+    const userTeamId = getUserTeamId(next as GameState);
+    if (userTeamId) (next as any).userTeamId = userTeamId;
+  }
   return { ...next, schemaVersion: 1 };
 }
 
@@ -113,6 +118,11 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   // Ensure top-level metadata is always present.
   if (saveId) {
     (next as any).saveId = saveId;
+  }
+
+  if (!(next as any).userTeamId) {
+    const userTeamId = getUserTeamId(next as GameState);
+    if (userTeamId) (next as any).userTeamId = userTeamId;
   }
 
   (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
@@ -154,6 +164,7 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
     return { ok: false, code: "INVALID_WEEK", message: "Week value is invalid." };
   }
 
+  const teamId = getUserTeamId(state as GameState);
   const teamId = getUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };

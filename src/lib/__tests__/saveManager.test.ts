@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { exportSave, importSave, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
-import { LATEST_SAVE_SCHEMA_VERSION, validateCriticalSaveState } from "@/lib/migrations/saveSchema";
+import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 
 class LocalStorageMock {
   private store = new Map<string, string>();
@@ -185,6 +185,11 @@ describe("saveManager", () => {
       expect(loaded.state.schemaVersion).toBe(LATEST_SAVE_SCHEMA_VERSION);
       expect(loaded.state.saveId).toBe(saveId);
     }
+  });
+
+  it("backfills userTeamId during migration", () => {
+    const migrated = migrateSaveSchema({ ...baseState, userTeamId: undefined, acceptedOffer: { teamId: "MILWAUKEE_NORTHSHORE" } } as any, "slot-a");
+    expect(migrated.userTeamId).toBe("MILWAUKEE_NORTHSHORE");
   });
 
   it("detects corrupt JSON and restores from backup", () => {

@@ -139,6 +139,7 @@ import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
+import { getUserTeamId } from "@/lib/userTeam";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
@@ -1758,7 +1759,7 @@ function createInitialState(): GameState {
   let initialized = ensureAccolades(bootstrapAccolades(base));
   initialized = gameReducer(initialized, { type: "COACHING_BOOTSTRAP", payload: { seed: initialized.saveSeed } });
   initialized = gameReducer(initialized, { type: "DYNASTY_INIT", payload: { seed: initialized.saveSeed } });
-  const userTeamId = initialized.acceptedOffer?.teamId;
+  const userTeamId = getUserTeamId(initialized);
   if (userTeamId) initialized = gameReducer(initialized, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: initialized.season, teamId: userTeamId } });
   return initialized;
 }
@@ -9101,6 +9102,9 @@ function loadState(): GameState {
       (out as any).personnelTeamOverrides ?? {},
       (out as any).staffContractsByPersonId ?? {},
     );
+    const backfilledUserTeamId = getUserTeamId(out);
+    out = backfilledUserTeamId && !out.userTeamId ? { ...out, userTeamId: backfilledUserTeamId } : out;
+
     out = ensureAccolades(bootstrapAccolades(out));
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
@@ -9238,7 +9242,7 @@ useEffect(() => {
   }, [state]);
 
   const getCurrentTeamMatchup: GameContextType["getCurrentTeamMatchup"] = (gameType) => {
-    const teamId = state.acceptedOffer?.teamId;
+    const teamId = getUserTeamId(state);
     const schedule = state.hub.schedule;
     if (!teamId || !schedule) return null;
 
