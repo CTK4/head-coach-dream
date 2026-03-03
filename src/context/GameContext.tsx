@@ -8,6 +8,7 @@ import {
   getContractById,
   getPersonnelById,
   getPersonnelContract,
+  getPlayerById,
   getPersonnel,
   getPlayers,
   getPlayersByTeam,
@@ -4775,8 +4776,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         id: `TX_${Date.now()}`,
         type: "TRADE" as const,
         playerId: String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? "NONE"),
-        playerName: String(getPersonnelById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.fullName ?? "Multiple Players"),
-        playerPos: String(getPersonnelById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.pos ?? "UNK"),
+        // M1 FIX: was getPersonnelById (Personnel table) — should be getPlayerById (Players table)
+        playerName: String(getPlayerById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.fullName ?? "Multiple Players"),
+        playerPos: String(getPlayerById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.pos ?? "UNK"),
         fromTeamId: String(teamA),
         toTeamId: String(teamB),
         season: Number(state.season),
@@ -4825,7 +4827,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
       const next = { ...state, playerContractOverrides: nextOverrides } as GameState;
-      const name = getPersonnelById(String(playerId))?.fullName ?? "Player";
+      // M1 FIX: was getPersonnelById (Personnel/staff table) — players are in getPlayerById
+      const name = getPlayerById(String(playerId))?.fullName ?? "Player";
       return addNews(next, {
         title: "Extension Signed",
         body: `${name} agreed to a ${term}-year extension.`,
@@ -7501,14 +7504,38 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (active[pid]) {
         delete active[pid];
         cuts[pid] = true;
-        return { ...state, rosterMgmt: { active, cuts, finalized: false }, feedbackQueue: [createFeedbackEvent("ROSTER_CHANGE", { playerName: String(getPersonnelById(pid)?.fullName ?? "Player"), position: String(getPersonnelById(pid)?.pos ?? "UNK"), action: "waived" }), ...state.feedbackQueue].slice(0, 50) };
+        return {
+          ...state,
+          rosterMgmt: { active, cuts, finalized: false },
+          feedbackQueue: [
+            createFeedbackEvent("ROSTER_CHANGE", {
+              // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+              playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+              position: String(getPlayerById(pid)?.pos ?? "UNK"),
+              action: "waived",
+            }),
+            ...state.feedbackQueue,
+          ].slice(0, 50),
+        };
       }
 
       if (activeCount >= 53) return state;
 
       delete cuts[pid];
       active[pid] = true;
-      return { ...state, rosterMgmt: { active, cuts, finalized: false }, feedbackQueue: [createFeedbackEvent("ROSTER_CHANGE", { playerName: String(getPersonnelById(pid)?.fullName ?? "Player"), position: String(getPersonnelById(pid)?.pos ?? "UNK"), action: "added to roster" }), ...state.feedbackQueue].slice(0, 50) };
+      return {
+        ...state,
+        rosterMgmt: { active, cuts, finalized: false },
+        feedbackQueue: [
+          createFeedbackEvent("ROSTER_CHANGE", {
+            // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+            playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+            position: String(getPlayerById(pid)?.pos ?? "UNK"),
+            action: "added to roster",
+          }),
+          ...state.feedbackQueue,
+        ].slice(0, 50),
+      };
     }
     case "FINALIZE_CUTS": {
       const teamId = state.acceptedOffer?.teamId;
@@ -7915,6 +7942,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
         season: nextSeason,
         week: 0,
+        // M2 FIX: compact per-season ephemeral data on rollover.
+        // These arrays grow across seasons and are only needed during the current season.
+        weeklyResults: [],
+        gameHistory: [],
+        league: {
+          ...out.league,
+          results: [],
+        },
         hub: {
           ...out.hub,
           schedule: nextSchedule,
