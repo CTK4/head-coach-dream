@@ -13,6 +13,7 @@ export interface TeamStanding {
   pointsFor: number;
   pointsAgainst: number;
   divisionRecord: { w: number; l: number; t: number };
+  conferenceRecord: { w: number; l: number; t: number };
   streak: string;
   lastFive: Array<"W" | "L" | "T">;
 }
@@ -36,8 +37,19 @@ function divisionPct(s: TeamStanding) {
   return pct(s.divisionRecord.w, s.divisionRecord.l, s.divisionRecord.t);
 }
 
+function conferencePct(s: TeamStanding) {
+  return pct(s.conferenceRecord.w, s.conferenceRecord.l, s.conferenceRecord.t);
+}
+
 function sortConference(a: TeamStanding, b: TeamStanding) {
-  return b.winPct - a.winPct || divisionPct(b) - divisionPct(a) || (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) || b.pointsFor - a.pointsFor || a.teamName.localeCompare(b.teamName);
+  return (
+    b.winPct - a.winPct ||
+    divisionPct(b) - divisionPct(a) ||
+    conferencePct(b) - conferencePct(a) ||
+    (b.pointsFor - b.pointsAgainst) - (a.pointsFor - a.pointsAgainst) ||
+    b.pointsFor - a.pointsFor ||
+    a.teamName.localeCompare(b.teamName)
+  );
 }
 
 function currentStreak(lastFive: Array<"W" | "L" | "T">, res: "W" | "L" | "T"): string {
@@ -50,7 +62,17 @@ function currentStreak(lastFive: Array<"W" | "L" | "T">, res: "W" | "L" | "T"): 
 }
 
 export function computeStandings(allGameResults: AIGameResult[], previousStandings: TeamStanding[]): TeamStanding[] {
-  const byId = new Map(previousStandings.map((s) => [s.teamId, { ...s, divisionRecord: { ...s.divisionRecord }, lastFive: [...(s.lastFive ?? [])] }]));
+  const byId = new Map(
+    previousStandings.map((s) => [
+      s.teamId,
+      {
+        ...s,
+        divisionRecord: { ...s.divisionRecord },
+        conferenceRecord: { ...(s.conferenceRecord ?? { w: 0, l: 0, t: 0 }) },
+        lastFive: [...(s.lastFive ?? [])],
+      },
+    ]),
+  );
 
   for (const game of allGameResults) {
     const homeMeta = getTeamById(game.homeTeamId);
@@ -89,6 +111,19 @@ export function computeStandings(allGameResults: AIGameResult[], previousStandin
       } else {
         home.divisionRecord.t += 1;
         away.divisionRecord.t += 1;
+      }
+    }
+
+    if (homeMeta?.conferenceId && awayMeta?.conferenceId && homeMeta.conferenceId === awayMeta.conferenceId) {
+      if (homeRes === "W") {
+        home.conferenceRecord.w += 1;
+        away.conferenceRecord.l += 1;
+      } else if (homeRes === "L") {
+        home.conferenceRecord.l += 1;
+        away.conferenceRecord.w += 1;
+      } else {
+        home.conferenceRecord.t += 1;
+        away.conferenceRecord.t += 1;
       }
     }
 
@@ -132,4 +167,3 @@ export function computeStandings(allGameResults: AIGameResult[], previousStandin
   }
   return ordered;
 }
-

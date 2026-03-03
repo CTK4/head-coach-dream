@@ -401,6 +401,7 @@ export function initTeamStandings(teamIds: string[]): TeamStanding[] {
       pointsFor: 0,
       pointsAgainst: 0,
       divisionRecord: { w: 0, l: 0, t: 0 },
+      conferenceRecord: { w: 0, l: 0, t: 0 }, // M3 FIX: needed for conference tiebreaker
       streak: "-",
       lastFive: [],
     };
