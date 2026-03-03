@@ -2107,11 +2107,10 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
   const ovr: PlayerContractOverride = { startSeason: state.season, endSeason: state.season + years - 1, salaries, signingBonus };
   const cashY1 = (salaries[0] ?? 0) + signingBonus;
 
-  let next = applyFinances({
-    ...state,
-    playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: signingTeamId },
-    playerContractOverrides: { ...state.playerContractOverrides, [playerId]: ovr },
-    finances: { ...state.finances, cash: state.finances.cash - cashY1 },
+  let next = applyCanonicalTx(state, Tx.signFA(signingTeamId, playerId, ovr));
+  next = applyFinances({
+    ...next,
+    finances: { ...next.finances, cash: next.finances.cash - cashY1 },
   });
 
   const p: any = (getPlayers() as any[]).find((x: any) => String(x.playerId) === String(playerId));
@@ -2135,7 +2134,7 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
     title: "Offer Accepted",
     message: reason,
     variant: "success" as const,
-    ts: Date.now(),
+    ts: Number(next.season ?? 1) * 10_000 + Number(next.week ?? 0) * 100 + Number(next.transactionLedger?.counter ?? 0),
   };
   const withFeedback = {
     ...next,
