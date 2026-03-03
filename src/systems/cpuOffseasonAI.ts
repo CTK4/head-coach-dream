@@ -1,5 +1,6 @@
 import { SIM_SYSTEMS_CONFIG } from "@/config/simSystems";
 import type { RebuildStage, TeamProfile } from "@/models/teamProfile";
+import { getDevTraitResignMultiplier } from "@/lib/devTrait";
 
 export type CpuPlayer = {
   playerId: string;
@@ -25,13 +26,7 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function devMultiplier(devTrait?: string): number {
-  const t = String(devTrait ?? "").toUpperCase();
-  if (t.includes("SUPER") || t.includes("X")) return 1.18;
-  if (t.includes("STAR")) return 1.11;
-  if (t.includes("NORMAL")) return 1;
-  return 0.95;
-}
+// devMultiplier is provided by @/lib/devTrait (getDevTraitResignMultiplier).
 
 function ageProjection(age: number, years = 2): number {
   const delta = Math.max(0, age + years - SIM_SYSTEMS_CONFIG.offseason.resign.ageCurvePeak);
@@ -46,7 +41,7 @@ function teamStageMultiplier(stage: RebuildStage): number {
 
 export function estimatePlayerMarketValue(player: CpuPlayer): number {
   const base = Number(player.marketValue ?? (player.overall * 120_000));
-  return Math.round(base * ageProjection(player.age, 1) * devMultiplier(player.devTrait));
+  return Math.round(base * ageProjection(player.age, 1) * getDevTraitResignMultiplier(player.devTrait));
 }
 
 export function cpuResignPlayers(team: CpuTeamContext, expiringPlayers: CpuPlayer[]): { playerId: string; offerApy: number; years: number; tagged?: boolean }[] {
@@ -55,8 +50,8 @@ export function cpuResignPlayers(team: CpuTeamContext, expiringPlayers: CpuPlaye
   let capBudget = Math.max(0, team.capSpace - capReserve);
 
   const sorted = [...expiringPlayers].sort((a, b) => {
-    const aScore = a.overall * ageProjection(a.age, 2) * devMultiplier(a.devTrait);
-    const bScore = b.overall * ageProjection(b.age, 2) * devMultiplier(b.devTrait);
+    const aScore = a.overall * ageProjection(a.age, 2) * getDevTraitResignMultiplier(a.devTrait);
+    const bScore = b.overall * ageProjection(b.age, 2) * getDevTraitResignMultiplier(b.devTrait);
     return bScore - aScore;
   });
 
@@ -68,7 +63,7 @@ export function cpuResignPlayers(team: CpuTeamContext, expiringPlayers: CpuPlaye
     const needBoost = 1 + (team.profile.positionalNeeds[String(player.pos).toUpperCase()] ?? 0) * 0.25;
     const ageValue = ageProjection(player.age, 3);
     const stageMult = teamStageMultiplier(team.profile.rebuildStage);
-    const valueScore = player.overall * ageValue * devMultiplier(player.devTrait) * needBoost * stageMult;
+    const valueScore = player.overall * ageValue * getDevTraitResignMultiplier(player.devTrait) * needBoost * stageMult;
 
     if (valueScore < 62) continue;
     if (annual > capBudget) continue;
@@ -117,7 +112,7 @@ export function buildCpuDraftBoard(team: CpuTeamContext, prospects: CpuPlayer[])
       const need = team.profile.positionalNeeds[String(p.pos).toUpperCase()] ?? 0;
       const immediate = p.overall / 100;
       const youth = clamp01((27 - p.age) / 10);
-      const dev = devMultiplier(p.devTrait) - 1;
+      const dev = getDevTraitResignMultiplier(p.devTrait) - 1;
       const contenderBias = immediate * SIM_SYSTEMS_CONFIG.offseason.draft.contenderImmediateWeight;
       const rebuildBias = youth * SIM_SYSTEMS_CONFIG.offseason.draft.rebuildAgeWeight + dev * SIM_SYSTEMS_CONFIG.offseason.draft.rebuildDevWeight;
       const stageBias = team.profile.rebuildStage === "contender" ? contenderBias : team.profile.rebuildStage === "rebuild" ? rebuildBias : (contenderBias + rebuildBias) * 0.5;

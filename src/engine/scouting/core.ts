@@ -1,3 +1,4 @@
+import { QB_TUNING } from "@/config/qbTuning";
 import type {
   GMScoutingTraits,
   IntelTrack,
@@ -34,8 +35,9 @@ export function initScoutProfile(args: {
   seed: (k: string) => number;
   gm: GMScoutingTraits;
   windowKey: string;
+  divergenceWidth?: number;
 }): ProspectScoutProfile {
-  const { prospectId, trueOVR, pos, seed, gm, windowKey } = args;
+  const { prospectId, trueOVR, pos, seed, gm, windowKey, divergenceWidth } = args;
 
   const sigma = clamp(9 - 0.05 * gm.film_process - 0.03 * gm.analytics_orientation, 2.5, 9);
   const u1 = Math.max(1e-9, seed(`init:ovr:${prospectId}:u1`));
@@ -43,7 +45,7 @@ export function initScoutProfile(args: {
   const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 
   const center = clamp(Math.round(trueOVR + z * sigma), 40, 99);
-  const width = clamp(baseWidthByPos(pos), 10, 22);
+  const width = clamp(divergenceWidth ?? baseWidthByPos(pos), 10, 24);
   const low = clamp(center - Math.floor(width / 2), 40, 99);
   const high = clamp(center + Math.ceil(width / 2), 40, 99);
 
@@ -177,4 +179,18 @@ export function revealCharacterIfUnlocked(args: {
     const ok = seed(`char:miss:${windowKey}:${profile.prospectId}`) >= miss;
     if (ok) profile.revealed.characterTier = truth.trueCharacter.tier;
   }
+}
+
+
+export function getQbScoutingDivergenceByArchetype(tag: "POCKET_PURE"|"DUAL_THREAT"|"IMPROVISER"|string) {
+  if (tag === "POCKET_PURE") return QB_TUNING.DIVERGENCE_POCKET;
+  if (tag === "DUAL_THREAT") return QB_TUNING.DIVERGENCE_DUAL_THREAT;
+  if (tag === "IMPROVISER") return QB_TUNING.DIVERGENCE_IMPROVISER;
+  return baseWidthByPos("QB");
+}
+
+export function shouldDelayQbReveal(attr: string, revealPct: number): boolean {
+  if (attr === "scrambleDiscipline") return revealPct < QB_TUNING.REVEAL_THRESHOLD_SCRAMBLE_DISCIPLINE;
+  if (attr === "rpoRating") return revealPct < QB_TUNING.REVEAL_THRESHOLD_RPO_RATING;
+  return false;
 }

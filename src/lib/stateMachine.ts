@@ -50,38 +50,50 @@ function upper(v: unknown): string {
 
 export class StateMachine {
   static getPhaseKey(state: any): PhaseKey {
+    // Read from a canonical `phase` field first, then fall back to legacy
+    // property names from older save shapes. Legacy shapes are migrated to
+    // a single `phase` field by migrateSaveSchema at load time; these
+    // fallbacks exist only as a safety net during that migration window.
     const raw = state?.phase ?? state?.careerStage ?? state?.seasonPhase ?? state?.hubPhase ?? "UNKNOWN";
     const p = upper(raw);
 
     if (p.includes("RETENTION") || p.includes("RESIGN") || p.includes("PHASE_2_RETENTION")) return PhaseKeyEnum.PHASE_2_RETENTION;
-    if (p.includes("COMBINE")) return PhaseKeyEnum.PHASE_3_COMBINE;
-    if (p.includes("FREE_AGENCY") || p.includes("TAMPERING")) return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
-    if (p.includes("DRAFT")) return PhaseKeyEnum.DRAFT;
-    if (p.includes("REGULAR") || p.includes("WEEK")) return PhaseKeyEnum.REGULAR_SEASON_WEEK;
+    if (p.includes("COMBINE"))                                                               return PhaseKeyEnum.PHASE_3_COMBINE;
+    if (p.includes("FREE_AGENCY") || p.includes("TAMPERING"))                               return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
+    if (p.includes("DRAFT"))                                                                 return PhaseKeyEnum.DRAFT;
+    if (p.includes("REGULAR") || p.includes("WEEK"))                                        return PhaseKeyEnum.REGULAR_SEASON_WEEK;
     return PhaseKeyEnum.UNKNOWN;
   }
 
+  /**
+   * Returns the canonical offseason step sequence for the given config.
+   * When `enableTamperingStep` is true, TAMPERING is spliced between COMBINE
+   * and FREE_AGENCY so that `nextOffseasonStepId` can resolve it from the
+   * sequence directly — no special-case guards needed at call sites.
+   */
   static getOffseasonSequence(config: StateMachineConfig): OffseasonStepId[] {
-    const base: OffseasonStepId[] = [
+    const steps: OffseasonStepId[] = [
       OffseasonStepEnum.RESIGNING,
       OffseasonStepEnum.COMBINE,
+    ];
+
+    if (config.enableTamperingStep) {
+      steps.push(OffseasonStepEnum.TAMPERING);
+    }
+
+    steps.push(
       OffseasonStepEnum.FREE_AGENCY,
       OffseasonStepEnum.PRE_DRAFT,
       OffseasonStepEnum.DRAFT,
       OffseasonStepEnum.TRAINING_CAMP,
       OffseasonStepEnum.PRESEASON,
       OffseasonStepEnum.CUT_DOWNS,
-    ];
-    return base;
+    );
+
+    return steps;
   }
 
   static nextOffseasonStepId(current: OffseasonStepId, config: StateMachineConfig): OffseasonStepId | null {
-    if (!config.enableTamperingStep && current === "TAMPERING") {
-      return OffseasonStepEnum.FREE_AGENCY;
-    }
-    if (current === OffseasonStepEnum.COMBINE) {
-      return OffseasonStepEnum.FREE_AGENCY;
-    }
     const steps = StateMachine.getOffseasonSequence(config);
     const idx = steps.findIndex((s) => s === current);
     if (idx < 0) return steps[0] ?? null;

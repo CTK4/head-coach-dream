@@ -49,7 +49,19 @@ export function updateAwardsRace(state: AwardsState, weekly: AwardsCandidateStat
 
   for (const row of weekly) {
     const mvp = SIM_SYSTEMS_CONFIG.awards.mvp;
-    const mvpScore = (row.passYards ?? 0) * mvp.passYards + (row.passTds ?? 0) * mvp.passTds + (row.ints ?? 0) * mvp.ints + row.teamWins * mvp.teamWins;
+
+    // Pocket QB path: passYards is the primary signal.
+    // Dual-threat / non-QB path: fall back to totalYards + totalTds so that
+    // a Lamar Jackson or dominant RB season can produce MVP-calibre scores
+    // even without elite passing volume.
+    const mvpScore = (row.passYards != null && row.passYards > 0)
+      ? (row.passYards * mvp.passYards
+          + (row.passTds ?? 0) * mvp.passTds
+          + (row.ints ?? 0) * mvp.ints
+          + row.teamWins * mvp.teamWins)
+      : ((row.totalYards ?? 0) * mvp.rushPassYards
+          + (row.totalTds ?? 0) * mvp.rushPassTds
+          + row.teamWins * mvp.teamWins);
     bump(next, "MVP", row.id, mvpScore);
 
     const opoy = SIM_SYSTEMS_CONFIG.awards.opoy;

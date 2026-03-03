@@ -14,21 +14,26 @@ export function normalizeProspectPosition(rawPos: string, taxonomy: ProspectPosi
 
   const hasAny = (...values: string[]) => values.some((v) => tokenSet.has(v));
 
-  let normalized = tokens[0] ?? "ATH";
+  // normalized is set by the first matching branch below.
+  // The fallback "ATH" is applied AFTER all branches so that any
+  // unrecognised token (e.g. "PUNTER", "LONG", garbage input) maps to ATH
+  // rather than blindly returning the raw token.
+  let normalized: string;
 
-  if (hasAny("HB", "FB", "RB")) normalized = "RB";
-  else if (hasAny("WR")) normalized = "WR";
-  else if (hasAny("TE")) normalized = "TE";
-  else if (hasAny("QB")) normalized = "QB";
-  else if (hasAny("C", "OC", "OG", "G", "IOL", "INTERIOROL")) normalized = "IOL";
-  else if (hasAny("OT", "T", "LT", "RT", "OLT")) normalized = "OT";
-  else if (hasAny("EDGE", "DE", "RUSH", "ER", "OLBEDGE", "ED")) normalized = "EDGE";
-  else if (hasAny("DT", "NT", "IDL", "DI", "INTERIORDL", "IDLINEMAN")) normalized = "DT";
-  else if (hasAny("LB", "MLB", "ILB", "OLB")) normalized = "LB";
-  else if (hasAny("CB", "DB")) normalized = "CB";
-  else if (hasAny("FS", "SS", "SAFETY", "S")) normalized = "S";
-  else if (hasAny("K")) normalized = "K";
-  else if (hasAny("P")) normalized = "P";
+  if (hasAny("HB", "FB", "RB"))                                       normalized = "RB";
+  else if (hasAny("WR"))                                               normalized = "WR";
+  else if (hasAny("TE"))                                               normalized = "TE";
+  else if (hasAny("QB"))                                               normalized = "QB";
+  else if (hasAny("C", "OC", "OG", "G", "IOL", "INTERIOROL"))         normalized = "IOL";
+  else if (hasAny("OT", "T", "LT", "RT", "OLT"))                      normalized = "OT";
+  else if (hasAny("EDGE", "DE", "RUSH", "ER", "OLBEDGE", "ED"))       normalized = "EDGE";
+  else if (hasAny("DT", "NT", "IDL", "DI", "INTERIORDL", "IDLINEMAN"))normalized = "DT";
+  else if (hasAny("LB", "MLB", "ILB", "OLB"))                         normalized = "LB";
+  else if (hasAny("CB", "DB"))                                         normalized = "CB";
+  else if (hasAny("FS", "SS", "SAFETY", "S"))                         normalized = "S";
+  else if (hasAny("K"))                                                normalized = "K";
+  else if (hasAny("P"))                                                normalized = "P";
+  else                                                                 normalized = "ATH";
 
   if (taxonomy === "DRAFT" && (normalized === "OT" || normalized === "IOL")) {
     return "OL";

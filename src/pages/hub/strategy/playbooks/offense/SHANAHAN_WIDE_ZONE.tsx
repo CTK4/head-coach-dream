@@ -1,5 +1,5 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
+import ShanahanWideZonePlaybook from "../../ShanahanWideZonePlaybook";
 
 export default function SHANAHAN_WIDE_ZONE() {
-  return <OffensePlaybookTemplate schemeId="SHANAHAN_WIDE_ZONE" />;
+  return <ShanahanWideZonePlaybook />;
 }

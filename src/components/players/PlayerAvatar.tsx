@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { getInitials } from "@/lib/r2Assets";
 import { useEffect, useState } from "react";
 
 type PlayerAvatarProps = {
@@ -27,6 +26,18 @@ function posTint(pos?: string): string {
     return "bg-emerald-500/20 text-emerald-100";
   if (["K", "P"].includes(key)) return "bg-violet-500/20 text-violet-100";
   return "bg-slate-500/20 text-slate-100";
+}
+
+function getInitials(name?: string, fallback = "?"): string {
+  const normalized = String(name ?? "").trim();
+  if (!normalized) return fallback;
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (!parts.length) return fallback;
+  const picks = parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return picks || fallback;
 }
 
 export function PlayerAvatar({ playerId, name, pos, size = "md", className }: PlayerAvatarProps) {

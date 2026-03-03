@@ -326,12 +326,13 @@ export function simulateWeek(params: {
     };
   }));
 
-  const awardsSource = statLeaders.passingYards.map((qb) => ({
+  const teamWinsMap = new Map(updatedStandings.map((s) => [s.teamId, Number(s.wins ?? 0)]));
+  const qbCandidates = statLeaders.passingYards.map((qb) => ({
     id: `${qb.teamId}:${qb.playerName}`,
     name: qb.playerName,
     teamId: qb.teamId,
     position: "QB",
-    teamWins: Number(updatedStandings.find((s) => s.teamId === qb.teamId)?.wins ?? 0),
+    teamWins: teamWinsMap.get(qb.teamId) ?? 0,
     passYards: qb.value,
     passTds: Math.round(qb.value / 120),
     ints: Math.round(qb.value / 420),
@@ -340,6 +341,38 @@ export function simulateWeek(params: {
     explosivePlays: Math.round(qb.value / 90),
     snaps: week * 60,
   }));
+  const rbCandidates = statLeaders.rushingYards.map((rb) => ({
+    id: `${rb.teamId}:${rb.playerName}:RB`,
+    name: rb.playerName,
+    teamId: rb.teamId,
+    position: "RB",
+    teamWins: teamWinsMap.get(rb.teamId) ?? 0,
+    totalYards: rb.value,
+    totalTds: Math.round(rb.value / 95),
+    explosivePlays: Math.round(rb.value / 65),
+    snaps: week * 45,
+  }));
+  const wrCandidates = statLeaders.receivingYards.map((wr) => ({
+    id: `${wr.teamId}:${wr.playerName}:WR`,
+    name: wr.playerName,
+    teamId: wr.teamId,
+    position: "WR",
+    teamWins: teamWinsMap.get(wr.teamId) ?? 0,
+    totalYards: wr.value,
+    totalTds: Math.round(wr.value / 110),
+    explosivePlays: Math.round(wr.value / 55),
+    snaps: week * 48,
+  }));
+  const edgeCandidates = statLeaders.sacks.map((edge) => ({
+    id: `${edge.teamId}:${edge.playerName}:EDGE`,
+    name: edge.playerName,
+    teamId: edge.teamId,
+    position: "EDGE",
+    teamWins: teamWinsMap.get(edge.teamId) ?? 0,
+    sacks: edge.value,
+    snaps: week * 50,
+  }));
+  const awardsSource = [...qbCandidates, ...rbCandidates, ...wrCandidates, ...edgeCandidates];
   const awardsRace = updateAwardsRace(priorWeekResults.at(-1)?.awardsRace ?? createAwardsState(), awardsSource);
   const awardsWinners = week >= REGULAR_SEASON_WEEKS ? finalizeAwards(awardsRace) : undefined;
   const userGame = allGameResults.find((g) => (g.homeTeamId === userHomeTeamId && g.awayTeamId === userAwayTeamId) || (g.homeTeamId === userAwayTeamId && g.awayTeamId === userHomeTeamId));
@@ -368,6 +401,7 @@ export function initTeamStandings(teamIds: string[]): TeamStanding[] {
       pointsFor: 0,
       pointsAgainst: 0,
       divisionRecord: { w: 0, l: 0, t: 0 },
+      conferenceRecord: { w: 0, l: 0, t: 0 }, // M3 FIX: needed for conference tiebreaker
       streak: "-",
       lastFive: [],
     };
