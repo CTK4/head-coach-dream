@@ -8,8 +8,31 @@ import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
+
+function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
+  const { state, dispatch } = useGame();
+  const offseason = state.offseason;
+  const isOffseasonActive = state.phase === "HUB" && (offseason?.stepId === stepId || Object.prototype.hasOwnProperty.call(offseason?.stepsComplete ?? {}, stepId));
+  if (!isOffseasonActive) return null;
+
+  const isStepComplete = Boolean(offseason?.stepsComplete?.[stepId]);
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/90 backdrop-blur p-3">
+      <div className="mx-auto flex max-w-5xl items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId } })}>
+          {completeLabel}
+        </Button>
+        <Button onClick={() => dispatch({ type: "OFFSEASON_ADVANCE_STEP" })} disabled={!isStepComplete}>
+          Next →
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function PhaseLocked({ title, detail }: { title: string; detail: string }) {
   return (
@@ -103,13 +126,16 @@ export function FreeAgencyRoutes() {
   const { state } = useGame();
   if (state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
   return (
-    <Routes>
-      <Route index element={<Navigate to="top" replace />} />
-      <Route path="top" element={<FreeAgencyPage />} />
-      <Route path="targets" element={<FaTargets />} />
-      <Route path="transactions" element={<FaTransactions />} />
-      <Route path="player/:playerId" element={<FreeAgencyPage />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route index element={<Navigate to="top" replace />} />
+        <Route path="top" element={<FreeAgencyPage />} />
+        <Route path="targets" element={<FaTargets />} />
+        <Route path="transactions" element={<FaTransactions />} />
+        <Route path="player/:playerId" element={<FreeAgencyPage />} />
+      </Routes>
+      <StepFooter stepId="FREE_AGENCY" completeLabel="Complete Free Agency Step" />
+    </>
   );
 }
 
@@ -117,11 +143,14 @@ export function ReSignRoutes() {
   const { state } = useGame();
   if (state.careerStage !== "RESIGN") return <Navigate to="/hub" replace />;
   return (
-    <Routes>
-      <Route index element={<Navigate to="expiring" replace />} />
-      <Route path="expiring" element={<ResignPlayers />} />
-      <Route path="player/:playerId" element={<ResignPlayers />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route index element={<Navigate to="expiring" replace />} />
+        <Route path="expiring" element={<ResignPlayers />} />
+        <Route path="player/:playerId" element={<ResignPlayers />} />
+      </Routes>
+      <StepFooter stepId="RESIGNING" completeLabel="Complete Re-Signing Step" />
+    </>
   );
 }
 
