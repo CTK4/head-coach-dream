@@ -21,6 +21,7 @@ export default function Draft() {
 
   const sim = state.draft;
   const scouting = state.offseasonData.scouting;
+  const draftStepComplete = state.offseason.stepsComplete.DRAFT === true;
   const currentSlot = sim.slots[sim.cursor];
   const onClock = !!currentSlot && currentSlot.teamId === sim.userTeamId;
 
@@ -251,6 +252,27 @@ export default function Draft() {
           </div>
         </section>
       )}
+
+      <section className="sticky bottom-0 rounded border bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            className="min-h-11 rounded border px-3 py-2 text-sm font-medium disabled:opacity-50"
+            disabled={!sim.complete}
+            onClick={() => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "DRAFT" } })}
+          >
+            Complete Step
+          </button>
+          <button
+            type="button"
+            className="min-h-11 rounded border bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            disabled={!draftStepComplete}
+            onClick={() => dispatch({ type: "OFFSEASON_ADVANCE_STEP" })}
+          >
+            Next →
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -83,4 +83,22 @@ describe("offseason regression coverage", () => {
     expect(total).toBeGreaterThan(0);
     expect(effective).toBeGreaterThan(0);
   });
+
+  it("advances from DRAFT to TRAINING_CAMP when DRAFT step is complete", () => {
+    const base = initState();
+    const inDraft: GameState = {
+      ...base,
+      offseason: {
+        ...base.offseason,
+        stepId: OffseasonStepEnum.DRAFT,
+        stepsComplete: { ...base.offseason.stepsComplete, DRAFT: true },
+      },
+      careerStage: "DRAFT",
+    };
+
+    const next = gameReducer(inDraft, { type: "OFFSEASON_ADVANCE_STEP" });
+
+    expect(next.offseason.stepId).toBe(OffseasonStepEnum.TRAINING_CAMP);
+  });
+
 });
