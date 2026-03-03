@@ -142,6 +142,7 @@ import { buildMigrationEvents, type TransactionState } from "@/engine/transactio
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
+import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import { offseasonReducer } from "@/context/offseasonReducer";
