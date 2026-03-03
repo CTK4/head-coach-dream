@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateSave, type GameState } from "@/context/GameContext";
+import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
 import { doesProspectExist } from "@/data/draftClass";
 
 describe("draft flow sanity", () => {
@@ -11,4 +11,14 @@ describe("draft flow sanity", () => {
       expect(doesProspectExist(id)).toBe(true);
     }
   });
+
+  it("marks offseason DRAFT step complete when draft is finalized as complete", () => {
+    const base = migrateSave({}) as GameState;
+    const completeDraft = { ...base, draft: { ...base.draft, complete: true } } as GameState;
+
+    const next = gameReducer(completeDraft, { type: "DRAFT_FINALIZE" });
+
+    expect(next.offseason.stepsComplete.DRAFT).toBe(true);
+  });
+
 });

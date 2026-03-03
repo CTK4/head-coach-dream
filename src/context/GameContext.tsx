@@ -3616,6 +3616,10 @@ function finalizeDraftIfComplete(state: GameState): GameState {
   const nextYear = state.season + 1;
   return {
     ...state,
+    offseason: {
+      ...state.offseason,
+      stepsComplete: { ...state.offseason.stepsComplete, DRAFT: true },
+    },
     draft: { ...state.draft, completed: true, prospectPool: [] },
     upcomingDraftClass: generateDraftClass({ year: nextYear, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
   };
