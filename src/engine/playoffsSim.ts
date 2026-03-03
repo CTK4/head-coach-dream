@@ -44,7 +44,7 @@ export function buildPlayoffBracket(params: { league: LeagueState; season: numbe
     const seeds = seeded.filter((id) => getTeamById(id)?.conferenceId === confId).slice(0, 7);
     const gamesByRound: PlayoffsBracket["conferences"][string]["gamesByRound"] = {};
 
-    if (seeds.length >= 7) {
+    if (seeds.length === 7) {
       gamesByRound.WILD_CARD = [mkGame("WILD_CARD", seeds[1], seeds[6], confId, 1), mkGame("WILD_CARD", seeds[2], seeds[5], confId, 2), mkGame("WILD_CARD", seeds[3], seeds[4], confId, 3)];
     } else if (seeds.length >= 4) {
       gamesByRound.DIVISIONAL = [mkGame("DIVISIONAL", seeds[0], seeds[3], confId, 1), mkGame("DIVISIONAL", seeds[1], seeds[2], confId, 2)];
