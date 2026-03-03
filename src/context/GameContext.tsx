@@ -133,6 +133,7 @@ import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generate
 import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
+import { getUserTeamId } from "@/lib/migrations/saveSchema";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
@@ -143,6 +144,7 @@ import { buildMigrationEvents, type TransactionState } from "@/engine/transactio
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
+import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import { offseasonReducer } from "@/context/offseasonReducer";
@@ -9169,6 +9171,9 @@ useEffect(() => {
   // Suppress saves entirely during active play-by-play.
   if (isGameInProgress) return;
 
+  const teamId = getUserTeamId(state);
+  if (!teamId) return;
+
   saveTimerRef.current = setTimeout(() => {
     saveTimerRef.current = null;
     try {
@@ -9204,6 +9209,7 @@ useEffect(() => {
       saveTimerRef.current = null;
     }
     if (isGameInProgress) return; // mid-drive state is not resumable
+    if (!getUserTeamId(state)) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       syncCurrentSave(state, getActiveSaveId() ?? undefined);

@@ -165,6 +165,7 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
   const teamId = getUserTeamId(state as GameState);
+  const teamId = getUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };
   }
@@ -174,4 +175,9 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
   return { ok: true };
+}
+
+export function getUserTeamId(state: Partial<GameState>): string | null {
+  const teamId = (state as any).acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
+  return typeof teamId === "string" && teamId.trim().length > 0 ? teamId : null;
 }
