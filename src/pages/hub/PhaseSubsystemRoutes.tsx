@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import FreeAgencyPage from "./FreeAgency";
 import ResignPlayers from "./ResignPlayers";
@@ -14,19 +14,26 @@ import { getPlayers } from "@/data/leagueDb";
 
 function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
   const { state, dispatch } = useGame();
-  const offseason = state.offseason;
-  const isOffseasonActive = state.phase === "HUB" && (offseason?.stepId === stepId || Object.prototype.hasOwnProperty.call(offseason?.stepsComplete ?? {}, stepId));
+  const navigate = useNavigate();
+  const isOffseasonActive = state.phase === "HUB" && Boolean(state.offseason) && state.offseason.stepId === stepId;
   if (!isOffseasonActive) return null;
 
-  const isStepComplete = Boolean(offseason?.stepsComplete?.[stepId]);
+  const isStepComplete = Boolean(state.offseason?.stepsComplete?.[stepId]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/90 backdrop-blur p-3">
       <div className="mx-auto flex max-w-5xl items-center justify-end gap-2">
-        <Button variant="outline" onClick={() => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId } })}>
+        <Button variant="outline" onClick={() => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId } })} disabled={isStepComplete}>
           {completeLabel}
         </Button>
-        <Button onClick={() => dispatch({ type: "OFFSEASON_ADVANCE_STEP" })} disabled={!isStepComplete}>
+        <Button
+          onClick={() => {
+            if (!state.offseason?.stepsComplete?.[stepId]) return;
+            dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
+            navigate("/offseason", { replace: true });
+          }}
+          disabled={!isStepComplete}
+        >
           Next →
         </Button>
       </div>
