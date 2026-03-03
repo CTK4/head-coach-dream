@@ -83,7 +83,7 @@ export function getPlayoffRoundGames(playoffs: PlayoffsState): PlayoffGame[] {
 export function simulateCpuPlayoffGamesForRound(params: { playoffs: PlayoffsState; userTeamId?: string; seed: number }) {
   const games = getPlayoffRoundGames(params.playoffs);
   const completedGames = { ...params.playoffs.completedGames };
-  let pendingUserGame = params.playoffs.pendingUserGame;
+  let pendingUserGame = undefined;
   for (const game of games) {
     if (completedGames[game.gameId]) continue;
     if (params.userTeamId && (game.homeTeamId === params.userTeamId || game.awayTeamId === params.userTeamId)) {
@@ -152,7 +152,10 @@ export function buildPostseasonResults(params: { league: LeagueState; playoffs: 
   }
 
   const sb = params.playoffs.bracket.superBowl;
-  const championTeamId = sb ? params.playoffs.completedGames[sb.gameId]?.winnerTeamId : Object.values(resultsByTeamId).find((r) => r.madePlayoffs)?.teamId ?? allStandingsTeams[0];
+  const championTeamId = sb ? params.playoffs.completedGames[sb.gameId]?.winnerTeamId : undefined;
+  if (!championTeamId) {
+    throw new Error("Cannot build postseason results until the Super Bowl is finalized.");
+  }
   if (championTeamId) resultsByTeamId[championTeamId] = { teamId: championTeamId, madePlayoffs: true, isChampion: true };
   return { postseason: { season: params.playoffs.season, resultsByTeamId }, championTeamId };
 }
