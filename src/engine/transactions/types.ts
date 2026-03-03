@@ -1,6 +1,7 @@
 export type TxKind =
   | "RESIGN"
   | "FRANCHISE_TAG"
+  | "FRANCHISE_TAG_REMOVE"
   | "CUT"
   | "RELEASE"
   | "SIGN_FA"
