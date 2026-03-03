@@ -133,6 +133,11 @@ import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
+import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
+import { Tx } from "@/engine/transactions/transactionAPI";
+import { validatePostTx } from "@/engine/transactions/validatePostTx";
+import type { TransactionEvent } from "@/engine/transactions/types";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -814,6 +819,8 @@ export type FreeAgencyUI =
 export type FreeAgencyState = {
   initStatus: "idle" | "loading" | "ready" | "error";
   isResolving: boolean;
+  progress?: { done: number; total: number };
+  lastResolveWeekKey?: string;
   ui: FreeAgencyUI;
   offersByPlayerId: Record<string, FreeAgencyOffer[]>;
   signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
@@ -1068,6 +1075,7 @@ export type GameState = {
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
   transactions: Transaction[];
+  transactionLedger?: TransactionState;
   userTeamId?: string;
   teamId?: string;
   playerMorale?: Record<string, number>;
@@ -1572,6 +1580,8 @@ function createInitialState(): GameState {
     freeAgency: {
       initStatus: "idle",
       isResolving: false,
+      progress: undefined,
+      lastResolveWeekKey: undefined,
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -1704,6 +1714,7 @@ function createInitialState(): GameState {
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     transactions: [],
+    transactionLedger: { events: [], counter: 0, migrationComplete: false },
     feedbackQueue: [],
     feedbackHistory: [],
     pendingInjuryAlert: undefined,
@@ -3033,33 +3044,31 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
 }
 
 function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: number): GameState {
-  const playerTeamOverrides = { ...state.playerTeamOverrides };
-  const playerContractOverrides = { ...state.playerContractOverrides };
+  let next = state;
 
   for (const p of getPlayers()) {
     const playerId = String((p as any).playerId ?? "");
     if (!playerId) continue;
 
-    const currentTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    const currentTeamId = String(next.playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
     if (!currentTeamId || currentTeamId === "FREE_AGENT") continue;
 
-    const tagged = state.franchiseTags[playerId];
+    const tagged = next.franchiseTags[playerId];
     if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
 
-    const override = playerContractOverrides[playerId];
+    const override = next.playerContractOverrides[playerId];
     const overrideCoversNextSeason = !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
     if (overrideCoversNextSeason) continue;
 
-    const summary = getContractSummaryForPlayer(state, playerId);
+    const summary = getContractSummaryForPlayer(next, playerId);
     if (!summary) continue;
 
     if (Number(summary.endSeason) < nextSeason) {
-      playerTeamOverrides[playerId] = "FREE_AGENT";
-      if (override && !overrideCoversNextSeason) delete playerContractOverrides[playerId];
+      next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
     }
   }
 
-  return { ...state, playerTeamOverrides, playerContractOverrides };
+  return next;
 }
 
 function seasonRollover(state: GameState): GameState {
@@ -3155,6 +3164,8 @@ function seasonRollover(state: GameState): GameState {
     freeAgency: {
       initStatus: "idle",
       isResolving: false,
+      progress: undefined,
+      lastResolveWeekKey: undefined,
       ui: { mode: "NONE" },
       offersByPlayerId: {},
       signingsByPlayerId: {},
@@ -3519,12 +3530,11 @@ function applyDraftSelectionToState(state: GameState, selection: import("@/engin
     total: contract.totalValue,
   };
 
-  return {
+  const base = {
     ...state,
     nextPlayerId: state.nextPlayerId + 1,
     rookies: [...state.rookies, rookie],
     rookieContracts: { ...state.rookieContracts, [playerId]: legacyContract },
-    playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: selection.teamId },
     draft: {
       ...state.draft,
       withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [selection.prospectId]: true },
@@ -3533,6 +3543,7 @@ function applyDraftSelectionToState(state: GameState, selection: import("@/engin
       appliedSelectionCount: state.draft.appliedSelectionCount + 1,
     },
   };
+  return applyCanonicalTx(base, Tx.rookieSign(selection.teamId, playerId, { startSeason: state.season, endSeason: state.season + 3, salaries: [...contract.capHitsByYear], signingBonus: 0 }));
 }
 
 function finalizeDraftIfComplete(state: GameState): GameState {
@@ -3725,7 +3736,6 @@ function applyLeagueDraftPick(state: GameState, teamId: string, prospectId: stri
     ...state,
     rookies: [...state.rookies, rookie],
     rookieContracts: { ...state.rookieContracts, [rookie.playerId]: contract },
-    playerTeamOverrides: { ...state.playerTeamOverrides, [rookie.playerId]: teamId },
     draft: {
       ...state.draft,
       leaguePicks: [...state.draft.leaguePicks, pick],
@@ -3733,7 +3743,8 @@ function applyLeagueDraftPick(state: GameState, teamId: string, prospectId: stri
     },
   };
 
-  const drafted = noteR1QBDraft(drafted0, teamId, round, rookie.pos);
+  const draftedTx = applyCanonicalTx(drafted0, Tx.draftPick(teamId, rookie.playerId, { overall: pick.overall, round: pick.round, pickInRound: pick.pickInRound, prospectId }));
+  const drafted = noteR1QBDraft(draftedTx, teamId, round, rookie.pos);
 
   const nextOverall = drafted.draft.currentOverall + 1;
   const totalPicks = drafted.draft.totalRounds * (drafted.draft.orderTeamIds.length || 32);
@@ -4435,6 +4446,21 @@ function mergeSideline(base: SidelineAdjustments, patch?: Partial<SidelineAdjust
 function deterministicRand(seed: number): number {
   const x = Math.sin(seed >>> 0) * 10000;
   return x - Math.floor(x);
+}
+
+function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts">): GameState {
+  const tx: TransactionEvent = {
+    ...draft,
+    txId: buildTxId(state),
+    season: Number(state.season ?? 1),
+    weekIndex: Number(state.week ?? 0),
+    ts: Number(state.season ?? 1) * 10_000 + Number(state.week ?? 0) * 100 + Number(state.transactionLedger?.counter ?? 0) + 1,
+  };
+  const draftState = applyTransaction(state, tx);
+  const validation = validatePostTx(draftState);
+  if (validation.ok) return draftState;
+  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${validation.errors.join("|")}`);
+  return { ...state, uiToast: `Transaction blocked: ${validation.errors[0] ?? "invalid state"}` };
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
@@ -5305,7 +5331,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!offer) return state;
 
       const ovr = contractOverrideFromOffer(state, offer);
-      const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
 
       const decisions = { ...state.offseasonData.resigning.decisions } as any;
       delete decisions[String(playerId)];
@@ -5314,11 +5339,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const curMorale = Number(morale[String(playerId)] ?? 60);
       morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
 
-      let next = applyFinances({
-        ...state,
-        playerContractOverrides,
+      let next = applyCanonicalTx(state, Tx.resign(String(state.acceptedOffer?.teamId ?? ""), String(playerId), ovr));
+      next = applyFinances({
+        ...next,
         playerMorale: morale,
-        offseasonData: { ...state.offseasonData, resigning: { decisions } },
+        offseasonData: { ...next.offseasonData, resigning: { decisions } },
       });
 
       const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
@@ -6726,23 +6751,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
       if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
 
-      const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: toTeamId };
-      const depthForUserTeam = autoFillDepthChartGaps({ ...state, playerTeamOverrides }, String(teamId));
-      const depthForDestination = autoFillDepthChartGaps({ ...state, playerTeamOverrides }, toTeamId);
+      const txState = applyCanonicalTx(state, Tx.trade(String(teamId), toTeamId, { playerIdsFrom: [playerId], playerIdsTo: [], details: { valueTier: String(action.payload.valueTier) } }));
+      const depthForUserTeam = autoFillDepthChartGaps(txState, String(teamId));
+      const depthForDestination = autoFillDepthChartGaps(txState, toTeamId);
       const nextState = {
-        ...state,
-        playerTeamOverrides,
+        ...txState,
         depthChart: {
-          ...state.depthChart,
+          ...txState.depthChart,
           startersByPos: depthForUserTeam,
           lockedBySlot: Object.fromEntries(
-            Object.entries(state.depthChart.lockedBySlot ?? {}).filter(([slot, pid]) => String(depthForUserTeam[slot] ?? "") === String(pid)),
+            Object.entries(txState.depthChart.lockedBySlot ?? {}).filter(([slot, pid]) => String(depthForUserTeam[slot] ?? "") === String(pid)),
           ),
         },
         leagueDepthCharts: {
-          ...(state.leagueDepthCharts ?? {}),
-          [String(teamId)]: { ...(state.leagueDepthCharts?.[String(teamId)] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForUserTeam },
-          [toTeamId]: { ...(state.leagueDepthCharts?.[toTeamId] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForDestination },
+          ...(txState.leagueDepthCharts ?? {}),
+          [String(teamId)]: { ...(txState.leagueDepthCharts?.[String(teamId)] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForUserTeam },
+          [toTeamId]: { ...(txState.leagueDepthCharts?.[toTeamId] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForDestination },
         },
         tradeError: undefined,
       };
@@ -6814,27 +6838,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         } : undefined,
       };
 
-      const playerTeamOverrides = { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" };
-      const playerContractOverrides = { ...state.playerContractOverrides };
-      delete playerContractOverrides[playerId];
+      const txState = applyCanonicalTx(state, Tx.cut(String(teamId), String(playerId), designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1"));
 
-      const cutDesignations = { ...state.offseasonData.rosterAudit.cutDesignations };
+      const cutDesignations = { ...txState.offseasonData.rosterAudit.cutDesignations };
       delete cutDesignations[playerId];
 
       const patched = applyFinances({
-        ...state,
-        playerTeamOverrides,
-        playerContractOverrides,
+        ...txState,
         offseasonData: {
-          ...state.offseasonData,
+          ...txState.offseasonData,
           rosterAudit: { cutDesignations },
         },
         finances: {
-          ...state.finances,
-          deadCapThisYear: (state.finances.deadCapThisYear ?? 0) + deadThisYear,
-          deadCapNextYear: (state.finances.deadCapNextYear ?? 0) + deadNextYear,
+          ...txState.finances,
+          deadCapThisYear: (txState.finances.deadCapThisYear ?? 0) + deadThisYear,
+          deadCapNextYear: (txState.finances.deadCapNextYear ?? 0) + deadNextYear,
         },
-        transactions: [...(state.transactions ?? []), cutTransaction],
+        transactions: [...(txState.transactions ?? []), cutTransaction],
       });
 
       const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
@@ -8704,6 +8724,7 @@ function loadState(): GameState {
       leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
       playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
       transactions: (migrated as any).transactions ?? [],
+      transactionLedger: (migrated as any).transactionLedger ?? initial.transactionLedger,
       feedbackQueue: Array.isArray((migrated as any).feedbackQueue) ? (migrated as any).feedbackQueue : [],
       feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
       pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
@@ -8713,6 +8734,21 @@ function loadState(): GameState {
       lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
       storySetup: (migrated as any).storySetup,
     };
+    if (!out.transactionLedger?.events?.length) {
+      const migrationEvents = buildMigrationEvents(out);
+      if (migrationEvents.length > 0) {
+        out = {
+          ...out,
+          transactionLedger: {
+            events: migrationEvents,
+            counter: migrationEvents.length,
+            migrationComplete: true,
+          },
+          playerTeamOverrides: {},
+          playerContractOverrides: {},
+        };
+      }
+    }
     out = ensureAccolades(bootstrapAccolades(out));
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);

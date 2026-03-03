@@ -1,6 +1,8 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
 import { CORE_ATTRIBUTE_KEYS } from "@/engine/snapBasedProgression";
 import { getPlayerById, getContractById, getPlayers } from "@/data/leagueDb";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
+import { buildContractIndex } from "@/engine/transactions/contractIndex";
 
 export function normalizePos(pos: string): string {
   const p = String(pos ?? "").toUpperCase();
@@ -80,7 +82,8 @@ export function capHitForOverride(o: PlayerContractOverride, season: number): nu
 
 export function getContractSummaryForPlayer(state: GameState, playerId: string) {
   const depthSlotLabel = getDepthSlotLabel(state, playerId);
-  const o = state.playerContractOverrides[playerId];
+  const contractIndex = buildContractIndex(state);
+  const o = contractIndex[playerId] ?? state.playerContractOverrides[playerId];
   if (o) {
     const startSeason = o.startSeason;
     const endSeason = o.endSeason;
@@ -176,6 +179,7 @@ export function getContractSummaryForPlayer(state: GameState, playerId: string) 
 }
 
 export function getEffectivePlayers(state: GameState): any[] {
+  const rosterIndex = buildRosterIndex(state);
   const base = getPlayers().map((p: any) => {
     const playerId = String(p.playerId);
     const delta = Number(state.playerAgingDeltasById?.[playerId] ?? 0);
@@ -196,7 +200,7 @@ export function getEffectivePlayers(state: GameState): any[] {
       development,
       overall: Math.max(40, Math.min(99, Number(p.overall ?? 60) + delta)),
       age: Number(p.age ?? 22) + ageOffset,
-      teamId: state.playerTeamOverrides[playerId] ?? p.teamId,
+      teamId: rosterIndex.playerToTeam[playerId] ?? state.playerTeamOverrides[playerId] ?? p.teamId,
     };
   });
 
@@ -207,7 +211,7 @@ export function getEffectivePlayers(state: GameState): any[] {
     pos: String(r.pos ?? "UNK"),
     overall: Number(r.ovr ?? 60),
     age: Number(r.age ?? 22),
-    teamId: state.playerTeamOverrides[String(r.playerId)] ?? String(r.teamId ?? ""),
+    teamId: rosterIndex.playerToTeam[String(r.playerId)] ?? state.playerTeamOverrides[String(r.playerId)] ?? String(r.teamId ?? ""),
     status: "ACTIVE",
     isRookie: true,
     snapCounts: state.playerSnapCountsById?.[String(r.playerId)] ?? { offense: 0, defense: 0, specialTeams: 0 },
@@ -228,12 +232,14 @@ export function getEffectivePlayer(state: GameState, playerId: string): any | un
 }
 
 export function getEffectiveFreeAgents(state: GameState): any[] {
+  const rosterIndex = buildRosterIndex(state);
+  const fa = new Set(rosterIndex.freeAgents);
   return getEffectivePlayers(state).filter((p: any) => {
     const playerId = String(p.playerId ?? "");
     if (state.franchiseTags[playerId]?.season && Number(state.franchiseTags[playerId].season) >= Number(state.season)) return false;
     const teamId = String(p.teamId ?? "").toUpperCase();
     const status = String(p.status ?? "").toUpperCase();
-    return teamId === "" || teamId === "FREE_AGENT" || status === "FREE_AGENT";
+    return fa.has(playerId) || teamId === "" || teamId === "FREE_AGENT" || status === "FREE_AGENT";
   });
 }
 
