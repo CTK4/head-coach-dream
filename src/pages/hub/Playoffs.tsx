@@ -19,7 +19,7 @@ export default function PlayoffsPage() {
 
   useEffect(() => {
     dispatch({ type: "PLAYOFFS_TICK" });
-  }, [dispatch, playoffs?.round]);
+  }, [dispatch]);
 
   const advancePlayoffs = () => dispatch({ type: "PLAYOFFS_TICK" });
 

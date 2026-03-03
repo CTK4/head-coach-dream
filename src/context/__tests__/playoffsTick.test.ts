@@ -51,25 +51,63 @@ describe("playoffs tick reducer", () => {
     vi.restoreAllMocks();
   });
 
-  it("playoffs.tick.advancesRoundsWithoutUserTeam", () => {
+  it("playoffs.tick.repeatedTicksCompleteSeasonWithoutUserGame", () => {
     const userTeamId = getTeams().find((t) => t.isActive)?.teamId;
     expect(userTeamId).toBeTruthy();
-    const state = playoffsReadyState(String(userTeamId), false);
-    vi.spyOn(playoffsSim, "simulateCpuPlayoffGamesForRound").mockImplementation(({ playoffs }) => ({ completedGames: { ...playoffs.completedGames, "WILD_CARD:CONF:1:B:C": { homeScore: 24, awayScore: 21, winnerTeamId: "B" } }, pendingUserGame: undefined }));
-    vi.spyOn(playoffsSim, "advancePlayoffRound").mockImplementation((playoffs) => ({ ...playoffs, round: "SUPER_BOWL", bracket: { ...playoffs.bracket, superBowl: { gameId: "SUPER_BOWL:LEAGUE:1:A:B", round: "SUPER_BOWL", homeTeamId: "A", awayTeamId: "B" } }, completedGames: { ...playoffs.completedGames, "SUPER_BOWL:LEAGUE:1:A:B": { homeScore: 20, awayScore: 17, winnerTeamId: "A" } } }));
-    vi.spyOn(playoffsSim, "getPlayoffRoundGames").mockImplementation((playoffs) => playoffs.round === "SUPER_BOWL" ? [{ gameId: "SUPER_BOWL:LEAGUE:1:A:B", round: "SUPER_BOWL", homeTeamId: "A", awayTeamId: "B" }] : [{ gameId: "WILD_CARD:CONF:1:B:C", round: "WILD_CARD", homeTeamId: "B", awayTeamId: "C", conferenceId: "CONF" }]);
 
-    const next = gameReducer(state, { type: "PLAYOFFS_TICK" });
+    vi.spyOn(playoffsSim, "simulateCpuPlayoffGamesForRound").mockImplementation(({ playoffs }) => {
+      const gameId = `${playoffs.round}:LEAGUE:1:A:B`;
+      return {
+        completedGames: {
+          ...playoffs.completedGames,
+          [gameId]: { homeScore: 27, awayScore: 17, winnerTeamId: "A" },
+        },
+        pendingUserGame: undefined,
+      };
+    });
+    vi.spyOn(playoffsSim, "getPlayoffRoundGames").mockImplementation((playoffs) => [{
+      gameId: `${playoffs.round}:LEAGUE:1:A:B`,
+      round: playoffs.round,
+      homeTeamId: "A",
+      awayTeamId: "B",
+    }]);
+    vi.spyOn(playoffsSim, "advancePlayoffRound").mockImplementation((playoffs) => {
+      const nextRound = playoffs.round === "WILD_CARD"
+        ? "DIVISIONAL"
+        : playoffs.round === "DIVISIONAL"
+          ? "CONF_FINALS"
+          : "SUPER_BOWL";
+      return {
+        ...playoffs,
+        round: nextRound,
+        bracket: {
+          ...playoffs.bracket,
+          superBowl: {
+            gameId: "SUPER_BOWL:LEAGUE:1:A:B",
+            round: "SUPER_BOWL",
+            homeTeamId: "A",
+            awayTeamId: "B",
+          },
+        },
+      };
+    });
 
-    expect(next.playoffs).toBeNull();
-    expect(next.careerStage).toBe("SEASON_AWARDS");
-    expect(next.league.phase).toBe("SEASON_COMPLETE");
+    let state = playoffsReadyState(String(userTeamId), false);
+    for (let i = 0; i < 12 && state.playoffs; i += 1) {
+      state = gameReducer(state, { type: "PLAYOFFS_TICK" });
+    }
+
+    expect(state.playoffs).toBeNull();
+    expect(state.careerStage).toBe("SEASON_AWARDS");
+    expect(state.league.phase).toBe("SEASON_COMPLETE");
   });
 
   it("playoffs.tick.doesNotAdvanceWhenPendingUserGame", () => {
     const userTeamId = getTeams().find((t) => t.isActive)?.teamId;
     expect(userTeamId).toBeTruthy();
     const state = playoffsReadyState(String(userTeamId), true);
+    const advanceSpy = vi.spyOn(playoffsSim, "advancePlayoffRound");
+
     vi.spyOn(playoffsSim, "simulateCpuPlayoffGamesForRound").mockImplementation(({ playoffs, userTeamId }) => ({
       completedGames: playoffs.completedGames,
       pendingUserGame: {
@@ -86,5 +124,6 @@ describe("playoffs tick reducer", () => {
     expect(next.playoffs?.pendingUserGame).toBeTruthy();
     expect(next.playoffs?.round).toBe(state.playoffs?.round);
     expect(next.careerStage).toBe("PLAYOFFS");
+    expect(advanceSpy).not.toHaveBeenCalled();
   });
 });

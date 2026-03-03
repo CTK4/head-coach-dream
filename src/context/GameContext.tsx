@@ -7871,19 +7871,20 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "PLAYOFFS_TICK": {
       if (!state.playoffs) return state;
-      let out = state;
-      const safetyLimit = 5;
-      for (let i = 0; i < safetyLimit; i += 1) {
-        out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-        if (!out.playoffs) return out;
-        if (out.playoffs.pendingUserGame) return out;
-        const games = getPlayoffRoundGames(out.playoffs);
-        const isRoundDone = games.length > 0 && games.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]));
-        if (!isRoundDone) return out;
-        if (out.playoffs.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
-        out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
-      }
-      return out;
+      let out = gameReducer(state, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+      if (!out.playoffs) return out;
+      if (out.playoffs.pendingUserGame) return out;
+
+      const currentRoundGames = getPlayoffRoundGames(out.playoffs);
+      const isCurrentRoundDone = currentRoundGames.length > 0 && currentRoundGames.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]));
+      if (!isCurrentRoundDone) return out;
+
+      if (out.playoffs.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+
+      out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
+      if (!out.playoffs || out.playoffs.pendingUserGame) return out;
+
+      return gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
     }
     case "PLAYOFFS_MARK_GAME_FINAL": {
       if (!state.playoffs) return state;
