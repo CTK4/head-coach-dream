@@ -2811,7 +2811,15 @@ function addNews(state: GameState, item: { title: string; body?: string; categor
 
 function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number): LeagueNewsItem[] {
   const context = { week: Number(week), season: Number(state.season), userTeamId: String(state.acceptedOffer?.teamId ?? "") };
-  const injuryNews = generateInjuryNews(state.injuries ?? [], context);
+
+  // H4 FIX: pass a deterministic seed so generateInjuryNews never calls Math.random().
+  // Slot 303 matches the convention used by other weekly generators:
+  //   101 = MEDIA_GENERATE_WEEKLY_STORIES
+  //   202 = MEDICAL_GENERATE_WEEKLY_INJURIES
+  //   303 = news fallback injury items (this call)
+  const injurySeed = seedFor(state.saveSeed, state.season, Number(week), 303);
+
+  const injuryNews = generateInjuryNews(state.injuries ?? [], context, injurySeed);
   const transactionNews = generateTransactionNews((state.transactions ?? []).filter((t) => Number(t.week ?? week) === Number(week)).slice(0, 8), context);
   const gameNews = generateGameResultNews(weekResult.allGameResults, context);
   const milestoneNews = generateMilestoneNews(weekResult.statLeaders, context);
