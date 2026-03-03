@@ -221,6 +221,44 @@ describe("saveManager", () => {
     }
   });
 
+  it("exportSave_is_pure_does_not_change_active_or_legacy", async () => {
+    const saveId = "slot-pure";
+    const storageKey = `hc_career_save__${saveId}`;
+    const initialSlot = JSON.stringify({ ...baseState, schemaVersion: 1, saveId });
+    const initialLegacy = JSON.stringify({ ...baseState, schemaVersion: 1, saveId: "legacy" });
+
+    localStorage.setItem(storageKey, initialSlot);
+    localStorage.setItem("hc_career_save", initialLegacy);
+    localStorage.setItem("hc_career_active_save_id", "different-active-slot");
+    localStorage.setItem(
+      "hc_career_saves_index",
+      JSON.stringify([
+        {
+          saveId,
+          storageKey,
+          coachName: "Coach Test",
+          teamName: "Milwaukee Northshore",
+          season: 2026,
+          week: 1,
+          record: { wins: 0, losses: 0 },
+          lastPlayed: Date.now(),
+          careerStage: "OFFSEASON_HUB",
+        },
+      ]),
+    );
+
+    const exported = exportSave(saveId);
+    expect(exported).toBeTruthy();
+    expect(localStorage.getItem("hc_career_active_save_id")).toBe("different-active-slot");
+    expect(localStorage.getItem("hc_career_save")).toBe(initialLegacy);
+    expect(localStorage.getItem(storageKey)).toBe(initialSlot);
+
+    const exportText = await exported!.blob.text();
+    const parsed = JSON.parse(exportText);
+    expect(parsed.saveId).toBe(saveId);
+    expect(parsed.schemaVersion).toBe(LATEST_SAVE_SCHEMA_VERSION);
+  });
+
   it("import/export round trip preserves critical state", async () => {
     syncCurrentSave({ ...baseState, schemaVersion: 1, saveId: "slot-a" } as any, "slot-a");
     const exported = exportSave("slot-a");
