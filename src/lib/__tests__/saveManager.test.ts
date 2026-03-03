@@ -4,10 +4,14 @@ import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveStat
 
 class LocalStorageMock {
   private store = new Map<string, string>();
+  failOnSetItemKey: string | null = null;
   getItem(key: string) {
     return this.store.has(key) ? this.store.get(key)! : null;
   }
   setItem(key: string, value: string) {
+    if (this.failOnSetItemKey === key) {
+      throw new Error(`setItem failed for ${key}`);
+    }
     this.store.set(key, String(value));
   }
   removeItem(key: string) {
@@ -234,6 +238,42 @@ describe("saveManager", () => {
       expect(imported.state.season).toBe(2026);
       expect(imported.state.teamId).toBe("MILWAUKEE_NORTHSHORE");
       expect(imported.state.schemaVersion).toBe(LATEST_SAVE_SCHEMA_VERSION);
+    }
+  });
+
+  it("commitAtomic_throws_and_does_not_mutate_index_on_failure", () => {
+    const storage = localStorage as unknown as LocalStorageMock;
+    const saveId = "slot-a";
+    const storageKey = `hc_career_save__${saveId}`;
+    const previousIndex = [
+      {
+        saveId,
+        storageKey,
+        coachName: "Coach Existing",
+        teamName: "Milwaukee Northshore",
+        season: 2025,
+        week: 10,
+        record: { wins: 7, losses: 3 },
+        lastPlayed: 100,
+        careerStage: "REGULAR_SEASON",
+      },
+    ];
+
+    localStorage.setItem(storageKey, JSON.stringify({ ...baseState, schemaVersion: 1, saveId, season: 2025 }));
+    localStorage.setItem("hc_career_saves_index", JSON.stringify(previousIndex));
+    localStorage.setItem("hc_career_active_save_id", saveId);
+
+    storage.failOnSetItemKey = `${storageKey}__tmp`;
+
+    expect(() => syncCurrentSave({ ...baseState, schemaVersion: 1, season: 2026, saveId } as any, saveId)).toThrow(/Failed to set localStorage key/);
+
+    expect(localStorage.getItem("hc_career_saves_index")).toBe(JSON.stringify(previousIndex));
+    expect(localStorage.getItem("hc_career_active_save_id")).toBe(saveId);
+
+    const loaded = loadSaveResult(saveId);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(loaded.state.season).toBe(2025);
     }
   });
 });
