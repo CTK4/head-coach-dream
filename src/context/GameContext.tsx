@@ -153,6 +153,7 @@ import { seasonReducer } from "@/context/seasonReducer";
 import { freeAgencyReducer } from "@/context/freeAgencyReducer";
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
+import { getWeekSeed } from "@/engine/rng";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type CareerStage =
@@ -8037,7 +8038,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         userHomeTeamId: state.game.homeTeamId,
         userAwayTeamId: state.game.awayTeamId,
         userScore: { homeScore: state.game.homeScore, awayScore: state.game.awayScore },
-        seed: state.careerSeed ?? state.saveSeed,
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, state.game.weekType, state.game.weekNumber),
         previousStandings: state.currentStandings,
         priorWeekResults: state.weeklyResults,
       });
@@ -8158,7 +8159,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         week,
         userHomeTeamId: matchup.homeTeamId,
         userAwayTeamId: matchup.awayTeamId,
-        seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`simweek:${gameType}:${week}`),
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, gameType, week),
         previousStandings: state.currentStandings,
         priorWeekResults: state.weeklyResults,
       });

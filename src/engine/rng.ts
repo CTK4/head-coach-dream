@@ -24,6 +24,10 @@ export function createPhaseSeed(saveSeed: number, teamId: string, phase: string)
   return hashSeed(saveSeed, teamId, phase);
 }
 
+export function getWeekSeed(baseSeed: number, season: number, gameType: string, week: number): number {
+  return (Number(baseSeed ?? 1) ^ hashSeed(`week:${season}:${gameType}:${week}`)) >>> 0;
+}
+
 export function shuffleDeterministic<T>(items: T[], rng: () => number): T[] {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i -= 1) {
