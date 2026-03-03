@@ -94,6 +94,10 @@ function readCsv(fileName) {
   return parseCsv(raw);
 }
 
+function missingRequiredCsvFiles() {
+  return Object.values(FILES).filter((fileName) => !fs.existsSync(path.join(SOURCE_DIR, fileName)));
+}
+
 function toMvpEntry(row, playerKey, teamKey, positionKey) {
   if (!row) return null;
   const player = String(row[playerKey] ?? "").trim();
@@ -108,6 +112,13 @@ function toMvpEntry(row, playerKey, teamKey, positionKey) {
 }
 
 function run() {
+  const missingFiles = missingRequiredCsvFiles();
+
+  if (missingFiles.length > 0) {
+    console.log(`[gen:league-history] skipped; missing required CSV files in ${path.relative(ROOT, SOURCE_DIR)}: ${missingFiles.join(", ")}`);
+    return;
+  }
+
   const championsRows = readCsv(FILES.ironCrownChampions);
   const ironCrownMvpRows = readCsv(FILES.ironCrownMvp);
   const regularSeasonMvpRows = readCsv(FILES.regularSeasonMvp);
