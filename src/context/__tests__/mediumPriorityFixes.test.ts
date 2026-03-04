@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { gameReducer, type GameState } from "@/context/GameContext";
 import { getPersonnelById, getPlayerById, getPlayers, getTeams } from "@/data/leagueDb";
 import { initTeamStandings, type AIGameResult } from "@/engine/leagueSim";
-import { buildPlayoffBracket } from "@/engine/playoffsSim";
+import { advancePlayoffRound, buildPlayoffBracket, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
 import { computeStandings, type TeamStanding } from "@/engine/standings";
 
 function baseGame(overrides: Partial<AIGameResult>): AIGameResult {
@@ -83,23 +83,47 @@ describe("M3 standings conferenceRecord + tiebreaker", () => {
       if (!conf) continue;
       byConf.set(conf, [...(byConf.get(conf) ?? []), t]);
     }
+    // Find a conference with at least 2 divisions and 2 teams per division.
     const confGroup = [...byConf.values()].find((group) => {
-      const divisions = new Set(group.map((t) => String(t.divisionId ?? "")));
-      return group.length >= 4 && divisions.size >= 2;
+      const divCounts = new Map<string, number>();
+      for (const t of group) divCounts.set(String(t.divisionId ?? ""), (divCounts.get(String(t.divisionId ?? "")) ?? 0) + 1);
+      return [...divCounts.values()].filter((c) => c >= 2).length >= 2;
     });
     expect(confGroup).toBeTruthy();
 
-    const teamA = confGroup![0];
-    const teamB = confGroup!.find((t) => t.divisionId !== teamA.divisionId) ?? confGroup![1];
-    const teamC = confGroup!.find((t) => t.teamId !== teamA.teamId && t.teamId !== teamB.teamId) ?? confGroup![2];
-    const teamD = confGroup!.find((t) => ![teamA.teamId, teamB.teamId, teamC.teamId].includes(t.teamId)) ?? confGroup![3];
+    // Pick two teams from different divisions (A/C same div, B/D same div).
+    const byDiv = new Map<string, typeof confGroup>();
+    for (const t of confGroup!) {
+      const div = String(t.divisionId ?? "");
+      byDiv.set(div, [...(byDiv.get(div) ?? []), t]);
+    }
+    const divArrays = [...byDiv.values()].filter((g) => g.length >= 2);
+    expect(divArrays.length).toBeGreaterThanOrEqual(2);
+    const [div1, div2] = divArrays;
+    const [teamA, teamC] = div1; // same division (conf X, div 1)
+    const [teamB, teamD] = div2; // same division (conf X, div 2)
 
-    const initial = initTeamStandings([teamA.teamId, teamB.teamId, teamC.teamId, teamD.teamId]);
+    // Also pick 2 non-conference teams (from a different conf) for padding games.
+    const otherConfGroup = [...byConf.values()].find((group) => group !== confGroup && group.length >= 2);
+    expect(otherConfGroup).toBeTruthy();
+    const [teamE, teamF] = otherConfGroup!;
+
+    // Set up 6-team standings. 5 games create equal 2-1 records for A and B
+    // but different conference records: B has 2 conf wins, A has 1 conf win.
+    // g1: A beats C (div-conf) → A confRec+1W, A divRec+1W
+    // g2: B beats D (div-conf) → B confRec+1W, B divRec+1W
+    // g3: B beats A (cross-div conf) → B confRec+1W, A confRec+1L
+    // g4: A beats E (non-conf) → A total+1W, no confRec change
+    // g5: F beats B (non-conf) → B total+1L, no confRec change
+    // Result: A=2W-1L confRec=1-1(0.5pct), B=2W-1L confRec=2-0(1.0pct)
+    const initial = initTeamStandings([teamA.teamId, teamB.teamId, teamC.teamId, teamD.teamId, teamE.teamId, teamF.teamId]);
     const out = computeStandings(
       [
         baseGame({ gameId: "g1", homeTeamId: teamA.teamId, awayTeamId: teamC.teamId, homeScore: 24, awayScore: 17 }),
         baseGame({ gameId: "g2", homeTeamId: teamB.teamId, awayTeamId: teamD.teamId, homeScore: 24, awayScore: 17 }),
         baseGame({ gameId: "g3", homeTeamId: teamA.teamId, awayTeamId: teamB.teamId, homeScore: 17, awayScore: 24 }),
+        baseGame({ gameId: "g4", homeTeamId: teamA.teamId, awayTeamId: teamE.teamId, homeScore: 24, awayScore: 17 }),
+        baseGame({ gameId: "g5", homeTeamId: teamF.teamId, awayTeamId: teamB.teamId, homeScore: 24, awayScore: 17 }),
       ],
       initial,
     );
@@ -120,7 +144,16 @@ describe("M2 season rollover compaction", () => {
     const teamId = getTeams().find((t) => t.isActive)?.teamId;
     expect(teamId).toBeTruthy();
     const state = seededState(String(teamId));
-    const playoffs = buildPlayoffBracket({ league: state.league, season: state.season });
+
+    // Build a fully-completed playoff bracket (all rounds including Super Bowl).
+    let playoffs = buildPlayoffBracket({ league: state.league, season: state.season });
+    while (playoffs.round !== "SUPER_BOWL" || getPlayoffRoundGames(playoffs).some((g) => !playoffs.completedGames[g.gameId])) {
+      const simmed = simulateCpuPlayoffGamesForRound({ playoffs, seed: 12345 });
+      playoffs = { ...playoffs, completedGames: simmed.completedGames, pendingUserGame: undefined };
+      if (playoffs.round === "SUPER_BOWL") break;
+      playoffs = advancePlayoffRound(playoffs);
+    }
+
     const withData: GameState = {
       ...state,
       playoffs,

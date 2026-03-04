@@ -7682,7 +7682,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "FIRE_STAFF": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
       if (!teamId) return state;
 
       const salary = state.staffBudget.byPersonId[action.payload.personId] ?? 0;
@@ -9029,7 +9029,21 @@ function readCapModeFromUrl(): boolean | null {
 
 
 export function createInitialStateForTests(): GameState {
-  return createInitialState();
+  const base = createInitialState();
+  // Provide a valid acceptedOffer so ADVANCE_WEEK, RESOLVE_PLAY, and FIRE_STAFF
+  // handlers that read state.acceptedOffer?.teamId don't return early in tests.
+  const firstActiveTeam = getTeams().find((t) => t.isActive);
+  if (!firstActiveTeam) return base;
+  const defaultOffer: OfferItem = {
+    teamId: firstActiveTeam.teamId,
+    years: 4,
+    salary: 4_000_000,
+    autonomy: 65,
+    patience: 55,
+    mediaNarrativeKey: "story_start",
+    base: { years: 4, salary: 4_000_000, autonomy: 65 },
+  };
+  return { ...base, acceptedOffer: defaultOffer, userTeamId: firstActiveTeam.teamId, teamId: firstActiveTeam.teamId };
 }
 
 function applyCapModeQuery(state: GameState): GameState {

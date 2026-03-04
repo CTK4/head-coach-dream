@@ -13,7 +13,8 @@ const USER_TEAM_ID = "MILWAUKEE_NORTHSHORE";
 
 describe("personnel overlay replay", () => {
   it("stores personnel + contract overlays when hiring staff", () => {
-    let state = { ...createInitialStateForTests(), userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID };
+    const _base = createInitialStateForTests();
+    let state = { ..._base, userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID, acceptedOffer: { ..._base.acceptedOffer, teamId: USER_TEAM_ID } as typeof _base.acceptedOffer };
     const candidate = getPersonnelFreeAgents().find((p) => String(p.role ?? "").toUpperCase() === "OFF_COORDINATOR");
     const candidateId = String(candidate?.personId ?? "");
     if (!candidateId) return;
@@ -34,7 +35,8 @@ describe("personnel overlay replay", () => {
   });
 
   it("replays hired personnel overlays into module DB getters", () => {
-    let state = { ...createInitialStateForTests(), userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID };
+    const _base = createInitialStateForTests();
+    let state = { ..._base, userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID, acceptedOffer: { ..._base.acceptedOffer, teamId: USER_TEAM_ID } as typeof _base.acceptedOffer };
     const candidate = getPersonnelFreeAgents().find((p) => String(p.role ?? "").toUpperCase() === "DEF_COORDINATOR");
     const candidateId = String(candidate?.personId ?? "");
     if (!candidateId) return;
@@ -62,7 +64,8 @@ describe("personnel overlay replay", () => {
   });
 
   it("stores FREE_AGENT personnel override on fire and replay keeps them in FA", () => {
-    let state = { ...createInitialStateForTests(), userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID };
+    const _base = createInitialStateForTests();
+    let state = { ..._base, userTeamId: USER_TEAM_ID, teamId: USER_TEAM_ID, acceptedOffer: { ..._base.acceptedOffer, teamId: USER_TEAM_ID } as typeof _base.acceptedOffer };
     const candidate = getPersonnelFreeAgents().find((p) => String(p.role ?? "").toUpperCase() === "ST_COORDINATOR");
     const candidateId = String(candidate?.personId ?? "");
     if (!candidateId) return;
