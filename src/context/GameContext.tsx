@@ -3285,6 +3285,7 @@ function seasonRollover(state: GameState): GameState {
 
   let next = applyFinances({
     ...state,
+    transactionLedger: expiredState.transactionLedger, // preserve RELEASE events from contract expiry
     season: nextSeason,
     week: 1,
     careerStage: "OFFSEASON_HUB",
@@ -8791,8 +8792,12 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   }
   normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
 
+  const VALID_MIGRATE_PHASES = new Set(["CREATE", "BACKGROUND", "INTERVIEWS", "OFFERS", "COORD_HIRING", "HUB"]);
+  const normalizedPhase = VALID_MIGRATE_PHASES.has(String(oldState.phase ?? "")) ? oldState.phase : "HUB";
+
   let s: Partial<GameState> = {
     ...oldState,
+    phase: normalizedPhase as GameState["phase"],
     saveSeed,
     season: Number((oldState as any).season ?? 2026),
     week: Number((oldState as any).week ?? 1),

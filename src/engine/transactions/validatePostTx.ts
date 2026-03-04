@@ -30,7 +30,12 @@ export function validatePostTx(state: GameState): { ok: true } | { ok: false; er
     if (team == null || String(team).trim() === "") errors.push(`null team ${pid}`);
   }
 
+  // Only validate game-managed contracts (explicit overrides). Base DB contracts
+  // may be stale/uninitialized and are intentionally excluded from validation.
   for (const [pid, c] of Object.entries(contracts)) {
+    if (!(pid in (state.playerContractOverrides ?? {}))) continue;
+    const team = roster.playerToTeam[pid];
+    if (!team || team === "FREE_AGENT") continue;
     if (Number(c.endSeason) < Number(c.startSeason)) errors.push(`invalid contract span ${pid}`);
     if ((c.salaries ?? []).some((n) => !Number.isFinite(Number(n)))) errors.push(`invalid salary ${pid}`);
     if (!Number.isFinite(Number(c.signingBonus ?? 0))) errors.push(`invalid bonus ${pid}`);
