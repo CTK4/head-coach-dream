@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    COVER 3 SINGLE-HIGH — DEFENSIVE CORE 40 (UI DATA)
 

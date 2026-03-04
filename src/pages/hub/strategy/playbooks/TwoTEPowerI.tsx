@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    POWER I / TWO-TE BASE — CORE 40 (UI DATA)
    Identity: 21/12 personnel, downhill gap, two-TE edges, FB lead.

@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ CHIP KELLY RPO OFFENSE — CORE 40 ═════════════════════════════════════
    Identity: Tempo, inside zone base, bubble/glance tags, fast conflict reads.
    Category counts: Runs 15 · RPO 15 · Pass 5 · Screens 5

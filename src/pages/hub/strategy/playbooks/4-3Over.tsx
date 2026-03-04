@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    4-3 OVER — DEFENSIVE CORE 40 (UI DATA)
    Structural Identity:

@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ TAMPA 2 SYSTEM — CORE 36 (2-High / Middle Runner / Pressures) ═══
    Format: { id, name, label, cat, sk, rt }
    cat: 'coverage' | 'sim' | 'pressure' | 'situational'

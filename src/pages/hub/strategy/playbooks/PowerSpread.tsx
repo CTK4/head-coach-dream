@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    POWER SPREAD — OFFENSE CORE 40 (UI DATA)
 

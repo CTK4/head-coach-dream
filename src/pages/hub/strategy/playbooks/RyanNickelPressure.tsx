@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    BUDDY RYAN NICKEL PRESSURE — DEFENSE CORE 40 (UI DATA)
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { LOS } from "./playbookConstants";
 
 /* ── PALETTE ─────────────────────────────────── */
 const CLR = {
@@ -26,8 +27,6 @@ const CAT_META = {
 const P  = (...pts) => pts.map((p,i) => `${i?'L':'M'}${p[0]} ${p[1]}`).join(' ');
 const QQ = (s,c,e)  => `M${s[0]} ${s[1]} Q${c[0]} ${c[1]} ${e[0]} ${e[1]}`;
 const CB = (s,c1,c2,e) => `M${s[0]} ${s[1]} C${c1[0]} ${c1[1]},${c2[0]} ${c2[1]},${e[0]} ${e[1]}`;
-
-const LOS  = 72;
 /* Air Raid: wide splits, shotgun QB */
 const OL_X = [70, 80, 90, 100, 110]; // tight OL in spread
 /* Typical formation helpers */

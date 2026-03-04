@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ SPREAD RPO — CORE 40 PLAYS ═══
    Same PLAYS format.
    Categories: run (12) | pass (16) | pa (6) | situational (6)

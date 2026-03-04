@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    DICK LeBEAU 3–4 ZONE BLITZ (FIRE ZONE) — CORE 40 (UI DATA)
    Identity: 3–4 base, 3-deep/3-under fire zones, zone exchange droppers,

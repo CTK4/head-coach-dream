@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ VERTICAL ERHARDT-PERKINS — CORE 40 ═══
    Core philosophy: concept language, option routes, vertical isolation.
    Format matches prior: { id, name, label, cat, sk, rt }
