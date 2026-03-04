@@ -3100,18 +3100,103 @@ function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: numbe
     if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
 
     const override = next.playerContractOverrides[playerId];
-    const overrideCoversNextSeason = !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
-    if (overrideCoversNextSeason) continue;
+    if (override) {
+      if (Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason)) continue;
+      if (Number(override.endSeason) < nextSeason) {
+        next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
+      }
+      continue;
+    }
 
-    const summary = getContractSummaryForPlayer(next, playerId);
-    if (!summary) continue;
+    const contractId = String((p as any).contractId ?? "");
+    if (!contractId) continue;
+    const contract = getContractById(contractId);
+    if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
 
-    if (Number(summary.endSeason) < nextSeason) {
+    if (Number((contract as any).endSeason ?? 0) < nextSeason) {
       next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
     }
   }
 
   return next;
+}
+
+function migrateExpiredStaffContracts(state: GameState, season: number): Pick<GameState, "personnelTeamOverrides" | "staffContractsByPersonId" | "staff" | "orgRoles" | "assistantStaff" | "staffBudget"> {
+  const trackedPersonIds = new Set<string>();
+  for (const personId of Object.keys(state.staffBudget.byPersonId ?? {})) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of [state.staff.ocId, state.staff.dcId, state.staff.stcId]) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of Object.values(state.orgRoles ?? {})) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of Object.values(state.assistantStaff ?? {})) if (personId) trackedPersonIds.add(String(personId));
+
+  if (trackedPersonIds.size === 0) {
+    return {
+      personnelTeamOverrides: state.personnelTeamOverrides,
+      staffContractsByPersonId: state.staffContractsByPersonId,
+      staff: state.staff,
+      orgRoles: state.orgRoles,
+      assistantStaff: state.assistantStaff,
+      staffBudget: state.staffBudget,
+    };
+  }
+
+  const personnelTeamOverrides = { ...state.personnelTeamOverrides };
+  const staffContractsByPersonId = { ...state.staffContractsByPersonId };
+  const expiredStaffIds = new Set<string>();
+
+  for (const personId of trackedPersonIds) {
+    const overrideContract = staffContractsByPersonId[personId];
+    const baseContractId = String(getPersonnelById(personId)?.contractId ?? "");
+    const baseContract = baseContractId ? getContractById(baseContractId) : undefined;
+    const contract = overrideContract ?? baseContract;
+    if (!contract) continue;
+
+    const contractEndSeason = Number(contract.endSeason ?? season);
+    if (season <= contractEndSeason) continue;
+
+    personnelTeamOverrides[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
+    staffContractsByPersonId[personId] = { ...contract, isExpired: true };
+    expiredStaffIds.add(personId);
+  }
+
+  if (expiredStaffIds.size === 0) {
+    return {
+      personnelTeamOverrides: state.personnelTeamOverrides,
+      staffContractsByPersonId: state.staffContractsByPersonId,
+      staff: state.staff,
+      orgRoles: state.orgRoles,
+      assistantStaff: state.assistantStaff,
+      staffBudget: state.staffBudget,
+    };
+  }
+
+  const staff = { ...state.staff };
+  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
+  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
+  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
+
+  const orgRoles = { ...state.orgRoles };
+  for (const key of Object.keys(orgRoles) as Array<keyof OrgRoles>) {
+    const personId = orgRoles[key];
+    if (personId && expiredStaffIds.has(String(personId))) delete orgRoles[key];
+  }
+
+  const assistantStaff = { ...state.assistantStaff };
+  for (const [slot, personId] of Object.entries(assistantStaff)) {
+    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
+  }
+
+  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
+  for (const personId of expiredStaffIds) delete staffBudgetByPersonId[personId];
+  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
+
+  return {
+    personnelTeamOverrides,
+    staffContractsByPersonId,
+    staff,
+    orgRoles,
+    assistantStaff,
+    staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
+  };
 }
 
 function seasonRollover(state: GameState): GameState {
@@ -3128,6 +3213,9 @@ function seasonRollover(state: GameState): GameState {
 
     const effectiveTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
     if (!effectiveTeamId || effectiveTeamId === "FREE_AGENT") continue;
+
+    const tagged = expiredState.franchiseTags[playerId];
+    if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
 
     const override = playerContractOverrides[playerId];
     const overrideCoversNextSeason =
@@ -3147,38 +3235,8 @@ function seasonRollover(state: GameState): GameState {
     playerTeamOverrides[playerId] = "FREE_AGENT";
   }
 
-  const expiredStaffIds = new Set<string>();
-  const personnelOverrides_expire: Record<string, import("@/data/leagueDb").PersonnelOverride> = {};
-  const staffContractsByPersonId_expire: Record<string, ContractRow> = {};
-  for (const person of getPersonnel()) {
-    const personId = String((person as any).personId ?? "");
-    if (!personId) continue;
-    const contract = getPersonnelContract(personId);
-    if (!contract) continue;
-    const contractEndSeason = Number(contract.endSeason ?? nextSeason);
-    if (nextSeason <= contractEndSeason) continue;
-    clearPersonnelTeam(personId);
-    expireContract(String(contract.contractId ?? ""), contractEndSeason);
-    personnelOverrides_expire[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
-    staffContractsByPersonId_expire[personId] = { ...contract, isExpired: true };
-    expiredStaffIds.add(personId);
-  }
-
-  const staff = { ...state.staff };
-  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
-  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
-  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
-
-  const assistantStaff = { ...state.assistantStaff };
-  for (const [slot, personId] of Object.entries(assistantStaff)) {
-    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
-  }
-
-  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
-  for (const personId of expiredStaffIds) {
-    delete staffBudgetByPersonId[personId];
-  }
-  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
+  const expiredStaffState = migrateExpiredStaffContracts(state, nextSeason);
+  replayPersonnelOverrides(expiredStaffState.personnelTeamOverrides, expiredStaffState.staffContractsByPersonId);
 
   let cash = state.finances.cash;
   if (teamId) {
@@ -3229,11 +3287,12 @@ function seasonRollover(state: GameState): GameState {
     resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     playerTeamOverrides,
     playerContractOverrides,
-    personnelTeamOverrides: { ...state.personnelTeamOverrides, ...personnelOverrides_expire },
-    staffContractsByPersonId: { ...state.staffContractsByPersonId, ...staffContractsByPersonId_expire },
-    staff,
-    assistantStaff,
-    staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
+    personnelTeamOverrides: expiredStaffState.personnelTeamOverrides,
+    staffContractsByPersonId: expiredStaffState.staffContractsByPersonId,
+    staff: expiredStaffState.staff,
+    orgRoles: expiredStaffState.orgRoles,
+    assistantStaff: expiredStaffState.assistantStaff,
+    staffBudget: expiredStaffState.staffBudget,
     finances: { ...state.finances, cash },
   });
 
