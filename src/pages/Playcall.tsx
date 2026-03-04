@@ -336,11 +336,17 @@ const Playcall = () => {
   const isOver = g.clock.quarter === 4 && g.clock.timeRemainingSec === 0;
   const canShowPlay = useMemo(() => !invalid && !isOver, [invalid, isOver]);
 
+  const roster = useMemo(
+    () => (teamId ? getEffectivePlayersByTeam(state, teamId) : []),
+    [state.playerTeamOverrides, state.playerContractOverrides, teamId],
+  );
+
   const userTeamQbArchetype = useMemo(() => {
-    if (!teamId) return "GAME_MANAGER" as const;
-    const qb = getEffectivePlayersByTeam(state, teamId).filter((p: any) => String(p.pos ?? "").toUpperCase() === "QB").sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
+    const qb = roster
+      .filter((p: any) => String(p.pos ?? "").toUpperCase() === "QB")
+      .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
     return qb ? resolveQbArchetypeTag(qb as any) : "GAME_MANAGER" as const;
-  }, [state, teamId]);
+  }, [roster]);
   const canCallRpo = userTeamQbArchetype === "DUAL_THREAT" || userTeamQbArchetype === "SCRAMBLER";
 
   const rec = useMemo(

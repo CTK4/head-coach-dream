@@ -496,21 +496,22 @@ export default function InjuryReport() {
   // Drawer state
   const [drawerInjuryId, setDrawerInjuryId] = useState<string | null>(null);
 
-  // Build the injury list: prefer real data, fall back to mock data in dev mode
-  const allInjuries = useMemo(() => {
-    const real = state.injuries ?? [];
-    if (real.length > 0) return real;
-
-    // Dev-only mock data
-    if (!import.meta.env.DEV) return real;
-
+  const mockInjuries = useMemo(() => {
+    if (!import.meta.env.DEV) return [] as Injury[];
     const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
     const mocked: Injury[] = [];
     for (const team of teams) {
       mocked.push(...generateMockInjuries(state, team.teamId, state.saveSeed, currentWeek));
     }
     return mocked;
-  }, [state.injuries, state.saveSeed, currentWeek]);
+  }, [state.playerTeamOverrides, state.playerContractOverrides, state.saveSeed, currentWeek]);
+
+  // Build the injury list: prefer real data, fall back to mock data in dev mode
+  const allInjuries = useMemo(() => {
+    const real = state.injuries ?? [];
+    if (real.length > 0) return real;
+    return mockInjuries;
+  }, [state.injuries, mockInjuries]);
 
   // Build player lookup map (stable)
   const playerMap = useMemo(() => buildInjuryPlayerMap(state), [state]);

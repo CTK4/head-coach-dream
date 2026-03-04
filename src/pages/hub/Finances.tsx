@@ -36,9 +36,13 @@ export default function Finances() {
     { to: "/hub/tag-center", label: "Tag Center" },
   ];
 
+  const players = useMemo(
+    () => getEffectivePlayersByTeam(state, teamId),
+    [state.playerTeamOverrides, state.playerContractOverrides, teamId],
+  );
+
   const rows = useMemo(() => {
-    const ps = getEffectivePlayersByTeam(state, teamId);
-    return ps
+    return players
       .map((p: any) => {
         const c = getContractSummaryForPlayer(state, String(p.playerId));
         return {
@@ -52,7 +56,7 @@ export default function Finances() {
         };
       })
       .sort((a, b) => b.capHit - a.capHit);
-  }, [state, teamId]);
+  }, [players, state]);
 
   return (
     <Card>
