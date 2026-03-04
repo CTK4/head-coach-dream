@@ -57,6 +57,7 @@ import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { migrateExpiredContractsToFreeAgency } from "@/context/seasonRollover";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
 import type { CoachProfile, StaffRoster } from "@/data/coachTraits";
@@ -3203,7 +3204,7 @@ function seasonRollover(state: GameState): GameState {
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
-  const expiredState = expireExpiringContractsToFreeAgency(state, nextSeason);
+  const expiredState = migrateExpiredContractsToFreeAgency(state, state.season);
   const playerTeamOverrides = { ...expiredState.playerTeamOverrides };
   const playerContractOverrides = { ...expiredState.playerContractOverrides };
 
@@ -3237,6 +3238,38 @@ function seasonRollover(state: GameState): GameState {
 
   const expiredStaffState = migrateExpiredStaffContracts(state, nextSeason);
   replayPersonnelOverrides(expiredStaffState.personnelTeamOverrides, expiredStaffState.staffContractsByPersonId);
+  const expiredStaffIds = new Set<string>();
+  const personnelOverrides_expire: Record<string, import("@/data/leagueDb").PersonnelOverride> = {};
+  const staffContractsByPersonId_expire: Record<string, ContractRow> = {};
+  for (const person of getPersonnel()) {
+    const personId = String((person as any).personId ?? "");
+    if (!personId) continue;
+    const contract = getPersonnelContract(personId);
+    if (!contract) continue;
+    const contractEndSeason = Number(contract.endSeason ?? nextSeason);
+    if (nextSeason <= contractEndSeason) continue;
+    clearPersonnelTeam(personId);
+    expireContract(String(contract.contractId ?? ""), contractEndSeason);
+    personnelOverrides_expire[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
+    staffContractsByPersonId_expire[personId] = { ...contract, isExpired: true };
+    expiredStaffIds.add(personId);
+  }
+
+  const staff = { ...state.staff };
+  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
+  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
+  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
+
+  const assistantStaff = { ...state.assistantStaff };
+  for (const [slot, personId] of Object.entries(assistantStaff)) {
+    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
+  }
+
+  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
+  for (const personId of expiredStaffIds) {
+    delete staffBudgetByPersonId[personId];
+  }
+  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
 
   let cash = state.finances.cash;
   if (teamId) {
@@ -7995,6 +8028,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (!superBowl || !state.playoffs.completedGames[superBowl.gameId]) return state;
       const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
       let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason, phase: "SEASON_COMPLETE" }, careerStage: "SEASON_AWARDS" };
+      out = migrateExpiredContractsToFreeAgency(out, out.season);
       out = applySeasonMilestoneAwards(out);
       const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
       const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
