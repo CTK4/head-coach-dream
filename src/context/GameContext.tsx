@@ -57,6 +57,7 @@ import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { migrateExpiredContractsToFreeAgency } from "@/context/seasonRollover";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
 import type { CoachProfile, StaffRoster } from "@/data/coachTraits";
@@ -3086,66 +3087,13 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
   return { ...state, playerTeamOverrides };
 }
 
-function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: number): GameState {
-  let next = state;
-
-  for (const p of getPlayers()) {
-    const playerId = String((p as any).playerId ?? "");
-    if (!playerId) continue;
-
-    const currentTeamId = String(next.playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
-    if (!currentTeamId || currentTeamId === "FREE_AGENT") continue;
-
-    const tagged = next.franchiseTags[playerId];
-    if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
-
-    const override = next.playerContractOverrides[playerId];
-    const overrideCoversNextSeason = !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
-    if (overrideCoversNextSeason) continue;
-
-    const summary = getContractSummaryForPlayer(next, playerId);
-    if (!summary) continue;
-
-    if (Number(summary.endSeason) < nextSeason) {
-      next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
-    }
-  }
-
-  return next;
-}
-
 function seasonRollover(state: GameState): GameState {
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
-  const expiredState = expireExpiringContractsToFreeAgency(state, nextSeason);
+  const expiredState = migrateExpiredContractsToFreeAgency(state, state.season);
   const playerTeamOverrides = { ...expiredState.playerTeamOverrides };
   const playerContractOverrides = { ...expiredState.playerContractOverrides };
-
-  for (const p of getPlayers()) {
-    const playerId = String((p as any).playerId ?? "");
-    if (!playerId) continue;
-
-    const effectiveTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
-    if (!effectiveTeamId || effectiveTeamId === "FREE_AGENT") continue;
-
-    const override = playerContractOverrides[playerId];
-    const overrideCoversNextSeason =
-      !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
-    if (overrideCoversNextSeason) continue;
-
-    const contractId = String((p as any).contractId ?? "");
-    if (!contractId) continue;
-
-    const contract = getContractById(contractId);
-    if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
-
-    const baseEndSeason = Number((contract as any).endSeason ?? 0);
-    if (nextSeason <= baseEndSeason) continue;
-
-    expireContract(contractId, baseEndSeason);
-    playerTeamOverrides[playerId] = "FREE_AGENT";
-  }
 
   const expiredStaffIds = new Set<string>();
   const personnelOverrides_expire: Record<string, import("@/data/leagueDb").PersonnelOverride> = {};
@@ -7936,6 +7884,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (!superBowl || !state.playoffs.completedGames[superBowl.gameId]) return state;
       const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
       let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason, phase: "SEASON_COMPLETE" }, careerStage: "SEASON_AWARDS" };
+      out = migrateExpiredContractsToFreeAgency(out, out.season);
       out = applySeasonMilestoneAwards(out);
       const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
       const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);

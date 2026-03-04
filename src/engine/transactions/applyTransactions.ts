@@ -54,6 +54,9 @@ export function buildRosterIndex(state: GameState): RosterIndex {
 
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
   for (const event of events) applyMovement(playerToTeam, event as TransactionEvent);
+  for (const [playerId, teamId] of Object.entries(state.playerTeamOverrides ?? {})) {
+    playerToTeam[String(playerId)] = normTeamId(teamId);
+  }
 
   const teamToPlayers: Record<string, string[]> = {};
   const freeAgents: string[] = [];
