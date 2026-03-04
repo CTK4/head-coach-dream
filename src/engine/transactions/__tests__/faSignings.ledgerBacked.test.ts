@@ -18,7 +18,8 @@ function withTx(state: any, draft: any) {
 
 describe("fa signings are ledger-backed", () => {
   it("appends SIGN_FA and drives roster + contract indices", () => {
-    const player = getPlayers().find((p: any) => String(p.teamId ?? "") === "FREE_AGENT");
+    // Any player works; SIGN_FA ledger event will override their team assignment
+    const player = getPlayers().find((p: any) => !!String(p.playerId ?? ""));
     expect(player).toBeTruthy();
 
     const playerId = String((player as any).playerId);
