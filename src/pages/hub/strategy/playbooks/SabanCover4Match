@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    SABAN COVER 4 MATCH — DEFENSIVE CORE 40 (UI DATA)
 

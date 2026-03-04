@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ POWER GAP — CORE 40 PLAYS ═══
    Same format as your PLAYS array.
    Categories: run (12) | pass (16) | pa (6) | situational (6)

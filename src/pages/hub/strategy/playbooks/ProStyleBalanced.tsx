@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ PRO-STYLE BALANCED — CORE 40 ═══
    15 run / 20 pass / 5 PA
    Buckets: run (1-15), pass (16-35), pa (36-40)

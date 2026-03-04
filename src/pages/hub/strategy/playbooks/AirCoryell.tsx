@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ CORYELL / AIR CORYELL — VERTICAL DIGIT SYSTEM (CORE 40) ═══
    Core philosophy: stretch deep thirds, attack intermediate dig windows, 7-step timing.
    Format: { id, name, label, cat, sk, rt }

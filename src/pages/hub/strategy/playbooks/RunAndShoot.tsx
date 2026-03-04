@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ RUN-AND-SHOOT — CORE 40 ═══
    Core philosophy: option routes vs coverage leverage.
    Uses your existing helpers/constants: P(), QQ(), CB(), LOS

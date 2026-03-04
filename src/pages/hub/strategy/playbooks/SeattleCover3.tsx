@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ COVER 3 SYSTEM — CORE 40 (Match / Fire Zones / Pressures) ═══
    Same format: { id, name, label, cat, sk, rt }
    Uses cat: 'coverage' | 'sim' | 'pressure' | 'situational'

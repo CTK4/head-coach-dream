@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    MOTION-BASED / MISDIRECTION OFFENSE — CORE 40 (UI DATA)
    Identity: Jet/orbit motion, eye-discipline stress, constraint layering.

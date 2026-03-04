@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ════════════════════════════════════════════════════════════════════════
    MODERNIZED TRIPLE OPTION — CORE 40 (UI DATA)
    Identity: option/run-first with modern spread elements (zone read, RPO-ish tags,

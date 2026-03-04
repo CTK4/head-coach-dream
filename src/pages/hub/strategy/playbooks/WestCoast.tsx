@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ WEST COAST (Classic Walsh) — CORE 40 PLAYS ═══
    Format matches your existing PLAYS objects.
    Categories: run (12) | pass (16) | pa (6) | situational (6)

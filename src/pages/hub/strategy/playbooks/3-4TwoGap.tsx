@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ 3-4 TWO-GAP (OKIE) SYSTEM — CORE 36 ═══
    Philosophy: control A/B gaps with 2-gapping DL (0/4i/4i), spill or box with OLBs,
    keep ILBs clean, pattern-match behind it.

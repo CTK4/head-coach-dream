@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ FANGIO TWO-HIGH — MATCH / DISGUISE CORE 40 ═══
    Same shape: { id, name, label, cat, sk, rt }
    Suggested DEF categories (add to CAT_META if you want UI tabs):

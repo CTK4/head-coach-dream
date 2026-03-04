@@ -1,3 +1,4 @@
+import { LOS } from "./playbookConstants";
 /* ═══ VERTICAL PASSING SYSTEM — CORE 40 ═══
    High-variance, 7-step base.
    Buckets: run (1-10), pass (11-35), pa (36-40)
