@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { computeDevArrow, computeDevRisk } from "@/engine/devCalculators";
+import { coachAttrModifier, coachesForPosition } from "@/engine/coachImpact";
+import { CORE_ATTRIBUTE_KEYS } from "@/engine/snapBasedProgression";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +149,7 @@ export default function Development() {
   // ── Player drawer ────────────────────────────────────────
   const seasonDevDeltas = useMemo(() => {
     const events = (state.memoryLog ?? []).filter((e) => e.type === "SEASON_DEVELOPMENT");
-    const latest = events.length ? (events[events.length - 1].payload as any) : null;
+    const latest = events.length ? (events[events.length - 1].payload as { deltas?: Record<string, number> }) : null;
     return (latest?.deltas ?? {}) as Record<string, number>;
   }, [state.memoryLog]);
 
@@ -156,6 +158,29 @@ export default function Development() {
     () => players.find((p) => p.playerId === selectedId) ?? null,
     [players, selectedId],
   );
+
+  // ── Attribute deltas for selected player ────────────────
+  const selectedAttrDeltas = useMemo<Record<string, number>>(() => {
+    if (!selectedId) return {};
+    return state.playerAttributeDeltasById?.[selectedId] ?? {};
+  }, [selectedId, state.playerAttributeDeltasById]);
+
+  // ── Staff coaching bonus for selected player's position ──
+  const selectedCoachBonus = useMemo<Array<{ label: string; delta: number }>>(() => {
+    if (!selectedPlayer || !state.staffRoster?.coaches?.length) return [];
+    const pos = selectedPlayer.pos; // already display-label; use raw pos from players array
+    const rawPlayer = state.playerAttributeDeltasById ? selectedId : null;
+    // get raw pos from effective players
+    const rawPos = rawPlayer
+      ? String(getEffectivePlayersByTeam(state, teamId).find((p: Record<string, unknown>) => String(p.playerId) === selectedId)?.pos ?? pos)
+      : pos;
+    const relevant = coachesForPosition(state.staffRoster.coaches, rawPos);
+    if (!relevant.length) return [];
+    return CORE_ATTRIBUTE_KEYS.map((attr) => ({
+      label: attr.replace(/_/g, " "),
+      delta: relevant.reduce((sum, c) => sum + coachAttrModifier(c, attr.toLowerCase()), 0),
+    })).filter((row) => Math.abs(row.delta) > 0.001);
+  }, [selectedPlayer, selectedId, state, teamId]);
 
   // ── Loading / empty guard ────────────────────────────────
   if (!teamId) {
@@ -371,13 +396,31 @@ export default function Development() {
                   </Card>
                 ) : null}
 
-                {/* Attribute delta (snap-based — placeholder until sim is wired) */}
+                {/* Attribute Delta (snap-based progression) */}
                 <Card className="rounded-xl border-white/10 bg-white/[0.04]">
                   <CardContent className="p-3">
                     <div className="mb-2 text-xs uppercase tracking-wider text-slate-400">Attribute Delta</div>
-                    <div className="text-xs italic text-slate-500">
-                      Snap-based growth tracking not yet available — deltas will appear after game simulation.
-                    </div>
+                    {Object.keys(selectedAttrDeltas).length === 0 ? (
+                      <div className="text-xs italic text-slate-500">
+                        No snap data yet — deltas accumulate after regular season games.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {Object.entries(selectedAttrDeltas)
+                          .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
+                          .slice(0, 10)
+                          .map(([attr, delta]) => (
+                            <div key={attr} className="flex items-center justify-between gap-1">
+                              <span className="text-xs text-slate-400 truncate">{attr.replace(/_/g, " ")}</span>
+                              <span
+                                className={`text-xs font-bold shrink-0 ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-slate-400"}`}
+                              >
+                                {delta > 0 ? `+${delta}` : delta}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -399,13 +442,30 @@ export default function Development() {
                   </CardContent>
                 </Card>
 
-                {/* Coaching / staff modifiers (placeholder) */}
+                {/* Coaching Modifiers (staff affinity bonuses) */}
                 <Card className="rounded-xl border-white/10 bg-white/[0.04]">
                   <CardContent className="p-3">
                     <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">Coaching Modifiers</div>
-                    <div className="text-xs italic text-slate-500">
-                      Staff coaching bonuses will display here when staff system is wired.
-                    </div>
+                    {selectedCoachBonus.length === 0 ? (
+                      <div className="text-xs italic text-slate-500">
+                        {state.staffRoster?.coaches?.length
+                          ? "No applicable coaches for this position."
+                          : "Hire position coaches to see attribute bonuses."}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {selectedCoachBonus.map(({ label, delta }) => (
+                          <div key={label} className="flex items-center justify-between gap-1">
+                            <span className="text-xs text-slate-400 truncate">{label}</span>
+                            <span
+                              className={`text-xs font-bold shrink-0 ${delta > 0 ? "text-emerald-400" : "text-rose-400"}`}
+                            >
+                              {delta > 0 ? `+${(delta * 100).toFixed(0)}%` : `${(delta * 100).toFixed(0)}%`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
