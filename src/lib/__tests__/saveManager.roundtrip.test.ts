@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GameState } from "@/context/GameContext";
-import { loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
+import { createSaveManager } from "@/lib/saveManager";
 import { runGoldenSeason } from "@/testHarness/goldenSeasonRunner";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
@@ -20,21 +20,21 @@ class LocalStorageMock {
   }
 }
 
-function saveAndLoad(saveId: string, state: GameState): GameState {
-  syncCurrentSave({ ...state, saveId }, saveId);
-  const loaded = loadSaveResult(saveId);
+function saveAndLoad(saveManager: ReturnType<typeof createSaveManager>, saveId: string, state: GameState): GameState {
+  saveManager.syncCurrentSave({ ...state, saveId }, saveId);
+  const loaded = saveManager.loadSaveResult(saveId);
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) throw new Error("save load failed");
   return loaded.state;
 }
 
 describe("saveManager round trip at golden checkpoints", () => {
+  let storage: LocalStorageMock;
+  let saveManager: ReturnType<typeof createSaveManager>;
+
   beforeEach(() => {
-    Object.defineProperty(globalThis, "localStorage", {
-      value: new LocalStorageMock(),
-      configurable: true,
-      writable: true,
-    });
+    storage = new LocalStorageMock();
+    saveManager = createSaveManager({ storage });
   });
 
   it("preserves determinism and integrity hashes at offseason, midseason, and postseason checkpoints", () => {
@@ -66,8 +66,8 @@ describe("saveManager round trip at golden checkpoints", () => {
     ];
 
     for (const { saveId, state } of cases) {
-      const loaded = saveAndLoad(saveId, state);
-      const loadedAgain = saveAndLoad(`${saveId}-again`, loaded);
+      const loaded = saveAndLoad(saveManager, saveId, state);
+      const loadedAgain = saveAndLoad(saveManager, `${saveId}-again`, loaded);
       expect(stableDeterminismHash(loaded)).toBe(stableDeterminismHash(state));
       expect(stableDeterminismHash(loadedAgain)).toBe(stableDeterminismHash(loaded));
       expect(stableIntegrityHash(loadedAgain)).toBe(stableIntegrityHash(loaded));
@@ -84,17 +84,17 @@ describe("saveManager round trip at golden checkpoints", () => {
       stopAt: "OFFSEASON_DONE",
     }).finalState;
 
-    syncCurrentSave({ ...state, saveId: "corrupt-me" }, "corrupt-me");
-    const canonicalBeforeCorruption = loadSaveResult("corrupt-me");
+    saveManager.syncCurrentSave({ ...state, saveId: "corrupt-me" }, "corrupt-me");
+    const canonicalBeforeCorruption = saveManager.loadSaveResult("corrupt-me");
     expect(canonicalBeforeCorruption.ok).toBe(true);
     if (!canonicalBeforeCorruption.ok) throw new Error("expected canonical save before corruption");
 
-    syncCurrentSave({ ...canonicalBeforeCorruption.state, saveId: "corrupt-me" }, "corrupt-me");
+    saveManager.syncCurrentSave({ ...canonicalBeforeCorruption.state, saveId: "corrupt-me" }, "corrupt-me");
 
     const key = "hc_career_save__corrupt-me";
-    localStorage.setItem(key, "{not valid json");
+    storage.setItem(key, "{not valid json");
 
-    const result = loadSaveResult("corrupt-me");
+    const result = saveManager.loadSaveResult("corrupt-me");
     expect(result.ok).toBe(true);
 
     if (result.ok) {

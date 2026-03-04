@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { exportSave, importSave, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
+import { createSaveManager } from "@/lib/saveManager";
 import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 
 class LocalStorageMock {
@@ -35,12 +35,12 @@ const baseState = {
 };
 
 describe("saveManager", () => {
+  let storage: LocalStorageMock;
+  let saveManager: ReturnType<typeof createSaveManager>;
+
   beforeEach(() => {
-    Object.defineProperty(globalThis, "localStorage", {
-      value: new LocalStorageMock(),
-      configurable: true,
-      writable: true,
-    });
+    storage = new LocalStorageMock();
+    saveManager = createSaveManager({ storage });
   });
 
   describe("validateCriticalSaveState — phase domain", () => {
@@ -165,8 +165,8 @@ describe("saveManager", () => {
   it("loads legacy save without schemaVersion and migrates to latest", () => {
     const saveId = "legacy-save";
     const storageKey = `hc_career_save__${saveId}`;
-    localStorage.setItem(storageKey, JSON.stringify(baseState));
-    localStorage.setItem(
+    storage.setItem(storageKey, JSON.stringify(baseState));
+    storage.setItem(
       "hc_career_saves_index",
       JSON.stringify([
         {
@@ -183,7 +183,7 @@ describe("saveManager", () => {
       ]),
     );
 
-    const loaded = loadSaveResult(saveId);
+    const loaded = saveManager.loadSaveResult(saveId);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.state.schemaVersion).toBe(LATEST_SAVE_SCHEMA_VERSION);
@@ -199,9 +199,9 @@ describe("saveManager", () => {
   it("detects corrupt JSON and restores from backup", () => {
     const saveId = "corrupt-save";
     const storageKey = `hc_career_save__${saveId}`;
-    localStorage.setItem(storageKey, "{bad json");
-    localStorage.setItem(`${storageKey}__bak`, JSON.stringify({ ...baseState, schemaVersion: 1, saveId }));
-    localStorage.setItem(
+    storage.setItem(storageKey, "{bad json");
+    storage.setItem(`${storageKey}__bak`, JSON.stringify({ ...baseState, schemaVersion: 1, saveId }));
+    storage.setItem(
       "hc_career_saves_index",
       JSON.stringify([
         {
@@ -218,7 +218,7 @@ describe("saveManager", () => {
       ]),
     );
 
-    const loaded = loadSaveResult(saveId);
+    const loaded = saveManager.loadSaveResult(saveId);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.state.saveId).toBe(saveId);
@@ -231,10 +231,10 @@ describe("saveManager", () => {
     const initialSlot = JSON.stringify({ ...baseState, schemaVersion: 1, saveId });
     const initialLegacy = JSON.stringify({ ...baseState, schemaVersion: 1, saveId: "legacy" });
 
-    localStorage.setItem(storageKey, initialSlot);
-    localStorage.setItem("hc_career_save", initialLegacy);
-    localStorage.setItem("hc_career_active_save_id", "different-active-slot");
-    localStorage.setItem(
+    storage.setItem(storageKey, initialSlot);
+    storage.setItem("hc_career_save", initialLegacy);
+    storage.setItem("hc_career_active_save_id", "different-active-slot");
+    storage.setItem(
       "hc_career_saves_index",
       JSON.stringify([
         {
@@ -251,11 +251,11 @@ describe("saveManager", () => {
       ]),
     );
 
-    const exported = exportSave(saveId);
+    const exported = saveManager.exportSave(saveId);
     expect(exported).toBeTruthy();
-    expect(localStorage.getItem("hc_career_active_save_id")).toBe("different-active-slot");
-    expect(localStorage.getItem("hc_career_save")).toBe(initialLegacy);
-    expect(localStorage.getItem(storageKey)).toBe(initialSlot);
+    expect(storage.getItem("hc_career_active_save_id")).toBe("different-active-slot");
+    expect(storage.getItem("hc_career_save")).toBe(initialLegacy);
+    expect(storage.getItem(storageKey)).toBe(initialSlot);
 
     const exportText = await exported!.blob.text();
     const parsed = JSON.parse(exportText);
@@ -264,12 +264,12 @@ describe("saveManager", () => {
   });
 
   it("import/export round trip preserves critical state", async () => {
-    syncCurrentSave({ ...baseState, schemaVersion: 1, saveId: "slot-a" } as any, "slot-a");
-    const exported = exportSave("slot-a");
+    saveManager.syncCurrentSave({ ...baseState, schemaVersion: 1, saveId: "slot-a" } as any, "slot-a");
+    const exported = saveManager.exportSave("slot-a");
     expect(exported).toBeTruthy();
     const text = await exported!.blob.text();
 
-    const imported = importSave(text);
+    const imported = saveManager.importSave(text);
     expect(imported.ok).toBe(true);
     if (imported.ok) {
       expect(imported.state.coach.name).toBe("Coach Test");
@@ -280,7 +280,6 @@ describe("saveManager", () => {
   });
 
   it("commitAtomic_throws_and_does_not_mutate_index_on_failure", () => {
-    const storage = localStorage as unknown as LocalStorageMock;
     const saveId = "slot-a";
     const storageKey = `hc_career_save__${saveId}`;
     const previousIndex = [
@@ -297,18 +296,19 @@ describe("saveManager", () => {
       },
     ];
 
-    localStorage.setItem(storageKey, JSON.stringify({ ...baseState, schemaVersion: 1, saveId, season: 2025 }));
-    localStorage.setItem("hc_career_saves_index", JSON.stringify(previousIndex));
-    localStorage.setItem("hc_career_active_save_id", saveId);
+    storage.setItem(storageKey, JSON.stringify({ ...baseState, schemaVersion: 1, saveId, season: 2025 }));
+    storage.setItem("hc_career_saves_index", JSON.stringify(previousIndex));
+    storage.setItem("hc_career_active_save_id", saveId);
 
     storage.failOnSetItemKey = `${storageKey}__tmp`;
 
-    expect(() => syncCurrentSave({ ...baseState, schemaVersion: 1, season: 2026, saveId } as any, saveId)).toThrow(/Failed to set localStorage key/);
+    expect(() => saveManager.syncCurrentSave({ ...baseState, schemaVersion: 1, season: 2026, saveId } as any, saveId)).toThrow(/Failed to set localStorage key/);
 
-    expect(localStorage.getItem("hc_career_saves_index")).toBe(JSON.stringify(previousIndex));
-    expect(localStorage.getItem("hc_career_active_save_id")).toBe(saveId);
+    expect(storage.getItem("hc_career_saves_index")).toBe(JSON.stringify(previousIndex));
+    expect(storage.getItem("hc_career_active_save_id")).toBe(saveId);
 
-    const loaded = loadSaveResult(saveId);
+    storage.failOnSetItemKey = null;
+    const loaded = saveManager.loadSaveResult(saveId);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.state.season).toBe(2025);
