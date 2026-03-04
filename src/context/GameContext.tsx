@@ -134,7 +134,6 @@ import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generate
 import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
-import { getUserTeamId } from "@/lib/migrations/saveSchema";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
@@ -4549,6 +4548,10 @@ function deterministicRand(seed: number): number {
   return x - Math.floor(x);
 }
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled action: ${JSON.stringify(x)}`);
+}
+
 function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts">): GameState {
   const tx: TransactionEvent = {
     ...draft,
@@ -4588,13 +4591,13 @@ function finalizeWeek(
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   const t = action.type;
-  if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE" || t === "CUT_SUBMIT") {
+  if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE") {
     return offseasonReducer(state, action as GameAction);
   }
   if (t.startsWith("DRAFT_")) {
     return draftReducer(state, action as GameAction);
   }
-  if (t === "SIMULATE_WEEK" || t === "WEEK_COMPLETE" || t.startsWith("SEASON_") || t.startsWith("PLAYOFFS_") || t === "ADVANCE_PHASE") {
+  if (t.startsWith("SEASON_") || t.startsWith("PLAYOFFS_")) {
     return seasonReducer(state, action as GameAction);
   }
   if (t.startsWith("FA_") || t.startsWith("FREE_AGENCY_")) {
@@ -8635,7 +8638,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "RESET":
       return createInitialState();
     default:
-      return state;
+      return assertNever(action);
   }
 }
 

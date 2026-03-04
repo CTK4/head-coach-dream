@@ -41,11 +41,11 @@ export default function Combine() {
   const top = filtered.slice(0, 80);
 
   function completeStep() {
-    dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "COMBINE" } } as any);
+    dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "COMBINE" } });
   }
 
   function next() {
-    dispatch({ type: "OFFSEASON_ADVANCE_STEP" } as any);
+    dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
   }
 
   return (
@@ -63,7 +63,7 @@ export default function Combine() {
               <Button
                 className="min-h-11"
                 onClick={next}
-                disabled={!state.offseason?.stepsComplete?.COMBINE && !(state as any).offseason?.stepsComplete?.COMBINE}
+                disabled={!state.offseason.stepsComplete.COMBINE}
               >
                 Continue →
               </Button>
