@@ -84,11 +84,12 @@ import {
 } from "@/engine/practiceFocus";
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
-import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
+import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked, getQbScoutingDivergenceByArchetype } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import {
   COMBINE_DAY_COUNT,
   COMBINE_DAY_POSITION_BUCKETS,
@@ -2343,14 +2344,14 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
   const amount = resolveFranchiseTagAmount(state, player);
   const priorTag = state.franchiseTags[playerId];
   const priorContract = buildContractIndex(state)[playerId];
+  // Franchise tag is a 1-year fully guaranteed contract at the tag amount.
+  // Keep salary = full amount (no signing bonus split) so ledger reflects real cap hit.
   const tagContract: PlayerContractOverride = {
-    ...createContractOverride({
-      startSeason: nextSeason,
-      years: 1,
-      salary: amount,
-      guarantees: 1,
-      type: "FRANCHISE_TAG",
-    }),
+    startSeason: nextSeason,
+    endSeason: nextSeason,
+    salaries: [amount],
+    signingBonus: 0,
+    contractType: "FRANCHISE_TAG",
     guaranteedAtSigning: amount,
   };
 
@@ -5153,7 +5154,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
-      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
+      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase().replace(/\s+/g, "_");
       let nextPlaybooks = {
         ...nextState.playbooks,
         userOverride: {
@@ -8899,6 +8900,9 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         cash: 150_000_000,
         postJune1Sim: false,
       },
+    staffBudget: (oldState as any).staffBudget ?? { total: 23_000_000, used: 0, byPersonId: {} },
+    teamFinances: (oldState as any).teamFinances ?? { cash: 60_000_000, deadMoneyBySeason: {} },
+    memoryLog: Array.isArray((oldState as any).memoryLog) ? (oldState as any).memoryLog : [],
     league: normalizedLeague,
     teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
     game,
