@@ -3964,8 +3964,14 @@ function applySeasonDevelopment(state: GameState): GameState {
   };
 }
 
+const MEMORY_LOG_MAX = 200;
+
 function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
-  return [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
+  // P3 FIX: cap at 200; newest entries are kept (tail), oldest are dropped.
+  // 200 entries ≈ 10 seasons of normal activity; enough for coach history,
+  // recent staff moves, and penalty audit trail.
+  const next = [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
+  return next.length > MEMORY_LOG_MAX ? next.slice(next.length - MEMORY_LOG_MAX) : next;
 }
 
 function applyOwnerPenalty(state: GameState, amount: number, reason: string): GameState {
@@ -7978,8 +7984,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
         season: nextSeason,
         week: 0,
-        // M2 FIX: compact per-season ephemeral data on rollover.
-        // These arrays grow across seasons and are only needed during the current season.
+        // P3 FIX: compact per-season ephemeral data on rollover.
+        // accumulateSeasonStats() already consumed gameHistory above (line ~7835).
+        // weeklyResults, gameHistory, and league.results are only needed during
+        // the current season; resetting saves ~100-300KB per season on the save.
         weeklyResults: [],
         gameHistory: [],
         league: {
