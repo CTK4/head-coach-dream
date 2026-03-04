@@ -3,11 +3,11 @@ import { buildPlayoffBracket, simulateCpuPlayoffGamesForRound, advancePlayoffRou
 import { initLeagueState } from "@/engine/leagueSim";
 
 function run(seed: number) {
-  const league = initLeagueState(["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS", "CLEVELAND_BULLDOGS"], 2026);
+  const league = initLeagueState(["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BALTIMORE_ADMIRALS", "BOSTON_HARBORMEN"], 2026);
   league.standings.MILWAUKEE_NORTHSHORE = { w: 14, l: 3, pf: 450, pa: 280 };
   league.standings.ATLANTA_APEX = { w: 13, l: 4, pf: 430, pa: 300 };
-  league.standings.BIRMINGHAM_VULCANS = { w: 12, l: 5, pf: 410, pa: 320 };
-  league.standings.CLEVELAND_BULLDOGS = { w: 11, l: 6, pf: 390, pa: 340 };
+  league.standings.BALTIMORE_ADMIRALS = { w: 12, l: 5, pf: 410, pa: 320 };
+  league.standings.BOSTON_HARBORMEN = { w: 11, l: 6, pf: 390, pa: 340 };
 
   let playoffs = buildPlayoffBracket({ league, season: 2026 });
   for (let i = 0; i < 4; i += 1) {
