@@ -91,9 +91,22 @@ function HubGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const LegacyHubScoutingRedirect = () => <Navigate to={`/scouting${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
-const LegacyHubOffseasonRedirect = () => <Navigate to={`/offseason${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
-const LegacyHubPlayerRedirect = () => { const { playerId } = useParams(); return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />; };
+function LegacyHubScoutingRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/scouting/${wildcard}` : "/scouting"} replace />;
+}
+
+function LegacyHubOffseasonRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/offseason/${wildcard}` : "/offseason"} replace />;
+}
+
+function LegacyHubPlayerRedirect() {
+  const { playerId } = useParams();
+  return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />;
+}
 
 function OnboardingRouteGuard({ children }: { children: React.ReactNode }) {
   const { state } = useGame();
