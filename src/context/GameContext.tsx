@@ -440,6 +440,7 @@ export type OffseasonData = {
     resultsByProspectId?: Record<string, any>;
     interviewPoolIds?: string[];
     lastRunSeed?: number;
+    shortlist: Record<string, boolean>;
   };
   scouting: {
     windowId: ScoutingWindowId;
@@ -459,7 +460,7 @@ export type OffseasonData = {
     capHitsByPlayerId: Record<string, number>;
     decisionReasonByPlayerId: Record<string, string>;
   };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM" };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM"; intelByProspectId: Record<string, number> };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
@@ -1256,6 +1257,7 @@ export type GameAction =
   | { type: "COMBINE_GENERATE" }
   | { type: "COMBINE_RUN_EVENTS"; payload?: { seed?: number } }
   | { type: "COMBINE_GENERATE_INTERVIEW_POOL"; payload?: { seed?: number } }
+  | { type: "COMBINE_TOGGLE_SHORTLIST"; payload: { prospectId: string } }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "TAMPERING_INIT" }
   | { type: "TAMPERING_OPEN_PLAYER"; payload: { playerId: string } }
@@ -1273,7 +1275,7 @@ export type GameAction =
   | { type: "FA_INIT_RESET" }
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
-  | { type: "FA_SIGN"; payload: { offerId: string } }
+  | { type: "FA_SIGN"; payload: { offerId: string; years?: number; apy?: number } }
   | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
   | { type: "FA_OPEN_MY_OFFERS" }
   | { type: "FA_CLOSE_MODAL" }
@@ -1580,7 +1582,7 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
       rosterAudit: { cutDesignations: {} },
-      combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0 },
+      combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -1599,7 +1601,7 @@ function createInitialState(): GameState {
         capHitsByPlayerId: {},
         decisionReasonByPlayerId: {},
       },
-      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
+      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
       draft: { board: [], picks: [], completed: false },
       camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
       cutDowns: { decisions: {} },
@@ -6353,6 +6355,21 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
 
+    case "COMBINE_TOGGLE_SHORTLIST": {
+      const id = String(action.payload.prospectId);
+      const cur = !!(state.offseasonData.combine.shortlist?.[id]);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          combine: {
+            ...state.offseasonData.combine,
+            shortlist: { ...(state.offseasonData.combine.shortlist ?? {}), [id]: !cur },
+          },
+        },
+      };
+    }
+
     case "COMBINE_GENERATE": {
       return ensureOffseasonCombineData(state);
     }
@@ -6591,22 +6608,42 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const offerId = String(action.payload.offerId);
       const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.id) === offerId);
       if (!offer) return state;
+      const teamId = String(state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
       const playerId = String(offer.playerId);
+      const years = Math.max(1, Math.min(5, Number(action.payload.years ?? offer.years ?? 2)));
+      const apy = Math.max(500_000, Number(action.payload.apy ?? offer.apy ?? 0));
       const reason = offer.interest >= 0.55 ? "AAV vs market" : "Contender status";
-      const capUsed = state.offseasonData.freeAgency.capUsed + Number(offer.apy ?? 0);
+      const capUsed = state.offseasonData.freeAgency.capUsed + apy;
+
+      // Create a real contract override and apply via canonical transaction
+      const contractOverride = createContractOverride({
+        startSeason: state.season,
+        years,
+        salary: apy,
+        guarantees: 0,
+        type: "STANDARD",
+      });
+      let next: GameState;
+      try {
+        next = applyCanonicalTx(state, Tx.signFA(teamId, playerId, contractOverride));
+      } catch {
+        next = state;
+      }
+
       return {
-        ...state,
+        ...next,
         offseasonData: {
-          ...state.offseasonData,
+          ...next.offseasonData,
           freeAgency: {
-            ...state.offseasonData.freeAgency,
-            signings: Array.from(new Set([playerId, ...state.offseasonData.freeAgency.signings])),
+            ...next.offseasonData.freeAgency,
+            signings: Array.from(new Set([playerId, ...next.offseasonData.freeAgency.signings])),
             capUsed,
-            capHitsByPlayerId: { ...state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: Number(offer.apy ?? 0) },
-            decisionReasonByPlayerId: { ...state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+            capHitsByPlayerId: { ...next.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
+            decisionReasonByPlayerId: { ...next.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
           },
         },
-        ui: { ...state.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
+        ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
       };
     }
 
@@ -7189,6 +7226,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (nextOn) nextReveals[id] = genVisitReveal(state, id);
       else delete nextReveals[id];
 
+      const nextIntelVisit = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelVisit[id] = Math.min(2, (nextIntelVisit[id] ?? 0) + 1);
+
       return {
         ...state,
         offseasonData: {
@@ -7197,6 +7237,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             ...state.offseasonData.preDraft,
             visits: { ...state.offseasonData.preDraft.visits, [id]: nextOn },
             reveals: nextReveals,
+            intelByProspectId: nextIntelVisit,
           },
         },
       };
@@ -7212,6 +7253,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (nextOn && visits[id]) return { ...state, uiToast: "Prospect already scheduled for visit." };
       if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
 
+      const nextIntelWorkout = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelWorkout[id] = Math.min(2, (nextIntelWorkout[id] ?? 0) + 1);
+
       return {
         ...state,
         offseasonData: {
@@ -7219,6 +7263,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           preDraft: {
             ...state.offseasonData.preDraft,
             workouts: { ...state.offseasonData.preDraft.workouts, [id]: nextOn },
+            intelByProspectId: nextIntelWorkout,
           },
         },
       };
@@ -8712,7 +8757,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
         rosterAudit: { cutDesignations: {} },
-        combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0 },
+        combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -8731,7 +8776,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           capHitsByPlayerId: {},
           decisionReasonByPlayerId: {},
         },
-        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
+        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
         draft: { board: [], picks: [], completed: false },
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },
