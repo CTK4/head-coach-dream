@@ -1,11 +1,12 @@
 import type { GameState } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getLeague } from "@/data/leagueDb";
 
 /** Annual league-cap growth rate (historical NFL average ~6.5%). */
 export const CAP_GROWTH_RATE = 0.065;
 
 /** Fallback league cap when not yet set in game state. */
-export const DEFAULT_BASE_CAP = 250_000_000;
+export const DEFAULT_BASE_CAP = getLeague().salaryCap;
 
 /** Min-roster / practice-squad estimated burden per team per year (placeholder). */
 export const MIN_ROSTER_ESTIMATE = 4_000_000;

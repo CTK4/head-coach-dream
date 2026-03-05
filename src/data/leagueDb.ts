@@ -96,6 +96,14 @@ export type TeamFinancesRow = {
   notes?: string | null;
 };
 
+export type LeagueRow = {
+  leagueId: string;
+  season: number;
+  salaryCap: number;
+  currency?: string;
+  notes?: string | null;
+};
+
 const root = leagueDbJson as Record<string, unknown[]>;
 
 function coerceNumber(value: unknown): number | undefined {
@@ -234,6 +242,13 @@ const teamFinances: TeamFinancesRow[] = ((root.TeamFinances ?? []) as any[]).map
   expenses: coerceNumber(row.expenses),
   notes: row.notes != null ? String(row.notes) : null,
 }));
+const leagueRows: LeagueRow[] = ((root.League ?? []) as any[]).map((row) => ({
+  leagueId: String(row.leagueId ?? "UGF"),
+  season: coerceInt(row.season) ?? 2026,
+  salaryCap: coerceNumber(row.salaryCap) ?? 0,
+  currency: row.currency != null ? String(row.currency) : undefined,
+  notes: row.notes != null ? String(row.notes) : null,
+}));
 
 const teamsById = new Map(teams.map((team) => [team.teamId, team]));
 const playersById = new Map(players.map((player) => [player.playerId, player]));
@@ -250,6 +265,10 @@ function isFreeAgentPersonnel(person: PersonnelRow) {
 
 export function getTeams(): TeamRow[] {
   return teams;
+}
+
+export function getLeague(): LeagueRow {
+  return leagueRows[0] ?? { leagueId: "UGF", season: 2026, salaryCap: 0, currency: "USD", notes: null };
 }
 
 export function getTeamById(teamId: string): TeamRow | undefined {
@@ -495,7 +514,7 @@ export function getTeamSummary(teamId: string) {
     .filter((contract) => contract.entityType === "PLAYER" && contract.teamId === teamId)
     .reduce((sum, contract) => sum + Number(contract.salaryY1 ?? 0), 0);
 
-  const capSpace = 250_000_000 - capHits;
+  const capSpace = getLeague().salaryCap - capHits;
 
   return {
     team,

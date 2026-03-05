@@ -5,13 +5,14 @@ import { computeWeeklyPowerRankings } from "@/systems/powerRankings";
 import { createAwardsState, finalizeAwards, updateAwardsRace } from "@/systems/awardsEngine";
 import { calculateTradeValue } from "@/systems/tradeValuation";
 import { computeSnapBasedDevelopmentDelta } from "@/systems/snapProgression";
+import { getLeague } from "@/data/leagueDb";
 
 describe("phase2 systems", () => {
   it("builds deterministic team profiles", () => {
     const profile = buildTeamProfile({
       winPct: 0.72,
       capSpace: 30_000_000,
-      capTotal: 250_000_000,
+      capTotal: getLeague().salaryCap,
       avgRosterAge: 26.2,
       playoffResult: "conference",
       positionalNeeds: { QB: 0.1, WR: 0.4 },
@@ -24,7 +25,7 @@ describe("phase2 systems", () => {
     const profile = buildTeamProfile({
       winPct: 0.5,
       capSpace: 15_000_000,
-      capTotal: 250_000_000,
+      capTotal: getLeague().salaryCap,
       avgRosterAge: 27.9,
       playoffResult: "missed",
       positionalNeeds: { QB: 0.8, EDGE: 0.6 },
@@ -33,7 +34,7 @@ describe("phase2 systems", () => {
     const offers = cpuResignPlayers({
       teamId: "T1",
       capSpace: 15_000_000,
-      capTotal: 250_000_000,
+      capTotal: getLeague().salaryCap,
       profile,
       rosterByPos: {},
     }, [
