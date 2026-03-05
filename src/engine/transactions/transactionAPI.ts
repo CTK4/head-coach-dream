@@ -1,7 +1,8 @@
 import type { PlayerContractOverride } from "@/context/GameContext";
 import type { TransactionEvent } from "./types";
 
-type TradePackage = { playerIdsFrom: string[]; playerIdsTo: string[]; details?: Record<string, any> };
+type TradePickSwap = { round: number; year?: number; originalTeamId: string; fromTeamId: string; toTeamId: string };
+type TradePackage = { playerIdsFrom: string[]; playerIdsTo: string[]; pickSwaps?: TradePickSwap[]; details?: Record<string, any> };
 
 export const Tx = {
   resign(teamId: string, playerId: string, offer: PlayerContractOverride): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
@@ -46,7 +47,7 @@ export const Tx = {
       teamId: teamAId,
       otherTeamId: teamBId,
       playerIds: [...pkg.playerIdsFrom, ...pkg.playerIdsTo],
-      details: { ...(pkg.details ?? {}), toTeamByPlayer },
+      details: { ...(pkg.details ?? {}), toTeamByPlayer, pickSwaps: pkg.pickSwaps ?? [] },
     };
   },
   draftPick(teamId: string, prospectId: string, pickMeta: Record<string, any>): Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts"> {
