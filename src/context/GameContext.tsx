@@ -134,7 +134,7 @@ import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
 import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
-import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
+import { createFeedbackEvent, type FeedbackCategory, type FeedbackEvent, type FeedbackPayloadByCategory } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { updateMorale } from "@/engine/morale";
 import { updateChemistry } from "@/engine/chemistry";
@@ -903,6 +903,15 @@ export type OfferResultModalState = {
   ts: number;
 };
 
+export type DeterministicCounters = {
+  news: number;
+  feedback: number;
+  ui: number;
+  offer: number;
+  staff: number;
+  injury: number;
+};
+
 export type GameState = {
   coach: {
     name: string;
@@ -1128,6 +1137,7 @@ export type GameState = {
   feedbackHistory: FeedbackEvent[];
   pendingInjuryAlert?: Injury;
   hotSeatStatus: HotSeatStatus;
+  deterministicCounters?: DeterministicCounters;
   trainingFocus?: {
     posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
   };
@@ -1561,6 +1571,15 @@ function seedFor(leagueSeed: number, a: number, b: number, c: number): number {
   return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
 }
 
+const DEFAULT_DETERMINISTIC_COUNTERS: DeterministicCounters = {
+  news: 0,
+  feedback: 0,
+  ui: 0,
+  offer: 0,
+  staff: 0,
+  injury: 0,
+};
+
 const DEFAULT_SIDELINE: SidelineAdjustments = {
   offense: { tempo: "NORMAL", aggressiveness: 50, runBias: 50, passProtection: "BASE" },
   defense: { shellPreference: "AUTO", blitzRate: 35, spyQB: false, runFit: "NORMAL" },
@@ -1779,6 +1798,7 @@ function createInitialState(): GameState {
     feedbackHistory: [],
     pendingInjuryAlert: undefined,
     ui: {},
+    deterministicCounters: { ...DEFAULT_DETERMINISTIC_COUNTERS },
     hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
@@ -2018,10 +2038,50 @@ function clearResignOffers(state: GameState): GameState {
   };
 }
 
+type DeterministicCounterKey = keyof DeterministicCounters;
+
+function allocateDeterministic(state: GameState, key: DeterministicCounterKey, prefix: string): { state: GameState; id: string; ts: number; counter: number } {
+  const prior = state.deterministicCounters ?? DEFAULT_DETERMINISTIC_COUNTERS;
+  const counter = Number(prior[key] ?? 0) + 1;
+  const counters = { ...DEFAULT_DETERMINISTIC_COUNTERS, ...prior, [key]: counter };
+  const season = Number(state.season ?? 0);
+  const week = Number(state.week ?? 0);
+  const ts = season * 1_000_000 + week * 10_000 + counter;
+  return {
+    state: { ...state, deterministicCounters: counters },
+    id: `${prefix}_${season}_W${week}_${counter}`,
+    ts,
+    counter,
+  };
+}
+
+function buildOfferResultModal(
+  state: GameState,
+  payload: { title: string; message: string; variant: "success" | "danger" },
+): { state: GameState; modal: OfferResultModalState } {
+  const allocated = allocateDeterministic(state, "ui", "UI_MODAL");
+  return {
+    state: allocated.state,
+    modal: { open: true, title: payload.title, message: payload.message, variant: payload.variant, ts: allocated.ts },
+  };
+}
+
+function createDeterministicFeedbackEvent<C extends FeedbackCategory>(
+  state: GameState,
+  category: C,
+  payload: FeedbackPayloadByCategory[C],
+): { state: GameState; event: FeedbackEvent } {
+  const allocated = allocateDeterministic(state, "feedback", `FEEDBACK_${category}`);
+  return {
+    state: allocated.state,
+    event: createFeedbackEvent(category, payload, { id: allocated.id, timestamp: allocated.ts }),
+  };
+}
+
 function faPush(state: GameState, text: string, playerId?: string): GameState {
-  const ts = Date.now();
-  const activity = [{ ts, text, playerId }, ...state.freeAgency.activity].slice(0, 80);
-  return { ...state, freeAgency: { ...state.freeAgency, activity } };
+  const allocated = allocateDeterministic(state, "offer", "FA_ACTIVITY");
+  const activity = [{ ts: allocated.ts, text, playerId }, ...allocated.state.freeAgency.activity].slice(0, 80);
+  return { ...allocated.state, freeAgency: { ...allocated.state.freeAgency, activity } };
 }
 
 function countPendingUserOffers(state: GameState) {
@@ -2137,12 +2197,17 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
   try {
     next = applyCanonicalTx(state, Tx.signFA(signingTeamId, playerId, ovr));
   } catch (error: any) {
+    const modalAlloc = buildOfferResultModal(state, {
+      title: "Signing Failed",
+      message: "Unable to finalize signing transaction.",
+      variant: "danger",
+    });
     return {
-      ...state,
+      ...modalAlloc.state,
       uiToast: `Transaction blocked: ${String(error?.message ?? "invalid transaction")}`,
       ui: {
-        ...state.ui,
-        offerResultModal: { open: true, title: "Signing Failed", message: "Unable to finalize signing transaction.", variant: "danger", ts: Date.now() },
+        ...modalAlloc.state.ui,
+        offerResultModal: modalAlloc.modal,
       },
     };
   }
@@ -2157,7 +2222,7 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
 
   const p: any = (getPlayers() as any[]).find((x: any) => String(x.playerId) === String(playerId));
   next = pushNews(next, `Signed: ${String(p?.fullName ?? "Player")} (${String(p?.pos ?? "")}) agrees to terms.`);
-  const faEvent = createFeedbackEvent("FA_SIGNED", {
+  const faAlloc = createDeterministicFeedbackEvent(next, "FA_SIGNED", {
     playerName: String(p?.fullName ?? "Player"),
     position: String(p?.pos ?? "UNK"),
     years,
@@ -2165,23 +2230,21 @@ function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffe
     capHit: `$${Math.round((salaries[0] ?? 0) / 1_000_000)}M`,
     playerIds: [String(playerId)],
   });
-  const capEvent = createFeedbackEvent("CAP_CHANGE", {
+  const capAlloc = createDeterministicFeedbackEvent(faAlloc.state, "CAP_CHANGE", {
     playerName: String(p?.fullName ?? "Player"),
     capDelta: Math.round(cashY1 / 1000),
     remainingCap: Math.round((next.finances.capSpace ?? 0) / 1000),
     playerIds: [String(playerId)],
   });
-  const modal = {
-    open: true,
+  const modalAlloc = buildOfferResultModal(capAlloc.state, {
     title: "Offer Accepted",
     message: reason,
-    variant: "success" as const,
-    ts: Number(next.season ?? 1) * 10_000 + Number(next.week ?? 0) * 100 + Number(next.transactionLedger?.counter ?? 0),
-  };
+    variant: "success",
+  });
   const withFeedback = {
-    ...next,
-    ui: { ...next.ui, offerResultModal: modal },
-    feedbackQueue: [capEvent, faEvent, ...next.feedbackQueue].slice(0, 50),
+    ...modalAlloc.state,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    feedbackQueue: [capAlloc.event, faAlloc.event, ...modalAlloc.state.feedbackQueue].slice(0, 50),
   };
   return faPush(withFeedback, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(offer.aav / 1_000_000)}M/yr.`, playerId);
 }
@@ -2783,19 +2846,19 @@ function stableHashId(input: string): string {
   return `n_${(h >>> 0).toString(16)}`;
 }
 
-function makeNewsItem(title: string, opts?: { body?: string; category?: string; createdAt?: number }): NewsItem {
-  const createdAt = opts?.createdAt ?? Date.now();
-  const id = stableHashId(`${createdAt}:${opts?.category ?? ""}:${title}:${opts?.body ?? ""}`);
-  return { id, title, body: opts?.body, category: opts?.category, createdAt };
+function makeNewsItem(
+  title: string,
+  opts: { id: string; body?: string; category?: string; createdAt: number },
+): NewsItem {
+  return { id: opts.id, title, body: opts.body, category: opts.category, createdAt: opts.createdAt };
 }
 
 function defaultNews(season: number): NewsItem[] {
-  const now = Date.now();
   return [
-    makeNewsItem(`League announces ${season} salary cap at $250M`, { category: "LEAGUE", createdAt: now - 10 * 60_000 }),
-    makeNewsItem("Coaching staffs begin offseason installs", { category: "COACHING", createdAt: now - 9 * 60_000 }),
-    makeNewsItem("Front offices prepare for free agency", { category: "LEAGUE", createdAt: now - 8 * 60_000 }),
-    makeNewsItem("Draft prospects begin pro day circuit", { category: "DRAFT", createdAt: now - 7 * 60_000 }),
+    makeNewsItem(`League announces ${season} salary cap at $250M`, { id: stableHashId(`default:${season}:0`), category: "LEAGUE", createdAt: season * 1_000_000 - 10 }),
+    makeNewsItem("Coaching staffs begin offseason installs", { id: stableHashId(`default:${season}:1`), category: "COACHING", createdAt: season * 1_000_000 - 9 }),
+    makeNewsItem("Front offices prepare for free agency", { id: stableHashId(`default:${season}:2`), category: "LEAGUE", createdAt: season * 1_000_000 - 8 }),
+    makeNewsItem("Draft prospects begin pro day circuit", { id: stableHashId(`default:${season}:3`), category: "DRAFT", createdAt: season * 1_000_000 - 7 }),
   ];
 }
 
@@ -2819,13 +2882,21 @@ function ensureNewsItems(raw: unknown, now: number): NewsItem[] {
 }
 
 function pushNews(state: GameState, line: string): GameState {
-  const news = [makeNewsItem(line), ...(state.hub.news ?? [])].slice(0, 200);
-  return { ...state, hub: { ...state.hub, news } };
+  const allocated = allocateDeterministic(state, "news", "NEWS");
+  const news = [
+    makeNewsItem(line, { id: allocated.id, createdAt: allocated.ts }),
+    ...(allocated.state.hub.news ?? []),
+  ].slice(0, 200);
+  return { ...allocated.state, hub: { ...allocated.state.hub, news } };
 }
 
 function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
-  const news = [makeNewsItem(item.title, { body: item.body, category: item.category }), ...(state.hub.news ?? [])].slice(0, 200);
-  return { ...state, hub: { ...state.hub, news }, unreadNewsCount: (state.unreadNewsCount ?? 0) + 1 };
+  const allocated = allocateDeterministic(state, "news", "NEWS");
+  const news = [
+    makeNewsItem(item.title, { id: allocated.id, body: item.body, category: item.category, createdAt: allocated.ts }),
+    ...(allocated.state.hub.news ?? []),
+  ].slice(0, 200);
+  return { ...allocated.state, hub: { ...allocated.state.hub, news }, unreadNewsCount: (allocated.state.unreadNewsCount ?? 0) + 1 };
 }
 
 function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number): LeagueNewsItem[] {
@@ -4932,8 +5003,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const capDeltaA = tradeCapDelta(state, outgoingPlayerIds, incomingPlayerIds);
       const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
       const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
+      const tradeAlloc = allocateDeterministic(state, "news", "TX");
       const syntheticTx = {
-        id: `TX_${Date.now()}`,
+        id: tradeAlloc.id,
         type: "TRADE" as const,
         playerId: String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? "NONE"),
         // M1 FIX: was getPersonnelById (Personnel table) — should be getPlayerById (Players table)
@@ -4951,21 +5023,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
       const txNews = generateTransactionNews([syntheticTx], { week: currentWeek, season: Number(state.season), userTeamId: String(teamA) });
       const gmRelationship = Math.max(0, Math.min(100, Number(state.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
+      const tradeFeedbackAlloc = createDeterministicFeedbackEvent(tradeAlloc.state, "TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` });
 
       return {
-        ...state,
+        ...tradeFeedbackAlloc.state,
         playerTeamOverrides: overrides,
-        transactions: [...(state.transactions ?? []), syntheticTx],
-        draft: { ...state.draft, slots: nextSlots },
-        newsHistory: appendNewsHistory(state.newsHistory ?? [], txNews),
-        coach: { ...state.coach, gmRelationship },
+        transactions: [...(tradeFeedbackAlloc.state.transactions ?? []), syntheticTx],
+        draft: { ...tradeFeedbackAlloc.state.draft, slots: nextSlots },
+        newsHistory: appendNewsHistory(tradeFeedbackAlloc.state.newsHistory ?? [], txNews),
+        coach: { ...tradeFeedbackAlloc.state.coach, gmRelationship },
         finances: {
-          ...state.finances,
-          capCommitted: Math.max(0, Number(state.finances.capCommitted ?? 0) + Math.round(capDeltaA)),
-          capSpace: Math.max(0, Number(state.finances.capSpace ?? 0) - Math.round(capDeltaA)),
+          ...tradeFeedbackAlloc.state.finances,
+          capCommitted: Math.max(0, Number(tradeFeedbackAlloc.state.finances.capCommitted ?? 0) + Math.round(capDeltaA)),
+          capSpace: Math.max(0, Number(tradeFeedbackAlloc.state.finances.capSpace ?? 0) - Math.round(capDeltaA)),
         },
         uiToast: `${teamAName} completed a trade with ${teamBName}.`,
-        feedbackQueue: [createFeedbackEvent("TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` }), ...state.feedbackQueue].slice(0, 50),
+        feedbackQueue: [tradeFeedbackAlloc.event, ...tradeFeedbackAlloc.state.feedbackQueue].slice(0, 50),
         tradeError: undefined,
       };
     }
@@ -5397,8 +5470,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const person = getPersonnelById(action.payload.personId);
       if (!person) return state;
 
+      const staffAlloc = allocateDeterministic(state, "staff", "STAFF_OFFER");
       const baseOffer: StaffOffer = {
-        id: `staff_offer_${state.season}_${Date.now()}_${action.payload.personId}`,
+        id: `${staffAlloc.id}_${action.payload.personId}`,
         roleType: action.payload.roleType,
         role: action.payload.role,
         personId: action.payload.personId,
@@ -5413,7 +5487,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (salary > staffBudgetRemaining) {
         const budgetReason = `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).`;
         const rejectedBudget: StaffOffer = { ...baseOffer, status: "REJECTED", reason: budgetReason };
-        return { ...state, staffOffers: [rejectedBudget, ...state.staffOffers].slice(0, 100), uiToast: budgetReason, memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: budgetReason }) };
+        return { ...staffAlloc.state, staffOffers: [rejectedBudget, ...staffAlloc.state.staffOffers].slice(0, 100), uiToast: budgetReason, memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: budgetReason }) };
       }
 
       // Route through deterministic coachAcceptance model (N2)
@@ -5441,17 +5515,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         else if (personRep > (state.coach.repBaseline ?? 55) + 20) rejectionReason = "Team reputation insufficient for this candidate.";
         const rejectedOffer: StaffOffer = { ...baseOffer, status: "REJECTED", reason: rejectionReason };
         return {
-          ...state,
-          staffOffers: [rejectedOffer, ...state.staffOffers].slice(0, 100),
+          ...staffAlloc.state,
+          staffOffers: [rejectedOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
           uiToast: rejectionReason,
-          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: rejectionReason }),
+          memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: rejectionReason }),
         };
       }
 
       const acceptedOffer: StaffOffer = { ...baseOffer, status: "ACCEPTED", reason: "Offer accepted." };
       const withOfferState: GameState = {
-        ...state,
-        staffOffers: [acceptedOffer, ...state.staffOffers].slice(0, 100),
+        ...staffAlloc.state,
+        staffOffers: [acceptedOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
       };
 
       const next =
@@ -5677,20 +5751,18 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
 
-      const modal = {
-        open: true,
+      const modalAlloc = buildOfferResultModal(state, {
         title: decision.accepted ? "Offer Accepted" : "Offer Rejected",
         message: decision.reason,
-        variant: decision.accepted ? "success" as const : "danger" as const,
-        ts: Date.now(),
-      };
+        variant: decision.accepted ? "success" : "danger",
+      });
 
       if (!decision.accepted) {
         return {
-          ...state,
+          ...modalAlloc.state,
           contracts: { playerTeamInterestById: contractsByPlayer },
           resign,
-          ui: { ...state.ui, offerResultModal: modal },
+          ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
         };
       }
 
@@ -5704,13 +5776,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
 
       let next = applyFinances({
-        ...state,
+        ...modalAlloc.state,
         playerContractOverrides,
         playerMorale: morale,
         offseasonData: { ...state.offseasonData, resigning: { decisions } },
         contracts: { playerTeamInterestById: contractsByPlayer },
         resign,
-        ui: { ...state.ui, offerResultModal: modal },
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
       });
 
       if (isNewsworthyRecommit(p)) {
@@ -6753,17 +6825,18 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const playerId = String(action.payload.playerId);
       const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.playerId) === playerId);
       const reason = offer ? (offer.interest >= 0.65 ? "Role projection" : "AAV vs market") : "Offer declined";
+      const modalAlloc = buildOfferResultModal(state, { title: "Offer Rejected", message: reason, variant: "danger" });
       return {
-        ...state,
+        ...modalAlloc.state,
         offseasonData: {
-          ...state.offseasonData,
+          ...modalAlloc.state.offseasonData,
           freeAgency: {
-            ...state.offseasonData.freeAgency,
-            rejected: { ...state.offseasonData.freeAgency.rejected, [playerId]: true },
-            decisionReasonByPlayerId: { ...state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+            ...modalAlloc.state.offseasonData.freeAgency,
+            rejected: { ...modalAlloc.state.offseasonData.freeAgency.rejected, [playerId]: true },
+            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
           },
         },
-        ui: { ...state.ui, offerResultModal: { open: true, title: "Offer Rejected", message: reason, variant: "danger", ts: Date.now() } },
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
       };
     }
 
@@ -6794,19 +6867,20 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         next = state;
       }
 
+      const modalAlloc = buildOfferResultModal(next, { title: "Offer Accepted", message: reason, variant: "success" });
       return {
-        ...next,
+        ...modalAlloc.state,
         offseasonData: {
-          ...next.offseasonData,
+          ...modalAlloc.state.offseasonData,
           freeAgency: {
-            ...next.offseasonData.freeAgency,
-            signings: Array.from(new Set([playerId, ...next.offseasonData.freeAgency.signings])),
+            ...modalAlloc.state.offseasonData.freeAgency,
+            signings: Array.from(new Set([playerId, ...modalAlloc.state.offseasonData.freeAgency.signings])),
             capUsed,
-            capHitsByPlayerId: { ...next.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
-            decisionReasonByPlayerId: { ...next.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+            capHitsByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
+            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
           },
         },
-        ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
       };
     }
 
@@ -6939,7 +7013,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       if (!accept) {
         const next = { ...state, freeAgency: upsertOffers(state, pid, offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "REJECTED" as const, decisionReason: "Counter offer declined" } : o))) };
-        return { ...faPush(next, "Counter declined.", pid), ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: "Counter offer declined", variant: "danger", ts: Date.now() } } };
+        const declined = faPush(next, "Counter declined.", pid);
+        const modalAlloc = buildOfferResultModal(declined, { title: "Offer Rejected", message: "Counter offer declined", variant: "danger" });
+        return { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } };
       }
 
       let next = { ...state, freeAgency: upsertOffers(state, pid, closeAllOffers(offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "ACCEPTED" as const } : o)), counter.offerId)) };
@@ -7082,12 +7158,12 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
               }
               return o;
             });
-            if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
+            if (userPending && !best.isUser) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
             next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
             next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
           } else {
             next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const, decisionReason: o.isUser ? userDecision?.reason ?? "Offer not selected" : o.decisionReason } : o));
-            if (userPending) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
+            if (userPending) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
             next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
           }
           next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
@@ -7106,7 +7182,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
               }
               return o;
             });
-            if (userPending && !best.isUser) next = { ...next, ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger", ts: Date.now() } } };
+            if (userPending && !best.isUser) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
           next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
           next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
         } else if (roll < acceptProb + counterProb) {
@@ -7671,11 +7747,19 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
       const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
 
+      const feedbackAlloc = createDeterministicFeedbackEvent(nextState, "DRAFT_SELECTION", {
+        pickNumber: nextState.offseasonData.draft.picks.length + 1,
+        playerName: rookie.name,
+        position: rookie.pos,
+        college: "Unknown",
+        scoutingGrade: String(rookie.scoutOvr),
+        tierLabel: `Dev ${rookie.scoutDev}`,
+      });
       return {
-        ...nextState,
+        ...feedbackAlloc.state,
         rookies: [...nextState.rookies, rookie],
         rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
-        feedbackQueue: [createFeedbackEvent("DRAFT_SELECTION", { pickNumber: nextState.offseasonData.draft.picks.length + 1, playerName: rookie.name, position: rookie.pos, college: "Unknown", scoutingGrade: String(rookie.scoutOvr), tierLabel: `Dev ${rookie.scoutDev}` }), ...state.feedbackQueue].slice(0, 50),
+        feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
       };
     }
 
@@ -7729,18 +7813,16 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (active[pid]) {
         delete active[pid];
         cuts[pid] = true;
+        const feedbackAlloc = createDeterministicFeedbackEvent(state, "ROSTER_CHANGE", {
+          // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+          playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+          position: String(getPlayerById(pid)?.pos ?? "UNK"),
+          action: "waived",
+        });
         return {
-          ...state,
+          ...feedbackAlloc.state,
           rosterMgmt: { active, cuts, finalized: false },
-          feedbackQueue: [
-            createFeedbackEvent("ROSTER_CHANGE", {
-              // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
-              playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
-              position: String(getPlayerById(pid)?.pos ?? "UNK"),
-              action: "waived",
-            }),
-            ...state.feedbackQueue,
-          ].slice(0, 50),
+          feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
         };
       }
 
@@ -7748,18 +7830,16 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       delete cuts[pid];
       active[pid] = true;
+      const feedbackAlloc = createDeterministicFeedbackEvent(state, "ROSTER_CHANGE", {
+        // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+        playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+        position: String(getPlayerById(pid)?.pos ?? "UNK"),
+        action: "added to roster",
+      });
       return {
-        ...state,
+        ...feedbackAlloc.state,
         rosterMgmt: { active, cuts, finalized: false },
-        feedbackQueue: [
-          createFeedbackEvent("ROSTER_CHANGE", {
-            // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
-            playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
-            position: String(getPlayerById(pid)?.pos ?? "UNK"),
-            action: "added to roster",
-          }),
-          ...state.feedbackQueue,
-        ].slice(0, 50),
+        feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
       };
     }
     case "FINALIZE_CUTS": {
@@ -8034,14 +8114,20 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const weeks = Number((action.payload as any).estWeeks ?? (action.payload as any).weeksOut ?? 0);
       const severity = weeks >= 4 || String((action.payload as any).status ?? "").toUpperCase() === "OUT" ? "CRITICAL" : weeks >= 1 ? "WARNING" : "INFO";
       const p = getPersonnelById(String(action.payload.playerId));
+      const injuryAlloc = allocateDeterministic(state, "injury", "INJURY");
       const event = createFeedbackEvent("INJURY_ALERT", {
         playerName: String(p?.fullName ?? "Player"),
         injuryType: String((action.payload as any).type ?? "Injury"),
         estimatedWeeks: weeks,
         severity,
         playerIds: [String(action.payload.playerId)],
-      });
-      return { ...state, injuries: updated, pendingInjuryAlert: severity === "CRITICAL" ? action.payload : state.pendingInjuryAlert, feedbackQueue: severity === "CRITICAL" ? state.feedbackQueue : [event, ...state.feedbackQueue].slice(0, 50) };
+      }, { id: injuryAlloc.id, timestamp: injuryAlloc.ts });
+      return {
+        ...injuryAlloc.state,
+        injuries: updated,
+        pendingInjuryAlert: severity === "CRITICAL" ? action.payload : injuryAlloc.state.pendingInjuryAlert,
+        feedbackQueue: severity === "CRITICAL" ? injuryAlloc.state.feedbackQueue : [event, ...injuryAlloc.state.feedbackQueue].slice(0, 50),
+      };
     }
     case "INJURY_MOVE_TO_IR": {
       const injuries = (state.injuries ?? []).map((i) =>
@@ -8195,8 +8281,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           injuryGamesMissed: (out.injuries ?? []).filter((inj) => String(inj.playerId) === pid).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0),
         };
       }
+      const championNewsAlloc = allocateDeterministic(out, "news", "NEWS");
       let completed: GameState = {
-        ...out,
+        ...championNewsAlloc.state,
         coach: coachWithCareer,
         playerSeasonStatsById: nextSeasonStatsById,
         playerProgressionSeasonStatsById: progressionSeasonStatsById,
@@ -8216,11 +8303,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           results: [],
         },
         hub: {
-          ...out.hub,
+          ...championNewsAlloc.state.hub,
           schedule: nextSchedule,
           preseasonWeek: 1,
           regularSeasonWeek: 1,
-          news: [{ id: `NEWS_${Date.now()}`, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: Date.now(), category: "LEAGUE" }, ...(out.hub.news ?? [])],
+          news: [{ id: championNewsAlloc.id, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: championNewsAlloc.ts, category: "LEAGUE" }, ...(championNewsAlloc.state.hub.news ?? [])],
         },
       };
       const teamId = completed.acceptedOffer?.teamId ?? "";
@@ -8636,13 +8723,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
       const nextHotSeat = computeHotSeatScore(out.coach, out);
       if (nextHotSeat.level !== out.hotSeatStatus.level && (nextHotSeat.level === "HOT" || nextHotSeat.level === "CRITICAL")) {
-        out = gameReducer(out, {
+        const hotSeatAlloc = createDeterministicFeedbackEvent(out, "HOT_SEAT", {
+          message: `${nextHotSeat.level}: ${nextHotSeat.primaryDriver}`,
+          severity: nextHotSeat.level === "CRITICAL" ? "CRITICAL" : "WARNING",
+        });
+        out = gameReducer(hotSeatAlloc.state, {
           type: "PUSH_FEEDBACK",
           payload: {
-            event: createFeedbackEvent("HOT_SEAT", {
-              message: `${nextHotSeat.level}: ${nextHotSeat.primaryDriver}`,
-              severity: nextHotSeat.level === "CRITICAL" ? "CRITICAL" : "WARNING",
-            }),
+            event: hotSeatAlloc.event,
           },
         });
       }
@@ -8933,7 +9021,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
     case "SHOW_OFFER_RESULT_MODAL": {
       const { title, message, variant } = action.payload;
-      return { ...state, ui: { ...state.ui, offerResultModal: { open: true, title, message, variant, ts: Date.now() } } };
+      const modalAlloc = buildOfferResultModal(state, { title, message, variant });
+      return { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } };
     }
     case "HIDE_OFFER_RESULT_MODAL": {
       return { ...state, ui: { ...state.ui, offerResultModal: undefined } };
@@ -9004,7 +9093,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const saveSeed = oldState.saveSeed ?? Date.now();
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
-  const now = Date.now();
+  const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
   const migratedNews = ensureNewsItems((oldState as any).hub?.news, now);
   const legacyReadCount = Number((oldState as any).hub?.newsReadCount ?? 0);
   const newsReadIds: Record<string, true> = { ...((oldState as any).hub?.newsReadIds ?? {}) };
@@ -9484,6 +9573,10 @@ function loadState(): GameState {
       feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
       pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
       ui: { ...initial.ui, ...((migrated as any).ui ?? {}) },
+      deterministicCounters: {
+        ...DEFAULT_DETERMINISTIC_COUNTERS,
+        ...((migrated as any).deterministicCounters ?? {}),
+      },
       hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
       unreadNewsCount: Number((migrated as any).unreadNewsCount ?? 0),
       lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
