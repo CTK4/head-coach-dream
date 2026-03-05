@@ -609,7 +609,10 @@ const Playcall = () => {
               </div>
               <div className="flex items-center justify-between rounded border p-3">
                 <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
-                <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={needsDefensiveCall} onClick={() => dispatch({ type: "SIMULATE_REST_OF_GAME" })}>Sim Rest</Button>
+                  <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                </div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Recommended stem updates instantly from card selection. Two-tap flow: select then confirm.</p>

@@ -1681,3 +1681,36 @@ export function simulateFullGame(params: { homeTeamId: string; awayTeamId: strin
 
   return { homeScore: sim.homeScore, awayScore: sim.awayScore };
 }
+
+export function buildGameBoxScore(sim: GameSim, season: number): GameBoxScore {
+  return {
+    season,
+    week: sim.weekNumber ?? 0,
+    home: {
+      teamId: sim.homeTeamId,
+      score: sim.homeScore,
+      passAttempts: sim.stats.home.passAttempts,
+      completions: sim.stats.home.completions,
+      passYards: sim.stats.home.passYards,
+      rushAttempts: sim.stats.home.rushAttempts,
+      rushYards: sim.stats.home.rushYards,
+      turnovers: sim.stats.home.turnovers,
+      sacks: sim.stats.home.sacks,
+      tds: sim.stats.home.tds,
+    },
+    away: {
+      teamId: sim.awayTeamId,
+      score: sim.awayScore,
+      passAttempts: sim.stats.away.passAttempts,
+      completions: sim.stats.away.completions,
+      passYards: sim.stats.away.passYards,
+      rushAttempts: sim.stats.away.rushAttempts,
+      rushYards: sim.stats.away.rushYards,
+      turnovers: sim.stats.away.turnovers,
+      sacks: sim.stats.away.sacks,
+      tds: sim.stats.away.tds,
+    },
+    players: [],
+    finalized: true,
+  };
+}
