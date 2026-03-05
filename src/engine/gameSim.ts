@@ -467,7 +467,6 @@ function callVsLook(playType: PlayType, look: DefensiveLook): number {
 }
 
 /** MatchupEdge from team ratings. Returns roughly [-1, +1]. */
-function matchupEdge(sim: GameSim, playType: PlayType, off: TeamGameRatings, def: TeamGameRatings): number {
 function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRatings, sim: GameSim): number {
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
@@ -563,7 +562,6 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
   const def = sim.possession === "HOME" ? sim.awayRatings : sim.homeRatings;
 
   const cvl = callVsLook(playType, look);
-  const me = off && def ? matchupEdge(sim, playType, off, def) : 0;
   const me = off && def ? matchupEdge(playType, off, def, sim) : 0;
   const sf = situationFit(playType, sim);
   const exec = executionState(sim, playType, matchup);
@@ -708,8 +706,7 @@ function buildResultTags(
   look: DefensiveLook,
   pasComponents: { pas: number; cvl: number; me: number; sf: number },
   outcome: "SUCCESS" | "FAILURE" | "EXPLOSIVE" | "NEGATIVE",
-  aggression: AggressionLevel,
-  sim: GameSim
+  aggression: AggressionLevel
 ): ResultTag[] {
   const tags: ResultTag[] = [];
   const { cvl, me, sf } = pasComponents;
@@ -836,7 +833,6 @@ function resolveWithPAS(
   let outcomeLabel = "normal";
 
   const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
-  const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression, sim);
   const resolverTags: ResultTag[] = [];
   const callFx = applyDefensiveCallMultipliers(defensiveCall);
   if (callFx.debug.length) resolverTags.push({ kind: "SITUATION", text: `DEF_CALL:${callFx.debug.join(",")}` });
