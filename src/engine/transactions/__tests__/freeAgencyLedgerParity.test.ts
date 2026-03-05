@@ -30,7 +30,8 @@ function initStateForTeam(teamId: string): GameState {
 
 describe("free agency signing ledger parity", () => {
   it("routes FA_RESOLVE_WEEK user acceptance through exactly one SIGN_FA tx", () => {
-    const player = getPlayers().find((p: any) => String(p.teamId ?? "") === "FREE_AGENT");
+    // Use any player not already on CHI; FA status will be established via playerTeamOverrides
+    const player = getPlayers().find((p: any) => String(p.teamId ?? "").toUpperCase() !== "CHI");
     expect(player).toBeTruthy();
 
     const teamId = "CHI";
@@ -41,6 +42,7 @@ describe("free agency signing ledger parity", () => {
     const withOffer = {
       ...state,
       careerStage: "FREE_AGENCY" as const,
+      playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" },
       freeAgency: {
         ...state.freeAgency,
         offersByPlayerId: {
@@ -75,7 +77,8 @@ describe("free agency signing ledger parity", () => {
   });
 
   it("routes FA_RESPOND_COUNTER acceptance through exactly one SIGN_FA tx", () => {
-    const player = getPlayers().find((p: any) => String(p.teamId ?? "") === "FREE_AGENT");
+    // Use any player not already on CHI; FA status will be established via playerTeamOverrides
+    const player = getPlayers().find((p: any) => String(p.teamId ?? "").toUpperCase() !== "CHI");
     expect(player).toBeTruthy();
 
     const teamId = "CHI";
@@ -86,6 +89,7 @@ describe("free agency signing ledger parity", () => {
     const withCounter = {
       ...state,
       careerStage: "FREE_AGENCY" as const,
+      playerTeamOverrides: { ...state.playerTeamOverrides, [playerId]: "FREE_AGENT" },
       freeAgency: {
         ...state.freeAgency,
         offersByPlayerId: {

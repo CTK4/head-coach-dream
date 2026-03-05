@@ -84,11 +84,12 @@ import {
 } from "@/engine/practiceFocus";
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
-import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
+import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked, getQbScoutingDivergenceByArchetype } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import {
   COMBINE_DAY_COUNT,
   COMBINE_DAY_POSITION_BUCKETS,
@@ -134,8 +135,14 @@ import type { NewsItem as LeagueNewsItem } from "@/types/news";
 import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
 import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents";
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
+import { updateMorale } from "@/engine/morale";
+import { updateChemistry } from "@/engine/chemistry";
+import { updateStaffTrust } from "@/engine/staffTrust";
+import { updateMedia } from "@/engine/media";
+import { updateOwner, updateAutonomy } from "@/engine/owner";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
+import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
@@ -173,7 +180,9 @@ export type CareerStage =
   | "PRESEASON"
   | "CUTDOWNS"
   | "REGULAR_SEASON"
-  | "PLAYOFFS";
+  | "PLAYOFFS"
+  | "FIRED"
+  | "REHIRING";
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
@@ -440,6 +449,7 @@ export type OffseasonData = {
     resultsByProspectId?: Record<string, any>;
     interviewPoolIds?: string[];
     lastRunSeed?: number;
+    shortlist: Record<string, boolean>;
   };
   scouting: {
     windowId: ScoutingWindowId;
@@ -459,7 +469,7 @@ export type OffseasonData = {
     capHitsByPlayerId: Record<string, number>;
     decisionReasonByPlayerId: Record<string, string>;
   };
-  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM" };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM"; intelByProspectId: Record<string, number> };
   draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
   camp: { settings: CampSettings };
   cutDowns: { decisions: Record<string, CutDecision> };
@@ -862,6 +872,21 @@ export type FiringMeter = {
   firedAt?: { season: number; week?: number; checkpoint: "WEEKLY" | "SEASON_END" };
 };
 
+export type FiringRecap = {
+  season: number;
+  week: number;
+  teamId: string;
+  record: { wins: number; losses: number };
+  topDrivers: string[];
+  ownerApproval: number;
+  tenureWeeks: number;
+  autonomyAtFiring: number;
+};
+
+export type CareerHistory = {
+  firings: FiringRecap[];
+};
+
 export type PlayerAccolades = {
   formerMvp?: boolean;
   formerAllPro?: boolean;
@@ -914,6 +939,8 @@ export type GameState = {
     perkPoints?: number;
     unlockedPerkIds?: string[];
     perkPointLog?: { source: string; amount: number; season: number }[];
+    autonomyHistory?: Array<{ week: number; value: number; reason: string }>;
+    autonomyLastChangeReason?: string;
   };
   lastSeasonSummary?: SeasonSummary;
   seasonHistory: SeasonSummary[];
@@ -955,6 +982,8 @@ export type GameState = {
     gmName?: string;
     teamLocked: true;
   };
+  recoveryNeeded?: boolean;
+  recoveryErrors?: string[];
   autonomyRating?: number;
   ownerPatience?: number;
   teamOwnerExpectationsByTeamId: Record<TeamId, OwnerExpectationsConfig>;
@@ -1098,6 +1127,7 @@ export type GameState = {
   tradeError?: TradeDeadlineError;
   tradeBlockByPlayerId: Record<string, boolean>;
   firing: FiringMeter;
+  careerHistory: CareerHistory;
   transactions: Transaction[];
   transactionLedger?: TransactionState;
   userTeamId?: string;
@@ -1166,7 +1196,7 @@ export type DraftState = {
   };
 
 export type GameAction =
-  | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string } }
+  | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string; interviewOutcome?: import("@/engine/interviewHiring/types").InterviewOutcome; isRehire?: boolean } }
   | {
       type: "INIT_FREE_PLAY_CAREER";
       payload: {
@@ -1257,6 +1287,7 @@ export type GameAction =
   | { type: "COMBINE_GENERATE" }
   | { type: "COMBINE_RUN_EVENTS"; payload?: { seed?: number } }
   | { type: "COMBINE_GENERATE_INTERVIEW_POOL"; payload?: { seed?: number } }
+  | { type: "COMBINE_TOGGLE_SHORTLIST"; payload: { prospectId: string } }
   | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
   | { type: "TAMPERING_INIT" }
   | { type: "TAMPERING_OPEN_PLAYER"; payload: { playerId: string } }
@@ -1274,7 +1305,7 @@ export type GameAction =
   | { type: "FA_INIT_RESET" }
   | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
-  | { type: "FA_SIGN"; payload: { offerId: string } }
+  | { type: "FA_SIGN"; payload: { offerId: string; years?: number; apy?: number } }
   | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
   | { type: "FA_OPEN_MY_OFFERS" }
   | { type: "FA_CLOSE_MODAL" }
@@ -1387,6 +1418,10 @@ export type GameAction =
   | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
   | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
   | { type: "SET_PLAYER_ATTR_OVERRIDE"; payload: { playerId: string; patch: Partial<PlayerRow> } }
+  | { type: "RECOVERY_RETURN_TO_HUB" }
+  | { type: "RECOVERY_REBUILD_INDICES" }
+  | { type: "RECOVERY_SKIP_STEP" }
+  | { type: "RECOVERY_RESTORE_BACKUP" }
   | { type: "RESET" };
 
 
@@ -1581,7 +1616,7 @@ function createInitialState(): GameState {
       resigning: { decisions: {} },
       tagCenter: { applied: undefined },
       rosterAudit: { cutDesignations: {} },
-      combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0 },
+      combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -1600,7 +1635,7 @@ function createInitialState(): GameState {
         capHitsByPlayerId: {},
         decisionReasonByPlayerId: {},
       },
-      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
+      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
       draft: { board: [], picks: [], completed: false },
       camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
       cutDowns: { decisions: {} },
@@ -1751,6 +1786,7 @@ function createInitialState(): GameState {
     tradeError: undefined,
     tradeBlockByPlayerId: {},
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
+    careerHistory: { firings: [] },
     transactions: [],
     transactionLedger: { events: [], counter: 0, migrationComplete: false },
     feedbackQueue: [],
@@ -2344,14 +2380,14 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
   const amount = resolveFranchiseTagAmount(state, player);
   const priorTag = state.franchiseTags[playerId];
   const priorContract = buildContractIndex(state)[playerId];
+  // Franchise tag is a 1-year fully guaranteed contract at the tag amount.
+  // Keep salary = full amount (no signing bonus split) so ledger reflects real cap hit.
   const tagContract: PlayerContractOverride = {
-    ...createContractOverride({
-      startSeason: nextSeason,
-      years: 1,
-      salary: amount,
-      guarantees: 1,
-      type: "FRANCHISE_TAG",
-    }),
+    startSeason: nextSeason,
+    endSeason: nextSeason,
+    salaries: [amount],
+    signingBonus: 0,
+    contractType: "FRANCHISE_TAG",
     guaranteedAtSigning: amount,
   };
 
@@ -3286,6 +3322,7 @@ function seasonRollover(state: GameState): GameState {
 
   let next = applyFinances({
     ...state,
+    transactionLedger: expiredState.transactionLedger, // preserve RELEASE events from contract expiry
     season: nextSeason,
     week: 1,
     careerStage: "OFFSEASON_HUB",
@@ -4702,22 +4739,36 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
+      const isRehire = action.payload.isRehire === true;
+      // For rehires, preserve career history and archetype; for new starts, use fresh state
       const fresh = createInitialState();
+      const base = isRehire ? { ...fresh, coach: state.coach, careerHistory: state.careerHistory } : fresh;
+      const outcome = action.payload.interviewOutcome;
+      // Persist autonomyGrant from interview outcome so downstream systems can read the hire contract
+      const autonomyFromOutcome = outcome?.autonomyGrant ?? action.payload.offer.autonomy;
       const next = {
-        ...fresh,
+        ...base,
         phase: "CREATE",
         acceptedOffer: action.payload.offer,
-        autonomyRating: action.payload.offer.autonomy,
-        ownerPatience: action.payload.offer.patience,
+        autonomyRating: autonomyFromOutcome,
+        ownerPatience: outcome ? outcome.leashLength * 20 : action.payload.offer.patience,
         userTeamId: action.payload.offer.teamId,
         teamId: action.payload.offer.teamId,
         storySetup: {
           teamId: action.payload.offer.teamId,
           teamName: action.payload.teamName,
           gmName: action.payload.gmName,
-          teamLocked: true,
+          teamLocked: true as const,
         },
         staffRoster: { teamId: action.payload.offer.teamId, coaches: [] },
+        // Apply interview outcome to coach starting values
+        coach: {
+          ...base.coach,
+          autonomy: autonomyFromOutcome,
+        },
+        // Clear firing state for new job
+        firing: { ...fresh.firing },
+        careerStage: "OFFSEASON_HUB" as const,
       };
       return ensureMinimumFreeAgencyPool(next as GameState);
     }
@@ -5153,7 +5204,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
-      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
+      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase().replace(/\s+/g, "_");
       let nextPlaybooks = {
         ...nextState.playbooks,
         userOverride: {
@@ -5367,25 +5418,47 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         submittedSeason: state.season,
       };
 
-      const evaluated = evaluateStaffOffer(state, {
-        roleType: action.payload.roleType,
-        role: action.payload.role,
+      // Hard budget gate before acceptance check (N2)
+      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
+      if (salary > staffBudgetRemaining) {
+        const budgetReason = `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).`;
+        const rejectedBudget: StaffOffer = { ...baseOffer, status: "REJECTED", reason: budgetReason };
+        return { ...state, staffOffers: [rejectedBudget, ...state.staffOffers].slice(0, 100), uiToast: budgetReason, memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: budgetReason }) };
+      }
+
+      // Route through deterministic coachAcceptance model (N2)
+      const personRep = Number((person as any)?.reputation ?? 55);
+      const expSalary = expectedSalary(action.payload.role as any, personRep);
+      const perkMod = getPerkHiringModifier(state.coach, action.payload.roleType === "COORDINATOR" ? "COORD" : "ASST");
+      const isCoordinator = action.payload.roleType === "COORDINATOR";
+      const userTeamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
+
+      const staffAccepted = isOfferAccepted({
+        season: state.season,
+        teamId: userTeamId,
         personId: action.payload.personId,
-        years,
-        salary,
+        roleKey: String(action.payload.role),
+        reputation: personRep,
+        expectedSalary: expSalary,
+        offeredSalary: salary,
+        isCoordinator,
+        hiringModifier: perkMod,
       });
 
-      if (!evaluated.accepted) {
-        const rejectedOffer: StaffOffer = { ...baseOffer, status: "REJECTED", reason: evaluated.reason };
+      if (!staffAccepted) {
+        let rejectionReason = "Offer not competitive enough.";
+        if (salary < expSalary * 0.85) rejectionReason = "Salary below expectations.";
+        else if (personRep > (state.coach.repBaseline ?? 55) + 20) rejectionReason = "Team reputation insufficient for this candidate.";
+        const rejectedOffer: StaffOffer = { ...baseOffer, status: "REJECTED", reason: rejectionReason };
         return {
           ...state,
           staffOffers: [rejectedOffer, ...state.staffOffers].slice(0, 100),
-          uiToast: evaluated.reason,
-          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: evaluated.reason }),
+          uiToast: rejectionReason,
+          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: rejectionReason }),
         };
       }
 
-      const acceptedOffer: StaffOffer = { ...baseOffer, status: "ACCEPTED", reason: evaluated.reason };
+      const acceptedOffer: StaffOffer = { ...baseOffer, status: "ACCEPTED", reason: "Offer accepted." };
       const withOfferState: GameState = {
         ...state,
         staffOffers: [acceptedOffer, ...state.staffOffers].slice(0, 100),
@@ -6455,6 +6528,21 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
 
+    case "COMBINE_TOGGLE_SHORTLIST": {
+      const id = String(action.payload.prospectId);
+      const cur = !!(state.offseasonData.combine.shortlist?.[id]);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          combine: {
+            ...state.offseasonData.combine,
+            shortlist: { ...(state.offseasonData.combine.shortlist ?? {}), [id]: !cur },
+          },
+        },
+      };
+    }
+
     case "COMBINE_GENERATE": {
       return ensureOffseasonCombineData(state);
     }
@@ -6693,22 +6781,42 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const offerId = String(action.payload.offerId);
       const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.id) === offerId);
       if (!offer) return state;
+      const teamId = String(state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
       const playerId = String(offer.playerId);
+      const years = Math.max(1, Math.min(5, Number(action.payload.years ?? offer.years ?? 2)));
+      const apy = Math.max(500_000, Number(action.payload.apy ?? offer.apy ?? 0));
       const reason = offer.interest >= 0.55 ? "AAV vs market" : "Contender status";
-      const capUsed = state.offseasonData.freeAgency.capUsed + Number(offer.apy ?? 0);
+      const capUsed = state.offseasonData.freeAgency.capUsed + apy;
+
+      // Create a real contract override and apply via canonical transaction
+      const contractOverride = createContractOverride({
+        startSeason: state.season,
+        years,
+        salary: apy,
+        guarantees: 0,
+        type: "STANDARD",
+      });
+      let next: GameState;
+      try {
+        next = applyCanonicalTx(state, Tx.signFA(teamId, playerId, contractOverride));
+      } catch {
+        next = state;
+      }
+
       return {
-        ...state,
+        ...next,
         offseasonData: {
-          ...state.offseasonData,
+          ...next.offseasonData,
           freeAgency: {
-            ...state.offseasonData.freeAgency,
-            signings: Array.from(new Set([playerId, ...state.offseasonData.freeAgency.signings])),
+            ...next.offseasonData.freeAgency,
+            signings: Array.from(new Set([playerId, ...next.offseasonData.freeAgency.signings])),
             capUsed,
-            capHitsByPlayerId: { ...state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: Number(offer.apy ?? 0) },
-            decisionReasonByPlayerId: { ...state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+            capHitsByPlayerId: { ...next.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
+            decisionReasonByPlayerId: { ...next.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
           },
         },
-        ui: { ...state.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
+        ui: { ...next.ui, offerResultModal: { open: true, title: "Offer Accepted", message: reason, variant: "success", ts: Date.now() } },
       };
     }
 
@@ -7291,6 +7399,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (nextOn) nextReveals[id] = genVisitReveal(state, id);
       else delete nextReveals[id];
 
+      const nextIntelVisit = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelVisit[id] = Math.min(2, (nextIntelVisit[id] ?? 0) + 1);
+
       return {
         ...state,
         offseasonData: {
@@ -7299,6 +7410,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             ...state.offseasonData.preDraft,
             visits: { ...state.offseasonData.preDraft.visits, [id]: nextOn },
             reveals: nextReveals,
+            intelByProspectId: nextIntelVisit,
           },
         },
       };
@@ -7314,6 +7426,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (nextOn && visits[id]) return { ...state, uiToast: "Prospect already scheduled for visit." };
       if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
 
+      const nextIntelWorkout = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelWorkout[id] = Math.min(2, (nextIntelWorkout[id] ?? 0) + 1);
+
       return {
         ...state,
         offseasonData: {
@@ -7321,6 +7436,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           preDraft: {
             ...state.offseasonData.preDraft,
             workouts: { ...state.offseasonData.preDraft.workouts, [id]: nextOn },
+            intelByProspectId: nextIntelWorkout,
           },
         },
       };
@@ -7681,7 +7797,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "FIRE_STAFF": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
       if (!teamId) return state;
 
       const salary = state.staffBudget.byPersonId[action.payload.personId] ?? 0;
@@ -7826,12 +7942,30 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const fire = shouldFireDeterministic({ saveSeed: next.saveSeed, key, p });
       if (!fire) return next;
 
+      const firedTeamId = String(next.acceptedOffer?.teamId ?? next.teamId ?? "");
+      const firedStanding = next.currentStandings.find((s) => s.teamId === firedTeamId);
+      const firingRecap: FiringRecap = {
+        season: next.season,
+        week,
+        teamId: firedTeamId,
+        record: { wins: Number(firedStanding?.w ?? 0), losses: Number(firedStanding?.l ?? 0) },
+        topDrivers: next.firing.drivers.slice(0, 3).map((d) => d.label),
+        ownerApproval: Number(next.owner?.approval ?? 60),
+        tenureWeeks: Number(next.hub?.regularSeasonWeek ?? week),
+        autonomyAtFiring: Number(next.coach?.autonomy ?? 60),
+      };
+
       return {
         ...next,
+        careerStage: "FIRED" as const,
         firing: {
           ...next.firing,
           fired: true,
           firedAt: { season: next.season, week, checkpoint: action.payload.checkpoint },
+        },
+        careerHistory: {
+          ...next.careerHistory,
+          firings: [...(next.careerHistory?.firings ?? []), firingRecap],
         },
         memoryLog: addMemoryEvent(next, "FIRED", { season: next.season, week, checkpoint: action.payload.checkpoint, p }),
       };
@@ -8291,6 +8425,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           weekKey,
           seed: nextState.saveSeed,
         });
+        // Narrative pulse (N3): wire orphaned modules into live game path
+        try { nextState = updateMorale(nextState); } catch (e) { logError("narrative.morale", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateChemistry(nextState); } catch (e) { logError("narrative.chemistry", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateStaffTrust(nextState); } catch (e) { logError("narrative.staffTrust", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateMedia(nextState); } catch (e) { logError("narrative.media", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateOwner(nextState); } catch (e) { logError("narrative.owner", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateAutonomy(nextState); } catch (e) { logError("narrative.autonomy", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
         nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
         if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
           nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
@@ -8449,9 +8590,19 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       out = appliedAdvance.state;
       const weekKey = toWeekKey(out.season, week);
       out = finalizeWeek(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed });
+      // Narrative pulse (N3): orphaned modules wired back into active sim path
+      if (gameType === "REGULAR_SEASON") {
+        try { out = updateMorale(out); } catch (e) { logError("narrative.morale", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateChemistry(out); } catch (e) { logError("narrative.chemistry", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateStaffTrust(out); } catch (e) { logError("narrative.staffTrust", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateMedia(out); } catch (e) { logError("narrative.media", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+      }
       const didWin = Boolean((weekResult as any).userResult?.didWin);
       const ownerDeltas = { approval: didWin ? 1 : -2, pressure: didWin ? -1 : 2, trust: didWin ? 1 : -1 };
       out = gameReducer(out, { type: "OWNER_WEEKLY_EVALUATE", payload: { weekKey, teamId, deltas: ownerDeltas, reasons: [didWin ? "Won game" : "Lost game"] } });
+      // Sync ownerState → owner.approval and update autonomy pressure (N3+N4)
+      try { out = updateOwner(out); } catch (e) { logError("narrative.owner", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+      try { out = updateAutonomy(out); } catch (e) { logError("narrative.autonomy", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
       if (week % 4 === 0) out = gameReducer(out, { type: "WIRE_PRUNE", payload: { keepLastN: 250 } });
       if (Number(out.league.week ?? week + 1) > Number(out.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK)) {
         // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
@@ -8807,6 +8958,39 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
     }
+    case "RECOVERY_RETURN_TO_HUB": {
+      return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
+    }
+    case "RECOVERY_REBUILD_INDICES": {
+      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
+      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
+      const migrationEvts = buildMigrationEvents(rebuilt);
+      if (migrationEvts.length > 0) {
+        return {
+          ...rebuilt,
+          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+          playerTeamOverrides: {},
+          playerContractOverrides: {},
+        };
+      }
+      return rebuilt;
+    }
+    case "RECOVERY_SKIP_STEP": {
+      // Advance the offseason step and clear recovery.
+      const cfg = { enableTamperingStep: state.offseason?.enableTamperingStep ?? false };
+      const next = StateMachine.nextOffseasonStepId(state.offseason?.stepId ?? "RESIGNING", cfg);
+      const nextStep = next ?? "RESIGNING";
+      return {
+        ...state,
+        recoveryNeeded: false,
+        recoveryErrors: [],
+        offseason: { ...state.offseason, stepId: nextStep as import("@/lib/stateMachine").OffseasonStepId },
+      };
+    }
+    case "RECOVERY_RESTORE_BACKUP": {
+      // Clear recovery flags and fall back to initial state with the current season.
+      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+    }
     case "RESET":
       return createInitialState();
     default:
@@ -8871,8 +9055,12 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   }
   normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
 
+  const VALID_MIGRATE_PHASES = new Set(["CREATE", "BACKGROUND", "INTERVIEWS", "OFFERS", "COORD_HIRING", "HUB"]);
+  const normalizedPhase = VALID_MIGRATE_PHASES.has(String(oldState.phase ?? "")) ? oldState.phase : "HUB";
+
   let s: Partial<GameState> = {
     ...oldState,
+    phase: normalizedPhase as GameState["phase"],
     saveSeed,
     season: Number((oldState as any).season ?? 2026),
     week: Number((oldState as any).week ?? 1),
@@ -8896,7 +9084,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         resigning: { decisions: {} },
         tagCenter: { applied: undefined },
         rosterAudit: { cutDesignations: {} },
-        combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0 },
+        combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
       scouting: {
         windowId: "COMBINE",
         budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
@@ -8915,7 +9103,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
           capHitsByPlayerId: {},
           decisionReasonByPlayerId: {},
         },
-        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS" },
+        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
         draft: { board: [], picks: [], completed: false },
         camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
         cutDowns: { decisions: {} },
@@ -8974,6 +9162,9 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         cash: 150_000_000,
         postJune1Sim: false,
       },
+    staffBudget: (oldState as any).staffBudget ?? { total: 23_000_000, used: 0, byPersonId: {} },
+    teamFinances: (oldState as any).teamFinances ?? { cash: 60_000_000, deadMoneyBySeason: {} },
+    memoryLog: Array.isArray((oldState as any).memoryLog) ? (oldState as any).memoryLog : [],
     league: normalizedLeague,
     teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
     game,
@@ -9100,7 +9291,21 @@ function readCapModeFromUrl(): boolean | null {
 
 
 export function createInitialStateForTests(): GameState {
-  return createInitialState();
+  const base = createInitialState();
+  // Provide a valid acceptedOffer so ADVANCE_WEEK, RESOLVE_PLAY, and FIRE_STAFF
+  // handlers that read state.acceptedOffer?.teamId don't return early in tests.
+  const firstActiveTeam = getTeams().find((t) => t.isActive);
+  if (!firstActiveTeam) return base;
+  const defaultOffer: OfferItem = {
+    teamId: firstActiveTeam.teamId,
+    years: 4,
+    salary: 4_000_000,
+    autonomy: 65,
+    patience: 55,
+    mediaNarrativeKey: "story_start",
+    base: { years: 4, salary: 4_000_000, autonomy: 65 },
+  };
+  return { ...base, acceptedOffer: defaultOffer, userTeamId: firstActiveTeam.teamId, teamId: firstActiveTeam.teamId };
 }
 
 function applyCapModeQuery(state: GameState): GameState {
@@ -9145,6 +9350,7 @@ function loadState(): GameState {
       },
       staffOffers: Array.isArray((migrated as any).staffOffers) ? (migrated as any).staffOffers : [],
       firing: { ...initial.firing, ...migrated.firing },
+      careerHistory: { firings: Array.isArray((migrated as any).careerHistory?.firings) ? (migrated as any).careerHistory.firings : [] },
       owner: { ...initial.owner, ...migrated.owner },
       teamOwnerExpectationsByTeamId: { ...initial.teamOwnerExpectationsByTeamId, ...((migrated as any).teamOwnerExpectationsByTeamId ?? {}) },
       ownerState: { ...initial.ownerState, ...((migrated as any).ownerState ?? {}) },
@@ -9338,6 +9544,11 @@ function loadState(): GameState {
         }
       }
     } catch { /* corrupt checkpoint — ignore and proceed with main save */ }
+    // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
+    const criticalResult = validateCriticalSaveState(out);
+    if (!criticalResult.ok) {
+      out = { ...out, recoveryNeeded: true, recoveryErrors: [criticalResult.message] };
+    }
 
     return out;
   } catch (error) {

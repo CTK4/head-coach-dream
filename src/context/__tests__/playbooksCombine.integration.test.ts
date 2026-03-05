@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
+import { getPersonnelFreeAgents } from "@/data/leagueDb";
 
 describe("playbooks + combine wiring", () => {
   it("updates offense/defense playbook ids via state action", () => {
@@ -13,18 +14,23 @@ describe("playbooks + combine wiring", () => {
 
 
   it("auto-switches OC playbook on hire when user has not overridden", () => {
-    let state = migrateSave({}) as GameState;
+    const airRaidOc = getPersonnelFreeAgents().find(
+      (p) => String(p.role ?? "").toUpperCase() === "OFF_COORDINATOR" &&
+             String(p.scheme ?? "").toUpperCase().replace(/\s+/g, "_") === "AIR_RAID"
+    );
+    expect(airRaidOc).toBeTruthy();
+
+    let state = migrateSave({ userTeamId: "CHI" }) as GameState;
     state = {
       ...state,
+      userTeamId: "CHI",
+      staff: { ...state.staff, ocId: undefined },
       playbooks: {
         ...state.playbooks,
         offensePlaybookId: "PRO_STYLE_BALANCED",
         userOverride: { offense: false, defense: false },
       },
     };
-
-    const airRaidOc = state.staffMarket.find((person) => person.role === "OC" && person.scheme === "AIR_RAID");
-    expect(airRaidOc).toBeTruthy();
 
     state = gameReducer(state, {
       type: "HIRE_STAFF",
@@ -35,9 +41,17 @@ describe("playbooks + combine wiring", () => {
   });
 
   it("does not auto-switch OC playbook on hire when user override is set", () => {
-    let state = migrateSave({}) as GameState;
+    // Use any OC free agent — the scheme doesn't matter here since userOverride.offense=true blocks the switch
+    const anyOc = getPersonnelFreeAgents().find(
+      (p) => String(p.role ?? "").toUpperCase() === "OFF_COORDINATOR"
+    );
+    expect(anyOc).toBeTruthy();
+
+    let state = migrateSave({ userTeamId: "CHI" }) as GameState;
     state = {
       ...state,
+      userTeamId: "CHI",
+      staff: { ...state.staff, ocId: undefined },
       playbooks: {
         ...state.playbooks,
         offensePlaybookId: "WEST_COAST",
@@ -45,12 +59,9 @@ describe("playbooks + combine wiring", () => {
       },
     };
 
-    const airRaidOc = state.staffMarket.find((person) => person.role === "OC" && person.scheme === "AIR_RAID");
-    expect(airRaidOc).toBeTruthy();
-
     state = gameReducer(state, {
       type: "HIRE_STAFF",
-      payload: { role: "OC", personId: String(airRaidOc!.personId), salary: 1_000_000 },
+      payload: { role: "OC", personId: String(anyOc!.personId), salary: 1_000_000 },
     });
 
     expect(state.playbooks.offensePlaybookId).toBe("WEST_COAST");

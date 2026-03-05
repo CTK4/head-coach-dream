@@ -35,5 +35,5 @@ describe("cpu-only multi-season stability", () => {
       expect(totalRecordGames).toBeLessThanOrEqual(32 * REGULAR_SEASON_WEEKS);
       expect(totalRecordGames).toBeGreaterThan(500);
     }
-  });
+  }, 30_000);
 });

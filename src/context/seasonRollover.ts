@@ -53,7 +53,7 @@ export function migrateExpiredContractsToFreeAgency(state: GameState, currentSea
 
     const contractEndSeason = resolvePlayerContractEndSeason(next, playerId, p);
     if (contractEndSeason === null) continue;
-    if (Number(contractEndSeason) !== Number(currentSeason)) continue;
+    if (Number(contractEndSeason) > Number(currentSeason)) continue;
 
     next = applyCanonicalTx(next, Tx.release(effectiveTeamId, playerId, "CONTRACT_EXPIRED"));
     expiredPlayerIds.add(playerId);
