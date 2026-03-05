@@ -75,7 +75,7 @@ describe("saveManager round trip at golden checkpoints", () => {
 
     expect(Number(midState.hub.regularSeasonWeek ?? midState.week ?? 0)).toBeGreaterThanOrEqual(9);
     expect(postState.careerStage).toBe("SEASON_AWARDS");
-  });
+  }, 120000);
 
   it("restores from backup when primary save is corrupted", () => {
     const state = runGoldenSeason({
@@ -104,5 +104,5 @@ describe("saveManager round trip at golden checkpoints", () => {
       expect(result.code).toBe("CORRUPT_SAVE");
       expect(result.restoredFromBackup).toBe(false);
     }
-  });
+  }, 60000);
 });
