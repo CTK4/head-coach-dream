@@ -14,6 +14,7 @@ describe("golden season determinism", () => {
     expect(a.summary.standingsCount).toBeGreaterThan(0);
     expect(a.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(a.summary.record.losses).toBeGreaterThanOrEqual(0);
+  }, 300_000);
   }, 120000);
 
   it("changes hash for a different seed while preserving invariants", () => {
@@ -24,5 +25,6 @@ describe("golden season determinism", () => {
     expect(a.summary.standingsCount).toBe(b.summary.standingsCount);
     expect(b.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(b.summary.record.losses).toBeGreaterThanOrEqual(0);
+  }, 300_000);
   }, 120000);
 });

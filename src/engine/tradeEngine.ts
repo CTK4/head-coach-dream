@@ -77,10 +77,12 @@ function rand01(key: string): number {
 }
 
 export function playerTradeValue(p: TradePlayer): number {
+  // Draft pick assets carry their trade value directly in `overall` (no age adjustment).
+  if (p.isPick) return Number(p.overall ?? 140);
   return calculateTradeValue({
     overall: Number(p.overall ?? 60),
     age: Number(p.age ?? 26),
-    isPick: Boolean(p.isPick),
+    isPick: false,
   }, { teamStage: "competitive", positionalNeed: 0.5 });
 }
 

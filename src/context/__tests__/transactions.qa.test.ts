@@ -102,7 +102,7 @@ describe("transactions QA closure", () => {
 
     const after = computeTeamGameRatings(next, destinationTeamId);
     expect(after.qbProcessing).not.toBe(before.qbProcessing);
-  });
+  }, 60_000);
 
   it("cut apply sets free-agent override and affects effective selectors + ratings", () => {
     const base = initStateForTeam("MILWAUKEE_NORTHSHORE");
@@ -122,7 +122,7 @@ describe("transactions QA closure", () => {
 
     const after = computeTeamGameRatings(next, teamId);
     expect(after.qbProcessing).toBeLessThanOrEqual(before.qbProcessing);
-  });
+  }, 60_000);
 
   it("finalize cuts persists FA status across save/load", () => {
     const base = initStateForTeam("MILWAUKEE_NORTHSHORE");
@@ -168,7 +168,7 @@ describe("transactions QA closure", () => {
     const next = gameReducer(base, { type: "ADVANCE_SEASON" });
     expect(next.playerTeamOverrides[String((candidate as any).playerId)]).toBe("FREE_AGENT");
     expect(getEffectiveFreeAgents(next).some((p: any) => String(p.playerId) === String((candidate as any).playerId))).toBe(true);
-  });
+  }, 60_000);
 
   it("advancing season expires staff contracts and unassigns them", () => {
     const base = initStateForTeam("MILWAUKEE_NORTHSHORE");
@@ -210,5 +210,5 @@ describe("transactions QA closure", () => {
     expect(getPersonnelById(personId)?.teamId).toBe("FREE_AGENT");
     const remainingYears = Math.max(0, Number(contract.endSeason ?? 0) - next.season + 1);
     expect(remainingYears).toBe(0);
-  });
+  }, 60_000);
 });

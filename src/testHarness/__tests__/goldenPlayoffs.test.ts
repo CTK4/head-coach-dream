@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildPlayoffBracket, simulateCpuPlayoffGamesForRound, advancePlayoffRound, buildPostseasonResults, getPlayoffRoundGames } from "@/engine/playoffsSim";
 import { initLeagueState } from "@/engine/leagueSim";
 
+// CC conference: MILWAUKEE_NORTHSHORE, ATLANTA_APEX
+// FC conference: BALTIMORE_ADMIRALS, BOSTON_HARBORMEN
+// Using 2 teams per conference so playoff bracket produces a Super Bowl
+const TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BALTIMORE_ADMIRALS", "BOSTON_HARBORMEN"];
+
 function run(seed: number) {
+  const league = initLeagueState(TEAM_IDS, 2026);
   const league = initLeagueState(["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BALTIMORE_ADMIRALS", "BOSTON_HARBORMEN"], 2026);
   league.standings.MILWAUKEE_NORTHSHORE = { w: 14, l: 3, pf: 450, pa: 280 };
   league.standings.ATLANTA_APEX = { w: 13, l: 4, pf: 430, pa: 300 };

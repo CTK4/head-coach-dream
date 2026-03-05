@@ -84,11 +84,12 @@ import {
 } from "@/engine/practiceFocus";
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
-import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked } from "@/engine/scouting/core";
+import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked, getQbScoutingDivergenceByArchetype } from "@/engine/scouting/core";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import {
   COMBINE_DAY_COUNT,
   COMBINE_DAY_POSITION_BUCKETS,
@@ -141,6 +142,7 @@ import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
+import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
@@ -980,6 +982,8 @@ export type GameState = {
     gmName?: string;
     teamLocked: true;
   };
+  recoveryNeeded?: boolean;
+  recoveryErrors?: string[];
   autonomyRating?: number;
   ownerPatience?: number;
   teamOwnerExpectationsByTeamId: Record<TeamId, OwnerExpectationsConfig>;
@@ -1413,6 +1417,10 @@ export type GameAction =
   | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
   | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
   | { type: "SET_PLAYER_ATTR_OVERRIDE"; payload: { playerId: string; patch: Partial<PlayerRow> } }
+  | { type: "RECOVERY_RETURN_TO_HUB" }
+  | { type: "RECOVERY_REBUILD_INDICES" }
+  | { type: "RECOVERY_SKIP_STEP" }
+  | { type: "RECOVERY_RESTORE_BACKUP" }
   | { type: "RESET" };
 
 
@@ -2371,14 +2379,14 @@ function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagTy
   const amount = resolveFranchiseTagAmount(state, player);
   const priorTag = state.franchiseTags[playerId];
   const priorContract = buildContractIndex(state)[playerId];
+  // Franchise tag is a 1-year fully guaranteed contract at the tag amount.
+  // Keep salary = full amount (no signing bonus split) so ledger reflects real cap hit.
   const tagContract: PlayerContractOverride = {
-    ...createContractOverride({
-      startSeason: nextSeason,
-      years: 1,
-      salary: amount,
-      guarantees: 1,
-      type: "FRANCHISE_TAG",
-    }),
+    startSeason: nextSeason,
+    endSeason: nextSeason,
+    salaries: [amount],
+    signingBonus: 0,
+    contractType: "FRANCHISE_TAG",
     guaranteedAtSigning: amount,
   };
 
@@ -3313,6 +3321,7 @@ function seasonRollover(state: GameState): GameState {
 
   let next = applyFinances({
     ...state,
+    transactionLedger: expiredState.transactionLedger, // preserve RELEASE events from contract expiry
     season: nextSeason,
     week: 1,
     careerStage: "OFFSEASON_HUB",
@@ -5194,7 +5203,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
-      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase();
+      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase().replace(/\s+/g, "_");
       let nextPlaybooks = {
         ...nextState.playbooks,
         userOverride: {
@@ -7787,7 +7796,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "FIRE_STAFF": {
-      const teamId = state.acceptedOffer?.teamId;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
       if (!teamId) return state;
 
       const salary = state.staffBudget.byPersonId[action.payload.personId] ?? 0;
@@ -8870,6 +8879,39 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
     }
+    case "RECOVERY_RETURN_TO_HUB": {
+      return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
+    }
+    case "RECOVERY_REBUILD_INDICES": {
+      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
+      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
+      const migrationEvts = buildMigrationEvents(rebuilt);
+      if (migrationEvts.length > 0) {
+        return {
+          ...rebuilt,
+          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+          playerTeamOverrides: {},
+          playerContractOverrides: {},
+        };
+      }
+      return rebuilt;
+    }
+    case "RECOVERY_SKIP_STEP": {
+      // Advance the offseason step and clear recovery.
+      const cfg = { enableTamperingStep: state.offseason?.enableTamperingStep ?? false };
+      const next = StateMachine.nextOffseasonStepId(state.offseason?.stepId ?? "RESIGNING", cfg);
+      const nextStep = next ?? "RESIGNING";
+      return {
+        ...state,
+        recoveryNeeded: false,
+        recoveryErrors: [],
+        offseason: { ...state.offseason, stepId: nextStep as import("@/lib/stateMachine").OffseasonStepId },
+      };
+    }
+    case "RECOVERY_RESTORE_BACKUP": {
+      // Clear recovery flags and fall back to initial state with the current season.
+      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+    }
     case "RESET":
       return createInitialState();
     default:
@@ -8933,8 +8975,12 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   }
   normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
 
+  const VALID_MIGRATE_PHASES = new Set(["CREATE", "BACKGROUND", "INTERVIEWS", "OFFERS", "COORD_HIRING", "HUB"]);
+  const normalizedPhase = VALID_MIGRATE_PHASES.has(String(oldState.phase ?? "")) ? oldState.phase : "HUB";
+
   let s: Partial<GameState> = {
     ...oldState,
+    phase: normalizedPhase as GameState["phase"],
     saveSeed,
     season: Number((oldState as any).season ?? 2026),
     week: Number((oldState as any).week ?? 1),
@@ -9036,6 +9082,9 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         cash: 150_000_000,
         postJune1Sim: false,
       },
+    staffBudget: (oldState as any).staffBudget ?? { total: 23_000_000, used: 0, byPersonId: {} },
+    teamFinances: (oldState as any).teamFinances ?? { cash: 60_000_000, deadMoneyBySeason: {} },
+    memoryLog: Array.isArray((oldState as any).memoryLog) ? (oldState as any).memoryLog : [],
     league: normalizedLeague,
     teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
     game,
@@ -9162,7 +9211,21 @@ function readCapModeFromUrl(): boolean | null {
 
 
 export function createInitialStateForTests(): GameState {
-  return createInitialState();
+  const base = createInitialState();
+  // Provide a valid acceptedOffer so ADVANCE_WEEK, RESOLVE_PLAY, and FIRE_STAFF
+  // handlers that read state.acceptedOffer?.teamId don't return early in tests.
+  const firstActiveTeam = getTeams().find((t) => t.isActive);
+  if (!firstActiveTeam) return base;
+  const defaultOffer: OfferItem = {
+    teamId: firstActiveTeam.teamId,
+    years: 4,
+    salary: 4_000_000,
+    autonomy: 65,
+    patience: 55,
+    mediaNarrativeKey: "story_start",
+    base: { years: 4, salary: 4_000_000, autonomy: 65 },
+  };
+  return { ...base, acceptedOffer: defaultOffer, userTeamId: firstActiveTeam.teamId, teamId: firstActiveTeam.teamId };
 }
 
 function applyCapModeQuery(state: GameState): GameState {
@@ -9382,6 +9445,13 @@ function loadState(): GameState {
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
+
+    // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
+    const criticalResult = validateCriticalSaveState(out);
+    if (!criticalResult.ok) {
+      out = { ...out, recoveryNeeded: true, recoveryErrors: [criticalResult.message] };
+    }
+
     return out;
   } catch (error) {
     logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });

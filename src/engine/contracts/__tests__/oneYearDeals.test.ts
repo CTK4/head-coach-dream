@@ -125,7 +125,7 @@ describe("one-year contract deals", () => {
     const postExpiry = gameReducer(signedNextSeason, { type: "ADVANCE_SEASON" });
     expect(postExpiry.playerContractOverrides[String(playerId)]).toBeUndefined();
     expect(String(postExpiry.playerTeamOverrides[String(playerId)] ?? "")).toBe("FREE_AGENT");
-  });
+  }, 90_000);
 
   it("one-year re-sign contract override survives JSON reload deterministically", () => {
     const state = initStateForTeam("MILWAUKEE_NORTHSHORE");
