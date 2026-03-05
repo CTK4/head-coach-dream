@@ -8815,6 +8815,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 }
 
 const STORAGE_KEY = "hc_career_save";
+const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 function ensureLeagueGmMap(state: GameState): GameState {
   const ids = Object.keys(state.league?.standings ?? {});
@@ -9318,6 +9319,26 @@ function loadState(): GameState {
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
+
+    // Mid-game checkpoint restore: if a drive-boundary checkpoint exists for this
+    // save and the main save doesn't already have an active game, overlay the
+    // in-progress game state so the user can resume after a hard-refresh.
+    try {
+      const cpRaw = localStorage.getItem(GAME_CHECKPOINT_KEY);
+      if (cpRaw) {
+        const cp = JSON.parse(cpRaw) as { saveSeed?: number; season?: number; leaguePhase?: string; game?: GameSim };
+        const cpActive =
+          cp.leaguePhase === "REGULAR_SEASON_GAME" ||
+          (cp.game?.weekType === "PLAYOFFS" && cp.game?.homeTeamId !== "HOME");
+        const mainIdle =
+          out.league.phase !== "REGULAR_SEASON_GAME" &&
+          !(out.game?.weekType === "PLAYOFFS" && out.game?.homeTeamId !== "HOME");
+        if (cp.saveSeed === out.saveSeed && cp.season === out.season && cpActive && mainIdle && cp.game) {
+          out = { ...out, game: cp.game, league: { ...out.league, phase: cp.leaguePhase as typeof out.league.phase } };
+        }
+      }
+    } catch { /* corrupt checkpoint — ignore and proceed with main save */ }
+
     return out;
   } catch (error) {
     logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
@@ -9356,6 +9377,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 // —————————————————————————
 
 const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const prevDriveRef = useRef(state.game.driveNumber);
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
 // True when we are mid-play-by-play and saves should be suppressed.
@@ -9429,6 +9451,34 @@ useEffect(() => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
 }, [state, isGameInProgress]);
+
+// Drive-boundary checkpoint: save game state at the start of each new drive so
+// a hard-refresh mid-game can resume from the last completed drive boundary.
+useEffect(() => {
+  const prev = prevDriveRef.current;
+  prevDriveRef.current = state.game.driveNumber;
+
+  if (!isGameInProgress) {
+    // Game ended or not started — clear any stale checkpoint
+    try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
+    return;
+  }
+
+  // Only write at drive boundaries (driveNumber incremented)
+  if (state.game.driveNumber > prev) {
+    try {
+      localStorage.setItem(
+        GAME_CHECKPOINT_KEY,
+        JSON.stringify({
+          saveSeed: state.saveSeed,
+          season: state.season,
+          leaguePhase: state.league.phase,
+          game: state.game,
+        }),
+      );
+    } catch { /* quota exceeded — silent */ }
+  }
+}, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
