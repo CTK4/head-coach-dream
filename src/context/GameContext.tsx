@@ -162,27 +162,10 @@ import { freeAgencyReducer } from "@/context/freeAgencyReducer";
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed } from "@/engine/rng";
+import type { CareerStage } from "@/types/careerStage";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
-export type CareerStage =
-  | "OFFSEASON_HUB"
-  | "SEASON_AWARDS"
-  | "ASSISTANT_HIRING"
-  | "STAFF_CONSTRUCTION"
-  | "ROSTER_REVIEW"
-  | "RESIGN"
-  | "COMBINE"
-  | "TAMPERING"
-  | "FREE_AGENCY"
-  | "PRE_DRAFT"
-  | "DRAFT"
-  | "TRAINING_CAMP"
-  | "PRESEASON"
-  | "CUTDOWNS"
-  | "REGULAR_SEASON"
-  | "PLAYOFFS"
-  | "FIRED"
-  | "REHIRING";
+export type { CareerStage };
 
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 

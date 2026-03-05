@@ -1,21 +1,4 @@
-export type CareerStage =
-  | "OFFSEASON_HUB"
-  | "SEASON_AWARDS"
-  | "ASSISTANT_HIRING"
-  | "STAFF_CONSTRUCTION"
-  | "ROSTER_REVIEW"
-  | "RESIGN"
-  | "COMBINE"
-  | "TAMPERING"
-  | "FREE_AGENCY"
-  | "PRE_DRAFT"
-  | "DRAFT"
-  | "TRAINING_CAMP"
-  | "PRESEASON"
-  | "CUTDOWNS"
-  | "REGULAR_SEASON"
-  | "FIRED"
-  | "REHIRING";
+import type { CareerStage } from "@/types/careerStage";
 
 export enum PhaseKeyEnum {
   PHASE_2_RETENTION = "PHASE_2_RETENTION",
