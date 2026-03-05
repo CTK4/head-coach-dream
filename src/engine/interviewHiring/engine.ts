@@ -1,6 +1,6 @@
 import { evaluateFormula } from "./formula";
 import { XorShift32 } from "./rng";
-import type { InterviewQuestion, InterviewScoreResult, InterviewSession, QuestionOption, SelectedQuestion, TeamConfig } from "./types";
+import type { InterviewOutcome, InterviewQuestion, InterviewScoreResult, InterviewSession, QuestionOption, SelectedQuestion, TeamConfig } from "./types";
 import { weightedNoReplacement } from "./weightedSampler";
 
 const DELTA_TO_METRIC_CANDIDATES: Record<string, string[]> = {
@@ -321,6 +321,70 @@ export function scoreInterview(
     band,
     borderlineCoinflip,
     details,
+  };
+}
+
+/**
+ * Derives a unified InterviewOutcome from raw scoring results.
+ * Maps metrics → the contract that StoryInterview, generateOffers, and the
+ * INIT_NEW_GAME_FROM_STORY reducer all consume.
+ */
+export function deriveInterviewOutcome(
+  result: InterviewScoreResult,
+  _teamConfig: TeamConfig,
+): InterviewOutcome {
+  const m = result.metrics;
+  const ownerApproval = clamp(Math.round(m.owner_approval ?? 50), 0, 100);
+  const gmApproval = clamp(Math.round(m.gm_approval ?? 50), 0, 100);
+  const schemeScore = clamp(Math.round(m.stability_score ?? m.authority_score ?? 50), 0, 100);
+  const mediaScore = clamp(Math.round(m.media_score ?? 50), 0, 100);
+
+  // Derive autonomy grant: high combined score unlocks more operational freedom
+  const avgScore = (ownerApproval + gmApproval + schemeScore) / 3;
+  let autonomyGrant = 60;
+  let salaryBand: InterviewOutcome["salaryBand"] = "MID";
+  if (result.band === "HIRED") {
+    if (avgScore >= 80) { autonomyGrant = 85; salaryBand = "PREMIUM"; }
+    else if (avgScore >= 70) { autonomyGrant = 75; salaryBand = "HIGH"; }
+    else if (avgScore >= 60) { autonomyGrant = 65; salaryBand = "MID"; }
+    else { autonomyGrant = 58; salaryBand = "LOW"; }
+  } else {
+    autonomyGrant = 55;
+    salaryBand = "LOW";
+  }
+
+  // Leash length derived from owner approval and stability
+  const stabilityBonus = clamp(Math.round((m.stability_score ?? 50) - 50) / 10, -1, 2);
+  const leashLength = clamp(Math.round(2 + stabilityBonus + (ownerApproval >= 70 ? 1 : 0) + (result.band === "HIRED" ? 1 : 0)), 1, 5);
+
+  // Profile scores from available metrics
+  const profileScores: InterviewOutcome["profileScores"] = {
+    authority: clamp(Math.round(m.authority_score ?? 50), 0, 100),
+    continuity: clamp(Math.round(m.continuity_score ?? m.continuity ?? 50), 0, 100),
+    riskTolerance: clamp(Math.round(m.aggression_score ?? 50), 0, 100),
+    rebuildClarity: clamp(Math.round(m.rebuild_clarity ?? 50), 0, 100),
+    discipline: clamp(Math.round(m.discipline_score ?? m.discipline ?? 50), 0, 100),
+  };
+
+  const reasons: string[] = [];
+  if (ownerApproval >= 70) reasons.push(`Strong owner alignment (${ownerApproval})`);
+  if (gmApproval >= 70) reasons.push(`GM confidence high (${gmApproval})`);
+  if (ownerApproval < 50) reasons.push(`Owner alignment below threshold (${ownerApproval})`);
+  if (gmApproval < 50) reasons.push(`GM trust insufficient (${gmApproval})`);
+  if (result.chemistryDelta > 0) reasons.push('Chemistry bonus applied');
+
+  return {
+    band: result.band,
+    ownerApproval,
+    gmApproval,
+    schemeScore,
+    mediaScore,
+    autonomyGrant,
+    leashLength,
+    salaryBand,
+    gates: result.gateReasons,
+    reasons,
+    profileScores,
   };
 }
 

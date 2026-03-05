@@ -48,6 +48,8 @@ const VALID_CAREER_STAGES = new Set<string>([
   "CUTDOWNS",
   "REGULAR_SEASON",
   "PLAYOFFS",
+  "FIRED",
+  "REHIRING",
 ]);
 
 // ---------------------------------------------------------------------------

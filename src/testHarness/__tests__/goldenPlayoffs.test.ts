@@ -9,6 +9,7 @@ const TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BALTIMORE_ADMIRALS", 
 
 function run(seed: number) {
   const league = initLeagueState(TEAM_IDS, 2026);
+  const league = initLeagueState(["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BALTIMORE_ADMIRALS", "BOSTON_HARBORMEN"], 2026);
   league.standings.MILWAUKEE_NORTHSHORE = { w: 14, l: 3, pf: 450, pa: 280 };
   league.standings.ATLANTA_APEX = { w: 13, l: 4, pf: 430, pa: 300 };
   league.standings.BALTIMORE_ADMIRALS = { w: 12, l: 5, pf: 410, pa: 320 };
