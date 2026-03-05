@@ -13,7 +13,9 @@ export type CareerStage =
   | "TRAINING_CAMP"
   | "PRESEASON"
   | "CUTDOWNS"
-  | "REGULAR_SEASON";
+  | "REGULAR_SEASON"
+  | "FIRED"
+  | "REHIRING";
 
 export enum PhaseKeyEnum {
   PHASE_2_RETENTION = "PHASE_2_RETENTION",
