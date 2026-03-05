@@ -114,16 +114,20 @@ describe("practice integration", () => {
 
   it("combine reveal data persists through draft init", () => {
     const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";
-    const seeded = baselineState(teamId);
-    const prospectId = Object.keys(seeded.offseasonData.combine.results)[0];
+    const base = baselineState(teamId);
+    // Run combine to populate results before checking persistence
+    const withCombine = gameReducer(gameReducer(base, { type: "COMBINE_GENERATE" }), { type: "COMBINE_RUN_EVENTS", payload: { seed: 42 } });
+    const seeded = withCombine;
+    const prospectId = Object.keys(seeded.offseasonData.combine.results ?? seeded.offseasonData.combine.resultsByProspectId ?? {})[0];
     expect(prospectId).toBeDefined();
 
-    const before = seeded.offseasonData.combine.results[prospectId];
+    const before = (seeded.offseasonData.combine.results ?? seeded.offseasonData.combine.resultsByProspectId ?? {})[prospectId];
     expect(before).toBeDefined();
 
     const drafted = gameReducer({ ...seeded, careerStage: "DRAFT" }, { type: "DRAFT_INIT" });
 
-    expect(drafted.offseasonData.combine.results[prospectId]).toEqual(before);
+    const afterResults = drafted.offseasonData.combine.results ?? drafted.offseasonData.combine.resultsByProspectId ?? {};
+    expect(afterResults[prospectId]).toEqual(before);
   });
   it("default plan applies when no explicit selection exists", () => {
     const teamId = getTeams().find((t) => t.isActive !== false)?.teamId ?? "MILWAUKEE_NORTHSHORE";

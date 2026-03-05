@@ -15,7 +15,10 @@ const eliteDragTrait: CoachTrait = {
   label: "Elite Drag",
   tier: "Elite",
   description: "",
-  affinityMap: { awareness: -1, one: 1, two: 1, three: 1, four: -1, five: -1, six: -1 },
+  // 1 positive (six) and 6 negatives → net negative at base=50:
+  // 1×(+5) + 6×(−2) = 5 − 12 = −7. BASE_BOOST(0.10) doubles BASE_DRAG(0.05)
+  // so we need neg/pos > 2 to ensure overall negative impact.
+  affinityMap: { awareness: -1, one: -1, two: -1, three: -1, four: -1, five: -1, six: 1 },
 };
 
 function makeCoach(traits: CoachTrait[], tenureYears = 0): CoachProfile {
