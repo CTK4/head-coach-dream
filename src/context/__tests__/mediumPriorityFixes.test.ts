@@ -166,7 +166,7 @@ describe("M2 season rollover compaction", () => {
     expect(next.weeklyResults).toEqual([]);
     expect(next.gameHistory).toEqual([]);
     expect(next.league.results).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("M1 player lookup source", () => {

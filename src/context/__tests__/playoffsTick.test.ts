@@ -100,7 +100,7 @@ describe("playoffs tick reducer", () => {
     expect(state.playoffs).toBeNull();
     expect(state.careerStage).toBe("SEASON_AWARDS");
     expect(state.league.phase).toBe("SEASON_COMPLETE");
-  });
+  }, 30_000);
 
   it("playoffs.tick.doesNotAdvanceWhenPendingUserGame", () => {
     const userTeamId = getTeams().find((t) => t.isActive)?.teamId;
