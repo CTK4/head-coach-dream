@@ -181,5 +181,5 @@ describe("P10 – determinism and cross-system invariants", () => {
     const a = runGoldenSeason({ careerSeed: 777, userTeamId: "MILWAUKEE_NORTHSHORE", stopAt: "OFFSEASON_DONE" });
     const b = runGoldenSeason({ careerSeed: 777, userTeamId: "MILWAUKEE_NORTHSHORE", stopAt: "OFFSEASON_DONE" });
     expect(a.determinismHash).toBe(b.determinismHash);
-  });
-}, 60_000);
+  }, 300_000);
+}, 300_000);

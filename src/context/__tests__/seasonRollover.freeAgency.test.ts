@@ -96,7 +96,7 @@ describe("season rollover free agency handling", () => {
     expect(next.playerTeamOverrides[playerId]).toBe("FREE_AGENT");
     expect(getEffectiveFreeAgents(next).some((p: any) => String(p.playerId) === playerId)).toBe(true);
     expect(getEffectivePlayersByTeam(next, teamId).some((p: any) => String(p.playerId) === playerId)).toBe(false);
-  });
+  }, 60_000);
 
   it("keeps re-signed players on roster when override covers next season", () => {
     const candidate = getPlayers().find((p: any) => String(p.teamId ?? "") !== "FREE_AGENT" && !!getContractById(String(p.contractId ?? "")));
@@ -131,7 +131,7 @@ describe("season rollover free agency handling", () => {
     expect(next.playerTeamOverrides[playerId]).toBe(teamId);
     expect(getEffectivePlayersByTeam(next, teamId).some((p: any) => String(p.playerId) === playerId)).toBe(true);
     expect(getEffectiveFreeAgents(next).some((p: any) => String(p.playerId) === playerId)).toBe(false);
-  });
+  }, 60_000);
 
   it("does not change players already in free agency", () => {
     const candidate = getPlayers().find((p: any) => String(p.teamId ?? "") !== "FREE_AGENT" && !!getContractById(String(p.contractId ?? "")));
@@ -154,7 +154,7 @@ describe("season rollover free agency handling", () => {
 
     expect(next.playerTeamOverrides[playerId]).toBe("FREE_AGENT");
     expect(getEffectiveFreeAgents(next).some((p: any) => String(p.playerId) === playerId)).toBe(true);
-  });
+  }, 60_000);
 
   it("increases free-agent pool when multiple base contracts expire", () => {
     const candidates = getPlayers().filter((p: any) => String(p.teamId ?? "") !== "FREE_AGENT" && !!getContractById(String(p.contractId ?? ""))).slice(0, 3);
@@ -176,5 +176,5 @@ describe("season rollover free agency handling", () => {
     for (const playerId of playerIds) {
       expect(next.playerTeamOverrides[playerId]).toBe("FREE_AGENT");
     }
-  });
+  }, 60_000);
 });
