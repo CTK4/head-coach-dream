@@ -27,7 +27,7 @@ import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSa
 import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
-import { initGameSim, stepPlay, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
+import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import {
@@ -1235,6 +1235,7 @@ export type GameAction =
   | { type: "CLEAR_DEFENSIVE_CALL" }
   | { type: "EXIT_GAME" }
   | { type: "ADVANCE_WEEK" }
+  | { type: "SIMULATE_REST_OF_GAME" }
   | { type: "PLAYOFFS_INIT_BRACKET" }
   | { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" }
   | { type: "PLAYOFFS_TICK" }
@@ -8321,10 +8322,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
         const winnerTeamId = state.game.homeScore >= state.game.awayScore ? state.game.homeTeamId : state.game.awayTeamId;
-        const finalizedBox = (stepped.sim as any).boxScore;
+        const finalizedBox = buildGameBoxScore(stepped.sim, state.season);
         let out = gameReducer({
           ...nextWithPractice,
-          gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
+          gameHistory: [...(state.gameHistory ?? []), finalizedBox],
           game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
         }, { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: state.game.homeScore, awayScore: state.game.awayScore, winnerTeamId } });
         return gameReducer(out, { type: "PLAYOFFS_TICK" });
@@ -8401,7 +8402,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         }
       }
 
-      const finalizedBox = (stepped.sim as any).boxScore;
+      const finalizedBox = buildGameBoxScore(stepped.sim, state.season);
       let nextState = {
         ...nextWithPractice,
         teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
@@ -8410,7 +8411,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
         newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
-        gameHistory: finalizedBox ? [...(state.gameHistory ?? []), finalizedBox] : state.gameHistory,
+        gameHistory: [...(state.gameHistory ?? []), finalizedBox],
         hub,
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
@@ -8443,6 +8444,84 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         ...state,
         game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`exit:${state.hub.regularSeasonWeek}:${state.hub.preseasonWeek}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
+    case "SIMULATE_REST_OF_GAME": {
+      if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
+      let sim = state.game;
+      let safety = 0;
+      while (!(sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0)) {
+        const stepped = stepPlay(sim, autoPickPlay(sim));
+        sim = stepped.sim;
+        safety++;
+        if (safety > 6000) break;
+      }
+      const next = upsertGameFatigueState({ ...state, game: sim }, sim);
+      const nextWithRecovery = {
+        ...next,
+        playerFatigueById: applyWeeklyFatigueRecovery(next, sim.snapLoadThisGame ?? {}),
+        qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(sim.qbRunContactsByPlayerId ?? {}) },
+      };
+      const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
+      if (!appliedPlayWeek.applied) return state;
+      let nextWithPractice = appliedPlayWeek.state;
+
+      if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
+        const winnerTeamId = sim.homeScore >= sim.awayScore ? sim.homeTeamId : sim.awayTeamId;
+        const finalizedBox = buildGameBoxScore(sim, state.season);
+        let out = gameReducer(
+          { ...nextWithPractice, gameHistory: [...(state.gameHistory ?? []), finalizedBox], game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }) },
+          { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: sim.homeScore, awayScore: sim.awayScore, winnerTeamId } },
+        );
+        return gameReducer(out, { type: "PLAYOFFS_TICK" });
+      }
+
+      const schedule = state.hub.schedule;
+      if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
+
+      const weekResult = simulateWeek({
+        schedule,
+        gameType: state.game.weekType,
+        week: state.game.weekNumber,
+        userHomeTeamId: state.game.homeTeamId,
+        userAwayTeamId: state.game.awayTeamId,
+        userScore: { homeScore: sim.homeScore, awayScore: sim.awayScore },
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, state.game.weekType, state.game.weekNumber),
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
+      });
+      const simLeague = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType: state.game.weekType as GameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: Number(state.game.weekNumber) + 1,
+      };
+      const simHub = { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+      const simFinalizedBox = buildGameBoxScore(sim, state.season);
+      let simNextState = {
+        ...nextWithPractice,
+        teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
+        league: { ...simLeague, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase },
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
+        gameHistory: [...(state.gameHistory ?? []), simFinalizedBox],
+        hub: simHub,
+        contextFlags: applyFlagsToContext(nextWithPractice.coach),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+      };
+      if (state.game.weekType === "REGULAR_SEASON") {
+        const weekKey = toWeekKey(simNextState.season, Number(state.game.weekNumber));
+        simNextState = finalizeWeek(simNextState, { season: simNextState.season, week: Number(state.game.weekNumber), gameType: "REGULAR_SEASON", weekKey, seed: simNextState.saveSeed });
+        simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
+        if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
+          simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
+        }
+      }
+      return simNextState;
+    }
     case "ADVANCE_WEEK": {
       const schedule = state.hub.schedule;
       logInfo("sim.week.start", { phase: state.phase, season: state.season, week: state.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { careerStage: state.careerStage } });
@@ -8920,6 +8999,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 }
 
 const STORAGE_KEY = "hc_career_save";
+const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 function ensureLeagueGmMap(state: GameState): GameState {
   const ids = Object.keys(state.league?.standings ?? {});
@@ -9446,6 +9526,24 @@ function loadState(): GameState {
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
 
+    // Mid-game checkpoint restore: if a drive-boundary checkpoint exists for this
+    // save and the main save doesn't already have an active game, overlay the
+    // in-progress game state so the user can resume after a hard-refresh.
+    try {
+      const cpRaw = localStorage.getItem(GAME_CHECKPOINT_KEY);
+      if (cpRaw) {
+        const cp = JSON.parse(cpRaw) as { saveSeed?: number; season?: number; leaguePhase?: string; game?: GameSim };
+        const cpActive =
+          cp.leaguePhase === "REGULAR_SEASON_GAME" ||
+          (cp.game?.weekType === "PLAYOFFS" && cp.game?.homeTeamId !== "HOME");
+        const mainIdle =
+          out.league.phase !== "REGULAR_SEASON_GAME" &&
+          !(out.game?.weekType === "PLAYOFFS" && out.game?.homeTeamId !== "HOME");
+        if (cp.saveSeed === out.saveSeed && cp.season === out.season && cpActive && mainIdle && cp.game) {
+          out = { ...out, game: cp.game, league: { ...out.league, phase: cp.leaguePhase as typeof out.league.phase } };
+        }
+      }
+    } catch { /* corrupt checkpoint — ignore and proceed with main save */ }
     // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
     const criticalResult = validateCriticalSaveState(out);
     if (!criticalResult.ok) {
@@ -9490,6 +9588,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 // —————————————————————————
 
 const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const prevDriveRef = useRef(state.game.driveNumber);
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
 // True when we are mid-play-by-play and saves should be suppressed.
@@ -9563,6 +9662,34 @@ useEffect(() => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
 }, [state, isGameInProgress]);
+
+// Drive-boundary checkpoint: save game state at the start of each new drive so
+// a hard-refresh mid-game can resume from the last completed drive boundary.
+useEffect(() => {
+  const prev = prevDriveRef.current;
+  prevDriveRef.current = state.game.driveNumber;
+
+  if (!isGameInProgress) {
+    // Game ended or not started — clear any stale checkpoint
+    try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
+    return;
+  }
+
+  // Only write at drive boundaries (driveNumber incremented)
+  if (state.game.driveNumber > prev) {
+    try {
+      localStorage.setItem(
+        GAME_CHECKPOINT_KEY,
+        JSON.stringify({
+          saveSeed: state.saveSeed,
+          season: state.season,
+          leaguePhase: state.league.phase,
+          game: state.game,
+        }),
+      );
+    } catch { /* quota exceeded — silent */ }
+  }
+}, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;

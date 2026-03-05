@@ -202,6 +202,16 @@ export type DriveLogEntry = {
   awayScore: number;
 };
 
+export type DriveResult = "TD" | "FG" | "PUNT" | "TURNOVER" | "TURNOVER_ON_DOWNS";
+
+export type CurrentDrive = {
+  driveNumber: number;
+  possession: Possession;
+  startBallOn: number;
+  plays: DriveLogEntry[];
+  result?: DriveResult;
+};
+
 export type PlayExplanation = {
   primaryFactor: string;
   secondaryFactor?: string;
@@ -236,6 +246,7 @@ export type GameSim = {
   driveNumber: number;
   playNumberInDrive: number;
   driveLog: DriveLogEntry[];
+  currentDrive: CurrentDrive;
   /** Current defensive look shown to the user pre-snap */
   defLook?: DefensiveLook;
   /** Aggression level applied to next play */
@@ -1070,11 +1081,24 @@ function quarterAdvanceIfNeeded(sim: GameSim): GameSim {
 }
 
 function newDrive(sim: GameSim, possession: Possession): GameSim {
-  return { ...sim, possession, driveNumber: sim.driveNumber + 1, playNumberInDrive: 0 };
+  return {
+    ...sim,
+    possession,
+    driveNumber: sim.driveNumber + 1,
+    playNumberInDrive: 0,
+    currentDrive: { driveNumber: sim.driveNumber + 1, possession, startBallOn: sim.ballOn, plays: [] },
+  };
 }
 
 function setNewSeries(sim: GameSim, ballOn: number): GameSim {
-  return { ...sim, ballOn: clamp(ballOn, 1, 99), down: 1, distance: 10 };
+  const clamped = clamp(ballOn, 1, 99);
+  return {
+    ...sim,
+    ballOn: clamped,
+    down: 1,
+    distance: 10,
+    currentDrive: { ...sim.currentDrive, startBallOn: clamped },
+  };
 }
 
 function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
@@ -1096,7 +1120,12 @@ function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
     defensivePackage: sim.selectedDefensivePackage,
     explanation: sim.lastPlayResult?.explanation,
   };
-  return { ...sim, playNumberInDrive: sim.playNumberInDrive + 1, driveLog: [entry, ...sim.driveLog] };
+  return {
+    ...sim,
+    playNumberInDrive: sim.playNumberInDrive + 1,
+    driveLog: [entry, ...sim.driveLog],
+    currentDrive: { ...sim.currentDrive, plays: [...sim.currentDrive.plays, entry] },
+  };
 }
 
 function kickoffAfterScore(sim: GameSim, rng: () => number): GameSim {
@@ -1110,7 +1139,11 @@ function kickoffAfterScore(sim: GameSim, rng: () => number): GameSim {
 
 function turnover(sim: GameSim, rng: () => number): GameSim {
   const admin = adminTime(rng, "CHANGE");
-  const next = setNewSeries(newDrive(sim, otherSide(sim.possession)), 25);
+  // Tag the ending drive as TURNOVER only if the caller hasn't already set a more specific result
+  const tagged = sim.currentDrive.result
+    ? sim
+    : { ...sim, currentDrive: { ...sim.currentDrive, result: "TURNOVER" as DriveResult } };
+  const next = setNewSeries(newDrive(tagged, otherSide(sim.possession)), 25);
   return { ...next, clock: applyTime({ ...sim.clock, clockRunning: false, restartMode: "SNAP", playClockLen: 40 }, admin) };
 }
 
@@ -1124,7 +1157,7 @@ function punt(sim: GameSim, rng: () => number): GameSim {
   const puntOutcome = resolvePunt({ power: 78, accuracy: 73, hang: 76, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: "LOW", precipTier: "NONE", surface: "DRY" }, kickRng);
   const returned = puntOutcome.returnable;
   clock = applyTime(clock, liveTime(rng, returned ? "PUNT_RETURN" : "PUNT_FAIR"));
-  return turnover({ ...sim, clock, lastResult: `Punt ${puntOutcome.netYds}y${puntOutcome.inside20 ? " (inside 20)" : ""}.`, lastResultTags: puntOutcome.resultTags }, rng);
+  return turnover({ ...sim, clock, lastResult: `Punt ${puntOutcome.netYds}y${puntOutcome.inside20 ? " (inside 20)" : ""}.`, lastResultTags: puntOutcome.resultTags, currentDrive: { ...sim.currentDrive, result: "PUNT" } }, rng);
 }
 
 function fgMakeProb(ballOn: number): number {
@@ -1144,7 +1177,7 @@ function fgAttempt(sim: GameSim, rng: () => number): GameSim {
   if (fgOutcome.made) {
     const off = scoreRef(sim);
     off.set(off.get() + 3);
-    return kickoffAfterScore({ ...sim, clock, lastResult: `FG is GOOD (${kickYards}y)!`, lastResultTags: fgOutcome.resultTags }, rng);
+    return kickoffAfterScore({ ...sim, clock, lastResult: `FG is GOOD (${kickYards}y)!`, lastResultTags: fgOutcome.resultTags, currentDrive: { ...sim.currentDrive, result: "FG" } }, rng);
   }
   return turnover({ ...sim, clock, lastResult: `FG missed ${fgOutcome.missDir} (${kickYards}y).`, lastResultTags: fgOutcome.resultTags }, rng);
 }
@@ -1154,7 +1187,7 @@ function advanceDown(sim: GameSim, gained: number): GameSim {
     const off = scoreRef(sim);
     off.set(off.get() + 7);
     const reset = setNewSeries(sim, 25);
-    return { ...reset, lastResult: "TOUCHDOWN!" };
+    return { ...reset, lastResult: "TOUCHDOWN!", currentDrive: { ...reset.currentDrive, result: "TD" } };
   }
 
   if (gained >= sim.distance) {
@@ -1165,7 +1198,7 @@ function advanceDown(sim: GameSim, gained: number): GameSim {
   const distance = Math.max(1, sim.distance - gained);
 
   if (down > 4) {
-    return turnover({ ...sim, lastResult: `${sim.lastResult ?? ""} Turnover on downs.`.trim() }, mulberry32(sim.seed + 999));
+    return turnover({ ...sim, lastResult: `${sim.lastResult ?? ""} Turnover on downs.`.trim(), currentDrive: { ...sim.currentDrive, result: "TURNOVER_ON_DOWNS" } }, mulberry32(sim.seed + 999));
   }
 
   return { ...sim, down, distance };
@@ -1452,6 +1485,7 @@ export function initGameSim(params: {
     driveNumber: 1,
     playNumberInDrive: 0,
     driveLog: [],
+    currentDrive: { driveNumber: 1, possession: "HOME", startBallOn: 25, plays: [] },
     aggression: "NORMAL",
     tempo: "NORMAL",
     stats: emptyGameStats(),
@@ -1685,4 +1719,37 @@ export function simulateFullGame(params: { homeTeamId: string; awayTeamId: strin
   }
 
   return { homeScore: sim.homeScore, awayScore: sim.awayScore };
+}
+
+export function buildGameBoxScore(sim: GameSim, season: number): GameBoxScore {
+  return {
+    season,
+    week: sim.weekNumber ?? 0,
+    home: {
+      teamId: sim.homeTeamId,
+      score: sim.homeScore,
+      passAttempts: sim.stats.home.passAttempts,
+      completions: sim.stats.home.completions,
+      passYards: sim.stats.home.passYards,
+      rushAttempts: sim.stats.home.rushAttempts,
+      rushYards: sim.stats.home.rushYards,
+      turnovers: sim.stats.home.turnovers,
+      sacks: sim.stats.home.sacks,
+      tds: sim.stats.home.tds,
+    },
+    away: {
+      teamId: sim.awayTeamId,
+      score: sim.awayScore,
+      passAttempts: sim.stats.away.passAttempts,
+      completions: sim.stats.away.completions,
+      passYards: sim.stats.away.passYards,
+      rushAttempts: sim.stats.away.rushAttempts,
+      rushYards: sim.stats.away.rushYards,
+      turnovers: sim.stats.away.turnovers,
+      sacks: sim.stats.away.sacks,
+      tds: sim.stats.away.tds,
+    },
+    players: [],
+    finalized: true,
+  };
 }
