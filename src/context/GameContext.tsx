@@ -137,6 +137,7 @@ import { createFeedbackEvent, type FeedbackEvent } from "@/engine/feedbackEvents
 import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
+import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
@@ -956,6 +957,8 @@ export type GameState = {
     gmName?: string;
     teamLocked: true;
   };
+  recoveryNeeded?: boolean;
+  recoveryErrors?: string[];
   autonomyRating?: number;
   ownerPatience?: number;
   teamOwnerExpectationsByTeamId: Record<TeamId, OwnerExpectationsConfig>;
@@ -1387,6 +1390,10 @@ export type GameAction =
   | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
   | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
   | { type: "SET_PLAYER_ATTR_OVERRIDE"; payload: { playerId: string; patch: Partial<PlayerRow> } }
+  | { type: "RECOVERY_RETURN_TO_HUB" }
+  | { type: "RECOVERY_REBUILD_INDICES" }
+  | { type: "RECOVERY_SKIP_STEP" }
+  | { type: "RECOVERY_RESTORE_BACKUP" }
   | { type: "RESET" };
 
 
@@ -8730,6 +8737,39 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
     }
+    case "RECOVERY_RETURN_TO_HUB": {
+      return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
+    }
+    case "RECOVERY_REBUILD_INDICES": {
+      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
+      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
+      const migrationEvts = buildMigrationEvents(rebuilt);
+      if (migrationEvts.length > 0) {
+        return {
+          ...rebuilt,
+          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+          playerTeamOverrides: {},
+          playerContractOverrides: {},
+        };
+      }
+      return rebuilt;
+    }
+    case "RECOVERY_SKIP_STEP": {
+      // Advance the offseason step and clear recovery.
+      const cfg = { enableTamperingStep: state.offseason?.enableTamperingStep ?? false };
+      const next = StateMachine.nextOffseasonStepId(state.offseason?.stepId ?? "RESIGNING", cfg);
+      const nextStep = next ?? "RESIGNING";
+      return {
+        ...state,
+        recoveryNeeded: false,
+        recoveryErrors: [],
+        offseason: { ...state.offseason, stepId: nextStep as import("@/lib/stateMachine").OffseasonStepId },
+      };
+    }
+    case "RECOVERY_RESTORE_BACKUP": {
+      // Clear recovery flags and fall back to initial state with the current season.
+      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+    }
     case "RESET":
       return createInitialState();
     default:
@@ -9262,6 +9302,13 @@ function loadState(): GameState {
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
+
+    // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
+    const criticalResult = validateCriticalSaveState(out);
+    if (!criticalResult.ok) {
+      out = { ...out, recoveryNeeded: true, recoveryErrors: [criticalResult.message] };
+    }
+
     return out;
   } catch (error) {
     logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
