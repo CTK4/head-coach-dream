@@ -6,6 +6,7 @@ import {
   clearPersonnelTeam,
   expireContract,
   getContractById,
+  getLeague,
   getPersonnelById,
   getPersonnelContract,
   getPlayerById,
@@ -163,6 +164,8 @@ import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
+
+const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type { CareerStage };
@@ -1702,14 +1705,14 @@ function createInitialState(): GameState {
     playerProgressionSeasonStatsById: {},
     playerDevelopmentById: {},
     finances: {
-      cap: 250_000_000,
+      cap: LEAGUE_SALARY_CAP,
       carryover: 0,
       incentiveTrueUps: 0,
       deadCapThisYear: 0,
       deadCapNextYear: 0,
       baseCommitted: 0,
       capCommitted: 0,
-      capSpace: 250_000_000,
+      capSpace: LEAGUE_SALARY_CAP,
       cash: 150_000_000,
       postJune1Sim: false,
     },
@@ -9138,14 +9141,14 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     finances:
       (oldState as any).finances ??
       {
-        cap: 250_000_000,
+        cap: LEAGUE_SALARY_CAP,
         carryover: 0,
         incentiveTrueUps: 0,
         deadCapThisYear: 0,
         deadCapNextYear: 0,
         baseCommitted: 0,
         capCommitted: 0,
-        capSpace: 250_000_000,
+        capSpace: LEAGUE_SALARY_CAP,
         cash: 150_000_000,
         postJune1Sim: false,
       },

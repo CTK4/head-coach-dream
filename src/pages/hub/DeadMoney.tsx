@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { computeDeadMoneyLedger, computeLeagueDeadMoneySummary, type DeadMoneyEntry } from "@/engine/deadMoney";
-import { getTeams } from "@/data/leagueDb";
+import { getLeague, getTeams } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ export default function DeadMoney() {
     [teams, selectedTeamId, userTeamId],
   );
 
-  const cap = Number(state.finances?.cap ?? 250_000_000);
+  const cap = Number(state.finances?.cap ?? getLeague().salaryCap);
   // For the user's own team, use aggregate finances.deadCapThisYear when no individual entries exist
   const displayDeadThis =
     (selectedTeamId === userTeamId || !selectedTeamId)
