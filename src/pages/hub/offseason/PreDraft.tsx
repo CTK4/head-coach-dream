@@ -8,8 +8,46 @@ import { Badge } from "@/components/ui/badge";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
+import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
 const POS_FILTER_ALL = "ALL";
+
+// Same group normalization as Combine page
+function normalizeCombinePosGroup(pos: string): string {
+  const raw = normalizeProspectPosition(String(pos ?? ""), "DRAFT");
+  if (raw === "DT") return "DL";
+  return raw;
+}
+
+function pctToTier(pct: number): string {
+  if (pct >= 90) return "Elite";
+  if (pct >= 85) return "Top 15%";
+  if (pct >= 60) return "Above Avg";
+  if (pct >= 40) return "Average";
+  return "Below Avg";
+}
+
+// Deterministic integer hash for a string
+function simpleHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+const SCOUT_BLURBS = [
+  "Exceptional motor — plays through the whistle every snap.",
+  "Scheme fit is a question but athleticism is undeniable.",
+  "Leadership qualities stood out in all interviews.",
+  "Technique needs polish but ceiling is very high.",
+  "Production relative to competition warrants caution.",
+  "Medical history is clean — no red flags.",
+  "Strong hands and contested-catch ability above average.",
+  "Struggled against elite competition in last two seasons.",
+  "Off-script instincts offset any measurable limitations.",
+  "Work ethic and film study habits are elite.",
+];
 
 function priorityWeight(priorities: PriorityPos[], pos: string): number {
   const p = String(pos || "").toUpperCase().trim() as PriorityPos;
@@ -17,6 +55,8 @@ function priorityWeight(priorities: PriorityPos[], pos: string): number {
   if (idx < 0) return 0;
   return Math.max(0, 1 - idx * 0.25);
 }
+
+type TabMode = "BOARD" | "MY_BOARD";
 
 export default function PreDraft() {
   const { state, dispatch } = useGame();
@@ -26,6 +66,11 @@ export default function PreDraft() {
 
   const [pickerOpen, setPickerOpen] = useState(true);
   const [posFilter, setPosFilter] = useState<string>(POS_FILTER_ALL);
+  const [tabMode, setTabMode] = useState<TabMode>("BOARD");
+
+  const combine = state.offseasonData.combine;
+  const shortlist = (combine as any).shortlist ?? {};
+  const intelByProspectId = state.offseasonData.preDraft.intelByProspectId ?? {};
 
   const board = useMemo(() => {
     const base = state.offseasonData.preDraft.board.length ? state.offseasonData.preDraft.board : state.offseasonData.draft.board;
@@ -42,6 +87,28 @@ export default function PreDraft() {
       .sort((a, b) => (b.__score ?? 0) - (a.__score ?? 0))
       .slice(0, 90);
   }, [state.offseasonData.preDraft.board, state.offseasonData.draft.board, viewMode, priorities]);
+
+  // Compute percentiles from combine data (same logic as Combine page)
+  const percentileMap = useMemo(() => {
+    const allProspects = combine.prospects.length ? combine.prospects : board;
+    const byGroup: Record<string, Array<{ id: string; ras: number }>> = {};
+    for (const p of allProspects) {
+      const id = String((p as any).id ?? (p as any).playerId ?? "");
+      const result = combine.results?.[id] ?? {};
+      const ras = Number(result.ras ?? (p as any).ras ?? 0);
+      const grp = normalizeCombinePosGroup(String((p as any).pos ?? ""));
+      (byGroup[grp] ??= []).push({ id, ras });
+    }
+    const out: Record<string, number> = {};
+    for (const group of Object.values(byGroup)) {
+      const sorted = group.slice().sort((a, b) => a.ras - b.ras);
+      const n = sorted.length;
+      sorted.forEach(({ id }, rank) => {
+        out[id] = n > 1 ? Math.round((rank / (n - 1)) * 100) : 100;
+      });
+    }
+    return out;
+  }, [combine.prospects, combine.results, board]);
 
   const visits = state.offseasonData.preDraft.visits;
   const workouts = state.offseasonData.preDraft.workouts;
@@ -62,6 +129,8 @@ export default function PreDraft() {
     return board.filter((p) => String(p.pos ?? "UNK").toUpperCase() === posFilter);
   }, [board, posFilter]);
 
+  const myBoard = useMemo(() => board.filter((p) => !!shortlist[p.id]), [board, shortlist]);
+
   const toggleVisit = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
   const toggleWorkout = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_WORKOUT", payload: { prospectId: id } });
   const setViewMode = (mode: "CONSENSUS" | "GM" | "TEAM") => dispatch({ type: "PREDRAFT_SET_VIEWMODE", payload: { mode } });
@@ -75,13 +144,90 @@ export default function PreDraft() {
     if (nextOpen) setPosFilter(POS_FILTER_ALL);
   };
 
+  function renderProspectRow(p: Prospect, idx: number) {
+    const id = p.id;
+    const v = !!visits[id];
+    const w = !!workouts[id];
+    const alreadyScheduledOtherType = (v && !w) || (w && !v);
+    const disableVisitAdd = (!v && allSlotsUsed) || w;
+    const disableWorkoutAdd = (!w && allSlotsUsed) || v;
+
+    const intel = intelByProspectId[id] ?? 0;
+    const gmEval = viewMode === "GM" ? getUserProspectEval(state, p) : null;
+    const combineResult = combine.results?.[id] ?? {};
+    const combineScore10 = computeCombineScore({
+      ...(p as Record<string, unknown>),
+      ...combineResult,
+    }).combineScore10;
+
+    const ras = combineResult.ras ?? (p as any).ras;
+    const pct = percentileMap[id];
+    const tier = pct != null ? pctToTier(pct) : null;
+    const topPct = pct != null ? 100 - pct : null;
+
+    const blurbSeed = simpleHash(id + String((p as any).archetype ?? "") + String(state.saveSeed ?? 0));
+    const blurb = SCOUT_BLURBS[blurbSeed % SCOUT_BLURBS.length];
+
+    return (
+      <div key={id} className="border rounded-md px-3 py-2 flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-medium truncate">
+              #{idx + 1}{" "}
+              <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(id))}>
+                {p.name}
+              </button>{" "}
+              <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
+              {!!shortlist[id] ? <span className="ml-1 text-amber-400 text-xs">★ Pinned</span> : null}
+            </div>
+
+            {viewMode === "CONSENSUS" ? (
+              <div className="text-xs text-muted-foreground">
+                CS {formatCombineScore10(combineScore10)} · Interview {(p as any).interview} · {(p as any).archetype}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                GM Grade {gmEval?.roundBand} <span className="text-muted-foreground">({gmEval?.value})</span> · Consensus {(p as any).grade} · CS {formatCombineScore10(combineScore10)}
+              </div>
+            )}
+
+            {/* Intel-gated info */}
+            {intel >= 1 && ras != null ? (
+              <div className="text-xs text-sky-300">
+                RAS {Number(ras).toFixed(1)}{tier ? ` · ${tier}${topPct != null ? ` (Top ${topPct}%)` : ""}` : ""}
+              </div>
+            ) : intel === 0 ? (
+              <div className="text-xs text-slate-500">Schedule a visit or workout to unlock scouting intel.</div>
+            ) : null}
+            {intel >= 2 ? (
+              <div className="text-xs text-amber-300/80 italic">{blurb}</div>
+            ) : null}
+
+            {alreadyScheduledOtherType ? (
+              <div className="text-xs text-amber-500">Already scheduled ({v ? "Visit" : "Workout"}). Cannot add both.</div>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" variant={v ? "default" : "outline"} className="min-h-11" onClick={() => toggleVisit(id)} disabled={disableVisitAdd}>
+              {v ? "Visited" : "Visit"}
+            </Button>
+            <Button size="sm" variant={w ? "default" : "outline"} className="min-h-11" onClick={() => toggleWorkout(id)} disabled={disableWorkoutAdd}>
+              {w ? "Workout" : "Set Workout"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8 space-y-4">
       <Card>
         <CardContent className="p-6 flex items-center justify-between">
           <div className="space-y-1">
             <div className="text-xl font-bold">Pre-Draft</div>
-            <div className="text-sm text-muted-foreground">Top 30 visits / private workouts.</div>
+            <div className="text-sm text-muted-foreground">Top 30 visits / private workouts. Visit or workout unlocks scouting intel.</div>
             <div className="text-sm font-medium">Slots used: {slotsUsed} / {PREDRAFT_MAX_SLOTS}</div>
             {allSlotsUsed ? <div className="text-xs text-amber-500">All {PREDRAFT_MAX_SLOTS} slots used</div> : null}
           </div>
@@ -92,38 +238,68 @@ export default function PreDraft() {
       <Card>
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="font-semibold">Board</div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="min-h-11" onClick={togglePicker}>
-                {pickerOpen ? "Hide Picker" : "Open Picker"}
-              </Button>
-              <div className="flex overflow-x-auto rounded-md border">
-                <Button size="sm" variant={viewMode === "CONSENSUS" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("CONSENSUS")}>
-                  Consensus
+              <div className="font-semibold">Board</div>
+              <div className="flex rounded-md border overflow-hidden">
+                <Button
+                  size="sm"
+                  variant={tabMode === "BOARD" ? "default" : "ghost"}
+                  className="min-h-11 rounded-none"
+                  onClick={() => setTabMode("BOARD")}
+                >
+                  Board
                 </Button>
-                <Button size="sm" variant={viewMode === "GM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("GM")}>
-                  GM View
-                </Button>
-                <Button size="sm" variant={viewMode === "TEAM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("TEAM")}>
-                  Team View
+                <Button
+                  size="sm"
+                  variant={tabMode === "MY_BOARD" ? "default" : "ghost"}
+                  className="min-h-11 rounded-none"
+                  onClick={() => setTabMode("MY_BOARD")}
+                >
+                  My Board {myBoard.length > 0 ? `(${myBoard.length})` : ""}
                 </Button>
               </div>
-              <Badge variant="outline">{filteredBoard.length}</Badge>
             </div>
+            {tabMode === "BOARD" ? (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="min-h-11" onClick={togglePicker}>
+                  {pickerOpen ? "Hide Picker" : "Open Picker"}
+                </Button>
+                <div className="flex overflow-x-auto rounded-md border">
+                  <Button size="sm" variant={viewMode === "CONSENSUS" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("CONSENSUS")}>
+                    Consensus
+                  </Button>
+                  <Button size="sm" variant={viewMode === "GM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("GM")}>
+                    GM View
+                  </Button>
+                  <Button size="sm" variant={viewMode === "TEAM" ? "default" : "ghost"} className="min-h-11 rounded-none" onClick={() => setViewMode("TEAM")}>
+                    Team View
+                  </Button>
+                </div>
+                <Badge variant="outline">{filteredBoard.length}</Badge>
+              </div>
+            ) : null}
           </div>
 
-          {viewMode === "TEAM" ? (
+          {tabMode === "BOARD" && viewMode === "TEAM" ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Priority bump:</span>
               {priorities.slice(0, 3).map((p) => (
-                <Badge key={p} variant="secondary">
-                  {p}
-                </Badge>
+                <Badge key={p} variant="secondary">{p}</Badge>
               ))}
             </div>
           ) : null}
 
-          {pickerOpen ? (
+          {tabMode === "MY_BOARD" ? (
+            <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
+              {myBoard.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No prospects pinned. Use the Combine page to shortlist prospects.</div>
+              ) : (
+                myBoard.map((p, idx) => renderProspectRow(p, idx))
+              )}
+            </div>
+          ) : null}
+
+          {tabMode === "BOARD" && pickerOpen ? (
             <>
               <div className="overflow-x-auto pb-1"><div className="flex min-w-max items-center gap-2">
                 {positionFilters.map((pos) => (
@@ -134,58 +310,7 @@ export default function PreDraft() {
               </div></div>
 
               <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
-                {filteredBoard.map((p, idx) => {
-                  const v = !!visits[p.id];
-                  const w = !!workouts[p.id];
-                  const alreadyScheduledOtherType = (v && !w) || (w && !v);
-
-                  const disableVisitAdd = (!v && allSlotsUsed) || w;
-                  const disableWorkoutAdd = (!w && allSlotsUsed) || v;
-
-                  const gmEval = viewMode === "GM" ? getUserProspectEval(state, p) : null;
-                  const combineScore10 = computeCombineScore({
-                    ...(p as Record<string, unknown>),
-                    ...(state.offseasonData.combine.results?.[p.id] ?? {}),
-                  }).combineScore10;
-
-                  // STUB — Phase N: Pro Day variance tag behavior remains placeholder-only until variance model finalization.
-
-                  return (
-                    <div key={p.id} className="border rounded-md px-3 py-2 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          #{idx + 1}{" "}
-                          <button type="button" className="text-sky-300 hover:underline" onClick={() => openProspectProfile(String(p.id))}>
-                            {p.name}
-                          </button>{" "}
-                          <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
-                        </div>
-
-                        {viewMode === "CONSENSUS" ? (
-                          <div className="text-xs text-muted-foreground">
-                            CS {formatCombineScore10(combineScore10)} · Interview {p.interview} · {p.archetype}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">
-                            GM Grade {gmEval?.roundBand} <span className="text-muted-foreground">({gmEval?.value})</span> · Consensus {p.grade} · CS {formatCombineScore10(combineScore10)}
-                          </div>
-                        )}
-                        {alreadyScheduledOtherType ? (
-                          <div className="text-xs text-amber-500">Already scheduled ({v ? "Visit" : "Workout"}). Cannot add both.</div>
-                        ) : null}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant={v ? "default" : "outline"} className="min-h-11" onClick={() => toggleVisit(p.id)} disabled={disableVisitAdd}>
-                          {v ? "Visited" : "Visit"}
-                        </Button>
-                        <Button size="sm" variant={w ? "default" : "outline"} className="min-h-11" onClick={() => toggleWorkout(p.id)} disabled={disableWorkoutAdd}>
-                          {w ? "Workout" : "Set Workout"}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {filteredBoard.map((p, idx) => renderProspectRow(p, idx))}
               </div>
             </>
           ) : null}
