@@ -55,6 +55,7 @@ import Landing from "@/pages/Landing";
 import LoadSave from "@/pages/LoadSave";
 import SaveModeSelect from "@/pages/SaveModeSelect";
 import StoryInterview from "@/pages/story/StoryInterview";
+import FiredScreen from "@/pages/FiredScreen";
 import FreePlaySetup from "@/pages/FreePlaySetup";
 import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -88,6 +89,9 @@ function HubGate({ children }: { children: React.ReactNode }) {
     const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
+  // Redirect fired coaches away from hub to the fired/rehiring flow
+  if (state.careerStage === "FIRED") return <Navigate to="/fired" replace />;
+  if (state.careerStage === "REHIRING") return <Navigate to={ROUTES.storyInterview} replace />;
   return <>{children}</>;
 }
 
@@ -173,6 +177,7 @@ function AppRoutes() {
           <Route path="/hub/draft" element={<Navigate to="/offseason/draft" replace />} /><Route path="/hub/draft-results" element={<DraftResults />} /><Route path="/hub/free-agency-recap" element={<FreeAgencyRecap />} /><Route path="/hub/training-camp" element={<Navigate to="/offseason/training-camp" replace />} /><Route path="/hub/cutdowns" element={<Navigate to="/offseason/cutdowns" replace />} />
           <Route path="/hub/preseason" element={<PreseasonWeek />} /><Route path="/hub/regular-season" element={<RegularSeason />} /><Route path="/hub/gameplan" element={<GameplanPage />} /><Route path="/hub/playoffs" element={<PlayoffsPage />} /><Route path="/hub/playoffs/bracket" element={<PlayoffBracketPage />} /><Route path="/hub/playoffs/game/:id" element={<PlayoffGamePage />} /><Route path="/hub/schedule" element={<ScheduleHome />} /><Route path="/hub/schedule/week/:weekNumber" element={<WeekSlate />} /><Route path="/hub/schedule/team/:teamId" element={<TeamSchedule />} /><Route path="/hub/schedule/game/:gameKey" element={<GameDetails />} /><Route path="/hub/playcall" element={<Playcall />} /><Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} /><Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} /><Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} /><Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} /><Route path="/hub/development" element={<Navigate to="/roster/development" replace />} /><Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} /><Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} /><Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} /><Route path="/hub/coordinator-hiring" element={<CoordinatorHiring />} /><Route path="/hub/hall-of-fame" element={<HallOfFame />} /><Route path="/hub/league-history" element={<LeagueHistory />} /><Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} /><Route path="/hub/tampering" element={<Navigate to="/free-agency" replace />} /><Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} /><Route path="/skill-tree" element={<SkillTree />} /><Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} /><Route path="/contracts/cap-baseline" element={<CapBaseline />} /><Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
         </Route>
+        <Route path="/fired" element={<FiredScreen />} />
         <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

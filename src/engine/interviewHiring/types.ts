@@ -123,3 +123,27 @@ export interface InterviewScoreResult {
   };
   details: ScoringDetail[];
 }
+
+/**
+ * Unified interview outcome contract consumed by StoryInterview, generateOffers,
+ * and the reducer's INIT_NEW_GAME_FROM_STORY. Derived from InterviewScoreResult.
+ */
+export interface InterviewOutcome {
+  band: "HIRED" | "BORDERLINE" | "REJECTED";
+  ownerApproval: number;
+  gmApproval: number;
+  schemeScore: number;
+  mediaScore: number;
+  autonomyGrant: number;
+  leashLength: number;
+  salaryBand: "LOW" | "MID" | "HIGH" | "PREMIUM";
+  gates: string[];
+  reasons: string[];
+  profileScores: {
+    authority: number;
+    continuity: number;
+    riskTolerance: number;
+    rebuildClarity: number;
+    discipline: number;
+  };
+}
