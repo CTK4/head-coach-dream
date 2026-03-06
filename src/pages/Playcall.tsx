@@ -294,6 +294,18 @@ function PostgamePanel({ g, homeName, awayName, fatigueById }: { g: GameSim; hom
           </div>
         </div>
         <div className="space-y-2">
+          <p className="text-sm font-semibold">Unicorn Contributions</p>
+          {(g.unicornImpactLog ?? []).length === 0 ? (
+            <p className="text-xs text-muted-foreground">No unicorn boosts triggered this game.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {(g.unicornImpactLog ?? []).slice(-6).map((impact) => (
+                <Badge key={`${impact.playId}-${impact.playerId}`} variant="secondary">🦄 {impact.archetypeId}: {impact.description}</Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
           <p className="text-sm font-semibold">High Workload</p>
           {Object.entries(g.snapLoadThisGame).filter(([playerId]) => (g.playerFatigue[playerId] ?? 50) > HIGH_WORKLOAD_THRESHOLD).length === 0 ? (
             <p className="text-xs text-muted-foreground">No warning badges.</p>

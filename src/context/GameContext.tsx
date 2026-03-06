@@ -8731,6 +8731,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           coachUnlockedPerkIds: base.coach?.unlockedPerkIds,
           homeGameplan: base.teamGameplans?.[teamId],
           awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
+          playerUnicorns: base.playerUnicorns,
         }),
       };
       started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
