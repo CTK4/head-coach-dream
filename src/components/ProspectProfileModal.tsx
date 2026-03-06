@@ -1,5 +1,5 @@
 import type { PlayerIntel } from "@/engine/scoutingCapacity";
-import type { ProspectScoutProfile } from "@/engine/scouting/types";
+import type { ProspectScoutProfile, ScoutingState } from "@/engine/scouting/types";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -24,6 +24,8 @@ export function ProspectProfileModal({
   intel,
   scoutingProfile,
   combine,
+  scoutingState,
+  prospectId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,6 +33,8 @@ export function ProspectProfileModal({
   intel?: PlayerIntel;
   scoutingProfile?: ProspectScoutProfile;
   combine?: CombineSummary;
+  scoutingState?: ScoutingState;
+  prospectId?: string;
 }) {
   const isMobile = useIsMobile();
 
@@ -55,6 +59,11 @@ export function ProspectProfileModal({
             ? "LOW-MED"
             : "LOW"
       : null;
+
+
+  const interviewResults = prospectId ? scoutingState?.interviews.resultsByProspectId?.[prospectId] ?? [] : [];
+  const medicalResult = prospectId ? scoutingState?.medical.resultsByProspectId?.[prospectId] : undefined;
+  const workoutResult = prospectId ? scoutingState?.workouts.resultsByProspectId?.[prospectId] : undefined;
 
   const blurbs = [
     fmt(firstValue(source, ["blurb", "summary", "description"])),
@@ -142,6 +151,33 @@ export function ProspectProfileModal({
             <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
               {intelRows.map((row) => <div key={row.label}><span className="text-slate-400">{row.label}:</span> <span>{row.value}</span></div>)}
             </div>
+          </div>
+        ) : null}
+
+        {interviewResults.length ? (
+          <div className="mt-4">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Interview Notes</div>
+            <div className="mt-2 space-y-1 text-sm">
+              {interviewResults.slice(-4).map((result, idx) => (
+                <div key={`${result.category}-${idx}`}>{result.category}: {result.score}{result.reveal ? ` · "${result.reveal}"` : ""}</div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {medicalResult ? (
+          <div className="mt-4">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Medical Risk</div>
+            <div className="mt-2 text-sm">{medicalResult.riskTier} · {medicalResult.category}</div>
+            {medicalResult.notes ? <div className="text-sm text-slate-300">{medicalResult.notes}</div> : null}
+          </div>
+        ) : null}
+
+        {workoutResult ? (
+          <div className="mt-4">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Private Workout</div>
+            <div className="mt-2 text-sm">{Object.entries(workoutResult.drills).map(([drill, score]) => `${drill.toUpperCase()} ${score}`).join(" · ")}</div>
+            <div className="mt-1 space-y-1 text-sm text-slate-300">{workoutResult.notes.map((note) => <div key={note}>• {note}</div>)}</div>
           </div>
         ) : null}
 

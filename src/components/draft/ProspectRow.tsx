@@ -18,6 +18,9 @@ export interface Prospect {
   positionRank?: string;
   combineScore10?: number | null;
   unicornConfidence?: number;
+  interviewScore?: number;
+  medicalRiskTier?: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+  workoutDone?: boolean;
 }
 
 interface ProspectRowProps {
@@ -90,6 +93,9 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
                 CS {formatCombineScore10(prospect.combineScore10)}
               </span>
               {prospect.confidence ? <span className="text-[11px] text-slate-400">Conf {prospect.confidence}%</span> : null}
+              {typeof prospect.interviewScore === "number" ? <span className="rounded border border-sky-300/40 bg-sky-500/15 px-2 py-0.5 text-[11px] text-sky-100">🎤 {prospect.interviewScore}</span> : null}
+              {prospect.medicalRiskTier ? <span className="rounded border border-rose-300/40 bg-rose-500/15 px-2 py-0.5 text-[11px] text-rose-100">🩺 {prospect.medicalRiskTier}</span> : null}
+              {prospect.workoutDone ? <span className="rounded border border-emerald-300/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-100">🏋️ workout</span> : null}
               {unicornCandidate ? <span className="rounded border border-fuchsia-300/50 bg-fuchsia-500/15 px-2 py-0.5 text-[11px] text-fuchsia-100">🦄 unicorn candidate ({Math.round(unicornCandidate * 100)}%)</span> : null}
             </div>
           </div>

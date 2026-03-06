@@ -92,6 +92,9 @@ import {
 import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
 import { detRand as detRand2 } from "@/engine/scouting/rng";
 import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked, getQbScoutingDivergenceByArchetype } from "@/engine/scouting/core";
+import { runInterview } from "@/engine/scouting/interviews";
+import { requestMedical } from "@/engine/scouting/medical";
+import { conductPrivateWorkout } from "@/engine/scouting/workouts";
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
@@ -1306,6 +1309,9 @@ export type GameAction =
   | { type: "SCOUT_COMBINE_RUN_INTERVIEWS"; payload: { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
   | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
   | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_RUN_INTERVIEW"; payload: { prospectId: string; category: "CHARACTER" | "INTELLIGENCE" | "WORK_ETHIC" } }
+  | { type: "SCOUT_REQUEST_MEDICAL"; payload: { prospectId: string } }
+  | { type: "SCOUT_CONDUCT_WORKOUT"; payload: { prospectId: string } }
   | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
   | { type: "SCOUT_DEV_SIM_WEEK" }
   | { type: "COMBINE_GENERATE" }
@@ -6189,8 +6195,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           bigBoard: { tiers, tierByProspectId: tierBy },
           combine: { generated: false, day: 1, selectedByDay: {}, interviewResultsByProspectId: {}, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
           visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
-          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {} },
-          medical: { requests: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {}, resultsByProspectId: {} },
+          medical: { requests: {}, resultsByProspectId: {} },
+          workouts: { resultsByProspectId: {} },
           allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_INTERVIEW_TOKENS : 20, byGroup: {} },
           inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
         },
@@ -6687,6 +6694,102 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         scoutingState: {
           ...s,
           interviews: { ...s.interviews, interviewsRemaining: s.interviews.interviewsRemaining - 1, history },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_RUN_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || s.interviews.interviewsRemaining <= 0 || s.budget.remaining < 2) return state;
+      const { prospectId, category } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = runInterview(state, prospectId, category);
+      const confidenceBoost = result.score >= 75 ? 4 : result.score >= 60 ? 2 : 1;
+      profile.confidence = Math.min(99, (profile.confidence ?? 0) + confidenceBoost);
+      profile.clarity.CHAR = Math.min(100, profile.clarity.CHAR + (category === "CHARACTER" ? 12 : 8));
+      profile.clarity.FIT = Math.min(100, profile.clarity.FIT + (category === "INTELLIGENCE" ? 8 : 4));
+      if (result.reveal) {
+        profile.notes.character = [profile.notes.character, `${category}: ${result.reveal}`].filter(Boolean).join(" · ");
+      }
+      const budget = { ...s.budget, remaining: s.budget.remaining - 2, spent: s.budget.spent + 2 };
+      const hist = s.interviews.history[prospectId] ?? [];
+      const history = {
+        ...s.interviews.history,
+        [prospectId]: [...hist, { category: "LEADERSHIP", outcome: `${category}: ${result.score}${result.reveal ? ` (${result.reveal})` : ""}`, windowKey: s.windowKey }],
+      };
+      const existing = s.interviews.resultsByProspectId?.[prospectId] ?? [];
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          interviews: {
+            ...s.interviews,
+            interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1),
+            history,
+            resultsByProspectId: { ...s.interviews.resultsByProspectId, [prospectId]: [...existing, result] },
+          },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_REQUEST_MEDICAL": {
+      const s = state.scoutingState;
+      if (!s || s.budget.remaining < 3) return state;
+      const { prospectId } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = requestMedical(state, prospectId);
+      profile.revealed.medicalTier = result.riskTier;
+      profile.notes.medical = result.notes;
+      if (result.riskTier === "RED") profile.estHigh = Math.max(profile.estLow, profile.estHigh - 4);
+      if (result.riskTier === "BLACK") profile.estHigh = Math.max(profile.estLow, profile.estHigh - 8);
+      const budget = { ...s.budget, remaining: s.budget.remaining - 3, spent: s.budget.spent + 3 };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          medical: {
+            ...s.medical,
+            requests: { ...s.medical.requests, [prospectId]: { requested: true, windowKey: s.windowKey } },
+            resultsByProspectId: { ...s.medical.resultsByProspectId, [prospectId]: result },
+          },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_CONDUCT_WORKOUT": {
+      const s = state.scoutingState;
+      if (!s || s.visits.privateWorkoutsRemaining <= 0 || s.budget.remaining < 4) return state;
+      const { prospectId } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = conductPrivateWorkout(state, prospectId);
+      const avg = Object.values(result.drills).reduce((sum, value) => sum + value, 0) / Math.max(1, Object.keys(result.drills).length);
+      if (avg >= 70) {
+        profile.estLow = Math.min(99, profile.estLow + 1);
+        profile.estHigh = Math.min(99, profile.estHigh + 2);
+        profile.notes.athletic = result.notes[0];
+      }
+      const budget = { ...s.budget, remaining: s.budget.remaining - 4, spent: s.budget.spent + 4 };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          visits: { ...s.visits, privateWorkoutsRemaining: Math.max(0, s.visits.privateWorkoutsRemaining - 1) },
+          workouts: {
+            ...s.workouts,
+            resultsByProspectId: { ...s.workouts.resultsByProspectId, [prospectId]: result },
+          },
           scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
         },
       };
@@ -9577,6 +9680,22 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       ),
     };
     delete scoutingState.combine.hoursRemaining;
+  }
+
+  if (scoutingState) {
+    scoutingState.interviews = {
+      interviewsRemaining: Number(scoutingState.interviews?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS),
+      history: scoutingState.interviews?.history ?? {},
+      modelARevealByProspectId: scoutingState.interviews?.modelARevealByProspectId ?? {},
+      resultsByProspectId: scoutingState.interviews?.resultsByProspectId ?? {},
+    };
+    scoutingState.medical = {
+      requests: scoutingState.medical?.requests ?? {},
+      resultsByProspectId: scoutingState.medical?.resultsByProspectId ?? {},
+    };
+    scoutingState.workouts = {
+      resultsByProspectId: scoutingState.workouts?.resultsByProspectId ?? {},
+    };
   }
 
   // Ensure scoutingState has at minimum a myBoardOrder so migrations can validate IDs
