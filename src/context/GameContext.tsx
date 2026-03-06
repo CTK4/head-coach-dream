@@ -57,7 +57,7 @@ import { DEFAULT_WEEKLY_GAMEPLAN, buildCpuGameplan, type WeeklyGameplan } from "
 import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
-import { getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { getAvailableEffectivePlayersByTeam, getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { migrateExpiredContractsToFreeAgency } from "@/context/seasonRollover";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
@@ -1421,22 +1421,22 @@ export type GameAction =
   | { type: "RESET" };
 
 
-function pickTopPlayerIdByPos(teamId: string, pos: string): string | undefined {
-  const players = getPlayersByTeam(teamId)
+function pickTopPlayerIdByPos(state: GameState, teamId: string, pos: string): string | undefined {
+  const players = getAvailableEffectivePlayersByTeam(state, teamId)
     .filter((p) => String(p.pos ?? "").toUpperCase() === pos)
     .sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
   return players[0]?.playerId;
 }
 
-function buildTrackedPlayers(teamId: string): Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>> {
-  const qb = pickTopPlayerIdByPos(teamId, "QB");
-  const rb = pickTopPlayerIdByPos(teamId, "RB");
-  const wr = pickTopPlayerIdByPos(teamId, "WR");
-  const te = pickTopPlayerIdByPos(teamId, "TE");
-  const ol = pickTopPlayerIdByPos(teamId, "OL");
-  const dl = pickTopPlayerIdByPos(teamId, "DL") ?? pickTopPlayerIdByPos(teamId, "EDGE");
-  const lb = pickTopPlayerIdByPos(teamId, "LB");
-  const db = pickTopPlayerIdByPos(teamId, "CB") ?? pickTopPlayerIdByPos(teamId, "S");
+function buildTrackedPlayers(state: GameState, teamId: string): Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>> {
+  const qb = pickTopPlayerIdByPos(state, teamId, "QB");
+  const rb = pickTopPlayerIdByPos(state, teamId, "RB");
+  const wr = pickTopPlayerIdByPos(state, teamId, "WR");
+  const te = pickTopPlayerIdByPos(state, teamId, "TE");
+  const ol = pickTopPlayerIdByPos(state, teamId, "OL");
+  const dl = pickTopPlayerIdByPos(state, teamId, "DL") ?? pickTopPlayerIdByPos(state, teamId, "EDGE");
+  const lb = pickTopPlayerIdByPos(state, teamId, "LB");
+  const db = pickTopPlayerIdByPos(state, teamId, "CB") ?? pickTopPlayerIdByPos(state, teamId, "S");
   return { QB: qb, RB: rb, WR: wr, TE: te, OL: ol, DL: dl, LB: lb, DB: db };
 }
 
@@ -2588,6 +2588,25 @@ function cpuOfferTick(state: GameState, offerLimit = 70): GameState {
 function upsertStateOffers(state: GameState, playerId: string, nextOffers: FreeAgencyOffer[]) {
   return { ...state, freeAgency: upsertOffers({ ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } }, playerId, nextOffers) };
 }
+function hasPendingFreeAgencyOffers(state: GameState): boolean {
+  return Object.values(state.freeAgency.offersByPlayerId).some((offers) => offers.some((o) => o.status === "PENDING" || o.status === "COUNTERED"));
+}
+
+function expireRemainingFreeAgencyOffers(state: GameState, reason: string): GameState {
+  const offersByPlayerId: Record<string, FreeAgencyOffer[]> = {};
+  let changed = false;
+  for (const [playerId, offers] of Object.entries(state.freeAgency.offersByPlayerId)) {
+    const nextOffers = offers.map((offer) => {
+      if (offer.status !== "PENDING" && offer.status !== "COUNTERED") return offer;
+      changed = true;
+      return { ...offer, status: "REJECTED" as const, decisionReason: offer.decisionReason ?? reason };
+    });
+    offersByPlayerId[playerId] = nextOffers;
+  }
+  if (!changed) return state;
+  return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } };
+}
+
 
 function capSpaceForTeam(state: GameState, teamId: string) {
   try {
@@ -4981,56 +5000,46 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
 
-      const overrides = { ...(state.playerTeamOverrides ?? {}) };
-      for (const pid of outgoingPlayerIds) overrides[String(pid)] = String(teamB);
-      for (const pid of incomingPlayerIds) overrides[String(pid)] = String(teamA);
+      const pickSwaps = [
+        ...outgoingPicks.map((pick) => ({
+          round: Number(pick.round),
+          year: Number(pick.year),
+          originalTeamId: String(pick.originalTeamId),
+          fromTeamId: String(teamA),
+          toTeamId: String(teamB),
+        })),
+        ...incomingPicks.map((pick) => ({
+          round: Number(pick.round),
+          year: Number(pick.year),
+          originalTeamId: String(pick.originalTeamId),
+          fromTeamId: String(teamB),
+          toTeamId: String(teamA),
+        })),
+      ];
 
-      const nextSlots = (state.draft?.slots ?? []).map((slot: any) => {
-        let teamId = String(slot.teamId ?? "");
-        for (const p of outgoingPicks) {
-          if (Number(slot.round) === Number(p.round) && String(slot.originalTeamId) === String(p.originalTeamId) && teamId === String(teamA)) {
-            teamId = String(teamB);
-          }
-        }
-        for (const p of incomingPicks) {
-          if (Number(slot.round) === Number(p.round) && String(slot.originalTeamId) === String(p.originalTeamId) && teamId === String(teamB)) {
-            teamId = String(teamA);
-          }
-        }
-        return { ...slot, teamId };
-      });
+      let next = applyCanonicalTx(
+        state,
+        Tx.trade(String(teamA), String(teamB), {
+          playerIdsFrom: outgoingPlayerIds.map(String),
+          playerIdsTo: incomingPlayerIds.map(String),
+          pickSwaps,
+          details: {
+            outgoingPicks,
+            incomingPicks,
+            outgoingPlayersCount: outgoingPlayerIds.length,
+            incomingPlayersCount: incomingPlayerIds.length,
+          },
+        }),
+      );
 
       const capDeltaA = tradeCapDelta(state, outgoingPlayerIds, incomingPlayerIds);
       const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
       const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
-      const tradeAlloc = allocateDeterministic(state, "news", "TX");
-      const syntheticTx = {
-        id: tradeAlloc.id,
-        type: "TRADE" as const,
-        playerId: String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? "NONE"),
-        // M1 FIX: was getPersonnelById (Personnel table) — should be getPlayerById (Players table)
-        playerName: String(getPlayerById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.fullName ?? "Multiple Players"),
-        playerPos: String(getPlayerById(String(outgoingPlayerIds[0] ?? incomingPlayerIds[0] ?? ""))?.pos ?? "UNK"),
-        fromTeamId: String(teamA),
-        toTeamId: String(teamB),
-        season: Number(state.season),
-        week: currentWeek,
-        june1Designation: "NONE" as const,
-        notes: `Players ${outgoingPlayerIds.length} for ${incomingPlayerIds.length}`,
-        deadCapThisYear: 0,
-        deadCapNextYear: 0,
-        remainingProration: 0,
-      };
-      const txNews = generateTransactionNews([syntheticTx], { week: currentWeek, season: Number(state.season), userTeamId: String(teamA) });
-      const gmRelationship = Math.max(0, Math.min(100, Number(state.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
-      const tradeFeedbackAlloc = createDeterministicFeedbackEvent(tradeAlloc.state, "TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` });
+      const gmRelationship = Math.max(0, Math.min(100, Number(next.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
+      const tradeFeedbackAlloc = createDeterministicFeedbackEvent(next, "TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` });
 
-      return {
+      next = {
         ...tradeFeedbackAlloc.state,
-        playerTeamOverrides: overrides,
-        transactions: [...(tradeFeedbackAlloc.state.transactions ?? []), syntheticTx],
-        draft: { ...tradeFeedbackAlloc.state.draft, slots: nextSlots },
-        newsHistory: appendNewsHistory(tradeFeedbackAlloc.state.newsHistory ?? [], txNews),
         coach: { ...tradeFeedbackAlloc.state.coach, gmRelationship },
         finances: {
           ...tradeFeedbackAlloc.state.finances,
@@ -5041,6 +5050,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         feedbackQueue: [tradeFeedbackAlloc.event, ...tradeFeedbackAlloc.state.feedbackQueue].slice(0, 50),
         tradeError: undefined,
       };
+      return next;
     }
     case "EXTEND_PLAYER": {
       const { playerId, years, apy, signingBonus, guaranteedAtSigning } = action.payload;
@@ -5621,6 +5631,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             next = applyCanonicalTx(next, Tx.resign(teamId, String(offer.playerId), ovr));
           }
         }
+      }
+      if (action.payload.stepId === "FREE_AGENCY") {
+        while (next.freeAgency.resolvesUsedThisPhase < next.freeAgency.maxResolvesPerPhase && hasPendingFreeAgencyOffers(next)) {
+          const resolved = gameReducer(next, { type: "FA_RESOLVE" });
+          if (resolved === next) break;
+          next = resolved;
+        }
+        next = expireRemainingFreeAgencyOffers(next, "Expired: offseason free agency step completed");
       }
       return next;
     }
@@ -7042,7 +7060,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "FA_RESOLVE_BATCH":
     case "FA_RESOLVE": {
       if (state.careerStage !== "FREE_AGENCY") return state;
-      if (state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase) return state;
+      if (state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase) {
+        return expireRemainingFreeAgencyOffers(state, "Expired: resolve cap reached");
+      }
 
       let next0 = expireUserCounters(state);
       const offersByPlayerId = { ...next0.freeAgency.offersByPlayerId };
@@ -7221,6 +7241,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let out = cpuOfferTick(next, 70);
       if (guardTripped) {
         out = { ...out, uiToast: "Free Agency resolve stopped early to protect stability." };
+      }
+      if (out.freeAgency.resolvesUsedThisPhase >= out.freeAgency.maxResolvesPerPhase) {
+        out = expireRemainingFreeAgencyOffers(out, "Expired: resolve cap reached");
       }
       reportFaInvariantViolations(out, "FA_RESOLVE");
       return out;
@@ -8337,7 +8360,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if ((gameType === "REGULAR_SEASON" || gameType === "PLAYOFFS") && base.teamGameplans?.[teamId]?.locked !== true) {
         return base;
       }
-      const trackedPlayers = { HOME: buildTrackedPlayers(teamId), AWAY: buildTrackedPlayers(action.payload.opponentTeamId) };
+      const trackedPlayers = { HOME: buildTrackedPlayers(base, teamId), AWAY: buildTrackedPlayers(base, action.payload.opponentTeamId) };
       let started: GameState = {
         ...base,
         league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
