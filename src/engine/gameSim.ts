@@ -24,6 +24,8 @@ import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTrai
 import { resolvePerkModifiers } from "@/engine/perkWiring";
 import type { WeeklyGameplan } from "@/engine/gameplan";
 import type { GameWeather } from "@/engine/weather/generateGameWeather";
+import type { PlayerUnicorn, UnicornArchetypeId } from "@/engine/unicorns/types";
+import { describeUnicornBoost, resolveUnicornModifiers } from "@/engine/unicorns/effects";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -288,6 +290,8 @@ export type GameSim = {
   homeGameplan?: WeeklyGameplan;
   awayGameplan?: WeeklyGameplan;
   weather?: GameWeather;
+  playerUnicorns: Record<string, PlayerUnicorn>;
+  unicornImpactLog: Array<{ playId: string; side: Possession; playerId: string; archetypeId: UnicornArchetypeId; description: string }>;
   lastPlayResult?: PlayResult;
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
   lastPlayDiag?: PassPlayDiag;
@@ -804,6 +808,15 @@ function sideRef(sim: GameSim): SideStats {
   return sim.possession === "HOME" ? sim.stats.home : sim.stats.away;
 }
 
+function currentWeatherLabel(sim: GameSim): string {
+  return String(sim.weather?.condition ?? "CLEAR").toUpperCase();
+}
+
+function getUnicornForPlayer(sim: GameSim, playerId: string | undefined): PlayerUnicorn | undefined {
+  if (!playerId) return undefined;
+  return sim.playerUnicorns?.[String(playerId)];
+}
+
 /** Resolve a play using the PAS engine, returning yards, tags, and outcome label. */
 function resolveWithPAS(
   sim: GameSim,
@@ -813,7 +826,7 @@ function resolveWithPAS(
   aggression: AggressionLevel,
   snapKey: string,
   defensiveCall?: DefensiveCall,
-): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean; diag?: PassPlayDiag } {
+): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean; diag?: PassPlayDiag; unicornImpact?: { playerId: string; archetypeId: UnicornArchetypeId; description: string } } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
   const passive = resolveArchetypePassives(
     { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear },
@@ -834,6 +847,12 @@ function resolveWithPAS(
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
   const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
+  const weatherLabel = currentWeatherLabel(sim);
+  const qbUnicorn = getUnicornForPlayer(sim, qbId);
+  const rbId = sim.trackedPlayers[sim.possession]?.RB;
+  const rbUnicorn = getUnicornForPlayer(sim, rbId);
+  const edgeId = sim.trackedPlayers[otherSide(sim.possession)]?.DL ?? sim.trackedPlayers[otherSide(sim.possession)]?.LB;
+  const edgeUnicorn = getUnicornForPlayer(sim, edgeId);
 
   let yards = 0;
   let turnover = false;
@@ -842,6 +861,7 @@ function resolveWithPAS(
   let incomplete = false;
   let outcomeLabel = "normal";
   let diag: PassPlayDiag | undefined;
+  let unicornImpact: { playerId: string; archetypeId: UnicornArchetypeId; description: string } | undefined;
 
   const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
@@ -865,8 +885,9 @@ function resolveWithPAS(
       }
     }
     const contactRng = contextualRng(sim.seed, `${snapKey}:contact`);
+    const rbMods = resolveUnicornModifiers(rbUnicorn?.archetypeId, { weather: weatherLabel, down: sim.down, distance: sim.distance });
     const contactInput: ContactInput = {
-      ballcarrier: { weightLb: 215, strength: 74, balance: 73, agility: 77, accel: 78, tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
+      ballcarrier: { weightLb: 215, strength: 74 + (rbMods.runTruck ?? 0), balance: 73, agility: 77, accel: 78 + (rbMods.runBurst ?? 0), tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
       tackler: { weightLb: look.box === "HEAVY" ? 248 : 228, strength: Math.round((look.box === "HEAVY" ? 80 : 74) * callFx.runStuff), balance: 66, agility: 69, accel: 70, tackling: look.blitz === "LIKELY" ? 78 : 72, heightIn: 74, jump: 70, fatigue01: 0.22 },
       move: { type: playType === "OUTSIDE_ZONE" ? "JUKE" : playType === "POWER" ? "STIFF_ARM" : "NONE", timing01: 0.55 },
       context: {
@@ -897,16 +918,27 @@ function resolveWithPAS(
     turnover = runFumble.fumble && runFumble.recoveredBy === "DEFENSE";
     outcomeLabel = turnover ? "turnover" : contact.tackled ? "success" : contact.yacYards >= 12 ? "explosive" : "success";
     resolverTags.push(...contact.resultTags, ...runFumble.resultTags);
+    if (rbUnicorn && (rbMods.runBurst || rbMods.runTruck)) {
+      const desc = describeUnicornBoost(rbMods);
+      resolverTags.push({ kind: "EXECUTION", text: `UNICORN:${desc}` });
+      unicornImpact = { playerId: String(rbId), archetypeId: rbUnicorn.archetypeId, description: desc };
+    }
   } else if (isPass) {
+    const edgeMods = resolveUnicornModifiers(edgeUnicorn?.archetypeId, { weather: weatherLabel, down: sim.down, distance: sim.distance });
     const rushOutcome = resolvePassRush(
       {
-        rusher: { speed: Math.round((look.blitz === "LIKELY" ? 83 : 77) * callFx.passRushWin), accel: 79, strength: 78, technique: 76, bend: 80, fatigue01: 0.2 },
+        rusher: { speed: Math.round((look.blitz === "LIKELY" ? 83 : 77) * callFx.passRushWin) + (edgeMods.passRushBurst ?? 0), accel: 79 + (edgeMods.passRushBurst ?? 0), strength: 78, technique: 76, bend: 80 + (edgeMods.passRushBend ?? 0), fatigue01: 0.2 },
         blocker: { passPro: 74, footwork: 73, anchor: 75, fatigue01: 0.2 },
         context: { rushAngleDeg: look.shell === "SINGLE_HIGH" ? 28 : 41, depthYds: playType === "DROPBACK" ? 9 : 6, chipHelp: playType === "SCREEN", quickGame: playType === "QUICK_GAME" },
       },
       contextualRng(sim.seed, `${snapKey}:pass-rush`),
     );
     resolverTags.push(...rushOutcome.resultTags);
+    if (edgeUnicorn && (edgeMods.passRushBurst || edgeMods.passRushBend)) {
+      const desc = describeUnicornBoost(edgeMods);
+      resolverTags.push({ kind: "PRESSURE", text: `UNICORN:${desc}` });
+      unicornImpact = { playerId: String(edgeId), archetypeId: edgeUnicorn.archetypeId, description: desc };
+    }
     diag = { passRush: rushOutcome.diag };
     if (rushOutcome.sacked) {
       sack = true;
@@ -948,16 +980,20 @@ function resolveWithPAS(
           outcomeLabel = "negative";
         }
       } else {
+      const qbMods = resolveUnicornModifiers(qbUnicorn?.archetypeId, { weather: weatherLabel, down: sim.down, distance: sim.distance });
+      const precipPenaltyMitigation = Number(qbMods.weatherPenaltyMitigation ?? 0);
+      const basePrecip = sim.weather?.precipTier ?? "NONE";
+      const effectivePrecip = basePrecip !== "NONE" && precipPenaltyMitigation >= 0.06 ? "LIGHT" : basePrecip;
       const ballistics = resolveQbBallistics(
         {
-          qb: { arm: Number(qb?.armStrength ?? 78), accuracy: Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76), release: Number(qb?.anticipation ?? 77), spin: 75, fatigue01: 0.22 },
-          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", throwOnRun: throwOnRun || (playType === "PLAY_ACTION" && look.blitz === "LIKELY") },
+          qb: { arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), accuracy: Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0), release: Number(qb?.anticipation ?? 77), spin: 75, fatigue01: 0.22 },
+          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: sim.weather?.windTier ?? "LOW", precipTier: effectivePrecip, throwOnRun: throwOnRun || (playType === "PLAY_ACTION" && look.blitz === "LIKELY") },
         },
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
       const catchInput: CatchInput = {
-        qb: { accuracy: Math.round(Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) * schemeFit), arm: Number(qb?.armStrength ?? 78), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
+        qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit), arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
         wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
         cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
         context: {
@@ -979,6 +1015,11 @@ function resolveWithPAS(
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
+      if (qbUnicorn && (qbMods.armStrength || qbMods.throwOnMove || qbMods.weatherPenaltyMitigation)) {
+        const desc = describeUnicornBoost(qbMods);
+        resolverTags.push({ kind: "EXECUTION", text: `UNICORN:${desc}` });
+        unicornImpact = { playerId: String(qbId), archetypeId: qbUnicorn.archetypeId, description: desc };
+      }
       }
     }
   }
@@ -996,7 +1037,7 @@ function resolveWithPAS(
     yards = 100 - sim.ballOn;
   }
 
-  return { yards, tags, outcomeLabel, turnover, td, sack, incomplete, diag };
+  return { yards, tags, outcomeLabel, turnover, td, sack, incomplete, diag, unicornImpact };
 }
 
 // ─── Existing helpers (unchanged) ─────────────────────────────────────────
@@ -1237,7 +1278,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
     if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
     if (defensePlan?.pressureRate === "HIGH" && !isRunP) resolved = { ...resolved, sack: resolved.sack || rng() < 0.12 };
-    const { yards, tags, sack, incomplete, turnover: isTO, diag } = resolved;
+    const { yards, tags, sack, incomplete, turnover: isTO, diag, unicornImpact } = resolved;
 
     // Update stats
     const updatedStats = { ...sim.stats };
@@ -1259,6 +1300,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
       side.turnovers += 1;
       const desc = sack ? `Sack for ${yards}y.` : incomplete ? "Intercepted!" : `Fumble! Ball lost.`;
       let s2 = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
+      if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       if (sack) {
         const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
         s2 = advanceDown({ ...s2, ballOn: nextBallOn }, yards);
@@ -1272,14 +1314,17 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (sack) {
       const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
       const desc = `Sack for ${yards}y.`;
-      const s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
+      let s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
+      if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
 
     if (incomplete) {
       const desc = "Incomplete.";
       return {
-        sim: { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags },
+        sim: unicornImpact
+          ? { ...sim, stats: updatedStats, lastResult: `${desc} 🦄 ${unicornImpact.description}`.trim(), lastResultTags: tags, unicornImpactLog: [...(sim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] }
+          : { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags },
         tag: "INCOMPLETE" as const,
         live: liveTime(rng, "INCOMPLETE"),
         admin: adminTime(rng, "ROUTINE"),
@@ -1296,7 +1341,9 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
       side.tds += 1;
     }
 
-    const s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: newBallOn, lastResult: label, lastResultTags: tags }, yards);
+    const labelWithUnicorn = unicornImpact ? `${label} 🦄 ${unicornImpact.description}` : label;
+    let s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: newBallOn, lastResult: labelWithUnicorn, lastResultTags: tags }, yards);
+    if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
     return {
       sim: s2,
       tag: oob ? ("OOB" as const) : ("IN_BOUNDS" as const),
@@ -1481,6 +1528,7 @@ export function initGameSim(params: {
   homeGameplan?: WeeklyGameplan;
   awayGameplan?: WeeklyGameplan;
   weather?: GameWeather;
+  playerUnicorns?: Record<string, PlayerUnicorn>;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1524,6 +1572,8 @@ export function initGameSim(params: {
     homeGameplan: params.homeGameplan,
     awayGameplan: params.awayGameplan,
     weather: params.weather,
+    playerUnicorns: { ...(params.playerUnicorns ?? {}) },
+    unicornImpactLog: [],
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,
     forceAutoDefenseCall: false,
