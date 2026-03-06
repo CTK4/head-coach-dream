@@ -23,6 +23,7 @@ import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
 import type { WeeklyGameplan } from "@/engine/gameplan";
+import type { GameWeather } from "@/engine/weather/generateGameWeather";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -284,6 +285,7 @@ export type GameSim = {
   coachUnlockedPerkIds?: string[];
   homeGameplan?: WeeklyGameplan;
   awayGameplan?: WeeklyGameplan;
+  weather?: GameWeather;
   lastPlayResult?: PlayResult;
   homeGameplan?: TeamGameplan;
   awayGameplan?: TeamGameplan;
@@ -942,7 +944,7 @@ function resolveWithPAS(
       const ballistics = resolveQbBallistics(
         {
           qb: { arm: Number(qb?.armStrength ?? 78), accuracy: Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76), release: Number(qb?.anticipation ?? 77), spin: 75, fatigue01: 0.22 },
-          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: "LOW", precipTier: "NONE", throwOnRun: throwOnRun || (playType === "PLAY_ACTION" && look.blitz === "LIKELY") },
+          context: { targetDepth: playType === "DROPBACK" ? 18 : playType === "PLAY_ACTION" ? 14 : 8, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", throwOnRun: throwOnRun || (playType === "PLAY_ACTION" && look.blitz === "LIKELY") },
         },
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
@@ -1154,7 +1156,7 @@ function punt(sim: GameSim, rng: () => number): GameSim {
   let clock = applyTime(sim.clock, adminTime(rng, "PUNT_SETUP"));
   const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
   const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-punt");
-  const puntOutcome = resolvePunt({ power: 78, accuracy: 73, hang: 76, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: "LOW", precipTier: "NONE", surface: "DRY" }, kickRng);
+  const puntOutcome = resolvePunt({ power: 78, accuracy: 73, hang: 76, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
   const returned = puntOutcome.returnable;
   clock = applyTime(clock, liveTime(rng, returned ? "PUNT_RETURN" : "PUNT_FAIR"));
   return turnover({ ...sim, clock, lastResult: `Punt ${puntOutcome.netYds}y${puntOutcome.inside20 ? " (inside 20)" : ""}.`, lastResultTags: puntOutcome.resultTags, currentDrive: { ...sim.currentDrive, result: "PUNT" } }, rng);
@@ -1172,7 +1174,7 @@ function fgAttempt(sim: GameSim, rng: () => number): GameSim {
   const kickYards = 100 - sim.ballOn + 17;
   const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
   const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-fg");
-  const fgOutcome = resolveFieldGoal({ power: 79, accuracy: 77, spin: 74 }, { distanceYds: kickYards, windTier: "LOW", precipTier: "NONE", surface: "DRY" }, kickRng);
+  const fgOutcome = resolveFieldGoal({ power: 79, accuracy: 77, spin: 74 }, { distanceYds: kickYards, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
 
   if (fgOutcome.made) {
     const off = scoreRef(sim);
@@ -1466,8 +1468,10 @@ export function initGameSim(params: {
   lateGamePracticeRetentionBonus?: number;
   coachArchetypeId?: string;
   coachTenureYear?: number;
+  coachUnlockedPerkIds?: string[];
   homeGameplan?: WeeklyGameplan;
   awayGameplan?: WeeklyGameplan;
+  weather?: GameWeather;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1510,6 +1514,7 @@ export function initGameSim(params: {
     coachUnlockedPerkIds: [...(params.coachUnlockedPerkIds ?? [])],
     homeGameplan: params.homeGameplan,
     awayGameplan: params.awayGameplan,
+    weather: params.weather,
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,
     forceAutoDefenseCall: false,
