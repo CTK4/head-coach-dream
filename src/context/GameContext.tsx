@@ -30,6 +30,8 @@ import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
+import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
+import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
 import { applyGameAggToSeasonAgg } from "@/engine/telemetry/aggregateSeason";
 import type { GameAggV1, PlayEventV1Minimal, SeasonAggV1 } from "@/engine/telemetry/types";
@@ -558,7 +560,7 @@ export type MemoryEvent = { type: string; season: number; week?: number; payload
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
-const CURRENT_SAVE_VERSION = 5;
+const CURRENT_SAVE_VERSION = 6;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = getDraftClassRows() as DraftRow[];
@@ -993,6 +995,7 @@ export type GameState = {
   liveGames: Record<string, LiveGameState>;
   telemetry?: {
     playLogsByGameKey: Record<string, PlayEventV1Minimal[]>;
+    percentiles: TelemetryPercentilesBySeason;
     gameAggsByGameKey: Record<string, GameAggV1>;
     seasonAgg: SeasonAggV1;
   };
@@ -1488,6 +1491,7 @@ function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType"
         ...(state.telemetry?.playLogsByGameKey ?? {}),
         [key]: game.playLog,
       },
+      percentiles: { ...(state.telemetry?.percentiles ?? {}) },
     },
   };
 }
@@ -1743,6 +1747,7 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
+    telemetry: { playLogsByGameKey: {}, percentiles: {} },
     telemetry: { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
@@ -8362,6 +8367,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         };
       }
       const championNewsAlloc = allocateDeterministic(out, "news", "NEWS");
+      const percentileTables = buildPercentiles({
+        season: Number(out.season ?? 2026),
+        players: getEffectivePlayers(out).map((p) => ({ playerId: String((p as any).playerId ?? ""), pos: String((p as any).pos ?? "") })),
+        playerSeasonStatsById: nextSeasonStatsById,
+      });
+      const nextPercentiles = upsertSeasonPercentiles({
+        existing: out.telemetry?.percentiles,
+        season: Number(out.season ?? 2026),
+        tables: percentileTables,
+        activeSeason: Number(out.season ?? 2026),
+      });
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -8381,6 +8397,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         league: {
           ...out.league,
           results: [],
+        },
+        telemetry: {
+          playLogsByGameKey: {},
+          percentiles: nextPercentiles,
         },
         hub: {
           ...championNewsAlloc.state.hub,
@@ -9386,6 +9406,10 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       },
     },
     ui: (oldState as any).ui ?? {},
+    telemetry: {
+      playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
+      percentiles: { ...((oldState as any).telemetry?.percentiles ?? {}) },
+    },
   };
 
   if (s.offseason?.stepId === OffseasonStepEnum.TAMPERING) {
@@ -9546,6 +9570,8 @@ function loadState(): GameState {
       },
       liveGames: { ...initial.liveGames, ...((migrated as any).liveGames ?? {}) },
       telemetry: {
+        playLogsByGameKey: { ...initial.telemetry?.playLogsByGameKey, ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
+        percentiles: { ...initial.telemetry?.percentiles, ...((migrated as any).telemetry?.percentiles ?? {}) },
         ...initial.telemetry,
         ...((migrated as any).telemetry ?? {}),
         playLogsByGameKey: { ...(initial.telemetry?.playLogsByGameKey ?? {}), ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
