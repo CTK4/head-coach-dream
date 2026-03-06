@@ -19,7 +19,7 @@ import { aiSelectDefensiveCall } from "@/engine/defense/aiSelectDefensiveCall";
 import { applyDefensiveCallMultipliers, type DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { isKeyDefenseSituation } from "@/engine/defense/isKeyDefenseSituation";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
-import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
+import type { PassResolverDiagV1, PlayEventV1Expanded } from "@/engine/telemetry/types";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
 import type { WeeklyGameplan } from "@/engine/gameplan";
@@ -229,6 +229,8 @@ export type PlayResult = {
   explanation: PlayExplanation;
 };
 
+export type PassPlayDiag = PassResolverDiagV1;
+
 export type GameSim = {
   homeTeamId: string;
   awayTeamId: string;
@@ -248,7 +250,7 @@ export type GameSim = {
   driveNumber: number;
   playNumberInDrive: number;
   driveLog: DriveLogEntry[];
-  playLog: PlayEventV1Minimal[];
+  playLog: PlayEventV1Expanded[];
   currentDrive: CurrentDrive;
   /** Current defensive look shown to the user pre-snap */
   defLook?: DefensiveLook;
@@ -287,6 +289,8 @@ export type GameSim = {
   awayGameplan?: WeeklyGameplan;
   weather?: GameWeather;
   lastPlayResult?: PlayResult;
+  /** Deterministic pass resolver diagnostics for last snap (transient state) */
+  lastPlayDiag?: PassPlayDiag;
   homeGameplan?: TeamGameplan;
   awayGameplan?: TeamGameplan;
   defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
@@ -809,7 +813,7 @@ function resolveWithPAS(
   aggression: AggressionLevel,
   snapKey: string,
   defensiveCall?: DefensiveCall,
-): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean } {
+): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean; diag?: PassPlayDiag } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
   const passive = resolveArchetypePassives(
     { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear },
@@ -837,6 +841,7 @@ function resolveWithPAS(
   let sack = false;
   let incomplete = false;
   let outcomeLabel = "normal";
+  let diag: PassPlayDiag | undefined;
 
   const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
@@ -902,6 +907,7 @@ function resolveWithPAS(
       contextualRng(sim.seed, `${snapKey}:pass-rush`),
     );
     resolverTags.push(...rushOutcome.resultTags);
+    diag = { passRush: rushOutcome.diag };
     if (rushOutcome.sacked) {
       sack = true;
       yards = -Math.round(tri(rng, 4, 7, 12));
@@ -935,6 +941,7 @@ function resolveWithPAS(
           outcomeLabel = yards >= 12 ? "explosive" : "success";
           if (qbId) sim.qbRunContactsByPlayerId[qbId] = (sim.qbRunContactsByPlayerId[qbId] ?? 0) + (qbContact.tackled ? 1 : 0);
           resolverTags.push(...qbContact.resultTags, { kind: "EXECUTION", text: "QB_SCRAMBLE" });
+          diag = { ...(diag ?? {}), scrambleContact: qbContact.diag };
         } else {
           sack = true;
           yards = -Math.round(tri(rng, 3, 6, 10));
@@ -966,6 +973,7 @@ function resolveWithPAS(
         },
       };
       const catchOutcome = resolveCatchPoint(catchInput, catchRng);
+      diag = { ...(diag ?? {}), catchPoint: catchOutcome.diag };
       incomplete = !catchOutcome.completed;
       turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
@@ -988,7 +996,7 @@ function resolveWithPAS(
     yards = 100 - sim.ballOn;
   }
 
-  return { yards, tags, outcomeLabel, turnover, td, sack, incomplete };
+  return { yards, tags, outcomeLabel, turnover, td, sack, incomplete, diag };
 }
 
 // ─── Existing helpers (unchanged) ─────────────────────────────────────────
@@ -1212,10 +1220,10 @@ function isGranularPlay(playType: PlayType): boolean {
     || playType === "QUICK_GAME" || playType === "DROPBACK" || playType === "SCREEN";
 }
 
-function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}) {
+function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}): { sim: GameSim; tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE"; live: number; admin: number; playDiag?: PassPlayDiag } {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
-    return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE") };
+    return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE"), playDiag: undefined };
   }
 
   // ── PAS-driven resolution for granular play types ──────────────────────
@@ -1229,7 +1237,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
     if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
     if (defensePlan?.pressureRate === "HIGH" && !isRunP) resolved = { ...resolved, sack: resolved.sack || rng() < 0.12 };
-    const { yards, tags, sack, incomplete, turnover: isTO } = resolved;
+    const { yards, tags, sack, incomplete, turnover: isTO, diag } = resolved;
 
     // Update stats
     const updatedStats = { ...sim.stats };
@@ -1258,14 +1266,14 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
         s2 = turnover(s2, rng);
       }
       const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER";
-      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, isRun ? "RUN_IN_BOUNDS" : "SACK"), admin: adminTime(rng, "ROUTINE") };
+      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, isRun ? "RUN_IN_BOUNDS" : "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
 
     if (sack) {
       const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
       const desc = `Sack for ${yards}y.`;
       const s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
-      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE") };
+      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
 
     if (incomplete) {
@@ -1294,6 +1302,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
       tag: oob ? ("OOB" as const) : ("IN_BOUNDS" as const),
       live: liveTime(rng, oob ? (isRunP ? "RUN_OOB" : "SHORT_OOB") : isRunP ? "RUN_IN_BOUNDS" : yards >= 16 ? "DEEP_IN_BOUNDS" : "SHORT_IN_BOUNDS"),
       admin: adminTime(rng, yards >= sim.distance ? "FIRST_DOWN" : "ROUTINE"),
+      playDiag: !isRunP ? diag : undefined,
     };
   }
 
@@ -1521,7 +1530,7 @@ export function initGameSim(params: {
   };
 }
 
-function appendPlayLog(sim: GameSim, event: PlayEventV1Minimal): GameSim {
+function appendPlayLog(sim: GameSim, event: PlayEventV1Expanded): GameSim {
   const nextPlayLog = [...(sim.playLog ?? []), event];
   return {
     ...sim,
@@ -1635,16 +1644,16 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   let admin = 0;
 
   if (playType === "PUNT") {
-    s = punt(s, rng);
+    s = { ...punt(s, rng), lastPlayDiag: undefined };
     tag = "CHANGE";
   } else if (playType === "FG") {
-    s = fgAttempt(s, rng);
+    s = { ...fgAttempt(s, rng), lastPlayDiag: undefined };
     tag = "SCORE";
   } else {
     const planTempo = gameplanAdjustedTempo(s);
     const planAggression = gameplanAggression(s);
     const resolved = resolveNormalPlay(s, rng, playType, snapKey, { aggression: planAggression, tempo: planTempo });
-    s = resolved.sim;
+    s = { ...resolved.sim, lastPlayDiag: resolved.playDiag };
     tag = resolved.tag;
     live = resolved.live;
     admin = resolved.admin;
@@ -1705,6 +1714,7 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     result: s.lastResult ?? "",
     homeScore: s.homeScore,
     awayScore: s.awayScore,
+    ...(s.lastPlayDiag ? { passDiag: s.lastPlayDiag } : {}),
   });
   s = pushLog(s, playType, s.lastResult ?? "");
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };

@@ -21,6 +21,15 @@ export type CatchInput = {
   };
 };
 
+export type CatchPointDiag = {
+  sepDelta: number;
+  effSeparation: number;
+  throwQ: number;
+  reachAdvIn: number;
+  completionProb: number;
+  completionRoll: number;
+};
+
 export type CatchOutcome = {
   completed: boolean;
   pbu: boolean;
@@ -31,6 +40,7 @@ export type CatchOutcome = {
   catchType: "OPEN" | "CONTESTED" | "HIGH_POINT" | "THROUGH_CONTACT";
   resultTags: ResultTag[];
   debug: Record<string, number>;
+  diag: CatchPointDiag;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -138,6 +148,15 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
 
   if (input.context.highPoint) tags.push({ kind: "EXECUTION", text: `HIGH_POINT_ADV:${reachAdvIn.toFixed(2)}` });
 
+  const diag: CatchPointDiag = {
+    sepDelta,
+    effSeparation,
+    throwQ,
+    reachAdvIn,
+    completionProb,
+    completionRoll,
+  };
+
   return {
     completed,
     pbu,
@@ -147,13 +166,7 @@ export function resolveCatchPoint(input: CatchInput, rng: () => number): CatchOu
     recoveredBy,
     catchType,
     resultTags: tags,
-    debug: {
-      sepDelta,
-      effSeparation,
-      throwQ,
-      reachAdvIn,
-      completionProb,
-      completionRoll,
-    },
+    debug: diag,
+    diag,
   };
 }
