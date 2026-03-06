@@ -95,6 +95,8 @@ import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedical
 import { generateCombineResult } from "@/engine/prospectIntel";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
+import { advanceToDraft, advanceToFreeAgency, advanceToRegularSeason } from "@/engine/phaseTransitions";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 import { getArchetypeTraits } from "@/data/archetypeTraits";
 import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import {
@@ -5812,6 +5814,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       logInfo("offseason.step.transition", { phase: state.phase, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: cur, to: nextStep } });
       let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      if (stage === "FREE_AGENCY") next = advanceToFreeAgency(next);
+      if (stage === "DRAFT") next = advanceToDraft(next);
       if (cur === OffseasonStepEnum.RESIGNING) {
         next = gameReducer(next, { type: "EXPIRE_EXPIRING_CONTRACTS_TO_FA", payload: { nextSeason: state.season + 1 } });
       }
@@ -6068,10 +6072,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "SCOUT_INIT": {
       const saveSeed = state.saveSeed;
+      const unifiedPhase = getUnifiedPhase(state);
       const windowId =
-        state.careerStage === "COMBINE" ? "COMBINE" :
-        state.careerStage === "PRE_DRAFT" ? "PRE_DRAFT" :
-        state.careerStage === "FREE_AGENCY" ? "FREE_AGENCY" :
+        unifiedPhase === "COMBINE" ? "COMBINE" :
+        unifiedPhase === "PRE_DRAFT" || isInFranchiseActionWindow(unifiedPhase, "draft") ? "PRE_DRAFT" :
+        isInFranchiseActionWindow(unifiedPhase, "free-agency") ? "FREE_AGENCY" :
         "IN_SEASON";
       const windowKey = `${state.season}:${state.careerStage}:${windowId}`;
       const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
@@ -8246,7 +8251,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         const next = { ...state, careerStage: "PRESEASON" as CareerStage };
         return clearDepthLocksIfEnteringPreseason(state.careerStage, "PRESEASON", next);
       }
-      if (step === "CUT_DOWNS") return state.careerStage === "REGULAR_SEASON" ? state : { ...state, careerStage: "REGULAR_SEASON" };
+      if (step === "CUT_DOWNS") return getUnifiedPhase(state) === "REGULAR_SEASON" ? state : advanceToRegularSeason(state);
       return state;
     }
     case "SET_PRACTICE_PLAN": {
@@ -8327,7 +8332,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "DEV_RUN_ACTION": {
       if (action.payload.action === "ADVANCE_PHASE") {
-        if (state.phase === "HUB" && state.careerStage === "REGULAR_SEASON") {
+        if (state.phase === "HUB" && getUnifiedPhase(state) === "REGULAR_SEASON") {
           return gameReducer(state, { type: "ADVANCE_WEEK" });
         }
         return gameReducer(state, { type: "OFFSEASON_ADVANCE_STEP" });

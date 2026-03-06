@@ -44,10 +44,6 @@ function getTradeDeadlineWeek(state: GameState): number {
 export function isActionAllowedInCurrentPhase(state: GameState, action: AnyGameAction): { allowed: boolean; reason?: string } {
   const type = action.type as ValidPhaseActions;
 
-  // Migration path: all action-phase decisions now flow through getUnifiedPhase() and
-  // isInFranchiseActionWindow(). During save/backfill migration we still allow
-  // week/league.phase-derived fallback to avoid regressing legacy saves; once
-  // careerStage is guaranteed canonical everywhere, league.phase fallback can be removed.
   const phase = getUnifiedPhase(state);
 
   if (FREE_AGENCY_ONLY.has(type)) {

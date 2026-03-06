@@ -67,6 +67,7 @@ describe("phaseGuards", () => {
     expect(migrated.league.week).toBe(1);
     expect(migrated.league.tradeDeadlineWeek).toBe(10);
     expect(migrated.careerStage).toBeDefined();
+    expect(migrated.league.phase).toBe("OFFSEASON");
   });
 
   it("legacy TRADE_PLAYER throws deprecation error in dev", () => {

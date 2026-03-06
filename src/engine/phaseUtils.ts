@@ -1,7 +1,8 @@
 import type { GameState } from "@/context/GameContext";
 import type { CareerStage } from "@/types/careerStage";
 
-export type UnifiedPhase = CareerStage | "IN_SEASON" | "POSTSEASON" | "OFFSEASON_TRANSITION";
+export type UnifiedPhase = CareerStage;
+type LegacyUnifiedHint = "IN_SEASON" | "POSTSEASON" | "OFFSEASON_TRANSITION";
 
 const VALID_CAREER_STAGES = new Set<string>([
   "OFFSEASON_HUB",
@@ -24,58 +25,43 @@ const VALID_CAREER_STAGES = new Set<string>([
   "REHIRING",
 ]);
 
-const LEAGUE_POSTSEASON_PHASES = new Set<string>(["WILD_CARD", "DIVISIONAL", "CONFERENCE", "CHAMPIONSHIP", "SUPER_BOWL"]);
-const LEAGUE_IN_SEASON_PHASES = new Set<string>(["REGULAR_SEASON", "REGULAR_SEASON_GAMEPLAN", "REGULAR_SEASON_GAME"]);
-const LEAGUE_OFFSEASON_TRANSITION_PHASES = new Set<string>(["SEASON_COMPLETE", "STAFF_EVAL", "POST_DRAFT", "OFFSEASON_COMPLETE"]);
-
-function deriveCareerStageFromWeek(week: number): CareerStage {
-  if (week <= 0) return "OFFSEASON_HUB";
-  if (week <= 4) return "PRESEASON";
-  if (week <= 18) return "REGULAR_SEASON";
-  return "PLAYOFFS";
-}
-
-function getCurrentWeek(state: GameState): number {
-  const week = Number(state.league?.week ?? state.hub?.regularSeasonWeek ?? state.week ?? 1);
-  if (!Number.isFinite(week)) return 1;
-  return Math.floor(week);
-}
-
 export function getUnifiedPhase(state: GameState): UnifiedPhase {
   const careerStage = String(state.careerStage ?? "");
   if (VALID_CAREER_STAGES.has(careerStage)) {
     return careerStage as CareerStage;
   }
 
-  const leaguePhase = String(state.league?.phase ?? "");
-  const derivedCareerStage = deriveCareerStageFromWeek(getCurrentWeek(state));
-
-  if (derivedCareerStage !== "PLAYOFFS" && LEAGUE_POSTSEASON_PHASES.has(leaguePhase)) {
-    return "POSTSEASON";
-  }
-  if (derivedCareerStage === "REGULAR_SEASON" && LEAGUE_IN_SEASON_PHASES.has(leaguePhase)) {
-    return "IN_SEASON";
-  }
-  if (derivedCareerStage === "OFFSEASON_HUB" && LEAGUE_OFFSEASON_TRANSITION_PHASES.has(leaguePhase)) {
-    return "OFFSEASON_TRANSITION";
+  const msg = `invalid careerStage '${careerStage || "(empty)"}' with unified phase enforcement`;
+  if (import.meta.env.DEV) {
+    throw new Error(`phase_utils:${msg}`);
   }
 
-  return derivedCareerStage;
+  console.error(JSON.stringify({ level: "error", event: "phase_utils.invalid_career_stage", msg, careerStage: state.careerStage }));
+
+  return "OFFSEASON_HUB";
 }
 
-export function isInFranchiseActionWindow(phase: UnifiedPhase, actionCategory: "free-agency" | "draft" | "trade" | "contract"): boolean {
+function normalizeLegacyPhaseHint(phase: UnifiedPhase | LegacyUnifiedHint): UnifiedPhase {
+  if (phase === "IN_SEASON") return "REGULAR_SEASON";
+  if (phase === "POSTSEASON") return "PLAYOFFS";
+  if (phase === "OFFSEASON_TRANSITION") return "OFFSEASON_HUB";
+  return phase;
+}
+
+export function isInFranchiseActionWindow(phase: UnifiedPhase | LegacyUnifiedHint, actionCategory: "free-agency" | "draft" | "trade" | "contract"): boolean {
+  const normalizedPhase = normalizeLegacyPhaseHint(phase);
+
   if (actionCategory === "free-agency") {
-    return phase === "FREE_AGENCY";
+    return normalizedPhase === "FREE_AGENCY";
   }
 
   if (actionCategory === "draft") {
-    return phase === "DRAFT";
+    return normalizedPhase === "DRAFT";
   }
 
   if (actionCategory === "trade") {
-    return phase === "REGULAR_SEASON" || phase === "PRESEASON" || phase === "FREE_AGENCY" || phase === "PRE_DRAFT" || phase === "IN_SEASON";
+    return normalizedPhase === "REGULAR_SEASON" || normalizedPhase === "PRESEASON" || normalizedPhase === "FREE_AGENCY" || normalizedPhase === "PRE_DRAFT";
   }
 
-  return phase !== "PLAYOFFS" && phase !== "POSTSEASON" && phase !== "FIRED";
+  return normalizedPhase !== "PLAYOFFS" && normalizedPhase !== "FIRED";
 }
-
