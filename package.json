@@ -21,7 +21,8 @@
     "cap:open:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:build:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
-    "cap:build:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0"
+    "cap:build:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "check:determinism": "node scripts/checkDeterminismTripwire.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

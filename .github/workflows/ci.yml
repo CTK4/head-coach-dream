@@ -31,5 +31,9 @@ jobs:
       - name: Smoke test
         run: npm run smoke
 
+
+      - name: Determinism tripwire
+        run: npm run check:determinism
+
       - name: Unit tests
         run: npx vitest run
