@@ -31,6 +31,7 @@ import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkW
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
+import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import {
   initLeagueState,
@@ -556,7 +557,7 @@ export type MemoryEvent = { type: string; season: number; week?: number; payload
 export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
 export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
-const CURRENT_SAVE_VERSION = 5;
+const CURRENT_SAVE_VERSION = 6;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = getDraftClassRows() as DraftRow[];
@@ -991,6 +992,7 @@ export type GameState = {
   liveGames: Record<string, LiveGameState>;
   telemetry?: {
     playLogsByGameKey: Record<string, PlayEventV1Minimal[]>;
+    percentiles: TelemetryPercentilesBySeason;
   };
   dynasty: DynastyProfile;
   season: number;
@@ -1483,6 +1485,7 @@ function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType"
         ...(state.telemetry?.playLogsByGameKey ?? {}),
         [key]: game.playLog,
       },
+      percentiles: { ...(state.telemetry?.percentiles ?? {}) },
     },
   };
 }
@@ -1710,7 +1713,7 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
-    telemetry: { playLogsByGameKey: {} },
+    telemetry: { playLogsByGameKey: {}, percentiles: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
@@ -8329,6 +8332,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         };
       }
       const championNewsAlloc = allocateDeterministic(out, "news", "NEWS");
+      const percentileTables = buildPercentiles({
+        season: Number(out.season ?? 2026),
+        players: getEffectivePlayers(out).map((p) => ({ playerId: String((p as any).playerId ?? ""), pos: String((p as any).pos ?? "") })),
+        playerSeasonStatsById: nextSeasonStatsById,
+      });
+      const nextPercentiles = upsertSeasonPercentiles({
+        existing: out.telemetry?.percentiles,
+        season: Number(out.season ?? 2026),
+        tables: percentileTables,
+        activeSeason: Number(out.season ?? 2026),
+      });
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -8348,6 +8362,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         league: {
           ...out.league,
           results: [],
+        },
+        telemetry: {
+          playLogsByGameKey: {},
+          percentiles: nextPercentiles,
         },
         hub: {
           ...championNewsAlloc.state.hub,
@@ -9341,6 +9359,10 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     contracts: (oldState as any).contracts ?? { playerTeamInterestById: {} },
     resign: (oldState as any).resign ?? { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     ui: (oldState as any).ui ?? {},
+    telemetry: {
+      playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
+      percentiles: { ...((oldState as any).telemetry?.percentiles ?? {}) },
+    },
   };
 
   if (s.offseason?.stepId === OffseasonStepEnum.TAMPERING) {
@@ -9500,6 +9522,10 @@ function loadState(): GameState {
         injuryReportsByWeek: { ...initial.medical.injuryReportsByWeek, ...((migrated as any).medical?.injuryReportsByWeek ?? {}) },
       },
       liveGames: { ...initial.liveGames, ...((migrated as any).liveGames ?? {}) },
+      telemetry: {
+        playLogsByGameKey: { ...initial.telemetry?.playLogsByGameKey, ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
+        percentiles: { ...initial.telemetry?.percentiles, ...((migrated as any).telemetry?.percentiles ?? {}) },
+      },
       dynasty: { ...initial.dynasty, ...((migrated as any).dynasty ?? {}), seasonLog: Array.isArray((migrated as any).dynasty?.seasonLog) ? (migrated as any).dynasty.seasonLog : initial.dynasty.seasonLog, milestones: Array.isArray((migrated as any).dynasty?.milestones) ? (migrated as any).dynasty.milestones : initial.dynasty.milestones },
       teamFinances: {
         ...initial.teamFinances,
