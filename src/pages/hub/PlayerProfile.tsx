@@ -99,6 +99,36 @@ export default function PlayerProfile() {
   const playerBadges = state.playerBadges?.[playerId] ?? [];
   const playerUnicorn = state.playerUnicorns?.[playerId];
 
+  const telemetryTeamTimeline = useMemo(() => {
+    const bySeason = state.historicalTelemetry?.bySeason ?? {};
+    const rows = Object.entries(bySeason).map(([seasonKey, seasonAgg]) => {
+      const season = Number(seasonKey);
+      const teamAgg = seasonAgg?.byTeamId?.[teamId];
+      return {
+        season,
+        games: Number(teamAgg?.games ?? 0),
+        passYards: Number(teamAgg?.totals?.passYards ?? 0),
+        rushYards: Number(teamAgg?.totals?.rushYards ?? 0),
+      };
+    }).filter((row) => row.games > 0 || row.passYards > 0 || row.rushYards > 0).sort((a,b) => b.season - a.season);
+
+    const currentTeamAgg = state.telemetry?.seasonAgg?.byTeamId?.[teamId];
+    if (currentTeamAgg) {
+      rows.unshift({
+        season: Number(state.season),
+        games: Number(currentTeamAgg.games ?? 0),
+        passYards: Number(currentTeamAgg.totals?.passYards ?? 0),
+        rushYards: Number(currentTeamAgg.totals?.rushYards ?? 0),
+      });
+    }
+    return rows;
+  }, [state.historicalTelemetry?.bySeason, state.telemetry?.seasonAgg?.byTeamId, state.season, teamId]);
+
+  const badgeTimeline = useMemo(
+    () => [...playerBadges].sort((a, b) => Number(b.awardedSeason ?? 0) - Number(a.awardedSeason ?? 0)),
+    [playerBadges],
+  );
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/40">
       <div className="max-w-3xl mx-auto px-4 py-4">
@@ -273,6 +303,46 @@ export default function PlayerProfile() {
             </CardContent>
           </Card>
 
+
+          <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base tracking-wide">HISTORICAL TELEMETRY</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-xs text-muted-foreground">Team-season context from retained telemetry history.</div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Season</TableHead>
+                    <TableHead>Games</TableHead>
+                    <TableHead>Pass Yds</TableHead>
+                    <TableHead>Rush Yds</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {telemetryTeamTimeline.slice(0, 10).map((row) => (
+                    <TableRow key={`telemetry-${row.season}`}>
+                      <TableCell>{row.season}</TableCell>
+                      <TableCell>{row.games}</TableCell>
+                      <TableCell>{row.passYards}</TableCell>
+                      <TableCell>{row.rushYards}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="pt-2">
+                <div className="text-sm font-semibold mb-2">Badges Timeline</div>
+                <div className="flex flex-wrap gap-2">
+                  {badgeTimeline.length === 0 ? <span className="text-xs text-muted-foreground">No badges earned yet.</span> : badgeTimeline.map((badge) => (
+                    <Badge key={`${badge.badgeId}-${badge.awardedSeason}-timeline`} variant="outline" className="rounded-xl border-white/15 bg-white/5">
+                      {BADGE_DEFINITIONS.find((d) => d.id === badge.badgeId)?.name ?? badge.badgeId} · {badge.awardedSeason}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
             <CardHeader className="pb-2"><CardTitle className="text-base tracking-wide">HALL OF FAME MONITOR</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">

@@ -6,12 +6,14 @@ describe("telemetry percentile persistence integration", () => {
     const state = createInitialStateForTests();
     expect(state.telemetry?.playLogsByGameKey).toEqual({});
     expect(state.telemetry?.percentiles).toEqual({});
+    expect(state.historicalTelemetry.bySeason).toEqual({});
   });
 
   it("adds telemetry percentile defaults during migration and preserves existing entries", () => {
     const withoutTelemetry = migrateSave({ season: 2027, week: 3, saveVersion: 5 } as any);
     expect(withoutTelemetry.telemetry?.playLogsByGameKey).toEqual({});
     expect(withoutTelemetry.telemetry?.percentiles).toEqual({});
+    expect(withoutTelemetry.historicalTelemetry?.bySeason).toEqual({});
 
     const withTelemetry = migrateSave({
       season: 2027,

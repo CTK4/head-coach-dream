@@ -110,6 +110,7 @@ export default function Hub() {
     { id: "coachs_office", title: "Coach's Office", subtitle: "Profiles + Skill Tree", to: "/coachs-office", imageUrl: HUB_TILE_IMAGES.coachs_office },
     { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
     { id: "hall_of_fame", title: "League History", subtitle: "Champions + MVPs + Legends", to: "/hub/league-history", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
+    { id: "strategy", title: "Analytics", subtitle: "Career telemetry", to: "/hub/analytics", imageUrl: HUB_TILE_IMAGES.strategy },
   ];
 
   return (

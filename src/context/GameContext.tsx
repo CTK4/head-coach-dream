@@ -1013,6 +1013,9 @@ export type GameState = {
     gameAggsByGameKey: Record<string, GameAggV1>;
     seasonAgg: SeasonAggV1;
   };
+  historicalTelemetry: {
+    bySeason: Record<number, Partial<SeasonAggV1>>;
+  };
   dynasty: DynastyProfile;
   season: number;
   week?: number;
@@ -1548,6 +1551,53 @@ function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType"
   };
 }
 
+function telemetrySeasonFromGameKey(gameKey: string): number | null {
+  const season = Number(String(gameKey ?? "").split(":")[0]);
+  return Number.isFinite(season) ? season : null;
+}
+
+function compactSeasonTelemetry(state: GameState, season: number): GameState {
+  const targetSeason = Number(season);
+  if (!Number.isFinite(targetSeason)) return state;
+
+  const playLogsByGameKey = state.telemetry?.playLogsByGameKey ?? {};
+  const nextPlayLogsByGameKey = Object.fromEntries(
+    Object.entries(playLogsByGameKey).filter(([gameKey]) => telemetrySeasonFromGameKey(gameKey) !== targetSeason),
+  );
+
+  if (Object.keys(playLogsByGameKey).length === Object.keys(nextPlayLogsByGameKey).length) return state;
+
+  return {
+    ...state,
+    telemetry: {
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
+      playLogsByGameKey: nextPlayLogsByGameKey,
+    },
+  };
+}
+
+function persistSeasonAggToHistorical(state: GameState, season: number): GameState {
+  const seasonAgg = state.telemetry?.seasonAgg;
+  if (!seasonAgg) return state;
+
+  const combined = {
+    ...(state.historicalTelemetry?.bySeason ?? {}),
+    [season]: {
+      version: Number(seasonAgg.version ?? 1),
+      byTeamId: { ...(seasonAgg.byTeamId ?? {}) },
+      appliedGameKeys: { ...(seasonAgg.appliedGameKeys ?? {}) },
+    },
+  };
+
+  const minSeason = Number(season) - 9;
+  const bounded = Object.fromEntries(Object.entries(combined).filter(([k]) => Number(k) >= minSeason));
+
+  return {
+    ...state,
+    historicalTelemetry: { bySeason: bounded },
+  };
+}
+
 function applyTelemetryAggregatesForGame(
   state: GameState,
   game: Pick<GameSim, "weekType" | "weekNumber" | "homeTeamId" | "awayTeamId" | "playLog">,
@@ -1801,8 +1851,8 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
-    telemetry: { playLogsByGameKey: {}, percentiles: {} },
-    telemetry: { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } },
+    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } },
+    historicalTelemetry: { bySeason: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
@@ -3434,6 +3484,12 @@ function migrateExpiredStaffContracts(state: GameState, season: number): Pick<Ga
 
 function seasonRollover(state: GameState): GameState {
   state = applySeasonUnicorns(applySeasonBadges(state));
+  state = persistSeasonAggToHistorical(state, state.season);
+  for (const seasonKey of Object.keys(state.historicalTelemetry.bySeason ?? {})) {
+    const season = Number(seasonKey);
+    if (!Number.isFinite(season) || season > state.season - 5) continue;
+    state = compactSeasonTelemetry(state, season);
+  }
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
@@ -8603,7 +8659,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         telemetry: {
           playLogsByGameKey: {},
           percentiles: nextPercentiles,
+          gameAggsByGameKey: {},
+          seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} },
         },
+        historicalTelemetry: out.historicalTelemetry,
         hub: {
           ...championNewsAlloc.state.hub,
           schedule: nextSchedule,
@@ -9621,12 +9680,12 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
         appliedGameKeys: { ...((oldState as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
         byTeamId: { ...((oldState as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
       },
-    },
-    ui: (oldState as any).ui ?? {},
-    telemetry: {
-      playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
       percentiles: { ...((oldState as any).telemetry?.percentiles ?? {}) },
     },
+    historicalTelemetry: {
+      bySeason: { ...((oldState as any).historicalTelemetry?.bySeason ?? {}) },
+    },
+    ui: (oldState as any).ui ?? {},
   };
 
   if (s.offseason?.stepId === OffseasonStepEnum.TAMPERING) {
@@ -9812,17 +9871,22 @@ function loadState(): GameState {
       },
       liveGames: { ...initial.liveGames, ...((migrated as any).liveGames ?? {}) },
       telemetry: {
-        playLogsByGameKey: { ...initial.telemetry?.playLogsByGameKey, ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
-        percentiles: { ...initial.telemetry?.percentiles, ...((migrated as any).telemetry?.percentiles ?? {}) },
         ...initial.telemetry,
         ...((migrated as any).telemetry ?? {}),
         playLogsByGameKey: { ...(initial.telemetry?.playLogsByGameKey ?? {}), ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
+        percentiles: { ...(initial.telemetry?.percentiles ?? {}), ...((migrated as any).telemetry?.percentiles ?? {}) },
         gameAggsByGameKey: { ...(initial.telemetry?.gameAggsByGameKey ?? {}), ...((migrated as any).telemetry?.gameAggsByGameKey ?? {}) },
         seasonAgg: {
           ...(initial.telemetry?.seasonAgg ?? { version: 1, byTeamId: {}, appliedGameKeys: {} }),
           ...((migrated as any).telemetry?.seasonAgg ?? {}),
           byTeamId: { ...(initial.telemetry?.seasonAgg?.byTeamId ?? {}), ...((migrated as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
           appliedGameKeys: { ...(initial.telemetry?.seasonAgg?.appliedGameKeys ?? {}), ...((migrated as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
+        },
+      },
+      historicalTelemetry: {
+        bySeason: {
+          ...(initial.historicalTelemetry?.bySeason ?? {}),
+          ...((migrated as any).historicalTelemetry?.bySeason ?? {}),
         },
       },
       dynasty: { ...initial.dynasty, ...((migrated as any).dynasty ?? {}), seasonLog: Array.isArray((migrated as any).dynasty?.seasonLog) ? (migrated as any).dynasty.seasonLog : initial.dynasty.seasonLog, milestones: Array.isArray((migrated as any).dynasty?.milestones) ? (migrated as any).dynasty.milestones : initial.dynasty.milestones },
