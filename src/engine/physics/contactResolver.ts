@@ -34,6 +34,18 @@ export type ContactInput = {
   context: ContactContext;
 };
 
+export type ContactDiag = {
+  tackleProb: number;
+  tackleRoll: number;
+  offMass: number;
+  defMass: number;
+  leverageDelta: number;
+  moveAdv: number;
+  yacBase: number;
+  fumbleProb: number;
+  fumbleRoll: number;
+};
+
 export type ContactOutcome = {
   tackled: boolean;
   yacYards: number;
@@ -43,6 +55,7 @@ export type ContactOutcome = {
   recoveredBy?: "OFFENSE" | "DEFENSE";
   resultTags: ResultTag[];
   debug: Record<string, number>;
+  diag: ContactDiag;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -127,6 +140,18 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
     tags.push({ kind: "MISTAKE", text: `FUMBLE:${recoveredBy}` });
   }
 
+  const diag: ContactDiag = {
+    tackleProb,
+    tackleRoll,
+    offMass,
+    defMass,
+    leverageDelta,
+    moveAdv,
+    yacBase,
+    fumbleProb,
+    fumbleRoll,
+  };
+
   return {
     tackled,
     yacYards,
@@ -135,16 +160,7 @@ export function resolveContact(input: ContactInput, rng: () => number): ContactO
     fumble,
     recoveredBy,
     resultTags: tags,
-    debug: {
-      tackleProb,
-      tackleRoll,
-      offMass,
-      defMass,
-      leverageDelta,
-      moveAdv,
-      yacBase,
-      fumbleProb,
-      fumbleRoll,
-    },
+    debug: diag,
+    diag,
   };
 }

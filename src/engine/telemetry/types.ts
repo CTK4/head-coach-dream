@@ -18,6 +18,43 @@ export type PlayEventV1Minimal = {
   awayScore: number;
 };
 
+export type PassResolverDiagV1 = {
+  passRush?: {
+    pressureScore: number;
+    blockScore: number;
+    anglePenalty: number;
+    chipHelpPenalty: number;
+    delta: number;
+    pPressure: number;
+    pSack: number;
+    pressureRoll: number;
+    sackRoll: number;
+  };
+  catchPoint?: {
+    sepDelta: number;
+    effSeparation: number;
+    throwQ: number;
+    reachAdvIn: number;
+    completionProb: number;
+    completionRoll: number;
+  };
+  scrambleContact?: {
+    tackleProb: number;
+    tackleRoll: number;
+    offMass: number;
+    defMass: number;
+    leverageDelta: number;
+    moveAdv: number;
+    yacBase: number;
+    fumbleProb: number;
+    fumbleRoll: number;
+  };
+};
+
+export type PlayEventV1Expanded = PlayEventV1Minimal & {
+  passDiag?: PassResolverDiagV1;
+};
+
 export type TeamGameAggV1 = {
   passAttempts: number;
   completions: number;

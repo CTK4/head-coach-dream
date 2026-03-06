@@ -43,4 +43,21 @@ describe("telemetry play log", () => {
       if (i > 0) expect(playLog[i]!.playIndex).toBeGreaterThan(playLog[i - 1]!.playIndex);
     }
   });
+  it("emits pass diagnostics only for pass-play events when available", () => {
+    const [homeTeamId, awayTeamId] = testTeams();
+    const withLog = simulateFullGame({ homeTeamId, awayTeamId, seed: 84210, includePlayLog: true });
+    const passPlays = new Set(["QUICK_GAME", "DROPBACK", "SCREEN", "PLAY_ACTION", "SHORT_PASS", "DEEP_PASS"]);
+
+    let passDiagCount = 0;
+    for (const event of withLog.playLog ?? []) {
+      if (!passPlays.has(event.playType)) {
+        expect(event.passDiag).toBeUndefined();
+      } else if (event.passDiag) {
+        passDiagCount += 1;
+      }
+    }
+
+    expect(passDiagCount).toBeGreaterThan(0);
+  });
+
 });
