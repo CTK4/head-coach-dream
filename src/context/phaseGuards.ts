@@ -1,4 +1,5 @@
 import type { GameAction as AnyGameAction, GameState } from "@/context/GameContext";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 import { resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 
 export type ValidPhaseActions =
@@ -32,8 +33,6 @@ const TRADE_ACTIONS = new Set<ValidPhaseActions>(["TRADE_ACCEPT", "TRADE_REJECT"
 
 const CONTRACT_ACTIONS = new Set<ValidPhaseActions>(["CUT_APPLY", "CONTRACT_RESTRUCTURE_APPLY", "EXTEND_PLAYER", "APPLY_FRANCHISE_TAG", "TAG_APPLY", "SIGN_CONTRACT"]);
 
-const TRADE_ELIGIBLE_STAGES = new Set(["REGULAR_SEASON", "PRESEASON", "FREE_AGENCY", "PRE_DRAFT"]);
-
 function getCurrentWeek(state: GameState): number {
   return Number(state.league?.week ?? state.hub?.regularSeasonWeek ?? state.week ?? 1);
 }
@@ -45,23 +44,29 @@ function getTradeDeadlineWeek(state: GameState): number {
 export function isActionAllowedInCurrentPhase(state: GameState, action: AnyGameAction): { allowed: boolean; reason?: string } {
   const type = action.type as ValidPhaseActions;
 
+  // Migration path: all action-phase decisions now flow through getUnifiedPhase() and
+  // isInFranchiseActionWindow(). During save/backfill migration we still allow
+  // week/league.phase-derived fallback to avoid regressing legacy saves; once
+  // careerStage is guaranteed canonical everywhere, league.phase fallback can be removed.
+  const phase = getUnifiedPhase(state);
+
   if (FREE_AGENCY_ONLY.has(type)) {
-    if (state.careerStage !== "FREE_AGENCY") {
+    if (!isInFranchiseActionWindow(phase, "free-agency")) {
       return { allowed: false, reason: `${action.type} requires FREE_AGENCY career stage.` };
     }
     return { allowed: true };
   }
 
   if (DRAFT_ONLY.has(type)) {
-    if (state.careerStage !== "DRAFT") {
+    if (!isInFranchiseActionWindow(phase, "draft")) {
       return { allowed: false, reason: `${action.type} requires DRAFT career stage.` };
     }
     return { allowed: true };
   }
 
   if (TRADE_ACTIONS.has(type)) {
-    if (!TRADE_ELIGIBLE_STAGES.has(state.careerStage)) {
-      return { allowed: false, reason: `${action.type} is not allowed during ${state.careerStage}.` };
+    if (!isInFranchiseActionWindow(phase, "trade")) {
+      return { allowed: false, reason: `${action.type} is not allowed during ${phase}.` };
     }
     const currentWeek = getCurrentWeek(state);
     const deadlineWeek = getTradeDeadlineWeek(state);
@@ -72,8 +77,8 @@ export function isActionAllowedInCurrentPhase(state: GameState, action: AnyGameA
   }
 
   if (CONTRACT_ACTIONS.has(type)) {
-    if (state.careerStage === "PLAYOFFS" || state.careerStage === "FIRED") {
-      return { allowed: false, reason: `${action.type} is not allowed during ${state.careerStage}.` };
+    if (!isInFranchiseActionWindow(phase, "contract")) {
+      return { allowed: false, reason: `${action.type} is not allowed during ${phase}.` };
     }
     return { allowed: true };
   }

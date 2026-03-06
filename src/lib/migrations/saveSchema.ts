@@ -6,6 +6,7 @@ import { validateConfigPins } from "@/engine/config/validateConfig";
 import type { CareerStage } from "@/types/careerStage";
 import type { LeaguePhase } from "@/engine/leaguePhase";
 import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
+import { logInfo } from "@/lib/logger";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
@@ -91,8 +92,19 @@ function hardenPhaseFields(state: Partial<GameState>): Partial<GameState> {
   const next: any = { ...state };
   const safeWeek = clampWeek(next?.league?.week ?? next?.hub?.regularSeasonWeek ?? next?.week ?? 1);
 
-  if (!VALID_CAREER_STAGES.has(String(next.careerStage ?? ""))) {
+  const hasValidCareerStage = VALID_CAREER_STAGES.has(String(next.careerStage ?? ""));
+  if (!hasValidCareerStage) {
     next.careerStage = deriveCareerStageFromWeek(safeWeek);
+
+    if (next?.telemetry) {
+      logInfo("save.phase.normalized_from_week", {
+        meta: {
+          week: safeWeek,
+          leaguePhase: String(next?.league?.phase ?? ""),
+          derivedCareerStage: String(next.careerStage),
+        },
+      });
+    }
   }
 
   const league = { ...(next.league ?? {}) };
