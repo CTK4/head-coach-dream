@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
+import { formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
@@ -455,6 +456,7 @@ const Playcall = () => {
               <Badge variant="outline">{possessionLabel(g)}</Badge>
               <Badge variant="outline">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
               <Badge variant="outline">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
+              <Badge variant="outline">{formatWeatherSummary(g.weather)}</Badge>
             </div>
 
             {/* Last result + tags */}

@@ -167,6 +167,7 @@ import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
+import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 
@@ -1090,6 +1091,7 @@ export type GameState = {
   finances: TeamFinances;
   league: LeagueState;
   teamGameplans: Record<string, WeeklyGameplan | undefined>;
+  weatherByGameKey: Record<string, GameWeather>;
   playoffs: PlayoffsState | null;
   currentStandings: TeamStanding[];
   weeklyResults: WeekResult[];
@@ -1233,6 +1235,7 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
+  | { type: "ENSURE_GAME_WEATHER"; payload: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
   | { type: "SET_DEFENSIVE_CALL"; payload: { call: DefensiveCall } }
@@ -1474,7 +1477,15 @@ function applyWeeklyFatigueRecovery(state: GameState, snapLoadThisGame: Record<s
 
 
 function gameTelemetryKey(params: { season: number; weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string }): string {
-  return `${params.season}:${params.weekType}:${params.weekNumber}:${params.homeTeamId}:${params.awayTeamId}`;
+  return buildWeatherGameKey(params);
+}
+
+function resolvePersistedWeather(state: GameState, params: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string }): { gameKey: string; weather: GameWeather; weatherByGameKey: Record<string, GameWeather> } {
+  const gameKey = buildWeatherGameKey({ season: state.season, ...params });
+  const existing = state.weatherByGameKey?.[gameKey];
+  if (existing) return { gameKey, weather: existing, weatherByGameKey: state.weatherByGameKey };
+  const generated = generateGameWeather({ saveSeed: state.saveSeed, season: state.season, ...params, gameKey });
+  return { gameKey, weather: generated, weatherByGameKey: { ...(state.weatherByGameKey ?? {}), [gameKey]: generated } };
 }
 
 function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType" | "weekNumber" | "homeTeamId" | "awayTeamId" | "playLog">): GameState {
@@ -1794,6 +1805,7 @@ function createInitialState(): GameState {
     },
     league: initLeagueState(teams, saveSeed),
     teamGameplans: {},
+    weatherByGameKey: {},
     playoffs: null,
     currentStandings: initTeamStandings(teams),
     weeklyResults: [],
@@ -4985,7 +4997,26 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
     case "ADVANCE_LEAGUE_PHASE": {
-      return { ...state, league: { ...state.league, phase: advanceLeaguePhase(state.league.phase as LeaguePhase) } };
+      const nextPhase = advanceLeaguePhase(state.league.phase as LeaguePhase);
+      let next: GameState = { ...state, league: { ...state.league, phase: nextPhase } };
+      const userTeamId = getUserTeamId(next);
+      if (!userTeamId) return next;
+
+      if (nextPhase === "REGULAR_SEASON_GAMEPLAN") {
+        const weekSchedule = next.hub.schedule?.regularSeasonWeeks.find((item) => item.week === next.hub.regularSeasonWeek);
+        const matchup = weekSchedule ? getTeamMatchup(weekSchedule, userTeamId) : null;
+        if (matchup) {
+          const persisted = resolvePersistedWeather(next, { weekType: "REGULAR_SEASON", weekNumber: next.hub.regularSeasonWeek, homeTeamId: matchup.homeTeamId, awayTeamId: matchup.awayTeamId });
+          next = { ...next, weatherByGameKey: persisted.weatherByGameKey };
+        }
+      }
+
+      if ((nextPhase === "WILD_CARD" || nextPhase === "DIVISIONAL" || nextPhase === "CONFERENCE" || nextPhase === "CHAMPIONSHIP") && next.playoffs?.pendingUserGame) {
+        const pending = next.playoffs.pendingUserGame;
+        const persisted = resolvePersistedWeather(next, { weekType: "PLAYOFFS", weekNumber: Number(next.playoffs.round ?? 1), homeTeamId: pending.homeTeamId, awayTeamId: pending.awayTeamId });
+        next = { ...next, weatherByGameKey: persisted.weatherByGameKey };
+      }
+      return next;
     }
     case "SET_TEAM_GAMEPLAN": {
       return { ...state, teamGameplans: { ...(state.teamGameplans ?? {}), [action.payload.teamId]: action.payload.gameplan } };
@@ -8400,6 +8431,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       completed = gameReducer(completed, { type: "COACHING_POACHING_RESOLVE", payload: { weekKey: toWeekKey(completed.season, 0) } });
       return completed;
     }
+    case "ENSURE_GAME_WEATHER": {
+      const persisted = resolvePersistedWeather(state, action.payload);
+      if (persisted.weatherByGameKey === state.weatherByGameKey) return state;
+      return { ...state, weatherByGameKey: persisted.weatherByGameKey };
+    }
     case "START_GAME": {
       const gameType = action.payload.gameType ?? action.payload.weekType;
       logInfo("game.sim.start", { phase: state.phase, season: state.season, week: state.week, driveIndex: state.game.driveNumber, playIndex: state.game.playNumberInDrive, saveId: getActiveSaveId(), meta: { gameType, opponentTeamId: action.payload.opponentTeamId } });
@@ -8418,9 +8454,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return base;
       }
       const trackedPlayers = { HOME: buildTrackedPlayers(base, teamId), AWAY: buildTrackedPlayers(base, action.payload.opponentTeamId) };
+      const weekType = (gameType ?? "REGULAR_SEASON") as "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
+      const weekNumber = Number(action.payload.weekNumber ?? action.payload.week ?? 0);
+      const persistedWeather = resolvePersistedWeather(base, { weekType, weekNumber, homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId });
       let started: GameState = {
         ...base,
         league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
+        weatherByGameKey: persistedWeather.weatherByGameKey,
         contextFlags: applyFlagsToContext(base.coach),
         game: initGameSim({
           homeTeamId: teamId,
@@ -8428,6 +8468,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           seed: (base.careerSeed ?? base.saveSeed) ^ hashStr(`game:${gameType}:${action.payload.weekNumber ?? action.payload.week ?? 0}:${teamId}:${action.payload.opponentTeamId}`),
           weekType: gameType,
           weekNumber: action.payload.weekNumber ?? action.payload.week,
+          weather: persistedWeather.weather,
           playoffGameId: action.payload.playoffGameId,
           homeRatings: computeTeamGameRatings(base, teamId),
           awayRatings: computeTeamGameRatings(base, action.payload.opponentTeamId),
@@ -9332,6 +9373,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     memoryLog: Array.isArray((oldState as any).memoryLog) ? (oldState as any).memoryLog : [],
     league: normalizedLeague,
     teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
+    weatherByGameKey: { ...((oldState as any).weatherByGameKey ?? {}) },
     game,
     playerFatigueById: Object.fromEntries(getPlayers().map((pl) => {
       const v = (oldState as any).playerFatigueById?.[String(pl.playerId)];
