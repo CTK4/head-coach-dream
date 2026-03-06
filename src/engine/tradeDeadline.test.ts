@@ -61,9 +61,9 @@ describe("engine enforcement", () => {
     expect(cancelled.offers.map((o) => o.status)).toEqual(["CANCELLED", "ACCEPTED", "CANCELLED"]);
   });
 
-  it("missing tradeDeadlineWeek in save defaults to locked", () => {
+  it("missing tradeDeadlineWeek in save uses canonical fallback", () => {
     const migrated = migrateSave({ saveVersion: 1, saveSeed: 1, season: 2026, league: { standings: {}, results: [], gmByTeamId: {}, week: 1 } as unknown as GameState["league"] }) as GameState;
     expect(migrated.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK).toBe(TRADE_DEADLINE_DEFAULT_WEEK);
-    expect(isTradeAllowed(Number(migrated.league.week ?? 1), Number(migrated.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK))).toBe(false);
+    expect(isTradeAllowed(Number(migrated.league.week ?? 1), Number(migrated.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK))).toBe(true);
   });
 });

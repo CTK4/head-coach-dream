@@ -3,6 +3,9 @@ import { getUserTeamId } from "@/lib/userTeam";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
+import type { CareerStage } from "@/types/careerStage";
+import type { LeaguePhase } from "@/engine/leaguePhase";
+import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
@@ -57,6 +60,58 @@ const VALID_CAREER_STAGES = new Set<string>([
 ]);
 
 // ---------------------------------------------------------------------------
+
+
+const VALID_LEAGUE_PHASES = new Set<string>([
+  "PRESEASON",
+  "REGULAR_SEASON",
+  "REGULAR_SEASON_GAMEPLAN",
+  "REGULAR_SEASON_GAME",
+  "WILD_CARD",
+  "DIVISIONAL",
+  "CONFERENCE",
+  "SUPER_BOWL",
+  "OFFSEASON",
+]);
+
+function deriveCareerStageFromWeek(week: number): CareerStage {
+  if (week <= 0) return "OFFSEASON_HUB";
+  if (week <= 4) return "PRESEASON";
+  if (week <= 18) return "REGULAR_SEASON";
+  return "PLAYOFFS";
+}
+
+function clampWeek(rawWeek: unknown): number {
+  const week = Number(rawWeek);
+  if (!Number.isFinite(week)) return 1;
+  return Math.max(1, Math.min(23, Math.floor(week)));
+}
+
+function hardenPhaseFields(state: Partial<GameState>): Partial<GameState> {
+  const next: any = { ...state };
+  const safeWeek = clampWeek(next?.league?.week ?? next?.hub?.regularSeasonWeek ?? next?.week ?? 1);
+
+  if (!VALID_CAREER_STAGES.has(String(next.careerStage ?? ""))) {
+    next.careerStage = deriveCareerStageFromWeek(safeWeek);
+  }
+
+  const league = { ...(next.league ?? {}) };
+  const leaguePhase = String(league.phase ?? "");
+  if (!VALID_LEAGUE_PHASES.has(leaguePhase)) {
+    league.phase = (safeWeek <= 4 ? "PRESEASON" : safeWeek <= 18 ? "REGULAR_SEASON" : "WILD_CARD") as LeaguePhase;
+  }
+
+  league.week = safeWeek;
+  league.tradeDeadlineWeek = resolveTradeDeadlineWeek(league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+  next.league = league;
+
+  const hub = { ...(next.hub ?? {}) };
+  hub.regularSeasonWeek = clampWeek(hub.regularSeasonWeek ?? safeWeek);
+  next.hub = hub;
+  next.week = safeWeek;
+
+  return next;
+}
 
 const VALID_OFFSEASON_STEPS = new Set([
   "RESIGNING",
@@ -140,6 +195,8 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
+
+  next = hardenPhaseFields(next);
 
   return next as GameState;
 }

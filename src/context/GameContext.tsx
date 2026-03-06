@@ -75,7 +75,8 @@ import { evalProspectForGm } from "@/engine/prospectEval";
 import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
-import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, type TradeDeadlineError } from "@/engine/tradeDeadline";
+import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
+import { assertActionPhase, isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_EXEC_SCALE,
@@ -1439,6 +1440,27 @@ export type GameAction =
   | { type: "RECOVERY_RESTORE_BACKUP" }
   | { type: "RESET" };
 
+type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
+
+const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
+  "FA_SIGN",
+  "FA_SUBMIT_OFFER",
+  "FA_WITHDRAW_OFFER",
+  "FA_BOOTSTRAP_FROM_TAMPERING",
+  "TRADE_ACCEPT",
+  "DRAFT_PICK",
+  "DRAFT_USER_PICK",
+  "DRAFT_SEND_TRADE_UP_OFFER",
+  "CUT_APPLY",
+  "CONTRACT_RESTRUCTURE_APPLY",
+  "EXTEND_PLAYER",
+  "APPLY_FRANCHISE_TAG",
+  "TAG_APPLY",
+]);
+
+function isMutatingFranchiseAction(type: GameAction["type"]): type is ReducerMutatingAction {
+  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction);
+}
 
 function pickTopPlayerIdByPos(state: GameState, teamId: string, pos: string): string | undefined {
   const players = getAvailableEffectivePlayersByTeam(state, teamId)
@@ -4898,6 +4920,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 }
 
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
+  if (isMutatingFranchiseAction(action.type)) {
+    const verdict = isActionAllowedInCurrentPhase(state, action);
+    if (!verdict.allowed && action.type === "TRADE_ACCEPT") {
+      const currentWeek = Number(state.league.week ?? state.week ?? 1);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+    }
+    assertActionPhase(state, action);
+    if (!verdict.allowed) return state;
+  }
+
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const isRehire = action.payload.isRehire === true;
@@ -7544,14 +7577,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "TRADE_PLAYER":
-      return gameReducer(state, {
-        type: "CUT_APPLY",
-        payload: {
-          teamId: String(state.acceptedOffer?.teamId ?? ""),
-          playerId: String(action.payload.playerId),
-          designation: "PRE_JUNE_1",
-        },
-      });
+      if (import.meta.env.DEV) {
+        throw new Error("TRADE_PLAYER is deprecated – use proper trade actions");
+      }
+      return state;
 
     case "PREGENERATE_FUTURE_CLASS": {
       const classYear = action.payload.classYear;
@@ -9284,8 +9313,8 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   }
   if (!("tradeDeadlineWeek" in normalizedLeague)) {
     console.warn(JSON.stringify({ level: "warn", event: "trade.deadline_missing_in_save", appliedWeek: TRADE_DEADLINE_DEFAULT_WEEK }));
-    normalizedLeague.tradeDeadlineWeek = TRADE_DEADLINE_DEFAULT_WEEK;
   }
+  normalizedLeague.tradeDeadlineWeek = resolveTradeDeadlineWeek((normalizedLeague as any).tradeDeadlineWeek);
   normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
 
   const VALID_MIGRATE_PHASES = new Set(["CREATE", "BACKGROUND", "INTERVIEWS", "OFFERS", "COORD_HIRING", "HUB"]);
