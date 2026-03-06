@@ -3,6 +3,7 @@ import { createInitialStateForTests } from "@/context/GameContext";
 import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 import { isActionAllowedInCurrentPhase } from "@/context/phaseGuards";
 import { migrateSaveSchema } from "@/lib/migrations/saveSchema";
+import { advanceToDraft, advanceToFreeAgency, advanceToRegularSeason } from "@/engine/phaseTransitions";
 
 describe("phaseUtils", () => {
   it("prioritizes careerStage over week-derived value", () => {
@@ -11,21 +12,16 @@ describe("phaseUtils", () => {
     expect(getUnifiedPhase(state)).toBe("DRAFT");
   });
 
-  it("falls back to week-based derivation when careerStage is invalid", () => {
+  it("throws in dev when careerStage is invalid", () => {
     const base = createInitialStateForTests();
-    const state = { ...base, careerStage: "NOT_A_STAGE" as any, league: { ...base.league, week: 8, phase: "REGULAR_SEASON" } };
-    expect(getUnifiedPhase(state)).toBe("IN_SEASON");
-  });
-
-  it("falls back to postseason hint from league.phase when needed", () => {
-    const base = createInitialStateForTests();
-    const state = { ...base, careerStage: "UNKNOWN" as any, league: { ...base.league, week: 5, phase: "WILD_CARD" } };
-    expect(getUnifiedPhase(state)).toBe("POSTSEASON");
+    const state = { ...base, careerStage: "NOT_A_STAGE" as any };
+    expect(() => getUnifiedPhase(state)).toThrow(/phase_utils/);
   });
 
   it("trade action window blocks playoffs and allows regular season", () => {
     expect(isInFranchiseActionWindow("PLAYOFFS", "trade")).toBe(false);
     expect(isInFranchiseActionWindow("REGULAR_SEASON", "trade")).toBe(true);
+    expect(isInFranchiseActionWindow("IN_SEASON", "trade")).toBe(true);
   });
 
   it("legacy save missing careerStage gets normalized and blocks FA_SIGN", () => {
@@ -34,5 +30,26 @@ describe("phaseUtils", () => {
 
     const verdict = isActionAllowedInCurrentPhase(migrated, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } } as any);
     expect(verdict.allowed).toBe(false);
+  });
+
+  it("phase transitions set career stage and league phase consistently", () => {
+    const base = createInitialStateForTests();
+    const faState = advanceToFreeAgency(base);
+    expect(faState.careerStage).toBe("FREE_AGENCY");
+    expect(faState.league.phase).toBe("OFFSEASON");
+
+    const draftState = advanceToDraft(base);
+    expect(draftState.careerStage).toBe("DRAFT");
+    expect(draftState.league.phase).toBe("OFFSEASON");
+  });
+
+  it("advanceToRegularSeason synchronizes week fields", () => {
+    const base = createInitialStateForTests();
+    const state = { ...base, hub: { ...base.hub, regularSeasonWeek: 7 }, league: { ...base.league, week: 2, phase: "OFFSEASON" } };
+    const next = advanceToRegularSeason(state);
+    expect(next.careerStage).toBe("REGULAR_SEASON");
+    expect(next.league.phase).toBe("REGULAR_SEASON");
+    expect(next.league.week).toBe(7);
+    expect(next.hub.regularSeasonWeek).toBe(7);
   });
 });

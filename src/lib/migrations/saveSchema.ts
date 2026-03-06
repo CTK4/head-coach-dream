@@ -4,7 +4,6 @@ import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/co
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
 import type { CareerStage } from "@/types/careerStage";
-import type { LeaguePhase } from "@/engine/leaguePhase";
 import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 import { logInfo } from "@/lib/logger";
 
@@ -107,10 +106,14 @@ function hardenPhaseFields(state: Partial<GameState>): Partial<GameState> {
     }
   }
 
+  if (!VALID_CAREER_STAGES.has(String(next.careerStage ?? ""))) {
+    throw new Error(`save_schema: unable to normalize careerStage '${String(next.careerStage ?? "")}'`);
+  }
+
   const league = { ...(next.league ?? {}) };
   const leaguePhase = String(league.phase ?? "");
   if (!VALID_LEAGUE_PHASES.has(leaguePhase)) {
-    league.phase = (safeWeek <= 4 ? "PRESEASON" : safeWeek <= 18 ? "REGULAR_SEASON" : "WILD_CARD") as LeaguePhase;
+    league.phase = "OFFSEASON";
   }
 
   league.week = safeWeek;

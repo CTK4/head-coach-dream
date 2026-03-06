@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 
 function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
   const { state, dispatch } = useGame();
@@ -131,7 +132,8 @@ function FaTransactions() {
 
 export function FreeAgencyRoutes() {
   const { state } = useGame();
-  const canAccessFreeAgency = state.careerStage === "FREE_AGENCY" || state.offseason?.stepId === "FREE_AGENCY";
+  const phase = getUnifiedPhase(state);
+  const canAccessFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
   if (!canAccessFreeAgency) return <Navigate to="/hub" replace />;
   return (
     <>
@@ -165,7 +167,7 @@ export function ReSignRoutes() {
 
 export function TradesRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "REGULAR_SEASON" && state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
+  if (!isInFranchiseActionWindow(getUnifiedPhase(state), "trade")) return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="block" replace />} />
@@ -183,11 +185,14 @@ export function ProspectProfileScreen() {
 
 export function HubPhaseQuickLinks() {
   const { state } = useGame();
+  const phase = getUnifiedPhase(state);
+  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency");
+  const isTradeWindow = isInFranchiseActionWindow(phase, "trade");
   return (
     <div className="grid grid-cols-3 gap-2 text-xs">
-      {state.careerStage === "FREE_AGENCY" ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
+      {isFreeAgency ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
       {state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
-      {(state.careerStage === "REGULAR_SEASON" || state.careerStage === "FREE_AGENCY") ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
+      {isTradeWindow ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
     </div>
   );
 }
