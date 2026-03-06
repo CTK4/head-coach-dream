@@ -36,6 +36,7 @@ import { computeHOFm } from "@/engine/hofMonitor";
 import { resolveQbArchetypeTag, getQbArchetypeBadge } from "@/engine/qb/qbArchetype";
 import { getQbSchemeFitMultiplier, getQbSchemeFitSignal } from "@/engine/qb/qbSchemeFit";
 import { BADGE_DEFINITIONS } from "@/engine/badges/engine";
+import { UNICORN_DEFINITIONS } from "@/engine/unicorns/engine";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function clamp100(n: number) {
@@ -96,6 +97,7 @@ export default function PlayerProfile() {
 
 
   const playerBadges = state.playerBadges?.[playerId] ?? [];
+  const playerUnicorn = state.playerUnicorns?.[playerId];
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/40">
@@ -145,6 +147,17 @@ export default function PlayerProfile() {
                   ) : null}
 
 
+                {playerUnicorn ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge className="rounded-xl border border-fuchsia-300/60 bg-fuchsia-500/20 text-fuchsia-100">🦄 Unicorn</Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <div className="font-semibold">{UNICORN_DEFINITIONS.find((d) => d.id === playerUnicorn.archetypeId)?.name ?? playerUnicorn.archetypeId}</div>
+                      <div className="mt-1 text-[11px]">Confidence {Math.round(playerUnicorn.confidence * 100)}% • Discovered {playerUnicorn.discoveredSeason}</div>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
                 {playerBadges.length > 0 ? (
                   <TooltipProvider>
                     {playerBadges.map((badge) => {

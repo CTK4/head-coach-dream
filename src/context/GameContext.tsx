@@ -140,6 +140,8 @@ import { generateDraftClass as generateParameterizedDraftClass, type GeneratedPl
 import type { ClassYear } from "@/data/playerGeneratorConfig";
 import { applySeasonBadges } from "@/engine/badges/engine";
 import type { PlayerBadge } from "@/engine/badges/types";
+import { applySeasonUnicorns, getProspectUnicornSignal } from "@/engine/unicorns/engine";
+import type { PlayerUnicorn } from "@/engine/unicorns/types";
 import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
@@ -1027,6 +1029,7 @@ export type GameState = {
   leagueDepthCharts: Record<string, DepthChart>;
   playerAccolades: Record<string, PlayerAccolades>;
   playerBadges: Record<string, PlayerBadge[]>;
+  playerUnicorns: Record<PlayerId, PlayerUnicorn>;
   preseason: { rotation: PreseasonRotation; appliedWeeks: Record<number, true> };
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
@@ -1802,6 +1805,7 @@ function createInitialState(): GameState {
     leagueDepthCharts: {},
     playerAccolades: {},
     playerBadges: {},
+    playerUnicorns: {},
     preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
     staff: {},
     orgRoles: {},
@@ -3423,7 +3427,7 @@ function migrateExpiredStaffContracts(state: GameState, season: number): Pick<Ga
 }
 
 function seasonRollover(state: GameState): GameState {
-  state = applySeasonBadges(state);
+  state = applySeasonUnicorns(applySeasonBadges(state));
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
@@ -6155,6 +6159,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
       const budget = computeBudget({ gm, windowId: windowId as any, carryIn: 0 });
 
+      const unicornBoostByProspectId: Record<string, number> = {};
+      for (const p of draftClass) {
+        const signal = getProspectUnicornSignal(state, String(p.id));
+        if (signal <= 0.5) continue;
+        unicornBoostByProspectId[String(p.id)] = signal;
+        const existing = scoutProfiles[String(p.id)];
+        if (!existing) continue;
+        const bump = Math.round((signal - 0.5) * 20);
+        scoutProfiles[String(p.id)] = {
+          ...existing,
+          estHigh: Math.min(99, Number(existing.estHigh ?? 85) + bump),
+          estLow: Math.min(95, Number(existing.estLow ?? 65) + Math.max(1, Math.floor(bump / 2))),
+          confidence: Math.min(99, Number(existing.confidence ?? 0) + Math.round(signal * 10)),
+          hypeTag: signal >= 0.7 ? "UNICORN" : existing.hypeTag,
+        };
+      }
+
       return {
         ...state,
         scoutingState: {
@@ -8455,7 +8476,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         tables: percentileTables,
         activeSeason: Number(out.season ?? 2026),
       });
-      out = applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById });
+      out = applySeasonUnicorns(applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById }));
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -9196,7 +9217,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const mediaBonus = (inputs.mediaTags ?? []).length;
       const legacyDelta = Math.round(inputs.wins * 0.9 + playoffBonus + rankBonus + mediaBonus + ownerPenalty + (inputs.capDisaster ? -12 : 0));
       const log: DynastySeasonLog = { year, wins: inputs.wins, playoffResult: inputs.playoffResult, awards: inputs.awards, rankOff: inputs.powerRanks?.off, rankDef: inputs.powerRanks?.def, rankST: inputs.powerRanks?.st, ownerOutcome: inputs.ownerOutcome, legacyDelta };
-      return applySeasonBadges({
+      return applySeasonUnicorns(applySeasonBadges({
         ...state,
         dynasty: { ...state.dynasty, legacyScore: (state.dynasty?.legacyScore ?? 0) + legacyDelta, seasonLog: [...(state.dynasty?.seasonLog ?? []), log] },
         wire: {
@@ -9206,7 +9227,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: seedFor(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
           ],
         },
-      });
+      }));
     }
     case "DYNASTY_ADD_MILESTONE": {
       if ((state.dynasty?.milestones ?? []).some((m) => m.key === action.payload.key)) return state;
@@ -9424,6 +9445,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     playerProgressionSeasonStatsById: { ...((oldState as any).playerProgressionSeasonStatsById ?? {}) },
     playerDevelopmentById: { ...((oldState as any).playerDevelopmentById ?? {}) },
     playerBadges: { ...((oldState as any).playerBadges ?? {}) },
+    playerUnicorns: { ...((oldState as any).playerUnicorns ?? {}) },
     finances:
       (oldState as any).finances ??
       {
