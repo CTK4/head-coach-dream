@@ -43,6 +43,7 @@ export default function BigBoard() {
           ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
           ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
         }).combineScore10,
+        unicornConfidence: Number(state.playerUnicorns?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence ?? 0),
       })),
     [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId]
   );
@@ -123,6 +124,7 @@ export default function BigBoard() {
                 isDragging={draggedId === p.id}
                 isDragOver={dragOverId === p.id}
                 report={report}
+                unicornCandidate={p.unicornConfidence > 0.5 ? p.unicornConfidence : undefined}
                 onOpenProfile={openProspectProfile}
               />
             );
