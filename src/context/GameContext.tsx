@@ -149,6 +149,9 @@ import { updateOwner, updateAutonomy } from "@/engine/owner";
 import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
+import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { validateConfigPins } from "@/engine/config/validateConfig";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { logError, logInfo } from "@/lib/logger";
@@ -1005,6 +1008,8 @@ export type GameState = {
   schemaVersion: number;
   saveId?: string;
   saveVersion: number;
+  configVersion: string;
+  calibrationPackId: string;
   memoryLog: MemoryEvent[];
   contextFlags?: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
@@ -1733,6 +1738,8 @@ function createInitialState(): GameState {
     week: 1,
     schemaVersion: 1,
     saveVersion: CURRENT_SAVE_VERSION,
+    configVersion: DEFAULT_CONFIG_VERSION,
+    calibrationPackId: DEFAULT_CALIBRATION_PACK_ID,
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
@@ -9245,6 +9252,8 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
 
   let s: Partial<GameState> = {
     ...oldState,
+    configVersion: String((oldState as any).configVersion ?? DEFAULT_CONFIG_VERSION),
+    calibrationPackId: String((oldState as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID),
     phase: normalizedPhase as GameState["phase"],
     saveSeed,
     season: Number((oldState as any).season ?? 2026),
@@ -9515,6 +9524,15 @@ function applyCapModeQuery(state: GameState): GameState {
 
 function loadState(): GameState {
   const initial = applyCapModeQuery(createInitialState());
+  const loadedConfig = loadConfigRegistry();
+  if (!loadedConfig.ok) {
+    return {
+      ...initial,
+      recoveryNeeded: true,
+      recoveryErrors: [loadedConfig.validation.message],
+    };
+  }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return initial;
@@ -9760,6 +9778,20 @@ function loadState(): GameState {
         }
       }
     } catch { /* corrupt checkpoint — ignore and proceed with main save */ }
+    const pinValidation = validateConfigPins(loadedConfig.registry, {
+      configVersion: (out as any).configVersion,
+      calibrationPackId: (out as any).calibrationPackId,
+    });
+    if (!pinValidation.ok) {
+      out = { ...out, recoveryNeeded: true, recoveryErrors: [pinValidation.message] };
+      return out;
+    }
+    out = {
+      ...out,
+      configVersion: loadedConfig.registry.configVersion,
+      calibrationPackId: loadedConfig.registry.calibrationPackId,
+    };
+
     // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
     const criticalResult = validateCriticalSaveState(out);
     if (!criticalResult.ok) {
@@ -9772,6 +9804,11 @@ function loadState(): GameState {
     console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
     return initial;
   }
+}
+
+
+export function loadStateForTests(): GameState {
+  return loadState();
 }
 
 type GameContextType = {

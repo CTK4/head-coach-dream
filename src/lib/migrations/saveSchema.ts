@@ -1,7 +1,10 @@
 import type { GameState } from "@/context/GameContext";
 import { getUserTeamId } from "@/lib/userTeam";
+import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { validateConfigPins } from "@/engine/config/validateConfig";
 
-export const LATEST_SAVE_SCHEMA_VERSION = 1;
+export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
 export type SaveValidationErrorCode =
   | "INVALID_ROOT"
@@ -11,7 +14,8 @@ export type SaveValidationErrorCode =
   | "INVALID_SEASON"
   | "INVALID_WEEK"
   | "INVALID_TEAM"
-  | "INVALID_COACH";
+  | "INVALID_COACH"
+  | "INVALID_CONFIG_PIN";
 
 export type SaveValidationResult =
   | { ok: true }
@@ -96,10 +100,18 @@ function migrateV0toV1(state: Partial<GameState>): Partial<GameState> {
   return { ...next, schemaVersion: 1 };
 }
 
+function migrateV1toV2(state: Partial<GameState>): Partial<GameState> {
+  const next = { ...state };
+  (next as any).configVersion = String((next as any).configVersion ?? DEFAULT_CONFIG_VERSION);
+  (next as any).calibrationPackId = String((next as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID);
+  return { ...next, schemaVersion: 2 };
+}
+
 /** Ordered list of migrations. Index 0 upgrades schema version 0 → 1, etc. */
 const MIGRATIONS: MigrationFn[] = [
   migrateV0toV1,
-  // Add future migrations here: migrateV1toV2, migrateV2toV3, …
+  migrateV1toV2,
+  // Add future migrations here: migrateV2toV3, migrateV3toV4, …
 ];
 
 export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): GameState {
@@ -174,6 +186,19 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
 
   if (!(state as any).coach || typeof (state as any).coach.name !== "string") {
     return { ok: false, code: "INVALID_COACH", message: "Coach data is missing or invalid." };
+  }
+
+  const loadedConfig = loadConfigRegistry();
+  if (!loadedConfig.ok) {
+    return { ok: false, code: "INVALID_CONFIG_PIN", message: loadedConfig.validation.message };
+  }
+
+  const pinResult = validateConfigPins(loadedConfig.registry, {
+    configVersion: (state as any).configVersion,
+    calibrationPackId: (state as any).calibrationPackId,
+  });
+  if (!pinResult.ok) {
+    return { ok: false, code: "INVALID_CONFIG_PIN", message: pinResult.message };
   }
 
   return { ok: true };
