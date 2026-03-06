@@ -30,6 +30,7 @@ import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
+import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import {
   initLeagueState,
@@ -988,6 +989,9 @@ export type GameState = {
   wire: WireState;
   medical: MedicalState;
   liveGames: Record<string, LiveGameState>;
+  telemetry?: {
+    playLogsByGameKey: Record<string, PlayEventV1Minimal[]>;
+  };
   dynasty: DynastyProfile;
   season: number;
   week?: number;
@@ -1464,6 +1468,25 @@ function applyWeeklyFatigueRecovery(state: GameState, snapLoadThisGame: Record<s
   return next;
 }
 
+
+function gameTelemetryKey(params: { season: number; weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string }): string {
+  return `${params.season}:${params.weekType}:${params.weekNumber}:${params.homeTeamId}:${params.awayTeamId}`;
+}
+
+function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType" | "weekNumber" | "homeTeamId" | "awayTeamId" | "playLog">): GameState {
+  if (!game.weekType || !game.weekNumber || !game.playLog?.length) return state;
+  const key = gameTelemetryKey({ season: state.season, weekType: game.weekType, weekNumber: game.weekNumber, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId });
+  return {
+    ...state,
+    telemetry: {
+      playLogsByGameKey: {
+        ...(state.telemetry?.playLogsByGameKey ?? {}),
+        [key]: game.playLog,
+      },
+    },
+  };
+}
+
 function upsertGameFatigueState(state: GameState, sim: GameSim): GameState {
   const next = { ...state.playerFatigueById };
   for (const [playerId, fatigue] of Object.entries(sim.playerFatigue ?? {})) {
@@ -1687,6 +1710,7 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
+    telemetry: { playLogsByGameKey: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
     rosterMgmt: { active: {}, cuts: {}, finalized: false },
@@ -8516,6 +8540,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
+      nextState = persistUserGamePlayLog(nextState, stepped.sim);
       if (state.game.weekType === "REGULAR_SEASON") {
         const weekKey = toWeekKey(nextState.season, Number(state.game.weekNumber));
         nextState = finalizeWeek(nextState, {
@@ -8612,6 +8637,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
         game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
       };
+      simNextState = persistUserGamePlayLog(simNextState, sim);
       if (state.game.weekType === "REGULAR_SEASON") {
         const weekKey = toWeekKey(simNextState.season, Number(state.game.weekNumber));
         simNextState = finalizeWeek(simNextState, { season: simNextState.season, week: Number(state.game.weekNumber), gameType: "REGULAR_SEASON", weekKey, seed: simNextState.saveSeed });
@@ -8685,6 +8711,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
         qbRunContactExposureByPlayerId: { ...(state.qbRunContactExposureByPlayerId ?? {}), ...(state.game.qbRunContactsByPlayerId ?? {}) },
       };
+      out = persistUserGamePlayLog(out, state.game);
       const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
       if (!appliedAdvance.applied) return state;
       out = appliedAdvance.state;

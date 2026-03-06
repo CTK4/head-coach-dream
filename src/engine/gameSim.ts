@@ -19,6 +19,7 @@ import { aiSelectDefensiveCall } from "@/engine/defense/aiSelectDefensiveCall";
 import { applyDefensiveCallMultipliers, type DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { isKeyDefenseSituation } from "@/engine/defense/isKeyDefenseSituation";
 import type { TeamGameRatings } from "@/engine/game/teamRatings";
+import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
 import { getArchetypeTraits, type PassiveResolution } from "@/data/archetypeTraits";
 import { resolvePerkModifiers } from "@/engine/perkWiring";
 import type { WeeklyGameplan } from "@/engine/gameplan";
@@ -246,6 +247,7 @@ export type GameSim = {
   driveNumber: number;
   playNumberInDrive: number;
   driveLog: DriveLogEntry[];
+  playLog: PlayEventV1Minimal[];
   currentDrive: CurrentDrive;
   /** Current defensive look shown to the user pre-snap */
   defLook?: DefensiveLook;
@@ -292,6 +294,8 @@ export type GameSim = {
   defensiveCallSituation?: { down: number; distance: number; yardLine: number; quarter: number; clockSec: number };
   forceAutoDefenseCall?: boolean;
 };
+
+const MAX_PLAY_LOG_EVENTS = 384;
 
 const EXPLANATION_BANK: Record<"NEGATIVE" | "FAILURE" | "SUCCESS" | "EXPLOSIVE", string[]> = {
   NEGATIVE: ["Coverage closed quickly and the window vanished", "Pressure won early and disrupted rhythm", "Backside pursuit erased the cutback lane"],
@@ -1481,6 +1485,7 @@ export function initGameSim(params: {
     driveNumber: 1,
     playNumberInDrive: 0,
     driveLog: [],
+    playLog: [],
     currentDrive: { driveNumber: 1, possession: "HOME", startBallOn: 25, plays: [] },
     aggression: "NORMAL",
     tempo: "NORMAL",
@@ -1508,6 +1513,14 @@ export function initGameSim(params: {
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,
     forceAutoDefenseCall: false,
+  };
+}
+
+function appendPlayLog(sim: GameSim, event: PlayEventV1Minimal): GameSim {
+  const nextPlayLog = [...(sim.playLog ?? []), event];
+  return {
+    ...sim,
+    playLog: nextPlayLog.length > MAX_PLAY_LOG_EVENTS ? nextPlayLog.slice(-MAX_PLAY_LOG_EVENTS) : nextPlayLog,
   };
 }
 
@@ -1671,6 +1684,23 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
       explanation: buildPlayExplanation(s, playType, outcome, yardsGained),
     },
   };
+  const playIndex = (s.playLog.at(-1)?.playIndex ?? 0) + 1;
+  s = appendPlayLog(s, {
+    version: 1,
+    playIndex,
+    drive: s.driveNumber,
+    playInDrive: s.playNumberInDrive,
+    quarter: s.clock.quarter,
+    clockSec: s.clock.timeRemainingSec,
+    possession: s.possession,
+    down: s.down,
+    distance: s.distance,
+    ballOn: s.ballOn,
+    playType,
+    result: s.lastResult ?? "",
+    homeScore: s.homeScore,
+    awayScore: s.awayScore,
+  });
   s = pushLog(s, playType, s.lastResult ?? "");
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
 }
@@ -1702,7 +1732,7 @@ export function autoPickPlay(sim: GameSim): PlayType {
   return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "DROPBACK";
 }
 
-export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: TeamGameplan; awayGameplan?: TeamGameplan }) {
+export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: TeamGameplan; awayGameplan?: TeamGameplan; includePlayLog?: boolean }) {
   let sim = initGameSim({ ...params });
   sim = { ...sim, clock: { ...sim.clock, clockRunning: false, restartMode: "SNAP" } };
 
@@ -1714,7 +1744,11 @@ export function simulateFullGame(params: { homeTeamId: string; awayTeamId: strin
     if (safety > 6000) break;
   }
 
-  return { homeScore: sim.homeScore, awayScore: sim.awayScore };
+  return {
+    homeScore: sim.homeScore,
+    awayScore: sim.awayScore,
+    ...(params.includePlayLog ? { playLog: sim.playLog } : {}),
+  };
 }
 
 export function buildGameBoxScore(sim: GameSim, season: number): GameBoxScore {
