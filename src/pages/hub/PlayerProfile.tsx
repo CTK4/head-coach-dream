@@ -35,6 +35,8 @@ import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { computeHOFm } from "@/engine/hofMonitor";
 import { resolveQbArchetypeTag, getQbArchetypeBadge } from "@/engine/qb/qbArchetype";
 import { getQbSchemeFitMultiplier, getQbSchemeFitSignal } from "@/engine/qb/qbSchemeFit";
+import { BADGE_DEFINITIONS } from "@/engine/badges/engine";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -92,6 +94,9 @@ export default function PlayerProfile() {
   const accepted = offers.find((o) => o.status === "ACCEPTED");
   const capIllegal = state.finances.capSpace < 0;
 
+
+  const playerBadges = state.playerBadges?.[playerId] ?? [];
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/40">
       <div className="max-w-3xl mx-auto px-4 py-4">
@@ -138,6 +143,33 @@ export default function PlayerProfile() {
                       Scheme Fit: {qbFitSignal}
                     </Badge>
                   ) : null}
+
+
+                {playerBadges.length > 0 ? (
+                  <TooltipProvider>
+                    {playerBadges.map((badge) => {
+                      const definition = BADGE_DEFINITIONS.find((d) => d.id === badge.badgeId);
+                      if (!definition) return null;
+                      return (
+                        <Tooltip key={`${badge.badgeId}-${badge.awardedSeason}`}>
+                          <TooltipTrigger asChild>
+                            <Badge
+                              variant="outline"
+                              className="rounded-xl border-white/15 bg-white/5"
+                            >
+                              {definition.name}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <div className="text-xs font-semibold">{definition.name}</div>
+                            <div className="text-xs text-muted-foreground">{definition.description}</div>
+                            <div className="mt-1 text-[11px]">{definition.rarity} • Awarded {badge.awardedSeason}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </TooltipProvider>
+                ) : null}
                 </div>
               </div>
 

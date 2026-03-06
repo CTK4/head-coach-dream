@@ -138,6 +138,8 @@ import { buildRookieContract } from "@/engine/contracts/rookieContract";
 import { generateDraftClass } from "@/engine/draftClass/generateDraftClass";
 import { generateDraftClass as generateParameterizedDraftClass, type GeneratedPlayer } from "@/engine/playerGenerator";
 import type { ClassYear } from "@/data/playerGeneratorConfig";
+import { applySeasonBadges } from "@/engine/badges/engine";
+import type { PlayerBadge } from "@/engine/badges/types";
 import type { SeasonSummary } from "@/types/season";
 import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
 import type { NewsItem as LeagueNewsItem } from "@/types/news";
@@ -1024,6 +1026,7 @@ export type GameState = {
   depthChart: DepthChart;
   leagueDepthCharts: Record<string, DepthChart>;
   playerAccolades: Record<string, PlayerAccolades>;
+  playerBadges: Record<string, PlayerBadge[]>;
   preseason: { rotation: PreseasonRotation; appliedWeeks: Record<number, true> };
   staff: { ocId?: string; dcId?: string; stcId?: string };
   orgRoles: OrgRoles;
@@ -1798,6 +1801,7 @@ function createInitialState(): GameState {
     depthChart: { startersByPos: {}, lockedBySlot: {} },
     leagueDepthCharts: {},
     playerAccolades: {},
+    playerBadges: {},
     preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
     staff: {},
     orgRoles: {},
@@ -3419,6 +3423,7 @@ function migrateExpiredStaffContracts(state: GameState, season: number): Pick<Ga
 }
 
 function seasonRollover(state: GameState): GameState {
+  state = applySeasonBadges(state);
   const teamId = state.acceptedOffer?.teamId;
   const nextSeason = state.season + 1;
 
@@ -8450,6 +8455,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         tables: percentileTables,
         activeSeason: Number(out.season ?? 2026),
       });
+      out = applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById });
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -9190,7 +9196,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const mediaBonus = (inputs.mediaTags ?? []).length;
       const legacyDelta = Math.round(inputs.wins * 0.9 + playoffBonus + rankBonus + mediaBonus + ownerPenalty + (inputs.capDisaster ? -12 : 0));
       const log: DynastySeasonLog = { year, wins: inputs.wins, playoffResult: inputs.playoffResult, awards: inputs.awards, rankOff: inputs.powerRanks?.off, rankDef: inputs.powerRanks?.def, rankST: inputs.powerRanks?.st, ownerOutcome: inputs.ownerOutcome, legacyDelta };
-      return {
+      return applySeasonBadges({
         ...state,
         dynasty: { ...state.dynasty, legacyScore: (state.dynasty?.legacyScore ?? 0) + legacyDelta, seasonLog: [...(state.dynasty?.seasonLog ?? []), log] },
         wire: {
@@ -9200,7 +9206,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: seedFor(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
           ],
         },
-      };
+      });
     }
     case "DYNASTY_ADD_MILESTONE": {
       if ((state.dynasty?.milestones ?? []).some((m) => m.key === action.payload.key)) return state;
@@ -9417,6 +9423,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
     playerSnapCountsById: { ...((oldState as any).playerSnapCountsById ?? {}) },
     playerProgressionSeasonStatsById: { ...((oldState as any).playerProgressionSeasonStatsById ?? {}) },
     playerDevelopmentById: { ...((oldState as any).playerDevelopmentById ?? {}) },
+    playerBadges: { ...((oldState as any).playerBadges ?? {}) },
     finances:
       (oldState as any).finances ??
       {
