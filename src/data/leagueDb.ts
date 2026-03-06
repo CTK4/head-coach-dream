@@ -26,6 +26,7 @@ export type PlayerRow = {
   potential?: number;
   college?: string;
   contractId?: string;
+  jerseyNumber?: number;
   Archetype?: string;
   Traits?: string;
   snapCounts?: { offense: number; defense: number; specialTeams: number };
@@ -64,6 +65,7 @@ export type PersonnelRow = {
   age?: number;
   reputation?: number;
   contractId?: string;
+  jerseyNumber?: number;
   scheme?: string;
   avatarUrl?: string;
   [key: string]: unknown;
@@ -152,6 +154,7 @@ function normalizePlayerRow(p: any): PlayerRow {
     potential: coerceInt(p.potential),
     college: p.college != null ? String(p.college) : undefined,
     contractId: p.contractId != null ? String(p.contractId) : undefined,
+    jerseyNumber: coerceInt(p.jerseyNumber),
     Archetype: p.Archetype != null ? String(p.Archetype) : undefined,
     Traits: p.Traits != null ? String(p.Traits) : undefined,
   };
@@ -206,6 +209,7 @@ function normalizePersonnelRow(p: any): PersonnelRow {
     age: coerceInt(p.age),
     reputation: coerceNumber(p.reputation) ?? 55,
     contractId: p.contractId != null ? String(p.contractId) : undefined,
+    jerseyNumber: coerceInt(p.jerseyNumber),
     scheme: p.scheme != null ? String(p.scheme) : undefined,
   };
 }
@@ -532,6 +536,7 @@ export type PersonnelOverride = {
   teamId: string;
   status: string;
   contractId?: string;
+  jerseyNumber?: number;
 };
 
 /**

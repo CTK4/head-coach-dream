@@ -183,6 +183,7 @@ import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/s
 import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
+import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 
@@ -4934,6 +4935,28 @@ function assertNever(x: never): never {
   throw new Error(`Unhandled action: ${JSON.stringify(x)}`);
 }
 
+function reconcileJerseyNumbersForTx(state: GameState, tx: TransactionEvent): GameState {
+  const affectedTeams = new Set<string>();
+  if (tx.teamId) affectedTeams.add(String(tx.teamId));
+  if (tx.otherTeamId) affectedTeams.add(String(tx.otherTeamId));
+
+  for (const playerId of tx.playerIds ?? []) {
+    const beforeTeam = String(state.playerTeamOverrides?.[playerId] ?? "");
+    if (beforeTeam) affectedTeams.add(beforeTeam);
+  }
+
+  let nextAttr = { ...(state.playerAttrOverrides ?? {}) };
+  for (const teamId of affectedTeams) {
+    if (!teamId || teamId === "FREE_AGENT" || teamId === "RETIRED") continue;
+    const assigned = assignTeamRosterNumbers({ ...state, playerAttrOverrides: nextAttr }, teamId);
+    for (const [playerId, jerseyNumber] of Object.entries(assigned)) {
+      nextAttr[playerId] = { ...(nextAttr[playerId] ?? {}), jerseyNumber };
+    }
+  }
+
+  return nextAttr === state.playerAttrOverrides ? state : { ...state, playerAttrOverrides: nextAttr };
+}
+
 function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts">): GameState {
   const tx: TransactionEvent = {
     ...draft,
@@ -4943,14 +4966,15 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
     ts: Number(state.season ?? 1) * 10_000 + Number(state.week ?? 0) * 100 + Number(state.transactionLedger?.counter ?? 0) + 1,
   };
   const draftState = applyTransaction(state, tx);
-  const validation = validatePostTx(draftState);
-  if (validation.ok) return draftState;
+  const withJerseys = reconcileJerseyNumbersForTx(draftState, tx);
+  const validation = validatePostTx(withJerseys);
+  if (validation.ok) return withJerseys;
   if ("errors" in validation) {
     const errs = validation.errors;
     if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${errs.join("|")}`);
     return { ...state, uiToast: `Transaction blocked: ${errs[0] ?? "invalid state"}` };
   }
-  return draftState;
+  return withJerseys;
 }
 
 function finalizeWeek(
