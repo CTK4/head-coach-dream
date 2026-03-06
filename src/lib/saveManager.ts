@@ -79,6 +79,7 @@ class SaveWriteError extends Error {
 
 function assertStorageWrite(result: StorageWriteResult, operation: "set" | "remove", key: string, context: string): void {
   if (result.ok) return;
+  if (!("error" in result)) return;
   throw new SaveWriteError(`Failed to ${operation} localStorage key \"${key}\" during ${context}.`, operation, key, result.error);
 }
 
@@ -96,7 +97,7 @@ function readAndValidateState(raw: string | null, saveId: string): { state: Game
   if (!parsed) return { state: null };
   const migrated = migrateSaveSchema(parsed, saveId);
   const validation = validateCriticalSaveState(migrated);
-  if (!validation.ok) {
+  if (!validation.ok && "code" in validation) {
     return { state: null, validationCode: validation.code };
   }
   return { state: migrated };
@@ -281,13 +282,15 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
       return { ok: true, state: readResult.state };
     }
 
-    if (readResult.error.code === "MISSING_SAVE") {
+    if (!("error" in readResult)) return { ok: false, code: "CORRUPT_SAVE", saveId, restoredFromBackup: false, message: "Unknown save read error." };
+    const readError = readResult.error;
+    if (readError.code === "MISSING_SAVE") {
       logWarn("save.load.failure", { saveId, meta: { code: "MISSING_SAVE" } });
     } else {
-      logError("save.load.failure", { saveId, meta: { code: readResult.error.code, validationCode: readResult.error.validationCode } });
+      logError("save.load.failure", { saveId, meta: { code: readError.code, validationCode: readError.validationCode } });
     }
 
-    return { ...readResult.error, restoredFromBackup: false };
+    return { ...readError, restoredFromBackup: false };
   }
 
   function getActiveSaveMetadata(): SaveMetadata | null {
@@ -327,7 +330,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     const saveId = `import-${Date.now()}`;
     const migrated = migrateSaveSchema(parsed, saveId);
     const validation = validateCriticalSaveState(migrated);
-    if (!validation.ok) {
+    if (!validation.ok && "code" in validation) {
       return {
         ok: false,
         code: "INVALID_SAVE",

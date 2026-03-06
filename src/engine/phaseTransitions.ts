@@ -12,11 +12,11 @@ function withPhase(state: GameState, careerStage: GameState["careerStage"], leag
 }
 
 export function advanceToFreeAgency(state: GameState): GameState {
-  return withPhase(state, "FREE_AGENCY", "OFFSEASON");
+  return withPhase(state, "FREE_AGENCY", "FREE_AGENCY");
 }
 
 export function advanceToDraft(state: GameState): GameState {
-  return withPhase(state, "DRAFT", "OFFSEASON");
+  return withPhase(state, "DRAFT", "DRAFT");
 }
 
 export function advanceToRegularSeason(state: GameState): GameState {

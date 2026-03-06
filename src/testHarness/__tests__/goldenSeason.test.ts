@@ -15,7 +15,6 @@ describe("golden season determinism", () => {
     expect(a.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(a.summary.record.losses).toBeGreaterThanOrEqual(0);
   }, 300_000);
-  }, 120000);
 
   it("changes hash for a different seed while preserving invariants", () => {
     const a = runGoldenSeason({ careerSeed: 424242, userTeamId: "MILWAUKEE_NORTHSHORE" });
@@ -26,5 +25,4 @@ describe("golden season determinism", () => {
     expect(b.summary.record.wins).toBeGreaterThanOrEqual(0);
     expect(b.summary.record.losses).toBeGreaterThanOrEqual(0);
   }, 300_000);
-  }, 120000);
 });

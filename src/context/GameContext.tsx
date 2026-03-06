@@ -30,7 +30,6 @@ import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
-import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
 import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
 import { applyGameAggToSeasonAgg } from "@/engine/telemetry/aggregateSeason";
@@ -1581,7 +1580,7 @@ function persistSeasonAggToHistorical(state: GameState, season: number): GameSta
   const seasonAgg = state.telemetry?.seasonAgg;
   if (!seasonAgg) return state;
 
-  const combined = {
+  const combined: Record<number, Partial<SeasonAggV1>> = {
     ...(state.historicalTelemetry?.bySeason ?? {}),
     [season]: {
       version: Number(seasonAgg.version ?? 1),
@@ -1605,7 +1604,7 @@ function applyTelemetryAggregatesForGame(
 ): GameState {
   if (!game.weekType || !game.weekNumber || !game.playLog?.length) return state;
   const gameKey = gameTelemetryKey({ season: state.season, weekType: game.weekType, weekNumber: game.weekNumber, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId });
-  const telemetry = state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } };
+  const telemetry = state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} };
   if (telemetry.seasonAgg?.appliedGameKeys?.[gameKey]) return state;
 
   const gameAgg = buildGameAggFromPlayLog({
@@ -5857,7 +5856,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             }));
           const offers = cpuResignPlayers(teamCtx, expiring);
           for (const offer of offers) {
-            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0 });
+            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0, discountPct: 0 });
             next = applyCanonicalTx(next, Tx.resign(teamId, String(offer.playerId), ovr));
           }
         }
