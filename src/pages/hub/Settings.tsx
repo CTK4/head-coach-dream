@@ -39,15 +39,41 @@ const DEFAULT_SETTINGS: UserSettings = {
   showTooltips: true,
 };
 
+const APP_STORAGE_PREFIXES = [
+  "hc_",
+  "hcd:",
+];
+
+const APP_STORAGE_LEGACY_KEYS = [
+  // Legacy keys that do not follow our current namespace prefixes but are still
+  // read during migration/back-compat flows.
+  "hapticsEnabled",
+  "show_main_menu",
+  "DEV_PANEL",
+];
+
+function clearStorageNamespace(storage: Storage, prefixes: string[], includeKeys: string[]) {
+  const keysToDelete: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (!key) continue;
+    if (prefixes.some((prefix) => key.startsWith(prefix)) || includeKeys.includes(key)) {
+      keysToDelete.push(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    storage.removeItem(key);
+  }
+}
+
+export function clearAppOwnedStorage(local: Storage, session: Storage) {
+  clearStorageNamespace(local, APP_STORAGE_PREFIXES, APP_STORAGE_LEGACY_KEYS);
+  clearStorageNamespace(session, APP_STORAGE_PREFIXES, APP_STORAGE_LEGACY_KEYS);
+}
 
 function hardResetApp() {
   try {
-    localStorage.clear();
-  } catch {
-    // ignore
-  }
-  try {
-    sessionStorage.clear();
+    clearAppOwnedStorage(localStorage, sessionStorage);
   } catch {
     // ignore
   }

@@ -49,7 +49,7 @@ function regenerateDraftClass(state: GameState, payload?: Record<string, unknown
 
 function spawnFreeAgents(state: GameState, payload?: Record<string, unknown>): GameState {
   const count = Math.max(1, Number(payload?.count ?? 50));
-  const taken = new Set(Object.values(state.playerTeamOverrides ?? {}).filter(Boolean));
+  const taken = new Set(Object.keys(state.playerTeamOverrides ?? {}));
   const candidates = getPlayers().filter((p) => {
     const pid = String((p as any).playerId ?? "");
     const teamId = String((p as any).teamId ?? "");

@@ -155,7 +155,7 @@ import { updateChemistry } from "@/engine/chemistry";
 import { updateStaffTrust } from "@/engine/staffTrust";
 import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
-import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
+import { getActiveSaveId, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
@@ -172,6 +172,7 @@ import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransact
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import { offseasonReducer } from "@/context/offseasonReducer";
@@ -1768,7 +1769,9 @@ function defaultDynastyProfile(): DynastyProfile {
 
 function createInitialState(): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = Date.now();
+  // Use a deterministic seed derived from current time and a random component.
+  // This ensures reproducibility while avoiding collisions across multiple saves.
+  const saveSeed = Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647;
 
   const base: GameState = {
     coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
@@ -9469,18 +9472,30 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
     }
     case "RECOVERY_REBUILD_INDICES": {
-      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
-      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
-      const migrationEvts = buildMigrationEvents(rebuilt);
-      if (migrationEvts.length > 0) {
-        return {
-          ...rebuilt,
-          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
-          playerTeamOverrides: {},
-          playerContractOverrides: {},
-        };
-      }
-      return rebuilt;
+      // Capture current override maps as the migration source, then rebuild effective indices from ledger.
+      const sourceTeamOverrides = { ...state.playerTeamOverrides };
+      const sourceContractOverrides = { ...state.playerContractOverrides };
+      const sourceState = { ...state, playerTeamOverrides: sourceTeamOverrides, playerContractOverrides: sourceContractOverrides };
+      const migrationEvts = buildMigrationEvents(sourceState);
+      const rebuilt = {
+        ...state,
+        transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+        playerTeamOverrides: {},
+        playerContractOverrides: {},
+      };
+
+      const rosterIndex = buildRosterIndex(rebuilt);
+      const contractIndex = buildContractIndex(rebuilt);
+      const teamConsistent = Object.entries(sourceTeamOverrides).every(([playerId, teamId]) => String(rosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"));
+      const contractConsistent = Object.entries(sourceContractOverrides).every(([playerId]) => Boolean(contractIndex[String(playerId)]));
+      const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
+      const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
+
+      return {
+        ...rebuilt,
+        recoveryNeeded: !rebuildConsistent,
+        recoveryErrors: rebuildConsistent ? [] : ["Rebuild indices consistency check failed"],
+      };
     }
     case "RECOVERY_SKIP_STEP": {
       // Advance the offseason step and clear recovery.
@@ -9505,7 +9520,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
   }
 }
 
-const STORAGE_KEY = "hc_career_save";
 const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 function ensureLeagueGmMap(state: GameState): GameState {
@@ -9518,7 +9532,9 @@ function ensureLeagueGmMap(state: GameState): GameState {
 
 export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = oldState.saveSeed ?? Date.now();
+  // Preserve the existing saveSeed to ensure deterministic simulation replay.
+  // If missing, generate a new one using a deterministic method.
+  const saveSeed = oldState.saveSeed ?? (Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
@@ -9868,10 +9884,19 @@ function loadState(): GameState {
   }
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return initial;
+    const activeSaveId = getActiveSaveId();
+    if (!activeSaveId) return initial;
 
-    const parsed = JSON.parse(saved) as Partial<GameState>;
+    const loadResult = loadSaveResult(activeSaveId);
+    if (!loadResult.ok) {
+      return {
+        ...initial,
+        recoveryNeeded: true,
+        recoveryErrors: [loadResult.message],
+      };
+    }
+
+    const parsed = loadResult.state as Partial<GameState>;
     const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
     let out: GameState = {
@@ -10211,7 +10236,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         syncCurrentSave(state, getActiveSaveId() ?? undefined);
       } catch (error) {
         logError("state.save.failure", {
@@ -10245,7 +10269,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (isGameInProgress) return; // mid-drive state is not resumable
       if (!getUserTeamId(state)) return;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         syncCurrentSave(state, getActiveSaveId() ?? undefined);
       } catch {
         // Silent — can’t show UI in a visibilitychange handler.
