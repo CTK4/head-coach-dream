@@ -155,7 +155,7 @@ import { updateChemistry } from "@/engine/chemistry";
 import { updateStaffTrust } from "@/engine/staffTrust";
 import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
-import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
+import { getActiveSaveId, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
@@ -9502,7 +9502,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
   }
 }
 
-const STORAGE_KEY = "hc_career_save";
 const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 function ensureLeagueGmMap(state: GameState): GameState {
@@ -9865,10 +9864,19 @@ function loadState(): GameState {
   }
 
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return initial;
+    const activeSaveId = getActiveSaveId();
+    if (!activeSaveId) return initial;
 
-    const parsed = JSON.parse(saved) as Partial<GameState>;
+    const loadResult = loadSaveResult(activeSaveId);
+    if (!loadResult.ok) {
+      return {
+        ...initial,
+        recoveryNeeded: true,
+        recoveryErrors: [loadResult.message],
+      };
+    }
+
+    const parsed = loadResult.state as Partial<GameState>;
     const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
     let out: GameState = {
@@ -10208,7 +10216,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         syncCurrentSave(state, getActiveSaveId() ?? undefined);
       } catch (error) {
         logError("state.save.failure", {
@@ -10242,7 +10249,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (isGameInProgress) return; // mid-drive state is not resumable
       if (!getUserTeamId(state)) return;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         syncCurrentSave(state, getActiveSaveId() ?? undefined);
       } catch {
         // Silent — can’t show UI in a visibilitychange handler.
