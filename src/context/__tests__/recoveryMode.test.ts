@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { gameReducer, createInitialStateForTests, type GameState } from "@/context/GameContext";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
+import { buildContractIndex } from "@/engine/transactions/contractIndex";
 
 describe("recoveryMode", () => {
   it("RECOVERY_RETURN_TO_HUB clears recoveryNeeded and resets phase to HUB", () => {
@@ -14,13 +16,36 @@ describe("recoveryMode", () => {
     expect(next.careerStage).toBe("OFFSEASON_HUB");
   });
 
-  it("RECOVERY_REBUILD_INDICES clears recoveryNeeded and rebuilds from ledger", () => {
+  it("RECOVERY_REBUILD_INDICES clears recoveryNeeded and rebuilds from source state", () => {
     const base = createInitialStateForTests();
-    const state: GameState = { ...base, recoveryNeeded: true, recoveryErrors: ["tx error"] };
+    const state: GameState = {
+      ...base,
+      recoveryNeeded: true,
+      recoveryErrors: ["tx error"],
+      playerTeamOverrides: { p_recovery_1: "BUF", p_recovery_2: "FREE_AGENT" },
+      playerContractOverrides: {
+        p_recovery_1: { startSeason: 2028, endSeason: 2029, salaries: [1200000, 1400000], signingBonus: 100000 },
+      },
+    };
 
     const next = gameReducer(state, { type: "RECOVERY_REBUILD_INDICES" });
     expect(next.recoveryNeeded).toBe(false);
     expect(next.recoveryErrors).toEqual([]);
+    expect(next.playerTeamOverrides).toEqual({});
+    expect(next.playerContractOverrides).toEqual({});
+    expect(next.transactionLedger.migrationComplete).toBe(true);
+    expect(next.transactionLedger.counter).toBe(next.transactionLedger.events.length);
+
+    const rosterIndex = buildRosterIndex(next);
+    const contractIndex = buildContractIndex(next);
+    expect(rosterIndex.playerToTeam.p_recovery_1).toBe("BUF");
+    expect(rosterIndex.playerToTeam.p_recovery_2).toBe("FREE_AGENT");
+    expect(contractIndex.p_recovery_1).toMatchObject({
+      startSeason: 2028,
+      endSeason: 2029,
+      salaries: [1200000, 1400000],
+      signingBonus: 100000,
+    });
   });
 
   it("validateCriticalSaveState detects an invalid phase", () => {
