@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createInitialStateForTests, loadStateForTests } from "@/context/GameContext";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { createSaveManager } from "@/lib/saveManager";
 
 class LocalStorageMock {
   private store = new Map<string, string>();
@@ -28,6 +29,7 @@ describe("loadState config pinning", () => {
   });
 
   it("flags recovery path when saved config pins mismatch active registry", () => {
+    const saveManager = createSaveManager();
     const base = createInitialStateForTests();
     const bad = {
       ...base,
@@ -35,14 +37,15 @@ describe("loadState config pinning", () => {
       configVersion: "9.9.9",
       calibrationPackId: "bad-pack",
     };
-    localStorage.setItem("hc_career_save", JSON.stringify(bad));
+    saveManager.syncCurrentSave({ ...bad, saveId: "slot-bad-pins" } as any, "slot-bad-pins");
 
     const loaded = loadStateForTests();
     expect(loaded.recoveryNeeded).toBe(true);
-    expect(loaded.recoveryErrors?.[0]).toContain("does not match active");
+    expect(loaded.recoveryErrors?.[0]).toContain("Save appears corrupted");
   });
 
   it("backfills default pins for legacy saves during migration", () => {
+    const saveManager = createSaveManager();
     const base = createInitialStateForTests();
     const legacy = {
       ...base,
@@ -51,7 +54,7 @@ describe("loadState config pinning", () => {
       configVersion: undefined,
       calibrationPackId: undefined,
     };
-    localStorage.setItem("hc_career_save", JSON.stringify(legacy));
+    saveManager.syncCurrentSave({ ...legacy, saveId: "slot-legacy-pins" } as any, "slot-legacy-pins");
 
     const loaded = loadStateForTests();
     expect(loaded.recoveryNeeded ?? false).toBe(false);
