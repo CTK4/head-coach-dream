@@ -73,8 +73,22 @@ import AnalyticsPage from "@/pages/hub/Analytics";
 import RecoveryModePage from "@/pages/RecoveryModePage";
 
 const queryClient = new QueryClient();
-const shouldEnableDevPanel = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
+const shouldEnableDevPanel = DEV_TOOLS_ENABLED;
 const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : null;
+
+export const isDevPanelEnabled = (env: DevToolsEnv) => isDevToolsEnabled(env);
+
+export function DevPanelMount({
+  env,
+  PanelComponent,
+}: {
+  env: DevToolsEnv;
+  PanelComponent: React.ComponentType;
+}) {
+  if (!isDevPanelEnabled(env)) return null;
+  const Panel = PanelComponent;
+  return <Panel />;
+}
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
