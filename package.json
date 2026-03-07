@@ -17,6 +17,7 @@
     "test:ui": "playwright test",
     "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs",
     "test": "vitest run",
+    "verify": "npm run typecheck && npm run lint && npm run build && npm run test && npm run smoke && npm run check:determinism",
     "cap:sync": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
