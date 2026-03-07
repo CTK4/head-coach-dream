@@ -30,6 +30,12 @@ export default function Draft() {
     if (!state.draft.complete && slot && !isUserOnClock) dispatch({ type: "DRAFT_CPU_ADVANCE" });
   }, [dispatch, isUserOnClock, slot, state.draft.complete]);
 
+  useEffect(() => {
+    if (state.draft.completed) {
+      dispatch({ type: "DRAFT_COMPLETE" });
+    }
+  }, [dispatch, state.draft.completed]);
+
   const upcoming = useMemo(() => upcomingUserPickSlots(state.draft, 8), [state.draft]);
   const recent = useMemo(() => (state.draft.selections ?? []).slice(-10).reverse(), [state.draft.selections]);
 
