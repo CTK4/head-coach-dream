@@ -1,13 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { seedActiveSaveViaManagerKeys } from "./helpers/saveSlot";
 
 test("shows recovery mode screen when recoveryNeeded is set", async ({ page }) => {
-  await page.addInitScript(() => {
-    const saved = {
-      phase: "HUB",
-      recoveryNeeded: true,
-      recoveryErrors: ["Simulated integrity error"],
-    };
-    window.localStorage.setItem("hc_career_save", JSON.stringify(saved));
+  await seedActiveSaveViaManagerKeys(page, {
+    phase: "HUB",
+    recoveryNeeded: true,
+    recoveryErrors: ["Simulated integrity error"],
   });
 
   await page.goto("/hub");

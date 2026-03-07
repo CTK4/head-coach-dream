@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { updateActiveSave } from "./helpers/saveSlot";
 
 async function completeOnboarding(page: Page) {
   await page.goto("/");
@@ -15,12 +16,9 @@ async function completeOnboarding(page: Page) {
 test("defensive drawer opens on key down and blitz resolves", async ({ page }) => {
   await completeOnboarding(page);
 
-  await page.evaluate(() => {
-    const key = "hc_career_save";
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const state = JSON.parse(raw);
-    state.game = {
+  await updateActiveSave(page, (state) => ({
+    ...state,
+    game: {
       ...state.game,
       awayTeamId: "ATL",
       weekType: "REGULAR_SEASON",
@@ -31,9 +29,8 @@ test("defensive drawer opens on key down and blitz resolves", async ({ page }) =
       defenseUserMode: "KEY_DOWNS",
       needsDefensiveCall: true,
       defensiveCallSituation: { down: 3, distance: 7, yardLine: 42, quarter: 4, clockSec: 72 },
-    };
-    window.localStorage.setItem(key, JSON.stringify(state));
-  });
+    },
+  }));
 
   await page.goto("/hub/playcall");
   await expect(page.getByText(/Defensive Play Call/i)).toBeVisible();

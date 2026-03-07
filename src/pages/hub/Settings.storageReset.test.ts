@@ -29,6 +29,9 @@ describe("clearAppOwnedStorage", () => {
   it("removes app-owned local/session keys", () => {
     const local = createStorage({
       hc_career_save: "save",
+      hc_career_active_save_id: "slot-1",
+      hc_career_saves_index: "[]",
+      "hc_career_save__slot-1": "save",
       "hcd:settings": "settings",
       hapticsEnabled: "true",
       DEV_PANEL: "1",
@@ -44,6 +47,9 @@ describe("clearAppOwnedStorage", () => {
     clearAppOwnedStorage(local, session);
 
     expect(local.getItem("hc_career_save")).toBeNull();
+    expect(local.getItem("hc_career_active_save_id")).toBeNull();
+    expect(local.getItem("hc_career_saves_index")).toBeNull();
+    expect(local.getItem("hc_career_save__slot-1")).toBeNull();
     expect(local.getItem("hcd:settings")).toBeNull();
     expect(local.getItem("hapticsEnabled")).toBeNull();
     expect(local.getItem("DEV_PANEL")).toBeNull();
