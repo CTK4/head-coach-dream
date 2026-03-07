@@ -1,0 +1,139 @@
+
+> vite_react_shadcn_ts@0.0.0 typecheck
+> tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit
+
+src/context/GameContext.tsx(3984,27): error TS2345: Argument of type '{ nextPlayerId: number; rookies: RookiePlayer[]; rookieContracts: { [x: string]: RookieContract; }; draft: { withdrawnBoardIds: { [x: string]: boolean; }; prospectPool: Prospect[]; ... 21 more ...; draftedCountsByTeamBucket: Record<string, Record<string, number>>; }; ... 128 more ...; trainingFocus?: { posGroupFocus...' is not assignable to parameter of type 'GameState'.
+  Types of property 'draft' are incompatible.
+    Type '{ withdrawnBoardIds: { [x: string]: boolean; }; prospectPool: Prospect[]; leaguePicks: DraftPick[]; appliedSelectionCount: number; started: boolean; completed: boolean; ... 17 more ...; draftedCountsByTeamBucket: Record<string, Record<string, number>>; }' is not assignable to type 'DraftState'.
+      Type '{ withdrawnBoardIds: { [x: string]: boolean; }; prospectPool: Prospect[]; leaguePicks: DraftPick[]; appliedSelectionCount: number; started: boolean; completed: boolean; ... 17 more ...; draftedCountsByTeamBucket: Record<string, Record<string, number>>; }' is not assignable to type '{ started: boolean; completed: boolean; totalRounds: number; currentOverall: number; orderTeamIds: string[]; leaguePicks: DraftPick[]; onClockTeamId?: string; withdrawnBoardIds: Record<string, true>; prospectPool: Prospect[]; appliedSelectionCount: number; }'.
+        Types of property 'withdrawnBoardIds' are incompatible.
+          Type '{ [x: string]: boolean; }' is not assignable to type 'Record<string, true>'.
+            'string' index signatures are incompatible.
+              Type 'boolean' is not assignable to type 'true'.
+src/context/GameContext.tsx(4781,35): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+src/context/GameContext.tsx(5267,25): error TS2554: Expected 4 arguments, but got 3.
+src/context/GameContext.tsx(6814,13): error TS2322: Type '{ [x: string]: { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }[] | { category: string; outcome: string; windowKey: string; }[]; }' is not assignable to type 'Record<string, { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }[]>'.
+  'string' index signatures are incompatible.
+    Type '{ category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }[] | { category: string; outcome: string; windowKey: string; }[]' is not assignable to type '{ category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }[]'.
+      Type '{ category: string; outcome: string; windowKey: string; }[]' is not assignable to type '{ category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }[]'.
+        Type '{ category: string; outcome: string; windowKey: string; }' is not assignable to type '{ category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string; }'.
+          Types of property 'category' are incompatible.
+            Type 'string' is not assignable to type '"IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"'.
+src/context/GameContext.tsx(9278,28): error TS2345: Argument of type '{ coaching: { market: { weekKey: `${number}-W${number}`; pendingOffers: { status: string; offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number; }[]; candidates: CoachMarketItem[]; poaching: Array<{ eventId: string; coachId: CoachId; fromTeamId: TeamId; toT...' is not assignable to parameter of type 'GameState'.
+  The types of 'coaching.market.pendingOffers' are incompatible between these types.
+    Type '{ status: string; offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; }[]' is not assignable to type '{ offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"; }[]'.
+      Type '{ status: string; offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number; }' is not assignable to type '{ offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"; }'.
+        Types of property 'status' are incompatible.
+          Type 'string' is not assignable to type '"PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"'.
+src/context/GameContext.tsx(9280,7): error TS2322: Type '{ coaching: { market: { weekKey: `${number}-W${number}`; pendingOffers: { status: string; offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number; }[]; candidates: CoachMarketItem[]; poaching: Array<{ eventId: string; coachId: CoachId; fromTeamId: TeamId; toT...' is not assignable to type 'GameState'.
+  The types of 'coaching.market.pendingOffers' are incompatible between these types.
+    Type '{ status: string; offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; }[]' is not assignable to type '{ offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"; }[]'.
+      Type '{ status: string; offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number; }' is not assignable to type '{ offerId: string; coachId: string; teamId: string; role: "OC" | "DC" | "ST" | "HC"; years: number; salary: number; status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"; }'.
+        Types of property 'status' are incompatible.
+          Type 'string' is not assignable to type '"PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED"'.
+src/context/GameContext.tsx(9305,126): error TS2322: Type '{ status: string; toTeamId: string; eventId: string; coachId: string; fromTeamId: string; role: "OC" | "DC" | "ST"; }[]' is not assignable to type '{ eventId: string; coachId: string; fromTeamId: string; toTeamId?: string; role: "OC" | "DC" | "ST"; status: "LEFT" | "RUMOR" | "OFFERED" | "STAYED"; }[]'.
+  Type '{ status: string; toTeamId: string; eventId: string; coachId: CoachId; fromTeamId: TeamId; role: "OC" | "DC" | "ST"; }' is not assignable to type '{ eventId: string; coachId: string; fromTeamId: string; toTeamId?: string; role: "OC" | "DC" | "ST"; status: "LEFT" | "RUMOR" | "OFFERED" | "STAYED"; }'.
+    Types of property 'status' are incompatible.
+      Type 'string' is not assignable to type '"LEFT" | "RUMOR" | "OFFERED" | "STAYED"'.
+src/context/GameContext.tsx(9497,59): error TS2339: Property 'enableTamperingStep' does not exist on type 'OffseasonState'.
+src/context/GameContext.tsx(9514,26): error TS2345: Argument of type '{ type: "FA_WITHDRAW"; payload: { offerId: string; }; } | { type: "FA_WITHDRAW_OFFER"; payload: { offerId: string; playerId: string; }; } | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string; }; } | ... 4 more ... | { ...; }' is not assignable to parameter of type 'never'.
+  Type '{ type: "FA_WITHDRAW"; payload: { offerId: string; }; }' is not assignable to type 'never'.
+src/context/GameContext.tsx(9767,9): error TS2322: Type '1 | 2 | 4 | 3' is not assignable to type 'never'.
+  Type '1' is not assignable to type 'never'.
+src/context/GameContext.tsx(9768,9): error TS2322: Type 'string' is not assignable to type 'never'.
+src/context/GameContext.tsx(9769,9): error TS2322: Type 'number' is not assignable to type 'never'.
+src/context/GameContext.tsx(9875,37): error TS2339: Property 'validation' does not exist on type 'LoadedConfig'.
+  Property 'validation' does not exist on type '{ ok: true; registry: ConfigRegistry; }'.
+src/context/GameContext.tsx(9888,37): error TS2339: Property 'message' does not exist on type 'LoadSaveResult'.
+  Property 'message' does not exist on type '{ ok: true; state: GameState; }'.
+src/context/GameContext.tsx(10143,76): error TS2339: Property 'message' does not exist on type 'ConfigValidationResult'.
+  Property 'message' does not exist on type '{ ok: true; }'.
+src/context/GameContext.tsx(10155,77): error TS2339: Property 'message' does not exist on type 'SaveValidationResult'.
+  Property 'message' does not exist on type '{ ok: true; }'.
+src/context/seasonRollover.ts(19,79): error TS2339: Property 'errors' does not exist on type '{ ok: true; } | { ok: false; errors: string[]; }'.
+  Property 'errors' does not exist on type '{ ok: true; }'.
+src/context/seasonRollover.ts(20,66): error TS2339: Property 'errors' does not exist on type '{ ok: true; } | { ok: false; errors: string[]; }'.
+  Property 'errors' does not exist on type '{ ok: true; }'.
+src/controllers/recoveryController.ts(23,25): error TS2339: Property 'message' does not exist on type 'LoadSaveResult'.
+  Property 'message' does not exist on type '{ ok: true; state: GameState; }'.
+src/data/archetypeTraits.ts(83,84): error TS2365: Operator '>=' cannot be applied to types 'string | number' and 'number'.
+src/engine/badges/engine.ts(166,18): error TS2352: Conversion of type 'PlayerSeasonStats' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'PlayerSeasonStats'.
+src/engine/config/loadConfig.ts(25,25): error TS2322: Type 'ConfigValidationResult' is not assignable to type '{ ok: false; code: ConfigValidationIssueCode; message: string; } & { ok: false; }'.
+  Type '{ ok: true; }' is not assignable to type '{ ok: false; code: ConfigValidationIssueCode; message: string; } & { ok: false; }'.
+    Type '{ ok: true; }' is missing the following properties from type '{ ok: false; code: ConfigValidationIssueCode; message: string; }': code, message
+src/engine/cpuContext.ts(44,31): error TS2339: Property 'capTotal' does not exist on type '{ cap: any; committed: number; capSpace: number; mode: string; roster: { playerId: string; name: string; pos: string; capHit: number; yearsLeft: number; }[]; }'.
+src/engine/cpuContext.ts(45,30): error TS2339: Property 'capUsed' does not exist on type '{ cap: any; committed: number; capSpace: number; mode: string; roster: { playerId: string; name: string; pos: string; capHit: number; yearsLeft: number; }[]; }'.
+src/engine/cpuContext.ts(75,7): error TS2322: Type '"div" | "missed" | "wc" | "conf" | "sb" | "champ"' is not assignable to type '"missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion"'.
+  Type '"div"' is not assignable to type '"missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion"'.
+src/engine/gameplan.ts(30,3): error TS2322: Type '"STANDARD"' is not assignable to type '"CONSERVATIVE" | "AGGRESSIVE"'.
+src/engine/gameplan.ts(32,3): error TS2322: Type '"MEDIUM"' is not assignable to type '"LOW" | "HIGH"'.
+src/engine/gameplan.ts(65,5): error TS2322: Type '"STANDARD" | "AGGRESSIVE"' is not assignable to type '"CONSERVATIVE" | "AGGRESSIVE"'.
+  Type '"STANDARD"' is not assignable to type '"CONSERVATIVE" | "AGGRESSIVE"'.
+src/engine/gameplan.ts(67,5): error TS2322: Type '"HIGH" | "MEDIUM"' is not assignable to type '"LOW" | "HIGH"'.
+  Type '"MEDIUM"' is not assignable to type '"LOW" | "HIGH"'.
+src/engine/hotSeat.ts(27,31): error TS2339: Property 'w' does not exist on type 'TeamStanding'.
+src/engine/hotSeat.ts(28,33): error TS2339: Property 'l' does not exist on type 'TeamStanding'.
+src/engine/hotSeat.ts(50,42): error TS2339: Property 'streakByTeamId' does not exist on type 'LeagueState'.
+src/engine/interviewHiring/bankLoader.ts(4,23): error TS2352: Conversion of type '{ systems: ({ version: string; system_id: string; team: { team_id: string; team_name: string; owner: { person_id: string; name: string; traits: string[]; }; gm: { person_id: string; name: string; philosophy: string[]; }; }; ... 4 more ...; team_pool: { ...; }; } | { ...; } | { ...; })[]; }' to type 'InterviewBank' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of property 'systems' are incompatible.
+    Type '({ version: string; system_id: string; team: { team_id: string; team_name: string; owner: { person_id: string; name: string; traits: string[]; }; gm: { person_id: string; name: string; philosophy: string[]; }; }; ... 4 more ...; team_pool: { ...; }; } | { ...; } | { ...; })[]' is not comparable to type 'TeamConfig[]'.
+      Type '{ version: string; system_id: string; team: { team_id: string; team_name: string; owner: { person_id: string; name: string; traits: string[]; }; gm: { person_id: string; name: string; philosophy: string[]; }; }; ... 4 more ...; team_pool: { ...; }; } | { ...; } | { ...; }' is not comparable to type 'TeamConfig'.
+        Type '{ version: string; system_id: string; team: { team_id: string; team_name: string; owner: { person_id: string; name: string; traits: string[]; }; gm: { person_id: string; name: string; philosophy: string[]; }; }; ... 4 more ...; team_pool: { ...; }; }' is not comparable to type 'TeamConfig'.
+          The types of 'team.owner' are incompatible between these types.
+            Type '{ person_id: string; name: string; traits: string[]; }' is not comparable to type 'string'.
+src/engine/interviews/interviewSelector.ts(211,5): error TS2322: Type '(InterviewQuestion | { sourceBucket: string; question_id: string; asker: "OWNER" | "GM"; prompt: string; options: { choice_id: string; text: string; tags?: string[]; delta?: Record<...>; riskFlag?: string; }[]; question_key?: string; })[]' is not assignable to type 'InterviewQuestion[]'.
+  Type 'InterviewQuestion | { sourceBucket: string; question_id: string; asker: "OWNER" | "GM"; prompt: string; options: { choice_id: string; text: string; tags?: string[]; delta?: Record<...>; riskFlag?: string; }[]; question_key?: string; }' is not assignable to type 'InterviewQuestion'.
+    Type '{ sourceBucket: string; question_id: string; asker: "OWNER" | "GM"; prompt: string; options: Array<{ choice_id: string; text: string; tags?: string[]; delta?: Record<string, number>; riskFlag?: string; }>; question_key?: string; }' is not assignable to type 'InterviewQuestion'.
+      Types of property 'sourceBucket' are incompatible.
+        Type 'string' is not assignable to type '"contextual" | "team_pool" | "fallback_pool"'.
+src/engine/strengthOfSchedule.ts(17,37): error TS2345: Argument of type '(result: WeekResult) => NormalizedGame' is not assignable to parameter of type '(value: WeekResultRecord, index: number, array: WeekResultRecord[]) => NormalizedGame'.
+  Types of parameters 'result' and 'value' are incompatible.
+    Type 'WeekResultRecord' is missing the following properties from type 'WeekResult': userGameId, allGameResults, updatedStandings, statLeaders
+src/engine/tradeEngine.ts(134,5): error TS2353: Object literal may only specify known properties, and 'priorWinPct' does not exist in type '{ winPct: number; capSpaceRatio: number; avgRosterAge: number; playoffResult: "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion"; }'.
+src/lib/migrations/saveSchema.ts(2,10): error TS2440: Import declaration conflicts with local declaration of 'getUserTeamId'.
+src/lib/migrations/saveSchema.ts(265,75): error TS2339: Property 'validation' does not exist on type 'LoadedConfig'.
+  Property 'validation' does not exist on type '{ ok: true; registry: ConfigRegistry; }'.
+src/lib/migrations/saveSchema.ts(273,72): error TS2339: Property 'message' does not exist on type 'ConfigValidationResult'.
+  Property 'message' does not exist on type '{ ok: true; }'.
+src/pages/Hub.tsx(76,9): error TS2322: Type '({ id: string; title: string; to: string; imageUrl: string; } | { id: string; title: string; subtitle: string; to: string; imageUrl: string; dataTest: string; })[]' is not assignable to type 'HubTileConfig[]'.
+  Type '{ id: string; title: string; to: string; imageUrl: string; } | { id: string; title: string; subtitle: string; to: string; imageUrl: string; dataTest: string; }' is not assignable to type 'HubTileConfig'.
+    Type '{ id: string; title: string; to: string; imageUrl: string; }' is not assignable to type 'HubTileConfig'.
+      Types of property 'id' are incompatible.
+        Type 'string' is not assignable to type 'HubTileId'.
+src/pages/Offers.tsx(100,75): error TS2339: Property 'city' does not exist on type 'TeamRow'.
+src/pages/Playcall.tsx(125,56): error TS2551: Property 'replaceAll' does not exist on type '"EARLY_DOWN" | "3RD_SHORT" | "3RD_MEDIUM" | "4TH_DOWN" | "RED_ZONE"'. Did you mean 'replace'?
+  Property 'replaceAll' does not exist on type '"EARLY_DOWN"'.
+src/pages/hub/DepthChart.tsx(674,48): error TS2554: Expected 3 arguments, but got 2.
+src/pages/hub/FrontOffice.tsx(29,44): error TS2339: Property 'reputationComposite' does not exist on type 'GameState'.
+src/pages/hub/FrontOffice.tsx(58,29): error TS2339: Property 'market' does not exist on type 'TeamRow'.
+src/pages/hub/LeagueHistory.tsx(42,95): error TS2339: Property 'profile' does not exist on type 'GameState'.
+src/pages/hub/LeagueHistory.tsx(42,127): error TS2339: Property 'teamId' does not exist on type '{ name: string; ageTier: string; hometown: string; archetypeId: string; coachId?: string; careerRecord?: CoachCareerRecord; hometownTeamId?: string; repBaseline?: number; autonomy?: number; ... 12 more ...; autonomyLastChangeReason?: string; }'.
+src/pages/hub/PlayerContracts.tsx(31,43): error TS2339: Property 'yearsLeft' does not exist on type '{ startSeason: number; endSeason: number; years: number; yearsRemaining: number; salary: number; proration: number; capHit: number; capHitBySeason: Record<number, number>; signingBonus: number; ... 6 more ...; apy: number; }'.
+src/pages/hub/PlayerProfile.tsx(89,48): error TS2322: Type 'PlayerCareerStats' is not assignable to type '{ seasons: PlayerSeasonStats[]; careerTotals?: Record<string, number>; }'.
+  Types of property 'careerTotals' are incompatible.
+    Type 'Omit<PlayerSeasonStats, "teamId" | "season">' is not assignable to type 'Record<string, number>'.
+      Property 'playerId' is incompatible with index signature.
+        Type 'string' is not assignable to type 'number'.
+src/pages/hub/Settings.tsx(112,58): error TS2345: Argument of type '() => { simSpeed: SimSpeed; injuryNotifications: boolean; messagePopups: boolean; confirmAutoAdvance: boolean; reduceMotion: boolean; theme: "LIGHT" | "SYSTEM" | Theme; useTop51CapRule: boolean; units?: "IMPERIAL" | "METRIC"; showTooltips: boolean; }' is not assignable to parameter of type 'UserSettings | (() => UserSettings)'.
+  Type '() => { simSpeed: SimSpeed; injuryNotifications: boolean; messagePopups: boolean; confirmAutoAdvance: boolean; reduceMotion: boolean; theme: "LIGHT" | "SYSTEM" | Theme; useTop51CapRule: boolean; units?: "IMPERIAL" | "METRIC"; showTooltips: boolean; }' is not assignable to type '() => UserSettings'.
+    Call signature return types '{ simSpeed: SimSpeed; injuryNotifications: boolean; messagePopups: boolean; confirmAutoAdvance: boolean; reduceMotion: boolean; theme: "LIGHT" | "SYSTEM" | Theme; useTop51CapRule: boolean; units?: "IMPERIAL" | "METRIC"; showTooltips: boolean; }' and 'UserSettings' are incompatible.
+      The types of 'theme' are incompatible between these types.
+        Type '"LIGHT" | "SYSTEM" | Theme' is not assignable to type 'Theme'.
+          Type '"LIGHT"' is not assignable to type 'Theme'.
+src/pages/hub/offseason/PreDraft.tsx(82,31): error TS2339: Property 'rank' does not exist on type 'Prospect'.
+src/pages/hub/offseason/PreDraft.tsx(82,41): error TS2339: Property 'Rank' does not exist on type 'Prospect'.
+src/pages/hub/scouting/ScoutingCombine.tsx(290,63): error TS2554: Expected 1 arguments, but got 2.
+src/pages/hub/scouting/ScoutingCombine.tsx(291,61): error TS2554: Expected 1 arguments, but got 2.
+src/pages/hub/scouting/ScoutingCombine.tsx(309,43): error TS2339: Property 'low' does not exist on type '[number, number]'.
+src/pages/hub/scouting/ScoutingCombine.tsx(309,59): error TS2339: Property 'high' does not exist on type '[number, number]'.
+src/pages/hub/scouting/ScoutingCombine.tsx(309,89): error TS2339: Property 'low' does not exist on type '[number, number]'.
+src/pages/hub/scouting/ScoutingCombine.tsx(309,103): error TS2339: Property 'high' does not exist on type '[number, number]'.
+src/pages/hub/staff/UserProfile.tsx(13,91): error TS2339: Property 'profile' does not exist on type 'GameState'.
+src/pages/hub/staff/UserProfile.tsx(13,123): error TS2339: Property 'teamId' does not exist on type '{ name: string; ageTier: string; hometown: string; archetypeId: string; coachId?: string; careerRecord?: CoachCareerRecord; hometownTeamId?: string; repBaseline?: number; autonomy?: number; ... 12 more ...; autonomyLastChangeReason?: string; }'.
+src/pages/hub/strategy/PlaybookScreen.tsx(174,25): error TS2304: Cannot find name 'OFFENSE_COMPONENTS'.
+src/pages/hub/strategy/PlaybookScreen.tsx(177,23): error TS2304: Cannot find name 'DEFENSE_COMPONENTS'.
+src/pages/hub/strategy/playbooks/AirRaidPlaybook.tsx(462,54): error TS2554: Expected 4 arguments, but got 7.
+src/pages/hub/strategy/playbooks/offense/AIR_RAID.tsx(1,29): error TS2307: Cannot find module '../../AirRaidPlaybook' or its corresponding type declarations.
+src/pages/hub/strategy/playbooks/offense/SHANAHAN_WIDE_ZONE.tsx(1,38): error TS2307: Cannot find module '../../ShanahanWideZonePlaybook' or its corresponding type declarations.
+src/pages/story/StoryInterview.tsx(10,59): error TS2305: Module '"@/engine/interviewHiring/types"' has no exported member 'OfferItem'.

@@ -1768,7 +1768,9 @@ function defaultDynastyProfile(): DynastyProfile {
 
 function createInitialState(): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = Date.now();
+  // Use a deterministic seed derived from current time and a random component.
+  // This ensures reproducibility while avoiding collisions across multiple saves.
+  const saveSeed = Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647;
 
   const base: GameState = {
     coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
@@ -9527,7 +9529,9 @@ function ensureLeagueGmMap(state: GameState): GameState {
 
 export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = oldState.saveSeed ?? Date.now();
+  // Preserve the existing saveSeed to ensure deterministic simulation replay.
+  // If missing, generate a new one using a deterministic method.
+  const saveSeed = oldState.saveSeed ?? (Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
