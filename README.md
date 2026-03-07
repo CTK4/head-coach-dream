@@ -72,6 +72,8 @@ This project is configured for [Vercel](https://vercel.com) deployment. Import t
 
 ## Contributor guidelines
 
+See `docs/patch-scope-and-verification.md` for required verification commands, CI expectations, and patch-scope rules.
+
 - Never render enum constants or internal IDs directly in UI text (e.g. `AIR_RAID`, `teamId`, `QB`, raw status codes).
 - Use centralized mapping helpers from `src/lib/displayLabels.ts` for anything surfaced to users (schemes, playbooks, positions, and other domain enums).
 - If a new enum appears in UI, add its label mapping in `src/lib/displayLabels.ts` first, then use the helper in components.
