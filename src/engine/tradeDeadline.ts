@@ -1,6 +1,6 @@
 import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
 
-export const TRADE_DEADLINE_DEFAULT_WEEK = 10;
+export const TRADE_DEADLINE_DEFAULT_WEEK = Math.max(1, REGULAR_SEASON_WEEKS - 1);
 
 export type TradeDeadlineError = {
   code: "TRADE_DEADLINE_PASSED";
@@ -11,7 +11,7 @@ export type TradeDeadlineError = {
 /**
  * Safe resolver for trade deadline week values loaded from league state.
  * If saves are missing or carrying invalid values, we fall back to the
- * canonical in-season deadline (week 10) so legacy files stay playable while
+ * canonical in-season deadline (last valid regular-season trade week) so legacy files stay playable while
  * remaining deterministic and conservative.
  */
 export function resolveTradeDeadlineWeek(deadlineWeek: number | null | undefined): number {
