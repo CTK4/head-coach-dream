@@ -167,7 +167,7 @@ import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId } from "@/lib/userTeam";
-import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { buildMigrationEvents, sortTransactionEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
@@ -9474,22 +9474,45 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
     }
     case "RECOVERY_REBUILD_INDICES": {
-      // Capture current override maps as the migration source, then rebuild effective indices from ledger.
+      // Preserve recoverable source data first, then rebuild derived indices from canonical ledger
+      // when available (fallback: migration events synthesized from overrides).
       const sourceTeamOverrides = { ...state.playerTeamOverrides };
       const sourceContractOverrides = { ...state.playerContractOverrides };
-      const sourceState = { ...state, playerTeamOverrides: sourceTeamOverrides, playerContractOverrides: sourceContractOverrides };
-      const migrationEvts = buildMigrationEvents(sourceState);
+      const sourceState = {
+        ...state,
+        playerTeamOverrides: sourceTeamOverrides,
+        playerContractOverrides: sourceContractOverrides,
+      };
+
+      const existingLedgerEvents = Array.isArray(state.transactionLedger?.events)
+        ? sortTransactionEvents(state.transactionLedger.events)
+        : [];
+      const rebuiltLedgerEvents = existingLedgerEvents.length > 0
+        ? existingLedgerEvents
+        : buildMigrationEvents(sourceState);
+
       const rebuilt = {
         ...state,
-        transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+        transactionLedger: {
+          events: rebuiltLedgerEvents,
+          counter: rebuiltLedgerEvents.length,
+          migrationComplete: true,
+        },
         playerTeamOverrides: {},
         playerContractOverrides: {},
       };
 
-      const rosterIndex = buildRosterIndex(rebuilt);
-      const contractIndex = buildContractIndex(rebuilt);
-      const teamConsistent = Object.entries(sourceTeamOverrides).every(([playerId, teamId]) => String(rosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"));
-      const contractConsistent = Object.entries(sourceContractOverrides).every(([playerId]) => Boolean(contractIndex[String(playerId)]));
+      const sourceRosterIndex = buildRosterIndex(sourceState);
+      const sourceContractIndex = buildContractIndex(sourceState);
+      const rebuiltRosterIndex = buildRosterIndex(rebuilt);
+      const rebuiltContractIndex = buildContractIndex(rebuilt);
+
+      const teamConsistent = Object.entries(sourceRosterIndex.playerToTeam).every(
+        ([playerId, teamId]) => String(rebuiltRosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"),
+      );
+      const contractConsistent = Object.entries(sourceContractIndex).every(
+        ([playerId, contract]) => JSON.stringify(rebuiltContractIndex[String(playerId)] ?? null) === JSON.stringify(contract ?? null),
+      );
       const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
       const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
 
