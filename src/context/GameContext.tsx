@@ -1458,6 +1458,8 @@ export type GameAction =
   | { type: "RECOVERY_REBUILD_INDICES" }
   | { type: "RECOVERY_SKIP_STEP" }
   | { type: "RECOVERY_RESTORE_BACKUP" }
+  | { type: "RECOVERY_HYDRATE_STATE"; payload: { state: GameState } }
+  | { type: "RECOVERY_SET_ERRORS"; payload: { errors: string[] } }
   | { type: "RESET" };
 
 type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
@@ -9510,8 +9512,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "RECOVERY_RESTORE_BACKUP": {
-      // Clear recovery flags and fall back to initial state with the current season.
-      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+      // Restore is orchestrated by recovery controller via saveManager + RECOVERY_HYDRATE_STATE.
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: ["Backup restore must run from the recovery controller."],
+      };
+    }
+    case "RECOVERY_HYDRATE_STATE": {
+      return action.payload.state;
+    }
+    case "RECOVERY_SET_ERRORS": {
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: action.payload.errors,
+      };
     }
     case "RESET":
       return createInitialState();
