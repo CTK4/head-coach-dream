@@ -9883,10 +9883,10 @@ function loadState(): GameState {
     };
   }
 
-  try {
-    const activeSaveId = getActiveSaveId();
-    if (!activeSaveId) return initial;
+  const activeSaveId = getActiveSaveId();
+  if (!activeSaveId) return initial;
 
+  try {
     const loadResult = loadSaveResult(activeSaveId);
     if (!loadResult.ok) {
       return {
@@ -10164,9 +10164,14 @@ function loadState(): GameState {
 
     return out;
   } catch (error) {
-    logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
-    console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
-    return initial;
+    const message = error instanceof Error ? error.message : String(error);
+    logError("state.load.failure", { saveId: activeSaveId, meta: { message } });
+    console.error("[state-load] Failed to restore saved state, entering recovery mode", error);
+    return {
+      ...initial,
+      recoveryNeeded: true,
+      recoveryErrors: [message],
+    };
   }
 }
 
