@@ -6,7 +6,7 @@ import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense, lazy, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
-import { GameProvider, useGame } from "@/context/GameContext";
+import { GameProvider, useGame, type GameState } from "@/context/GameContext";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logError } from "@/lib/logger";
@@ -70,6 +70,7 @@ import TeamSchedule from "@/pages/hub/schedule/TeamSchedule";
 import WeekSlate from "@/pages/hub/schedule/WeekSlate";
 import ScheduleHome from "@/pages/hub/schedule/ScheduleHome";
 import AnalyticsPage from "@/pages/hub/Analytics";
+import RecoveryModePage from "@/pages/RecoveryModePage";
 
 const queryClient = new QueryClient();
 const shouldEnableDevPanel = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
@@ -137,6 +138,10 @@ export function shouldRouteRootToHub(state: Parameters<typeof getUserTeamId>[0])
   return state.phase === "HUB" && !!state.coach?.name && !!state.careerStage && !!getUserTeamId(state);
 }
 
+export function shouldRenderRecoveryMode(state: Pick<GameState, "recoveryNeeded">) {
+  return state.recoveryNeeded === true;
+}
+
 function StoryRouteShell() {
   const [storyError, setStoryError] = useState<Error | null>(null);
   return <ErrorBoundary fallback={<StoryErrorScreen error={storyError} />} onError={(error) => setStoryError(error)}><StoryInterview /></ErrorBoundary>;
@@ -150,10 +155,12 @@ function AppRoutes() {
   const { state, dispatch } = useGame();
   const handleExportDebugBundle = () => exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
   const handleResetToMainMenu = () => {
-    try { (dispatch as any)({ type: "RESET" }); } catch { /* no-op */ }
+    try { dispatch({ type: "RESET" }); } catch { /* no-op */ }
     sessionStorage.setItem("show_main_menu", "1");
     window.location.href = "/";
   };
+
+  if (shouldRenderRecoveryMode(state)) return <RecoveryModePage />;
 
   return <ErrorBoundary onExportDebugBundle={handleExportDebugBundle} onResetToMainMenu={handleResetToMainMenu} onError={(error, errorInfo) => logError("ui.app_routes.crash", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week, meta: { message: error.message, stack: errorInfo.componentStack?.slice(0, 1000) } })}>
     <BrowserRouter>
