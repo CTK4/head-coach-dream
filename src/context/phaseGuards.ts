@@ -17,6 +17,7 @@ export type ValidPhaseActions =
   | "SIGN_CONTRACT"
   | "CONTRACT_RESTRUCTURE_APPLY"
   | "EXTEND_PLAYER"
+  | "EXTENSION_SUBMIT_OFFER"
   | "APPLY_FRANCHISE_TAG"
   | "TAG_APPLY";
 
@@ -31,7 +32,7 @@ const DRAFT_ONLY = new Set<ValidPhaseActions>(["DRAFT_PICK", "DRAFT_USER_PICK", 
 
 const TRADE_ACTIONS = new Set<ValidPhaseActions>(["TRADE_ACCEPT", "TRADE_REJECT", "TRADE_SUBMIT_OFFER"]);
 
-const CONTRACT_ACTIONS = new Set<ValidPhaseActions>(["CUT_APPLY", "CONTRACT_RESTRUCTURE_APPLY", "EXTEND_PLAYER", "APPLY_FRANCHISE_TAG", "TAG_APPLY", "SIGN_CONTRACT"]);
+const CONTRACT_ACTIONS = new Set<ValidPhaseActions>(["CUT_APPLY", "CONTRACT_RESTRUCTURE_APPLY", "EXTEND_PLAYER", "EXTENSION_SUBMIT_OFFER", "APPLY_FRANCHISE_TAG", "TAG_APPLY", "SIGN_CONTRACT"]);
 
 function getCurrentWeek(state: GameState): number {
   return Number(state.league?.week ?? state.hub?.regularSeasonWeek ?? state.week ?? 1);

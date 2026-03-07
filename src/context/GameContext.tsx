@@ -1368,6 +1368,8 @@ export type GameAction =
   | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
   | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
   | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
+  | { type: "EXTENSION_SUBMIT_OFFER"; payload: { playerId: string; offer: ExtensionOffer } }
+  | { type: "EXTENSION_CLEAR_OFFER"; payload: { playerId: string } }
   | { type: "ADVANCE_SEASON" }
   | { type: "PREGENERATE_FUTURE_CLASS"; payload: { classYear: ClassYear } }
   | { type: "DISMISS_SEASON_AWARDS" }
@@ -1477,6 +1479,7 @@ const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "CUT_APPLY",
   "CONTRACT_RESTRUCTURE_APPLY",
   "EXTEND_PLAYER",
+  "EXTENSION_SUBMIT_OFFER",
   "APPLY_FRANCHISE_TAG",
   "TAG_APPLY",
 ]);
@@ -2132,6 +2135,8 @@ type ResignOffer = {
   rejectedCount?: number;
 };
 
+type ExtensionOffer = ResignOffer;
+
 function hashSeed(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -2194,6 +2199,139 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
     guarantees: offer.guaranteesPct,
     type: "STANDARD",
   });
+}
+
+function contractOverrideFromExtensionOffer(state: GameState, playerId: string, offer: ExtensionOffer): PlayerContractOverride {
+  const current = getContractSummaryForPlayer(state, String(playerId));
+  if (!current || current.yearsRemaining <= 0) return contractOverrideFromOffer(state, offer);
+
+  const preserveStartSeason = Number(state.season);
+  const preservedSalaries: number[] = [];
+  for (let season = preserveStartSeason; season <= Number(current.endSeason); season++) {
+    preservedSalaries.push(moneyRound(Number(current.capHitBySeason?.[season] ?? current.capHit ?? 0)));
+  }
+
+  const extension = createContractOverride({
+    startSeason: Number(current.endSeason) + 1,
+    years: offer.years,
+    salary: offer.apy,
+    guarantees: offer.guaranteesPct,
+    type: "STANDARD",
+  });
+
+  const extYears = Math.max(1, extension.endSeason - extension.startSeason + 1);
+  const extProration = extension.signingBonus > 0 ? moneyRound(extension.signingBonus / extYears) : 0;
+  const prorationBySeason: Record<number, number> = {};
+  for (let season = preserveStartSeason; season <= extension.endSeason; season++) {
+    prorationBySeason[season] = season >= extension.startSeason ? extProration : 0;
+  }
+
+  return {
+    startSeason: preserveStartSeason,
+    endSeason: extension.endSeason,
+    salaries: [...preservedSalaries, ...extension.salaries],
+    signingBonus: extension.signingBonus,
+    prorationBySeason,
+    contractType: "STANDARD",
+  };
+}
+
+function resolveDeterministicExtensionSubmission(state: GameState, playerId: string, offer: ExtensionOffer): GameState {
+  const normalizedOffer = sanitizeResignOffer(offer);
+  if (!normalizedOffer) return state;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+  if (!teamId) return state;
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return state;
+
+  const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+  const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+  const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+  const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+  const decision = evaluateContractOffer({
+    player: {
+      id: String(playerId),
+      age: Number(p.age ?? 26),
+      overall: Number(p.overall ?? p.ovr ?? 60),
+      position: String(p.pos ?? "UNK"),
+    },
+    offer: {
+      years: Number(normalizedOffer.years),
+      aav: Number(normalizedOffer.apy),
+      guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+    },
+    context: {
+      saveSeed: Number(state.saveSeed ?? 1),
+      season: Number(state.season ?? 2026),
+      week: Number(state.week ?? 1),
+      teamId: String(teamId),
+      phase: "RESIGN",
+      schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+      roleProjection: resolveRoleProjection(state, p),
+      contenderStatus: resolveContenderStatus(state, String(teamId)),
+      locationPreference: resolveLocationPreference(state, String(teamId), p),
+      desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+    },
+    interest: interestBefore,
+    priorOfferAav,
+    rejectionCount,
+  });
+
+  const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+  contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+  const resign = {
+    lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+    rejectionCountByPlayerId: {
+      ...state.resign.rejectionCountByPlayerId,
+      [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+    },
+  };
+
+  const modalAlloc = buildOfferResultModal(state, {
+    title: decision.accepted ? "Extension Accepted" : "Extension Rejected",
+    message: decision.reason,
+    variant: decision.accepted ? "success" : "danger",
+  });
+
+  if (!decision.accepted) {
+    const decisions = { ...state.offseasonData.resigning.decisions } as any;
+    decisions[String(playerId)] = {
+      action: "EXTEND_EARLY",
+      offer: { ...normalizedOffer, rejectedCount: rejectionCount + 1 },
+    };
+    return {
+      ...modalAlloc.state,
+      contracts: { playerTeamInterestById: contractsByPlayer },
+      resign,
+      offseasonData: { ...state.offseasonData, resigning: { decisions } },
+      ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    };
+  }
+
+  const ovr = contractOverrideFromExtensionOffer(state, String(playerId), normalizedOffer);
+  const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+  const decisions = { ...state.offseasonData.resigning.decisions } as any;
+  delete decisions[String(playerId)];
+
+  const morale = { ...(state.playerMorale ?? {}) };
+  const curMorale = Number(morale[String(playerId)] ?? 60);
+  morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+  let next = applyFinances({
+    ...modalAlloc.state,
+    playerContractOverrides,
+    playerMorale: morale,
+    offseasonData: { ...state.offseasonData, resigning: { decisions } },
+    contracts: { playerTeamInterestById: contractsByPlayer },
+    resign,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+  });
+
+  if (isNewsworthyRecommit(p)) {
+    next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+  }
+  return next;
 }
 
 function createContractOverride(args: {
@@ -5327,30 +5465,25 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return next;
     }
     case "EXTEND_PLAYER": {
-      const { playerId, years, apy, signingBonus, guaranteedAtSigning } = action.payload;
-      const term = Math.max(1, Math.min(4, Number(years)));
-      const startSeason = Number(state.season) + 1;
-      const endSeason = startSeason + term - 1;
-      const salaries = Array.from({ length: term }, () => Math.round(apy));
-      const nextOverrides = {
-        ...(state.playerContractOverrides ?? {}),
-        [String(playerId)]: {
-          startSeason,
-          endSeason,
-          salaries,
-          signingBonus: Math.round(signingBonus),
-          guaranteedAtSigning: Math.round(guaranteedAtSigning),
-          prorationBySeason: undefined,
-        },
+      const { playerId, years, apy, guaranteedAtSigning } = action.payload;
+      const offer: ExtensionOffer = {
+        years: Math.max(1, Math.min(4, Number(years))),
+        apy: moneyRound(Number(apy)),
+        guaranteesPct: Number(apy) > 0 ? clamp01(Number(guaranteedAtSigning) / Number(apy * Math.max(1, years))) : 0,
+        discountPct: 0,
+        createdFrom: "AUDIT",
       };
-      const next = { ...state, playerContractOverrides: nextOverrides } as GameState;
-      // M1 FIX: was getPersonnelById (Personnel/staff table) — players are in getPlayerById
-      const name = getPlayerById(String(playerId))?.fullName ?? "Player";
-      return addNews(next, {
-        title: "Extension Signed",
-        body: `${name} agreed to a ${term}-year extension.`,
-        category: "CONTRACTS",
-      });
+      return gameReducer(state, { type: "EXTENSION_SUBMIT_OFFER", payload: { playerId: String(playerId), offer } });
+    }
+    case "EXTENSION_SUBMIT_OFFER": {
+      return resolveDeterministicExtensionSubmission(state, action.payload.playerId, action.payload.offer);
+    }
+    case "EXTENSION_CLEAR_OFFER": {
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      const current = decisions[String(action.payload.playerId)];
+      if (!current?.offer || current?.action !== "EXTEND_EARLY") return state;
+      delete decisions[String(action.payload.playerId)];
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
     }
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
@@ -7695,7 +7828,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const toTeamId = String(action.payload.toTeamId);
 
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) return pushNews(state, "Trade blocked: tagged player. Remove tag first.");
-      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
+        return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+      }
 
       const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
       if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
@@ -7750,7 +7885,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) {
         return pushNews(state, "Cut blocked: tagged player. Remove tag first.");
       }
-      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") {
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
         return pushNews(state, "Cut blocked: extension offer pending. Clear offer first.");
       }
 
