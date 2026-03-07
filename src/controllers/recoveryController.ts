@@ -13,7 +13,9 @@ export function useRecoveryController() {
 
     const activeSaveId = getActiveSaveId();
     if (!activeSaveId) {
-      dispatch({ type: "RECOVERY_RESTORE_BACKUP" });
+      const message = "No active save is selected, so backup restore cannot run.";
+      setError(message);
+      dispatch({ type: "RECOVERY_SET_ERRORS", payload: { errors: [message] } });
       setBusyAction(null);
       return;
     }
@@ -21,11 +23,13 @@ export function useRecoveryController() {
     const restored = loadSaveResult(activeSaveId);
     if (!restored.ok) {
       setError(restored.message);
+      dispatch({ type: "RECOVERY_SET_ERRORS", payload: { errors: [restored.message] } });
       setBusyAction(null);
       return;
     }
 
-    window.location.assign("/");
+    dispatch({ type: "RECOVERY_HYDRATE_STATE", payload: { state: restored.state } });
+    setBusyAction(null);
   };
 
   const rebuildIndices = () => {
@@ -38,7 +42,7 @@ export function useRecoveryController() {
   const startFreshSave = () => {
     setBusyAction("fresh");
     setError(null);
-    dispatch({ type: "RECOVERY_RESTORE_BACKUP" });
+    dispatch({ type: "RESET" });
     setBusyAction(null);
   };
 

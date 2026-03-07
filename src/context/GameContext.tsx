@@ -75,7 +75,7 @@ import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers,
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
-import { assertActionPhase, isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
+import { isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_EXEC_SCALE,
@@ -167,7 +167,7 @@ import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId } from "@/lib/userTeam";
-import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { buildMigrationEvents, sortTransactionEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
@@ -1458,9 +1458,12 @@ export type GameAction =
   | { type: "RECOVERY_REBUILD_INDICES" }
   | { type: "RECOVERY_SKIP_STEP" }
   | { type: "RECOVERY_RESTORE_BACKUP" }
+  | { type: "RECOVERY_HYDRATE_STATE"; payload: { state: GameState } }
+  | { type: "RECOVERY_SET_ERRORS"; payload: { errors: string[] } }
   | { type: "RESET" };
 
 type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
+type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE" | "TRADE_PLAYER";
 
 const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "FA_SIGN",
@@ -1478,8 +1481,52 @@ const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "TAG_APPLY",
 ]);
 
-function isMutatingFranchiseAction(type: GameAction["type"]): type is ReducerMutatingAction {
-  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction);
+const EXTRA_PHASE_GUARDED_MUTATIONS = new Set<CentralPhaseGuardAction>([
+  "DRAFT_CPU_ADVANCE",
+  "EXECUTE_TRADE",
+  "TRADE_PLAYER",
+]);
+
+function isCentralPhaseGuardAction(type: GameAction["type"]): type is CentralPhaseGuardAction {
+  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction)
+    || EXTRA_PHASE_GUARDED_MUTATIONS.has(type as CentralPhaseGuardAction);
+}
+
+function getPhaseGuardVerdict(state: GameState, action: GameAction): { allowed: boolean; reason?: string } {
+  if (action.type === "TRADE_PLAYER") {
+    return { allowed: false, reason: "TRADE_PLAYER is a deprecated alias and is intentionally disabled." };
+  }
+
+  if (action.type === "DRAFT_CPU_ADVANCE") {
+    return isActionAllowedInCurrentPhase(state, { type: "DRAFT_USER_PICK", payload: { prospectId: "__phase_guard__" } } as GameAction);
+  }
+
+  if (action.type === "EXECUTE_TRADE") {
+    return isActionAllowedInCurrentPhase(state, {
+      type: "TRADE_ACCEPT",
+      payload: { playerId: "__phase_guard__", toTeamId: "__phase_guard__", valueTier: "__phase_guard__" },
+    } as GameAction);
+  }
+
+  return isActionAllowedInCurrentPhase(state, action);
+}
+
+function applyCentralMutationPhaseGuard(state: GameState, action: GameAction): GameState | null {
+  if (!isCentralPhaseGuardAction(action.type)) return null;
+
+  const verdict = getPhaseGuardVerdict(state, action);
+  if (verdict.allowed) return null;
+
+  if (action.type === "TRADE_ACCEPT" || action.type === "EXECUTE_TRADE") {
+    const currentWeek = Number(state.league.week ?? state.week ?? 1);
+    const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+    if (currentWeek > deadlineWeek) {
+      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+    }
+    return state;
+  }
+
+  return state;
 }
 
 function pickTopPlayerIdByPos(state: GameState, teamId: string, pos: string): string | undefined {
@@ -5005,6 +5052,9 @@ function finalizeWeek(
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  const blockedState = applyCentralMutationPhaseGuard(state, action);
+  if (blockedState) return blockedState;
+
   const t = action.type;
   if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE") {
     return offseasonReducer(state, action as GameAction);
@@ -5022,17 +5072,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 }
 
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
-  if (isMutatingFranchiseAction(action.type)) {
-    const verdict = isActionAllowedInCurrentPhase(state, action);
-    if (!verdict.allowed && action.type === "TRADE_ACCEPT") {
-      const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
-      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
-    }
-    assertActionPhase(state, action);
-    if (!verdict.allowed) return state;
-  }
-
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const isRehire = action.payload.isRehire === true;
@@ -5230,7 +5269,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "EXECUTE_TRADE": {
       const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds, outgoingPicks = [], incomingPicks = [], valueDelta = 0 } = action.payload;
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
@@ -7646,7 +7685,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
     case "TRADE_ACCEPT": {
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
@@ -7796,9 +7835,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "TRADE_PLAYER":
-      if (import.meta.env.DEV) {
-        throw new Error("TRADE_PLAYER is deprecated – use proper trade actions");
-      }
+      // Deprecated ambiguous alias: intentionally no-op to avoid accidental mutations.
       return state;
 
     case "PREGENERATE_FUTURE_CLASS": {
@@ -9112,7 +9149,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       try { out = updateOwner(out); } catch (e) { logError("narrative.owner", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
       try { out = updateAutonomy(out); } catch (e) { logError("narrative.autonomy", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
       if (week % 4 === 0) out = gameReducer(out, { type: "WIRE_PRUNE", payload: { keepLastN: 250 } });
-      if (Number(out.league.week ?? week + 1) > Number(out.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK)) {
+      if (Number(out.league.week ?? week + 1) > resolveTradeDeadlineWeek(out.league.tradeDeadlineWeek)) {
         // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
         const cancelled = cancelPendingTradesAtDeadline(out.pendingTradeOffers ?? []);
         if (cancelled.cancelledOffers > 0) {
@@ -9472,22 +9509,45 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
     }
     case "RECOVERY_REBUILD_INDICES": {
-      // Capture current override maps as the migration source, then rebuild effective indices from ledger.
+      // Preserve recoverable source data first, then rebuild derived indices from canonical ledger
+      // when available (fallback: migration events synthesized from overrides).
       const sourceTeamOverrides = { ...state.playerTeamOverrides };
       const sourceContractOverrides = { ...state.playerContractOverrides };
-      const sourceState = { ...state, playerTeamOverrides: sourceTeamOverrides, playerContractOverrides: sourceContractOverrides };
-      const migrationEvts = buildMigrationEvents(sourceState);
+      const sourceState = {
+        ...state,
+        playerTeamOverrides: sourceTeamOverrides,
+        playerContractOverrides: sourceContractOverrides,
+      };
+
+      const existingLedgerEvents = Array.isArray(state.transactionLedger?.events)
+        ? sortTransactionEvents(state.transactionLedger.events)
+        : [];
+      const rebuiltLedgerEvents = existingLedgerEvents.length > 0
+        ? existingLedgerEvents
+        : buildMigrationEvents(sourceState);
+
       const rebuilt = {
         ...state,
-        transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+        transactionLedger: {
+          events: rebuiltLedgerEvents,
+          counter: rebuiltLedgerEvents.length,
+          migrationComplete: true,
+        },
         playerTeamOverrides: {},
         playerContractOverrides: {},
       };
 
-      const rosterIndex = buildRosterIndex(rebuilt);
-      const contractIndex = buildContractIndex(rebuilt);
-      const teamConsistent = Object.entries(sourceTeamOverrides).every(([playerId, teamId]) => String(rosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"));
-      const contractConsistent = Object.entries(sourceContractOverrides).every(([playerId]) => Boolean(contractIndex[String(playerId)]));
+      const sourceRosterIndex = buildRosterIndex(sourceState);
+      const sourceContractIndex = buildContractIndex(sourceState);
+      const rebuiltRosterIndex = buildRosterIndex(rebuilt);
+      const rebuiltContractIndex = buildContractIndex(rebuilt);
+
+      const teamConsistent = Object.entries(sourceRosterIndex.playerToTeam).every(
+        ([playerId, teamId]) => String(rebuiltRosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"),
+      );
+      const contractConsistent = Object.entries(sourceContractIndex).every(
+        ([playerId, contract]) => JSON.stringify(rebuiltContractIndex[String(playerId)] ?? null) === JSON.stringify(contract ?? null),
+      );
       const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
       const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
 
@@ -9510,8 +9570,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "RECOVERY_RESTORE_BACKUP": {
-      // Clear recovery flags and fall back to initial state with the current season.
-      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+      // Restore is orchestrated by recovery controller via saveManager + RECOVERY_HYDRATE_STATE.
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: ["Backup restore must run from the recovery controller."],
+      };
+    }
+    case "RECOVERY_HYDRATE_STATE": {
+      return action.payload.state;
+    }
+    case "RECOVERY_SET_ERRORS": {
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: action.payload.errors,
+      };
     }
     case "RESET":
       return createInitialState();
@@ -9883,10 +9957,10 @@ function loadState(): GameState {
     };
   }
 
-  try {
-    const activeSaveId = getActiveSaveId();
-    if (!activeSaveId) return initial;
+  const activeSaveId = getActiveSaveId();
+  if (!activeSaveId) return initial;
 
+  try {
     const loadResult = loadSaveResult(activeSaveId);
     if (!loadResult.ok) {
       return {
@@ -10164,9 +10238,14 @@ function loadState(): GameState {
 
     return out;
   } catch (error) {
-    logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
-    console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
-    return initial;
+    const message = error instanceof Error ? error.message : String(error);
+    logError("state.load.failure", { saveId: activeSaveId, meta: { message } });
+    console.error("[state-load] Failed to restore saved state, entering recovery mode", error);
+    return {
+      ...initial,
+      recoveryNeeded: true,
+      recoveryErrors: [message],
+    };
   }
 }
 
