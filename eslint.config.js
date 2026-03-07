@@ -23,4 +23,22 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: ["src/pages/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/data/leagueDb",
+              importNames: ["getPlayers", "getPlayersByTeam"],
+              message:
+                "UI/page/component files should use context selectors or engine facades instead of raw league DB player accessors.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
