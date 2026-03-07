@@ -171,6 +171,7 @@ import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransact
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import { offseasonReducer } from "@/context/offseasonReducer";
@@ -9466,18 +9467,30 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
     }
     case "RECOVERY_REBUILD_INDICES": {
-      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
-      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
-      const migrationEvts = buildMigrationEvents(rebuilt);
-      if (migrationEvts.length > 0) {
-        return {
-          ...rebuilt,
-          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
-          playerTeamOverrides: {},
-          playerContractOverrides: {},
-        };
-      }
-      return rebuilt;
+      // Capture current override maps as the migration source, then rebuild effective indices from ledger.
+      const sourceTeamOverrides = { ...state.playerTeamOverrides };
+      const sourceContractOverrides = { ...state.playerContractOverrides };
+      const sourceState = { ...state, playerTeamOverrides: sourceTeamOverrides, playerContractOverrides: sourceContractOverrides };
+      const migrationEvts = buildMigrationEvents(sourceState);
+      const rebuilt = {
+        ...state,
+        transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
+        playerTeamOverrides: {},
+        playerContractOverrides: {},
+      };
+
+      const rosterIndex = buildRosterIndex(rebuilt);
+      const contractIndex = buildContractIndex(rebuilt);
+      const teamConsistent = Object.entries(sourceTeamOverrides).every(([playerId, teamId]) => String(rosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"));
+      const contractConsistent = Object.entries(sourceContractOverrides).every(([playerId]) => Boolean(contractIndex[String(playerId)]));
+      const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
+      const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
+
+      return {
+        ...rebuilt,
+        recoveryNeeded: !rebuildConsistent,
+        recoveryErrors: rebuildConsistent ? [] : ["Rebuild indices consistency check failed"],
+      };
     }
     case "RECOVERY_SKIP_STEP": {
       // Advance the offseason step and clear recovery.
