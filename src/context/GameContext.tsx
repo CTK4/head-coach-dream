@@ -1541,7 +1541,7 @@ function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType"
   return {
     ...state,
     telemetry: {
-      ...(state.telemetry ?? { gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } }),
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
       playLogsByGameKey: {
         ...(state.telemetry?.playLogsByGameKey ?? {}),
         [key]: game.playLog,
@@ -1570,7 +1570,7 @@ function compactSeasonTelemetry(state: GameState, season: number): GameState {
   return {
     ...state,
     telemetry: {
-      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
       playLogsByGameKey: nextPlayLogsByGameKey,
     },
   };
@@ -1583,7 +1583,7 @@ function persistSeasonAggToHistorical(state: GameState, season: number): GameSta
   const combined: Record<number, Partial<SeasonAggV1>> = {
     ...(state.historicalTelemetry?.bySeason ?? {}),
     [season]: {
-      version: Number(seasonAgg.version ?? 1),
+      version: 1 as const,
       byTeamId: { ...(seasonAgg.byTeamId ?? {}) },
       appliedGameKeys: { ...(seasonAgg.appliedGameKeys ?? {}) },
     },
@@ -1851,7 +1851,7 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
-    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } },
+    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} } },
     historicalTelemetry: { bySeason: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
@@ -8683,7 +8683,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           playLogsByGameKey: {},
           percentiles: nextPercentiles,
           gameAggsByGameKey: {},
-          seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} },
+          seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} },
         },
         historicalTelemetry: out.historicalTelemetry,
         hub: {
@@ -8878,7 +8878,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let nextState = {
         ...nextWithPractice,
         teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
-        league: { ...league, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase },
+        league: { ...league, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase) as LeaguePhase },
         currentStandings: weekResult.updatedStandings,
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
@@ -8976,7 +8976,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let simNextState = {
         ...nextWithPractice,
         teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
-        league: { ...simLeague, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase },
+        league: { ...simLeague, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase) as LeaguePhase },
         currentStandings: weekResult.updatedStandings,
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
@@ -9700,7 +9700,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
       gameAggsByGameKey: { ...((oldState as any).telemetry?.gameAggsByGameKey ?? {}) },
       seasonAgg: {
-        version: 1,
+        version: 1 as const,
         appliedGameKeys: { ...((oldState as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
         byTeamId: { ...((oldState as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
       },
@@ -9901,7 +9901,7 @@ function loadState(): GameState {
         percentiles: { ...(initial.telemetry?.percentiles ?? {}), ...((migrated as any).telemetry?.percentiles ?? {}) },
         gameAggsByGameKey: { ...(initial.telemetry?.gameAggsByGameKey ?? {}), ...((migrated as any).telemetry?.gameAggsByGameKey ?? {}) },
         seasonAgg: {
-          ...(initial.telemetry?.seasonAgg ?? { version: 1, byTeamId: {}, appliedGameKeys: {} }),
+          ...(initial.telemetry?.seasonAgg ?? { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }),
           ...((migrated as any).telemetry?.seasonAgg ?? {}),
           byTeamId: { ...(initial.telemetry?.seasonAgg?.byTeamId ?? {}), ...((migrated as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
           appliedGameKeys: { ...(initial.telemetry?.seasonAgg?.appliedGameKeys ?? {}), ...((migrated as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
@@ -10152,109 +10152,109 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 //     catching any pending debounced save before the browser suspends the tab.
 // —————————————————————————
 
-const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-const prevDriveRef = useRef(state.game.driveNumber);
-const AUTOSAVE_DEBOUNCE_MS = 600;
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevDriveRef = useRef(state.game.driveNumber);
+  const AUTOSAVE_DEBOUNCE_MS = 600;
 
-// True when we are mid-play-by-play and saves should be suppressed.
-//
-// Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
-// RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
-// which triggers a save automatically (no extra wiring needed).
-//
-// Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
-// CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
-// playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
-const isGameInProgress =
-  state.league.phase === "REGULAR_SEASON_GAME" ||
-  (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
+  // True when we are mid-play-by-play and saves should be suppressed.
+  //
+  // Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
+  // RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
+  // which triggers a save automatically (no extra wiring needed).
+  //
+  // Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
+  // CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
+  // playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
+  const isGameInProgress =
+    state.league.phase === "REGULAR_SEASON_GAME" ||
+    (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
 
-useEffect(() => {
-  if (saveTimerRef.current !== null) {
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-  }
-
-  // Suppress saves entirely during active play-by-play.
-  if (isGameInProgress) return;
-
-  const teamId = getUserTeamId(state);
-  if (!teamId) return;
-
-  saveTimerRef.current = setTimeout(() => {
-    saveTimerRef.current = null;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      syncCurrentSave(state, getActiveSaveId() ?? undefined);
-    } catch (error) {
-      logError("state.save.failure", {
-        phase: state.phase,
-        saveId: getActiveSaveId(),
-        season: state.season,
-        week: state.week,
-        meta: { message: error instanceof Error ? error.message : String(error) },
-      });
-      console.error("[state-save] Failed to persist save data", error);
-    }
-  }, AUTOSAVE_DEBOUNCE_MS);
-
-  return () => {
+  useEffect(() => {
     if (saveTimerRef.current !== null) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-  };
-}, [state, isGameInProgress]);
 
-// Flush immediately when the tab goes to background (catches any pending
-// debounced save before the browser suspends execution).
-useEffect(() => {
-  const handleVisibilityChange = () => {
-    if (document.visibilityState !== "hidden") return;
-    if (saveTimerRef.current !== null) {
-      clearTimeout(saveTimerRef.current);
+    // Suppress saves entirely during active play-by-play.
+    if (isGameInProgress) return;
+
+    const teamId = getUserTeamId(state);
+    if (!teamId) return;
+
+    saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
-    }
-    if (isGameInProgress) return; // mid-drive state is not resumable
-    if (!getUserTeamId(state)) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      syncCurrentSave(state, getActiveSaveId() ?? undefined);
-    } catch {
-      // Silent — can’t show UI in a visibilitychange handler.
-    }
-  };
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-}, [state, isGameInProgress]);
-
-// Drive-boundary checkpoint: save game state at the start of each new drive so
-// a hard-refresh mid-game can resume from the last completed drive boundary.
-useEffect(() => {
-  const prev = prevDriveRef.current;
-  prevDriveRef.current = state.game.driveNumber;
-
-  if (!isGameInProgress) {
-    // Game ended or not started — clear any stale checkpoint
-    try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
-    return;
-  }
-
-  // Only write at drive boundaries (driveNumber incremented)
-  if (state.game.driveNumber > prev) {
-    try {
-      localStorage.setItem(
-        GAME_CHECKPOINT_KEY,
-        JSON.stringify({
-          saveSeed: state.saveSeed,
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        syncCurrentSave(state, getActiveSaveId() ?? undefined);
+      } catch (error) {
+        logError("state.save.failure", {
+          phase: state.phase,
+          saveId: getActiveSaveId(),
           season: state.season,
-          leaguePhase: state.league.phase,
-          game: state.game,
-        }),
-      );
-    } catch { /* quota exceeded — silent */ }
-  }
-}, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
+          week: state.week,
+          meta: { message: error instanceof Error ? error.message : String(error) },
+        });
+        console.error("[state-save] Failed to persist save data", error);
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [state, isGameInProgress]);
+
+  // Flush immediately when the tab goes to background (catches any pending
+  // debounced save before the browser suspends execution).
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (isGameInProgress) return; // mid-drive state is not resumable
+      if (!getUserTeamId(state)) return;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        syncCurrentSave(state, getActiveSaveId() ?? undefined);
+      } catch {
+        // Silent — can’t show UI in a visibilitychange handler.
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [state, isGameInProgress]);
+
+  // Drive-boundary checkpoint: save game state at the start of each new drive so
+  // a hard-refresh mid-game can resume from the last completed drive boundary.
+  useEffect(() => {
+    const prev = prevDriveRef.current;
+    prevDriveRef.current = state.game.driveNumber;
+
+    if (!isGameInProgress) {
+      // Game ended or not started — clear any stale checkpoint
+      try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
+      return;
+    }
+
+    // Only write at drive boundaries (driveNumber incremented)
+    if (state.game.driveNumber > prev) {
+      try {
+        localStorage.setItem(
+          GAME_CHECKPOINT_KEY,
+          JSON.stringify({
+            saveSeed: state.saveSeed,
+            season: state.season,
+            leaguePhase: state.league.phase,
+            game: state.game,
+          }),
+        );
+      } catch { /* quota exceeded — silent */ }
+    }
+  }, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
