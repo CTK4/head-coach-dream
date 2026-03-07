@@ -70,10 +70,25 @@ import TeamSchedule from "@/pages/hub/schedule/TeamSchedule";
 import WeekSlate from "@/pages/hub/schedule/WeekSlate";
 import ScheduleHome from "@/pages/hub/schedule/ScheduleHome";
 import AnalyticsPage from "@/pages/hub/Analytics";
+import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
 
 const queryClient = new QueryClient();
-const shouldEnableDevPanel = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
+const shouldEnableDevPanel = DEV_TOOLS_ENABLED;
 const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : null;
+
+export const isDevPanelEnabled = (env: DevToolsEnv) => isDevToolsEnabled(env);
+
+export function DevPanelMount({
+  env,
+  PanelComponent,
+}: {
+  env: DevToolsEnv;
+  PanelComponent: React.ComponentType;
+}) {
+  if (!isDevPanelEnabled(env)) return null;
+  const Panel = PanelComponent;
+  return <Panel />;
+}
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();

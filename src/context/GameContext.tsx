@@ -163,6 +163,7 @@ import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
+import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId } from "@/lib/userTeam";
@@ -8557,9 +8558,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, pendingInjuryAlert: undefined };
     }
     case "DEV_APPLY_GATE": {
+      if (!DEV_TOOLS_ENABLED) return state;
       return applyDevGate(state, action.payload.gate);
     }
     case "DEV_RUN_ACTION": {
+      if (!DEV_TOOLS_ENABLED) return state;
       if (action.payload.action === "ADVANCE_PHASE") {
         if (state.phase === "HUB" && getUnifiedPhase(state) === "REGULAR_SEASON") {
           return gameReducer(state, { type: "ADVANCE_WEEK" });

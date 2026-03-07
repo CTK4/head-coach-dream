@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEV_POSITIONS, type DevAction } from "@/dev/runDevAction";
 import type { DevGate } from "@/dev/applyDevGate";
+import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 
 const GATES: Array<{ gate: DevGate; label: string }> = [
   { gate: "OFFSEASON_HUB", label: "Offseason Hub" },
@@ -25,7 +26,7 @@ const GATES: Array<{ gate: DevGate; label: string }> = [
 ];
 
 export default function DevPanel() {
-  const enabled = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
+  const enabled = DEV_TOOLS_ENABLED;
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
