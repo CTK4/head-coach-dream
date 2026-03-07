@@ -174,8 +174,6 @@ function AppRoutes() {
     window.location.href = "/";
   };
 
-  if (shouldRenderRecoveryMode(state)) return <RecoveryModePage />;
-
   return <ErrorBoundary onExportDebugBundle={handleExportDebugBundle} onResetToMainMenu={handleResetToMainMenu} onError={(error, errorInfo) => logError("ui.app_routes.crash", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week, meta: { message: error.message, stack: errorInfo.componentStack?.slice(0, 1000) } })}>
     <BrowserRouter>
       {DevPanel ? <Suspense fallback={null}><DevPanel /></Suspense> : null}
@@ -207,6 +205,17 @@ function AppRoutes() {
   </ErrorBoundary>;
 }
 
-const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><GameProvider><OfferResultModalHost /><AppRoutes /></GameProvider></TooltipProvider></QueryClientProvider>;
+function AppContent() {
+  const { state } = useGame();
+  if (shouldRenderRecoveryMode(state)) {
+    return <RecoveryModePage />;
+  }
+  return <>
+    <OfferResultModalHost />
+    <AppRoutes />
+  </>;
+}
+
+const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><GameProvider><AppContent /></GameProvider></TooltipProvider></QueryClientProvider>;
 
 export default App;
