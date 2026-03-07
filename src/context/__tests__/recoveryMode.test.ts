@@ -63,4 +63,22 @@ describe("recoveryMode", () => {
     const result = validateCriticalSaveState({ ...state, phase: "HUB" });
     expect(result.ok).toBe(true);
   });
+
+  it("RECOVERY_RESTORE_BACKUP returns a fresh state while preserving current season", () => {
+    const base = createInitialStateForTests();
+    const state: GameState = {
+      ...base,
+      season: 2034,
+      recoveryNeeded: true,
+      recoveryErrors: ["corrupt"],
+      coach: { ...base.coach, name: "Corrupted Coach" },
+    };
+
+    const next = gameReducer(state, { type: "RECOVERY_RESTORE_BACKUP" });
+
+    expect(next.season).toBe(2034);
+    expect(next.recoveryNeeded).toBe(false);
+    expect(next.recoveryErrors).toEqual([]);
+    expect(next.coach.name).toBe(createInitialStateForTests().coach.name);
+  });
 });
