@@ -39,4 +39,24 @@ describe("loadState backup recovery", () => {
     expect(loaded.coach.name).toBe("Backup Coach");
     expect(loaded.recoveryNeeded ?? false).toBe(false);
   });
+
+  it("restores through backup key path when primary key is corrupted", () => {
+    const saveId = "backup-key-path";
+    const saveManager = createSaveManager();
+    const base = createInitialStateForTests();
+
+    saveManager.syncCurrentSave({ ...base, saveId, coach: { ...base.coach, name: "Old Backup" } } as any, saveId);
+    saveManager.syncCurrentSave({ ...base, saveId, coach: { ...base.coach, name: "New Primary" } } as any, saveId);
+
+    localStorage.setItem(`hc_career_save__${saveId}`, "{invalid json");
+
+    const result = saveManager.loadSaveResult(saveId);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state.coach.name).toBe("Old Backup");
+    }
+
+    const repairedPrimary = localStorage.getItem(`hc_career_save__${saveId}`);
+    expect(repairedPrimary).toContain("Old Backup");
+  });
 });
