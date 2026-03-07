@@ -64,7 +64,7 @@ describe("recoveryMode", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("RECOVERY_RESTORE_BACKUP returns a fresh state while preserving current season", () => {
+  it("RECOVERY_RESTORE_BACKUP is not equivalent to RESET fresh-save semantics", () => {
     const base = createInitialStateForTests();
     const state: GameState = {
       ...base,
@@ -74,11 +74,50 @@ describe("recoveryMode", () => {
       coach: { ...base.coach, name: "Corrupted Coach" },
     };
 
-    const next = gameReducer(state, { type: "RECOVERY_RESTORE_BACKUP" });
+    const restoreAttempt = gameReducer(state, { type: "RECOVERY_RESTORE_BACKUP" });
+    const freshReset = gameReducer(state, { type: "RESET" });
 
-    expect(next.season).toBe(2034);
-    expect(next.recoveryNeeded).toBe(false);
-    expect(next.recoveryErrors).toEqual([]);
-    expect(next.coach.name).toBe(createInitialStateForTests().coach.name);
+    expect(restoreAttempt).toMatchObject({
+      season: 2034,
+      recoveryNeeded: true,
+      recoveryErrors: ["Backup restore must run from the recovery controller."],
+      coach: { name: "Corrupted Coach" },
+    });
+
+    expect(freshReset.recoveryNeeded ?? false).toBe(false);
+    expect(freshReset.coach.name).toBe(createInitialStateForTests().coach.name);
+    expect(restoreAttempt).not.toEqual(freshReset);
+  });
+
+  it("RECOVERY_REBUILD_INDICES prefers canonical ledger when present", () => {
+    const base = createInitialStateForTests();
+    const state: GameState = {
+      ...base,
+      recoveryNeeded: true,
+      recoveryErrors: ["tx error"],
+      playerTeamOverrides: { p_preserve_1: "BUF" },
+      transactionLedger: {
+        events: [{
+          txId: "tx_1",
+          season: base.season,
+          weekIndex: Number(base.week ?? 1),
+          ts: Date.now(),
+          kind: "MIGRATION",
+          teamId: "KC",
+          playerIds: ["p_preserve_1"],
+          details: { teamId: "KC" },
+        }],
+        counter: 1,
+        migrationComplete: true,
+      },
+    };
+
+    const next = gameReducer(state, { type: "RECOVERY_REBUILD_INDICES" });
+    const rosterIndex = buildRosterIndex(next);
+
+    expect(next.recoveryNeeded).toBe(true);
+    expect(next.recoveryErrors).toEqual(["Rebuild indices consistency check failed"]);
+    expect(next.playerTeamOverrides).toEqual({});
+    expect(rosterIndex.playerToTeam.p_preserve_1).toBe("KC");
   });
 });

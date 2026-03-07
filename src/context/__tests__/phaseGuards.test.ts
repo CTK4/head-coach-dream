@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialStateForTests, gameReducer, type GameAction } from "@/context/GameContext";
 import { isActionAllowedInCurrentPhase } from "@/context/phaseGuards";
 import { migrateSaveSchema } from "@/lib/migrations/saveSchema";
+import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
 
 function withCareerStage(stage: ReturnType<typeof createInitialStateForTests>["careerStage"]) {
   return { ...createInitialStateForTests(), careerStage: stage };
@@ -50,9 +51,22 @@ describe("phaseGuards", () => {
     expect(verdict.allowed).toBe(true);
   });
 
-  it("reducer hard-blocks out-of-phase FA_SIGN in dev", () => {
+  it("reducer no-ops out-of-phase FA_SIGN", () => {
     const state = withCareerStage("REGULAR_SEASON");
-    expect(() => gameReducer(state, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } } as GameAction)).toThrow(/phase_guard/);
+    const out = gameReducer(state, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } } as GameAction);
+    expect(out).toBe(state);
+  });
+
+  it("reducer no-ops out-of-phase DRAFT_CPU_ADVANCE", () => {
+    const state = withCareerStage("REGULAR_SEASON");
+    const out = gameReducer(state, { type: "DRAFT_CPU_ADVANCE" } as GameAction);
+    expect(out).toBe(state);
+  });
+
+  it("reducer no-ops out-of-phase CONTRACT_RESTRUCTURE_APPLY", () => {
+    const state = withCareerStage("PLAYOFFS");
+    const out = gameReducer(state, { type: "CONTRACT_RESTRUCTURE_APPLY", payload: { playerId: "PLY_1", amount: 1000000 } } as GameAction);
+    expect(out).toBe(state);
   });
 
   it("reducer surfaces TRADE_DEADLINE_PASSED on blocked trade", () => {
@@ -65,13 +79,14 @@ describe("phaseGuards", () => {
   it("migration hardens missing phase fields and deadline values", () => {
     const migrated = migrateSaveSchema({ phase: "HUB", season: 2026, coach: { name: "Coach" }, league: { week: -9, tradeDeadlineWeek: 0 } } as any);
     expect(migrated.league.week).toBe(1);
-    expect(migrated.league.tradeDeadlineWeek).toBe(10);
+    expect(migrated.league.tradeDeadlineWeek).toBe(TRADE_DEADLINE_DEFAULT_WEEK);
     expect(migrated.careerStage).toBeDefined();
     expect(migrated.league.phase).toBe("OFFSEASON");
   });
 
-  it("legacy TRADE_PLAYER throws deprecation error in dev", () => {
+  it("legacy TRADE_PLAYER alias is a deterministic no-op", () => {
     const state = withCareerStage("REGULAR_SEASON");
-    expect(() => gameReducer(state, { type: "TRADE_PLAYER", payload: { playerId: "PLY_1" } } as GameAction)).toThrow(/deprecated/);
+    const out = gameReducer(state, { type: "TRADE_PLAYER", payload: { playerId: "PLY_1" } } as GameAction);
+    expect(out).toBe(state);
   });
 });
