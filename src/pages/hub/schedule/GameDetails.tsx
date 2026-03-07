@@ -9,10 +9,12 @@ export default function GameDetails() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const { gameKey } = useParams();
-  if (!gameKey) return null;
-  const parsed = parseGameKey(decodeURIComponent(gameKey));
-  const score = scoreForGame(state, decodeURIComponent(gameKey));
+  const decodedGameKey = gameKey ? decodeURIComponent(gameKey) : "";
+  const parsed = parseGameKey(decodedGameKey);
+  const score = scoreForGame(state, decodedGameKey);
   const box = useMemo(() => (state.gameHistory ?? []).find((g) => g.week === parsed.week && g.home.teamId === parsed.homeTeamId && g.away.teamId === parsed.awayTeamId), [state.gameHistory, parsed.week, parsed.homeTeamId, parsed.awayTeamId]);
+
+  if (!gameKey) return null;
 
   const userTeamId = state.acceptedOffer?.teamId;
   const isUserGame = userTeamId && (parsed.homeTeamId === userTeamId || parsed.awayTeamId === userTeamId);

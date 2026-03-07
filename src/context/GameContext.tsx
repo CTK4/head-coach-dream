@@ -1025,7 +1025,7 @@ export type GameState = {
   configVersion: string;
   calibrationPackId: string;
   memoryLog: MemoryEvent[];
-  contextFlags?: string[];
+  contextFlags: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
   owner: { approval: number; budgetBreaches: number; financialRating: number; jobSecurity: number };
   staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
@@ -1385,6 +1385,7 @@ export type GameAction =
   | { type: "DRAFT_SIM_ALL" }
   | { type: "NAV_TO_DRAFT_RESULTS" }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_COMPLETE" }
   | { type: "DRAFT_FINALIZE" }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
@@ -1770,6 +1771,7 @@ function createInitialState(): GameState {
 
   const base: GameState = {
     coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
+    contextFlags: [],
     seasonHistory: [],
     earnedMilestoneIds: [],
     phase: "CREATE",
@@ -2292,8 +2294,8 @@ function resolveRoleProjection(state: GameState, player: any) {
 
 function resolveContenderStatus(state: GameState, teamId: string) {
   const row = state.league?.standings?.[String(teamId)] as any;
-  const wins = Number(row?.w ?? 0);
-  const losses = Number(row?.l ?? 0);
+  const wins = Number(row?.wins ?? 0);
+  const losses = Number(row?.losses ?? 0);
   const games = Math.max(1, wins + losses);
   const winPct = wins / games;
   return Math.round(clamp01((winPct - 0.35) / 0.35) * 100);
@@ -8053,11 +8055,25 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
       const newSelections = next.draft.selections.slice(next.draft.appliedSelectionCount);
       for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
-      return finalizeDraftIfComplete(next);
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
+    }
+
+    case "DRAFT_COMPLETE": {
+      let next = finalizeDraftIfComplete(state);
+      next = advanceToRegularSeason(next);
+      return next;
     }
 
     case "DRAFT_FINALIZE": {
-      return finalizeDraftIfComplete(state);
+      const finalized = finalizeDraftIfComplete(state);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
     }
 
     case "DRAFT_PICK": {
@@ -8120,12 +8136,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         scoutingGrade: String(rookie.scoutOvr),
         tierLabel: `Dev ${rookie.scoutDev}`,
       });
-      return {
+      const next = {
         ...feedbackAlloc.state,
         rookies: [...nextState.rookies, rookie],
         rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
         feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
       };
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
     }
 
     case "CAMP_SET":
@@ -8383,7 +8404,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         season: next.season,
         week,
         teamId: firedTeamId,
-        record: { wins: Number(firedStanding?.w ?? 0), losses: Number(firedStanding?.l ?? 0) },
+        record: { wins: Number(firedStanding?.wins ?? 0), losses: Number(firedStanding?.losses ?? 0) },
         topDrivers: next.firing.drivers.slice(0, 3).map((d) => d.label),
         ownerApproval: Number(next.owner?.approval ?? 60),
         tenureWeeks: Number(next.hub?.regularSeasonWeek ?? week),
@@ -8693,10 +8714,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           regularSeasonWeek: 1,
           news: [{ id: championNewsAlloc.id, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: championNewsAlloc.ts, category: "LEAGUE" }, ...(championNewsAlloc.state.hub.news ?? [])],
         },
+        contextFlags: applyFlagsToContext(coachWithCareer),
       };
       const teamId = completed.acceptedOffer?.teamId ?? "";
       const row = completed.currentStandings.find((r) => String(r.teamId) === String(teamId));
-      const wins = Number(row?.w ?? 0);
+      const wins = Number(row?.wins ?? 0);
       const ownerOutcome: DynastySeasonLog["ownerOutcome"] = completed.ownerState.approval < 25 ? "FIRED" : completed.ownerState.approval < 45 ? "ULTIMATUM" : "STABLE";
       completed = gameReducer(completed, { type: "OWNER_ENDSEASON_EVALUATE", payload: { year: completed.season - 1, teamId, result: { goalScore: wins, ownerOutcome, delta: wins >= 9 ? 4 : -4, summary: wins >= 9 ? "Met seasonal baseline" : "Missed seasonal baseline", trigger: wins < 6 ? "Sub-6-win season" : undefined } } });
       completed = gameReducer(completed, { type: "DYNASTY_ENDSEASON_SCORE", payload: { year: completed.season - 1, teamId, inputs: { wins, playoffResult: ownerOutcome === "FIRED" ? "MISS" : "WILD_CARD", awards: [], powerRanks: { off: completed.lastSeasonSummary?.offenseRank, def: completed.lastSeasonSummary?.defenseRank, st: completed.lastSeasonSummary?.specialTeamsRank }, ownerOutcome, mediaTags: ["season_complete"] } } });
@@ -8857,6 +8879,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
               stepId: "CUT_DOWNS",
               stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true },
             },
+            contextFlags: applyFlagsToContext(nextWithPractice.coach),
             careerStage: "CUTDOWNS",
             game: initGameSim({
               homeTeamId: state.game.homeTeamId,
@@ -9058,6 +9081,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         leagueStatLeaders: weekResult.statLeaders,
         newsHistory: appendWeeklyNews(state, weekResult, week),
         hub,
+        contextFlags: state.contextFlags,
         playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
         qbRunContactExposureByPlayerId: { ...(state.qbRunContactExposureByPlayerId ?? {}), ...(state.game.qbRunContactsByPlayerId ?? {}) },
       };
