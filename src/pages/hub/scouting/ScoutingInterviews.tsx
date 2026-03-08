@@ -33,8 +33,8 @@ export default function ScoutingInterviews() {
     <div className="space-y-3 p-4">
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
         <div className="font-semibold">Prospect Interviews</div>
-        <div className="mt-1 text-xs text-muted-foreground">Run deterministic interviews to reveal work ethic / IQ / character insight.</div>
-        <div className="mt-1 text-xs opacity-80">Remaining: {scouting.interviews.interviewsRemaining} · Budget: {scouting.budget.remaining}</div>
+        <div className="mt-1 text-xs text-muted-foreground">Run deterministic interviews to reveal character and football IQ intel.</div>
+        <div className="mt-1 text-xs opacity-80">Cost: 2 budget + 1 interview token · Remaining: {scouting.interviews.interviewsRemaining} tokens · Budget: {scouting.budget.remaining}</div>
       </div>
 
       {prospects.map((prospect) => (
