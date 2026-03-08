@@ -30,7 +30,6 @@ import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
-import type { PlayEventV1Minimal } from "@/engine/telemetry/types";
 import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
 import { applyGameAggToSeasonAgg } from "@/engine/telemetry/aggregateSeason";
@@ -76,7 +75,7 @@ import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers,
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
-import { assertActionPhase, isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
+import { isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_EXEC_SCALE,
@@ -156,7 +155,7 @@ import { updateChemistry } from "@/engine/chemistry";
 import { updateStaffTrust } from "@/engine/staffTrust";
 import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
-import { getActiveSaveId, syncCurrentSave } from "@/lib/saveManager";
+import { getActiveSaveId, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
@@ -164,14 +163,16 @@ import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
+import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId } from "@/lib/userTeam";
-import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { buildMigrationEvents, sortTransactionEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import { offseasonReducer } from "@/context/offseasonReducer";
@@ -183,6 +184,7 @@ import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/s
 import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
+import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 
@@ -504,7 +506,7 @@ export type OrgRoles = {
 };
 
 export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
-export type StaffOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+export type StaffOfferStatus = "PENDING" | "COUNTERED" | "ACCEPTED" | "REJECTED";
 export type StaffOffer = {
   id: string;
   roleType: "COORDINATOR" | "ASSISTANT";
@@ -515,6 +517,8 @@ export type StaffOffer = {
   status: StaffOfferStatus;
   submittedSeason: number;
   reason?: string;
+  counterProposal?: { years: number; salary: number } | null;
+  revisionCount?: number;
 };
 
 const CAREER_STAGE_ORDER: CareerStage[] = [
@@ -1025,7 +1029,7 @@ export type GameState = {
   configVersion: string;
   calibrationPackId: string;
   memoryLog: MemoryEvent[];
-  contextFlags?: string[];
+  contextFlags: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
   owner: { approval: number; budgetBreaches: number; financialRating: number; jobSecurity: number };
   staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
@@ -1246,7 +1250,7 @@ export type GameAction =
   | { type: "FIRE_COACH"; payload: { coachId: string } }
   | { type: "INCREMENT_COACH_TENURE" }
   | { type: "CREATE_STAFF_OFFER"; payload: { roleType: "COORDINATOR" | "ASSISTANT"; role: "OC" | "DC" | "STC" | keyof AssistantStaff; personId: string; years: number; salary: number } }
-  | { type: "STAFF_COUNTER_OFFER"; payload: { offerId: string } }
+  | { type: "STAFF_COUNTER_OFFER"; payload: { offerId: string; years: number; salary: number } }
   | { type: "STAFF_COUNTER_OFFER_RESPONSE"; payload: { offerId: string; accepted: boolean } }
   | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
   | { type: "SET_PLAYBOOK"; payload: { side: "OFFENSE" | "DEFENSE"; playbookId: string } }
@@ -1366,6 +1370,8 @@ export type GameAction =
   | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
   | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
   | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
+  | { type: "EXTENSION_SUBMIT_OFFER"; payload: { playerId: string; offer: ExtensionOffer } }
+  | { type: "EXTENSION_CLEAR_OFFER"; payload: { playerId: string } }
   | { type: "ADVANCE_SEASON" }
   | { type: "PREGENERATE_FUTURE_CLASS"; payload: { classYear: ClassYear } }
   | { type: "DISMISS_SEASON_AWARDS" }
@@ -1385,6 +1391,7 @@ export type GameAction =
   | { type: "DRAFT_SIM_ALL" }
   | { type: "NAV_TO_DRAFT_RESULTS" }
   | { type: "DRAFT_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_COMPLETE" }
   | { type: "DRAFT_FINALIZE" }
   | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
   | { type: "CUT_TOGGLE"; payload: { playerId: string } }
@@ -1455,9 +1462,12 @@ export type GameAction =
   | { type: "RECOVERY_REBUILD_INDICES" }
   | { type: "RECOVERY_SKIP_STEP" }
   | { type: "RECOVERY_RESTORE_BACKUP" }
+  | { type: "RECOVERY_HYDRATE_STATE"; payload: { state: GameState } }
+  | { type: "RECOVERY_SET_ERRORS"; payload: { errors: string[] } }
   | { type: "RESET" };
 
 type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
+type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE" | "TRADE_PLAYER";
 
 const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "FA_SIGN",
@@ -1471,12 +1481,57 @@ const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "CUT_APPLY",
   "CONTRACT_RESTRUCTURE_APPLY",
   "EXTEND_PLAYER",
+  "EXTENSION_SUBMIT_OFFER",
   "APPLY_FRANCHISE_TAG",
   "TAG_APPLY",
 ]);
 
-function isMutatingFranchiseAction(type: GameAction["type"]): type is ReducerMutatingAction {
-  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction);
+const EXTRA_PHASE_GUARDED_MUTATIONS = new Set<CentralPhaseGuardAction>([
+  "DRAFT_CPU_ADVANCE",
+  "EXECUTE_TRADE",
+  "TRADE_PLAYER",
+]);
+
+function isCentralPhaseGuardAction(type: GameAction["type"]): type is CentralPhaseGuardAction {
+  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction)
+    || EXTRA_PHASE_GUARDED_MUTATIONS.has(type as CentralPhaseGuardAction);
+}
+
+function getPhaseGuardVerdict(state: GameState, action: GameAction): { allowed: boolean; reason?: string } {
+  if (action.type === "TRADE_PLAYER") {
+    return { allowed: false, reason: "TRADE_PLAYER is a deprecated alias and is intentionally disabled." };
+  }
+
+  if (action.type === "DRAFT_CPU_ADVANCE") {
+    return isActionAllowedInCurrentPhase(state, { type: "DRAFT_USER_PICK", payload: { prospectId: "__phase_guard__" } } as GameAction);
+  }
+
+  if (action.type === "EXECUTE_TRADE") {
+    return isActionAllowedInCurrentPhase(state, {
+      type: "TRADE_ACCEPT",
+      payload: { playerId: "__phase_guard__", toTeamId: "__phase_guard__", valueTier: "__phase_guard__" },
+    } as GameAction);
+  }
+
+  return isActionAllowedInCurrentPhase(state, action);
+}
+
+function applyCentralMutationPhaseGuard(state: GameState, action: GameAction): GameState | null {
+  if (!isCentralPhaseGuardAction(action.type)) return null;
+
+  const verdict = getPhaseGuardVerdict(state, action);
+  if (verdict.allowed) return null;
+
+  if (action.type === "TRADE_ACCEPT" || action.type === "EXECUTE_TRADE") {
+    const currentWeek = Number(state.league.week ?? state.week ?? 1);
+    const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+    if (currentWeek > deadlineWeek) {
+      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+    }
+    return state;
+  }
+
+  return state;
 }
 
 function pickTopPlayerIdByPos(state: GameState, teamId: string, pos: string): string | undefined {
@@ -1541,7 +1596,7 @@ function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType"
   return {
     ...state,
     telemetry: {
-      ...(state.telemetry ?? { gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } }),
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
       playLogsByGameKey: {
         ...(state.telemetry?.playLogsByGameKey ?? {}),
         [key]: game.playLog,
@@ -1570,7 +1625,7 @@ function compactSeasonTelemetry(state: GameState, season: number): GameState {
   return {
     ...state,
     telemetry: {
-      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
       playLogsByGameKey: nextPlayLogsByGameKey,
     },
   };
@@ -1580,10 +1635,10 @@ function persistSeasonAggToHistorical(state: GameState, season: number): GameSta
   const seasonAgg = state.telemetry?.seasonAgg;
   if (!seasonAgg) return state;
 
-  const combined = {
+  const combined: Record<number, Partial<SeasonAggV1>> = {
     ...(state.historicalTelemetry?.bySeason ?? {}),
     [season]: {
-      version: Number(seasonAgg.version ?? 1),
+      version: 1 as const,
       byTeamId: { ...(seasonAgg.byTeamId ?? {}) },
       appliedGameKeys: { ...(seasonAgg.appliedGameKeys ?? {}) },
     },
@@ -1604,7 +1659,7 @@ function applyTelemetryAggregatesForGame(
 ): GameState {
   if (!game.weekType || !game.weekNumber || !game.playLog?.length) return state;
   const gameKey = gameTelemetryKey({ season: state.season, weekType: game.weekType, weekNumber: game.weekNumber, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId });
-  const telemetry = state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } };
+  const telemetry = state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} };
   if (telemetry.seasonAgg?.appliedGameKeys?.[gameKey]) return state;
 
   const gameAgg = buildGameAggFromPlayLog({
@@ -1766,10 +1821,13 @@ function defaultDynastyProfile(): DynastyProfile {
 
 function createInitialState(): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = Date.now();
+  // Use a deterministic seed derived from current time and a random component.
+  // This ensures reproducibility while avoiding collisions across multiple saves.
+  const saveSeed = Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647;
 
   const base: GameState = {
     coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
+    contextFlags: [],
     seasonHistory: [],
     earnedMilestoneIds: [],
     phase: "CREATE",
@@ -1851,7 +1909,7 @@ function createInitialState(): GameState {
     wire: { items: [] },
     medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
     liveGames: {},
-    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } },
+    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} } },
     historicalTelemetry: { bySeason: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
@@ -2079,6 +2137,8 @@ type ResignOffer = {
   rejectedCount?: number;
 };
 
+type ExtensionOffer = ResignOffer;
+
 function hashSeed(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -2141,6 +2201,139 @@ function contractOverrideFromOffer(state: GameState, offer: ResignOffer): Player
     guarantees: offer.guaranteesPct,
     type: "STANDARD",
   });
+}
+
+function contractOverrideFromExtensionOffer(state: GameState, playerId: string, offer: ExtensionOffer): PlayerContractOverride {
+  const current = getContractSummaryForPlayer(state, String(playerId));
+  if (!current || current.yearsRemaining <= 0) return contractOverrideFromOffer(state, offer);
+
+  const preserveStartSeason = Number(state.season);
+  const preservedSalaries: number[] = [];
+  for (let season = preserveStartSeason; season <= Number(current.endSeason); season++) {
+    preservedSalaries.push(moneyRound(Number(current.capHitBySeason?.[season] ?? current.capHit ?? 0)));
+  }
+
+  const extension = createContractOverride({
+    startSeason: Number(current.endSeason) + 1,
+    years: offer.years,
+    salary: offer.apy,
+    guarantees: offer.guaranteesPct,
+    type: "STANDARD",
+  });
+
+  const extYears = Math.max(1, extension.endSeason - extension.startSeason + 1);
+  const extProration = extension.signingBonus > 0 ? moneyRound(extension.signingBonus / extYears) : 0;
+  const prorationBySeason: Record<number, number> = {};
+  for (let season = preserveStartSeason; season <= extension.endSeason; season++) {
+    prorationBySeason[season] = season >= extension.startSeason ? extProration : 0;
+  }
+
+  return {
+    startSeason: preserveStartSeason,
+    endSeason: extension.endSeason,
+    salaries: [...preservedSalaries, ...extension.salaries],
+    signingBonus: extension.signingBonus,
+    prorationBySeason,
+    contractType: "STANDARD",
+  };
+}
+
+function resolveDeterministicExtensionSubmission(state: GameState, playerId: string, offer: ExtensionOffer): GameState {
+  const normalizedOffer = sanitizeResignOffer(offer);
+  if (!normalizedOffer) return state;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+  if (!teamId) return state;
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return state;
+
+  const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+  const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+  const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+  const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+  const decision = evaluateContractOffer({
+    player: {
+      id: String(playerId),
+      age: Number(p.age ?? 26),
+      overall: Number(p.overall ?? p.ovr ?? 60),
+      position: String(p.pos ?? "UNK"),
+    },
+    offer: {
+      years: Number(normalizedOffer.years),
+      aav: Number(normalizedOffer.apy),
+      guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+    },
+    context: {
+      saveSeed: Number(state.saveSeed ?? 1),
+      season: Number(state.season ?? 2026),
+      week: Number(state.week ?? 1),
+      teamId: String(teamId),
+      phase: "RESIGN",
+      schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+      roleProjection: resolveRoleProjection(state, p),
+      contenderStatus: resolveContenderStatus(state, String(teamId)),
+      locationPreference: resolveLocationPreference(state, String(teamId), p),
+      desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+    },
+    interest: interestBefore,
+    priorOfferAav,
+    rejectionCount,
+  });
+
+  const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+  contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+  const resign = {
+    lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+    rejectionCountByPlayerId: {
+      ...state.resign.rejectionCountByPlayerId,
+      [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+    },
+  };
+
+  const modalAlloc = buildOfferResultModal(state, {
+    title: decision.accepted ? "Extension Accepted" : "Extension Rejected",
+    message: decision.reason,
+    variant: decision.accepted ? "success" : "danger",
+  });
+
+  if (!decision.accepted) {
+    const decisions = { ...state.offseasonData.resigning.decisions } as any;
+    decisions[String(playerId)] = {
+      action: "EXTEND_EARLY",
+      offer: { ...normalizedOffer, rejectedCount: rejectionCount + 1 },
+    };
+    return {
+      ...modalAlloc.state,
+      contracts: { playerTeamInterestById: contractsByPlayer },
+      resign,
+      offseasonData: { ...state.offseasonData, resigning: { decisions } },
+      ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    };
+  }
+
+  const ovr = contractOverrideFromExtensionOffer(state, String(playerId), normalizedOffer);
+  const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+  const decisions = { ...state.offseasonData.resigning.decisions } as any;
+  delete decisions[String(playerId)];
+
+  const morale = { ...(state.playerMorale ?? {}) };
+  const curMorale = Number(morale[String(playerId)] ?? 60);
+  morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+  let next = applyFinances({
+    ...modalAlloc.state,
+    playerContractOverrides,
+    playerMorale: morale,
+    offseasonData: { ...state.offseasonData, resigning: { decisions } },
+    contracts: { playerTeamInterestById: contractsByPlayer },
+    resign,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+  });
+
+  if (isNewsworthyRecommit(p)) {
+    next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+  }
+  return next;
 }
 
 function createContractOverride(args: {
@@ -2292,8 +2485,8 @@ function resolveRoleProjection(state: GameState, player: any) {
 
 function resolveContenderStatus(state: GameState, teamId: string) {
   const row = state.league?.standings?.[String(teamId)] as any;
-  const wins = Number(row?.w ?? 0);
-  const losses = Number(row?.l ?? 0);
+  const wins = Number(row?.wins ?? 0);
+  const losses = Number(row?.losses ?? 0);
   const games = Math.max(1, wins + losses);
   const winPct = wins / games;
   return Math.round(clamp01((winPct - 0.35) / 0.35) * 100);
@@ -4934,6 +5127,28 @@ function assertNever(x: never): never {
   throw new Error(`Unhandled action: ${JSON.stringify(x)}`);
 }
 
+function reconcileJerseyNumbersForTx(state: GameState, tx: TransactionEvent): GameState {
+  const affectedTeams = new Set<string>();
+  if (tx.teamId) affectedTeams.add(String(tx.teamId));
+  if (tx.otherTeamId) affectedTeams.add(String(tx.otherTeamId));
+
+  for (const playerId of tx.playerIds ?? []) {
+    const beforeTeam = String(state.playerTeamOverrides?.[playerId] ?? "");
+    if (beforeTeam) affectedTeams.add(beforeTeam);
+  }
+
+  let nextAttr = { ...(state.playerAttrOverrides ?? {}) };
+  for (const teamId of affectedTeams) {
+    if (!teamId || teamId === "FREE_AGENT" || teamId === "RETIRED") continue;
+    const assigned = assignTeamRosterNumbers({ ...state, playerAttrOverrides: nextAttr }, teamId);
+    for (const [playerId, jerseyNumber] of Object.entries(assigned)) {
+      nextAttr[playerId] = { ...(nextAttr[playerId] ?? {}), jerseyNumber };
+    }
+  }
+
+  return nextAttr === state.playerAttrOverrides ? state : { ...state, playerAttrOverrides: nextAttr };
+}
+
 function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts">): GameState {
   const tx: TransactionEvent = {
     ...draft,
@@ -4943,14 +5158,15 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
     ts: Number(state.season ?? 1) * 10_000 + Number(state.week ?? 0) * 100 + Number(state.transactionLedger?.counter ?? 0) + 1,
   };
   const draftState = applyTransaction(state, tx);
-  const validation = validatePostTx(draftState);
-  if (validation.ok) return draftState;
+  const withJerseys = reconcileJerseyNumbersForTx(draftState, tx);
+  const validation = validatePostTx(withJerseys);
+  if (validation.ok) return withJerseys;
   if ("errors" in validation) {
     const errs = validation.errors;
     if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${errs.join("|")}`);
     return { ...state, uiToast: `Transaction blocked: ${errs[0] ?? "invalid state"}` };
   }
-  return draftState;
+  return withJerseys;
 }
 
 function finalizeWeek(
@@ -4976,6 +5192,9 @@ function finalizeWeek(
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
+  const blockedState = applyCentralMutationPhaseGuard(state, action);
+  if (blockedState) return blockedState;
+
   const t = action.type;
   if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE") {
     return offseasonReducer(state, action as GameAction);
@@ -4993,17 +5212,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 }
 
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
-  if (isMutatingFranchiseAction(action.type)) {
-    const verdict = isActionAllowedInCurrentPhase(state, action);
-    if (!verdict.allowed && action.type === "TRADE_ACCEPT") {
-      const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
-      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
-    }
-    assertActionPhase(state, action);
-    if (!verdict.allowed) return state;
-  }
-
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const isRehire = action.payload.isRehire === true;
@@ -5201,7 +5409,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "EXECUTE_TRADE": {
       const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds, outgoingPicks = [], incomingPicks = [], valueDelta = 0 } = action.payload;
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
@@ -5259,30 +5467,25 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return next;
     }
     case "EXTEND_PLAYER": {
-      const { playerId, years, apy, signingBonus, guaranteedAtSigning } = action.payload;
-      const term = Math.max(1, Math.min(4, Number(years)));
-      const startSeason = Number(state.season) + 1;
-      const endSeason = startSeason + term - 1;
-      const salaries = Array.from({ length: term }, () => Math.round(apy));
-      const nextOverrides = {
-        ...(state.playerContractOverrides ?? {}),
-        [String(playerId)]: {
-          startSeason,
-          endSeason,
-          salaries,
-          signingBonus: Math.round(signingBonus),
-          guaranteedAtSigning: Math.round(guaranteedAtSigning),
-          prorationBySeason: undefined,
-        },
+      const { playerId, years, apy, guaranteedAtSigning } = action.payload;
+      const offer: ExtensionOffer = {
+        years: Math.max(1, Math.min(4, Number(years))),
+        apy: moneyRound(Number(apy)),
+        guaranteesPct: Number(apy) > 0 ? clamp01(Number(guaranteedAtSigning) / Number(apy * Math.max(1, years))) : 0,
+        discountPct: 0,
+        createdFrom: "AUDIT",
       };
-      const next = { ...state, playerContractOverrides: nextOverrides } as GameState;
-      // M1 FIX: was getPersonnelById (Personnel/staff table) — players are in getPlayerById
-      const name = getPlayerById(String(playerId))?.fullName ?? "Player";
-      return addNews(next, {
-        title: "Extension Signed",
-        body: `${name} agreed to a ${term}-year extension.`,
-        category: "CONTRACTS",
-      });
+      return gameReducer(state, { type: "EXTENSION_SUBMIT_OFFER", payload: { playerId: String(playerId), offer } });
+    }
+    case "EXTENSION_SUBMIT_OFFER": {
+      return resolveDeterministicExtensionSubmission(state, action.payload.playerId, action.payload.offer);
+    }
+    case "EXTENSION_CLEAR_OFFER": {
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      const current = decisions[String(action.payload.playerId)];
+      if (!current?.offer || current?.action !== "EXTEND_EARLY") return state;
+      delete decisions[String(action.payload.playerId)];
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
     }
     case "SET_ORG_ROLE":
       return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
@@ -5427,7 +5630,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         reputation: Number((person as any).reputation ?? 55),
         expectedSalary: expected,
         offeredSalary: offeredWithArchetype,
-        isCoordinator: true,
+        isCoordinator: offer.roleType === "COORDINATOR",
         hiringModifier: perkHireMod,
       });
 
@@ -5696,9 +5899,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         salary,
         status: "PENDING",
         submittedSeason: state.season,
+        counterProposal: null,
+        revisionCount: 0,
       };
 
-      // Hard budget gate before acceptance check (N2)
       const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
       if (salary > staffBudgetRemaining) {
         const budgetReason = `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).`;
@@ -5706,7 +5910,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return { ...staffAlloc.state, staffOffers: [rejectedBudget, ...staffAlloc.state.staffOffers].slice(0, 100), uiToast: budgetReason, memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: budgetReason }) };
       }
 
-      // Route through deterministic coachAcceptance model (N2)
       const personRep = Number((person as any)?.reputation ?? 55);
       const expSalary = expectedSalary(action.payload.role as any, personRep);
       const perkMod = getPerkHiringModifier(state.coach, action.payload.roleType === "COORDINATOR" ? "COORD" : "ASST");
@@ -5726,6 +5929,24 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       });
 
       if (!staffAccepted) {
+        if (action.payload.roleType === "COORDINATOR" || action.payload.roleType === "ASSISTANT") {
+          const quality = offerQualityScore(salary, expSalary);
+          const counterYears = quality < 45 ? Math.min(5, years + 1) : years;
+          const counterSalary = Math.max(Math.round(expSalary * 1.02), Math.round(salary * 1.08));
+          const counteredOffer: StaffOffer = {
+            ...baseOffer,
+            status: "COUNTERED",
+            reason: "Candidate requested a counter-offer.",
+            counterProposal: { years: counterYears, salary: counterSalary },
+          };
+          return {
+            ...staffAlloc.state,
+            staffOffers: [counteredOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
+            uiToast: `${String((person as any).fullName ?? "Candidate")} countered your offer.`,
+            memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_COUNTERED", { ...action.payload, years, salary, counterYears, counterSalary }),
+          };
+        }
+
         let rejectionReason = "Offer not competitive enough.";
         if (salary < expSalary * 0.85) rejectionReason = "Salary below expectations.";
         else if (personRep > (state.coach.repBaseline ?? 55) + 20) rejectionReason = "Team reputation insufficient for this candidate.";
@@ -5761,9 +5982,129 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { ...action.payload, years, salary }),
       };
     }
-    case "STAFF_COUNTER_OFFER":
+    case "STAFF_COUNTER_OFFER": {
+      const offer = state.staffOffers.find((x) => x.id === action.payload.offerId);
+      if (!offer || offer.status !== "COUNTERED") return state;
+      if ((offer.revisionCount ?? 0) >= 1) return { ...state, uiToast: "You can only revise a counter-offer once." };
+
+      const revisedYears = Math.max(1, Math.min(5, Math.round(Number(action.payload.years) || 1)));
+      const revisedSalary = Math.max(0, Math.round(Number(action.payload.salary) || 0));
+      if (!revisedSalary) return { ...state, uiToast: "Offer salary must be greater than $0." };
+
+      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
+      if (revisedSalary > staffBudgetRemaining) {
+        return { ...state, uiToast: `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).` };
+      }
+
+      const person = getPersonnelById(offer.personId);
+      if (!person) return state;
+
+      const personRep = Number((person as any)?.reputation ?? 55);
+      const expSalary = expectedSalary(offer.role as any, personRep);
+      const perkMod = getPerkHiringModifier(state.coach, offer.roleType === "COORDINATOR" ? "COORD" : "ASST");
+      const userTeamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
+      const revisedAccepted = isOfferAccepted({
+        season: state.season,
+        teamId: userTeamId,
+        personId: offer.personId,
+        roleKey: String(offer.role),
+        reputation: personRep,
+        expectedSalary: expSalary,
+        offeredSalary: revisedSalary,
+        isCoordinator: offer.roleType === "COORDINATOR",
+        hiringModifier: perkMod,
+      });
+
+      if (!revisedAccepted) {
+        const rejected = state.staffOffers.map((x) =>
+          x.id === offer.id
+            ? { ...x, status: "REJECTED" as const, years: revisedYears, salary: revisedSalary, revisionCount: (x.revisionCount ?? 0) + 1, counterProposal: null, reason: "Revised offer rejected." }
+            : x,
+        );
+        return {
+          ...state,
+          staffOffers: rejected,
+          uiToast: `${String((person as any).fullName ?? "Candidate")} rejected your revised offer.`,
+          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { personId: offer.personId, role: offer.role, years: revisedYears, salary: revisedSalary, reason: "Revised offer rejected." }),
+        };
+      }
+
+      const acceptedState: GameState = {
+        ...state,
+        staffOffers: state.staffOffers.map((x) =>
+          x.id === offer.id
+            ? { ...x, status: "ACCEPTED" as const, years: revisedYears, salary: revisedSalary, revisionCount: (x.revisionCount ?? 0) + 1, counterProposal: null, reason: "Revised offer accepted." }
+            : x,
+        ),
+      };
+
+      const next =
+        offer.roleType === "COORDINATOR"
+          ? gameReducer(acceptedState, {
+              type: "HIRE_STAFF",
+              payload: { role: offer.role as "OC" | "DC" | "STC", personId: offer.personId, salary: revisedSalary },
+            })
+          : gameReducer(acceptedState, {
+              type: "HIRE_ASSISTANT",
+              payload: { role: offer.role as keyof AssistantStaff, personId: offer.personId, salary: revisedSalary },
+            });
+
+      return {
+        ...next,
+        uiToast: `${String((person as any).fullName ?? "Candidate")} accepted your revised offer.`,
+        memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { personId: offer.personId, role: offer.role, years: revisedYears, salary: revisedSalary, revisedFromCounter: true }),
+      };
+    }
     case "STAFF_COUNTER_OFFER_RESPONSE": {
-      return state;
+      const offer = state.staffOffers.find((x) => x.id === action.payload.offerId);
+      if (!offer || offer.status !== "COUNTERED") return state;
+      const person = getPersonnelById(offer.personId);
+      if (!person) return state;
+
+      if (!action.payload.accepted) {
+        return {
+          ...state,
+          staffOffers: state.staffOffers.map((x) =>
+            x.id === offer.id ? { ...x, status: "REJECTED" as const, counterProposal: null, reason: "Counter-offer rejected by team." } : x,
+          ),
+          uiToast: "Counter-offer rejected.",
+          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { personId: offer.personId, role: offer.role, years: offer.years, salary: offer.salary, reason: "Counter-offer rejected by team." }),
+        };
+      }
+
+      const proposal = offer.counterProposal;
+      if (!proposal) return state;
+
+      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
+      if (proposal.salary > staffBudgetRemaining) {
+        return { ...state, uiToast: `Counter exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).` };
+      }
+
+      const acceptedState: GameState = {
+        ...state,
+        staffOffers: state.staffOffers.map((x) =>
+          x.id === offer.id
+            ? { ...x, status: "ACCEPTED" as const, years: proposal.years, salary: proposal.salary, counterProposal: null, reason: "Counter-offer accepted." }
+            : x,
+        ),
+      };
+
+      const next =
+        offer.roleType === "COORDINATOR"
+          ? gameReducer(acceptedState, {
+              type: "HIRE_STAFF",
+              payload: { role: offer.role as "OC" | "DC" | "STC", personId: offer.personId, salary: proposal.salary },
+            })
+          : gameReducer(acceptedState, {
+              type: "HIRE_ASSISTANT",
+              payload: { role: offer.role as keyof AssistantStaff, personId: offer.personId, salary: proposal.salary },
+            });
+
+      return {
+        ...next,
+        uiToast: `${String((person as any).fullName ?? "Candidate")} accepted after counter negotiation.`,
+        memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { personId: offer.personId, role: offer.role, years: proposal.years, salary: proposal.salary, acceptedCounter: true }),
+      };
     }
     case "OFFSEASON_SET_TASK": {
       const completed = { ...state.offseason.completed, [action.payload.taskId]: action.payload.completed };
@@ -5833,7 +6174,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             }));
           const offers = cpuResignPlayers(teamCtx, expiring);
           for (const offer of offers) {
-            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0 });
+            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0, discountPct: 0 });
             next = applyCanonicalTx(next, Tx.resign(teamId, String(offer.playerId), ovr));
           }
         }
@@ -7617,7 +7958,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
     case "TRADE_ACCEPT": {
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
-      const deadlineWeek = Number(state.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {
         return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
       }
@@ -7627,7 +7968,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const toTeamId = String(action.payload.toTeamId);
 
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) return pushNews(state, "Trade blocked: tagged player. Remove tag first.");
-      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
+        return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+      }
 
       const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
       if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
@@ -7682,7 +8025,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (state.offseasonData.tagCenter.applied?.playerId === playerId) {
         return pushNews(state, "Cut blocked: tagged player. Remove tag first.");
       }
-      if (state.offseasonData.resigning.decisions[playerId]?.action === "RESIGN") {
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
         return pushNews(state, "Cut blocked: extension offer pending. Clear offer first.");
       }
 
@@ -7767,9 +8110,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "TRADE_PLAYER":
-      if (import.meta.env.DEV) {
-        throw new Error("TRADE_PLAYER is deprecated – use proper trade actions");
-      }
+      // Deprecated ambiguous alias: intentionally no-op to avoid accidental mutations.
       return state;
 
     case "PREGENERATE_FUTURE_CLASS": {
@@ -8030,11 +8371,25 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
       const newSelections = next.draft.selections.slice(next.draft.appliedSelectionCount);
       for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
-      return finalizeDraftIfComplete(next);
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
+    }
+
+    case "DRAFT_COMPLETE": {
+      let next = finalizeDraftIfComplete(state);
+      next = advanceToRegularSeason(next);
+      return next;
     }
 
     case "DRAFT_FINALIZE": {
-      return finalizeDraftIfComplete(state);
+      const finalized = finalizeDraftIfComplete(state);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
     }
 
     case "DRAFT_PICK": {
@@ -8097,12 +8452,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         scoutingGrade: String(rookie.scoutOvr),
         tierLabel: `Dev ${rookie.scoutDev}`,
       });
-      return {
+      const next = {
         ...feedbackAlloc.state,
         rookies: [...nextState.rookies, rookie],
         rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
         feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
       };
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
     }
 
     case "CAMP_SET":
@@ -8360,7 +8720,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         season: next.season,
         week,
         teamId: firedTeamId,
-        record: { wins: Number(firedStanding?.w ?? 0), losses: Number(firedStanding?.l ?? 0) },
+        record: { wins: Number(firedStanding?.wins ?? 0), losses: Number(firedStanding?.losses ?? 0) },
         topDrivers: next.firing.drivers.slice(0, 3).map((d) => d.label),
         ownerApproval: Number(next.owner?.approval ?? 60),
         tenureWeeks: Number(next.hub?.regularSeasonWeek ?? week),
@@ -8513,9 +8873,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, pendingInjuryAlert: undefined };
     }
     case "DEV_APPLY_GATE": {
+      if (!DEV_TOOLS_ENABLED) return state;
       return applyDevGate(state, action.payload.gate);
     }
     case "DEV_RUN_ACTION": {
+      if (!DEV_TOOLS_ENABLED) return state;
       if (action.payload.action === "ADVANCE_PHASE") {
         if (state.phase === "HUB" && getUnifiedPhase(state) === "REGULAR_SEASON") {
           return gameReducer(state, { type: "ADVANCE_WEEK" });
@@ -8660,7 +9022,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           playLogsByGameKey: {},
           percentiles: nextPercentiles,
           gameAggsByGameKey: {},
-          seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} },
+          seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} },
         },
         historicalTelemetry: out.historicalTelemetry,
         hub: {
@@ -8670,10 +9032,11 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           regularSeasonWeek: 1,
           news: [{ id: championNewsAlloc.id, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: championNewsAlloc.ts, category: "LEAGUE" }, ...(championNewsAlloc.state.hub.news ?? [])],
         },
+        contextFlags: applyFlagsToContext(coachWithCareer),
       };
       const teamId = completed.acceptedOffer?.teamId ?? "";
       const row = completed.currentStandings.find((r) => String(r.teamId) === String(teamId));
-      const wins = Number(row?.w ?? 0);
+      const wins = Number(row?.wins ?? 0);
       const ownerOutcome: DynastySeasonLog["ownerOutcome"] = completed.ownerState.approval < 25 ? "FIRED" : completed.ownerState.approval < 45 ? "ULTIMATUM" : "STABLE";
       completed = gameReducer(completed, { type: "OWNER_ENDSEASON_EVALUATE", payload: { year: completed.season - 1, teamId, result: { goalScore: wins, ownerOutcome, delta: wins >= 9 ? 4 : -4, summary: wins >= 9 ? "Met seasonal baseline" : "Missed seasonal baseline", trigger: wins < 6 ? "Sub-6-win season" : undefined } } });
       completed = gameReducer(completed, { type: "DYNASTY_ENDSEASON_SCORE", payload: { year: completed.season - 1, teamId, inputs: { wins, playoffResult: ownerOutcome === "FIRED" ? "MISS" : "WILD_CARD", awards: [], powerRanks: { off: completed.lastSeasonSummary?.offenseRank, def: completed.lastSeasonSummary?.defenseRank, st: completed.lastSeasonSummary?.specialTeamsRank }, ownerOutcome, mediaTags: ["season_complete"] } } });
@@ -8834,6 +9197,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
               stepId: "CUT_DOWNS",
               stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true },
             },
+            contextFlags: applyFlagsToContext(nextWithPractice.coach),
             careerStage: "CUTDOWNS",
             game: initGameSim({
               homeTeamId: state.game.homeTeamId,
@@ -8855,7 +9219,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let nextState = {
         ...nextWithPractice,
         teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
-        league: { ...league, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase },
+        league: { ...league, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase) as LeaguePhase },
         currentStandings: weekResult.updatedStandings,
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
@@ -8953,7 +9317,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let simNextState = {
         ...nextWithPractice,
         teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
-        league: { ...simLeague, phase: state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase },
+        league: { ...simLeague, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase) as LeaguePhase },
         currentStandings: weekResult.updatedStandings,
         weeklyResults: [...state.weeklyResults, weekResult],
         leagueStatLeaders: weekResult.statLeaders,
@@ -9035,6 +9399,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         leagueStatLeaders: weekResult.statLeaders,
         newsHistory: appendWeeklyNews(state, weekResult, week),
         hub,
+        contextFlags: state.contextFlags,
         playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
         qbRunContactExposureByPlayerId: { ...(state.qbRunContactExposureByPlayerId ?? {}), ...(state.game.qbRunContactsByPlayerId ?? {}) },
       };
@@ -9059,7 +9424,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       try { out = updateOwner(out); } catch (e) { logError("narrative.owner", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
       try { out = updateAutonomy(out); } catch (e) { logError("narrative.autonomy", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
       if (week % 4 === 0) out = gameReducer(out, { type: "WIRE_PRUNE", payload: { keepLastN: 250 } });
-      if (Number(out.league.week ?? week + 1) > Number(out.league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK)) {
+      if (Number(out.league.week ?? week + 1) > resolveTradeDeadlineWeek(out.league.tradeDeadlineWeek)) {
         // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
         const cancelled = cancelPendingTradesAtDeadline(out.pendingTradeOffers ?? []);
         if (cancelled.cancelledOffers > 0) {
@@ -9419,18 +9784,53 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
     }
     case "RECOVERY_REBUILD_INDICES": {
-      // Replay ledger to rebuild roster + contract indices, then clear recovery flag.
-      const rebuilt = { ...state, playerTeamOverrides: {}, playerContractOverrides: {}, recoveryNeeded: false, recoveryErrors: [] };
-      const migrationEvts = buildMigrationEvents(rebuilt);
-      if (migrationEvts.length > 0) {
-        return {
-          ...rebuilt,
-          transactionLedger: { events: migrationEvts, counter: migrationEvts.length, migrationComplete: true },
-          playerTeamOverrides: {},
-          playerContractOverrides: {},
-        };
-      }
-      return rebuilt;
+      // Preserve recoverable source data first, then rebuild derived indices from canonical ledger
+      // when available (fallback: migration events synthesized from overrides).
+      const sourceTeamOverrides = { ...state.playerTeamOverrides };
+      const sourceContractOverrides = { ...state.playerContractOverrides };
+      const sourceState = {
+        ...state,
+        playerTeamOverrides: sourceTeamOverrides,
+        playerContractOverrides: sourceContractOverrides,
+      };
+
+      const existingLedgerEvents = Array.isArray(state.transactionLedger?.events)
+        ? sortTransactionEvents(state.transactionLedger.events)
+        : [];
+      const rebuiltLedgerEvents = existingLedgerEvents.length > 0
+        ? existingLedgerEvents
+        : buildMigrationEvents(sourceState);
+
+      const rebuilt = {
+        ...state,
+        transactionLedger: {
+          events: rebuiltLedgerEvents,
+          counter: rebuiltLedgerEvents.length,
+          migrationComplete: true,
+        },
+        playerTeamOverrides: {},
+        playerContractOverrides: {},
+      };
+
+      const sourceRosterIndex = buildRosterIndex(sourceState);
+      const sourceContractIndex = buildContractIndex(sourceState);
+      const rebuiltRosterIndex = buildRosterIndex(rebuilt);
+      const rebuiltContractIndex = buildContractIndex(rebuilt);
+
+      const teamConsistent = Object.entries(sourceRosterIndex.playerToTeam).every(
+        ([playerId, teamId]) => String(rebuiltRosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"),
+      );
+      const contractConsistent = Object.entries(sourceContractIndex).every(
+        ([playerId, contract]) => JSON.stringify(rebuiltContractIndex[String(playerId)] ?? null) === JSON.stringify(contract ?? null),
+      );
+      const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
+      const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
+
+      return {
+        ...rebuilt,
+        recoveryNeeded: !rebuildConsistent,
+        recoveryErrors: rebuildConsistent ? [] : ["Rebuild indices consistency check failed"],
+      };
     }
     case "RECOVERY_SKIP_STEP": {
       // Advance the offseason step and clear recovery.
@@ -9445,8 +9845,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
     }
     case "RECOVERY_RESTORE_BACKUP": {
-      // Clear recovery flags and fall back to initial state with the current season.
-      return { ...createInitialState(), season: state.season, recoveryNeeded: false, recoveryErrors: [] };
+      // Restore is orchestrated by recovery controller via saveManager + RECOVERY_HYDRATE_STATE.
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: ["Backup restore must run from the recovery controller."],
+      };
+    }
+    case "RECOVERY_HYDRATE_STATE": {
+      return action.payload.state;
+    }
+    case "RECOVERY_SET_ERRORS": {
+      return {
+        ...state,
+        recoveryNeeded: true,
+        recoveryErrors: action.payload.errors,
+      };
     }
     case "RESET":
       return createInitialState();
@@ -9455,7 +9869,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
   }
 }
 
-const STORAGE_KEY = "hc_career_save";
 const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 function ensureLeagueGmMap(state: GameState): GameState {
@@ -9468,7 +9881,9 @@ function ensureLeagueGmMap(state: GameState): GameState {
 
 export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  const saveSeed = oldState.saveSeed ?? Date.now();
+  // Preserve the existing saveSeed to ensure deterministic simulation replay.
+  // If missing, generate a new one using a deterministic method.
+  const saveSeed = oldState.saveSeed ?? (Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
@@ -9677,7 +10092,7 @@ export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
       playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
       gameAggsByGameKey: { ...((oldState as any).telemetry?.gameAggsByGameKey ?? {}) },
       seasonAgg: {
-        version: 1,
+        version: 1 as const,
         appliedGameKeys: { ...((oldState as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
         byTeamId: { ...((oldState as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
       },
@@ -9817,11 +10232,20 @@ function loadState(): GameState {
     };
   }
 
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return initial;
+  const activeSaveId = getActiveSaveId();
+  if (!activeSaveId) return initial;
 
-    const parsed = JSON.parse(saved) as Partial<GameState>;
+  try {
+    const loadResult = loadSaveResult(activeSaveId);
+    if (!loadResult.ok) {
+      return {
+        ...initial,
+        recoveryNeeded: true,
+        recoveryErrors: [loadResult.message],
+      };
+    }
+
+    const parsed = loadResult.state as Partial<GameState>;
     const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
     let out: GameState = {
@@ -9878,7 +10302,7 @@ function loadState(): GameState {
         percentiles: { ...(initial.telemetry?.percentiles ?? {}), ...((migrated as any).telemetry?.percentiles ?? {}) },
         gameAggsByGameKey: { ...(initial.telemetry?.gameAggsByGameKey ?? {}), ...((migrated as any).telemetry?.gameAggsByGameKey ?? {}) },
         seasonAgg: {
-          ...(initial.telemetry?.seasonAgg ?? { version: 1, byTeamId: {}, appliedGameKeys: {} }),
+          ...(initial.telemetry?.seasonAgg ?? { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }),
           ...((migrated as any).telemetry?.seasonAgg ?? {}),
           byTeamId: { ...(initial.telemetry?.seasonAgg?.byTeamId ?? {}), ...((migrated as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
           appliedGameKeys: { ...(initial.telemetry?.seasonAgg?.appliedGameKeys ?? {}), ...((migrated as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
@@ -10089,9 +10513,14 @@ function loadState(): GameState {
 
     return out;
   } catch (error) {
-    logError("state.load.failure", { saveId: getActiveSaveId(), meta: { message: error instanceof Error ? error.message : String(error) } });
-    console.error("[state-load] Failed to restore saved state, falling back to defaults", error);
-    return initial;
+    const message = error instanceof Error ? error.message : String(error);
+    logError("state.load.failure", { saveId: activeSaveId, meta: { message } });
+    console.error("[state-load] Failed to restore saved state, entering recovery mode", error);
+    return {
+      ...initial,
+      recoveryNeeded: true,
+      recoveryErrors: [message],
+    };
   }
 }
 
@@ -10129,109 +10558,107 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 //     catching any pending debounced save before the browser suspends the tab.
 // —————————————————————————
 
-const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-const prevDriveRef = useRef(state.game.driveNumber);
-const AUTOSAVE_DEBOUNCE_MS = 600;
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevDriveRef = useRef(state.game.driveNumber);
+  const AUTOSAVE_DEBOUNCE_MS = 600;
 
-// True when we are mid-play-by-play and saves should be suppressed.
-//
-// Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
-// RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
-// which triggers a save automatically (no extra wiring needed).
-//
-// Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
-// CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
-// playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
-const isGameInProgress =
-  state.league.phase === "REGULAR_SEASON_GAME" ||
-  (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
+  // True when we are mid-play-by-play and saves should be suppressed.
+  //
+  // Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
+  // RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
+  // which triggers a save automatically (no extra wiring needed).
+  //
+  // Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
+  // CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
+  // playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
+  const isGameInProgress =
+    state.league.phase === "REGULAR_SEASON_GAME" ||
+    (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
 
-useEffect(() => {
-  if (saveTimerRef.current !== null) {
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = null;
-  }
-
-  // Suppress saves entirely during active play-by-play.
-  if (isGameInProgress) return;
-
-  const teamId = getUserTeamId(state);
-  if (!teamId) return;
-
-  saveTimerRef.current = setTimeout(() => {
-    saveTimerRef.current = null;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      syncCurrentSave(state, getActiveSaveId() ?? undefined);
-    } catch (error) {
-      logError("state.save.failure", {
-        phase: state.phase,
-        saveId: getActiveSaveId(),
-        season: state.season,
-        week: state.week,
-        meta: { message: error instanceof Error ? error.message : String(error) },
-      });
-      console.error("[state-save] Failed to persist save data", error);
-    }
-  }, AUTOSAVE_DEBOUNCE_MS);
-
-  return () => {
+  useEffect(() => {
     if (saveTimerRef.current !== null) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-  };
-}, [state, isGameInProgress]);
 
-// Flush immediately when the tab goes to background (catches any pending
-// debounced save before the browser suspends execution).
-useEffect(() => {
-  const handleVisibilityChange = () => {
-    if (document.visibilityState !== "hidden") return;
-    if (saveTimerRef.current !== null) {
-      clearTimeout(saveTimerRef.current);
+    // Suppress saves entirely during active play-by-play.
+    if (isGameInProgress) return;
+
+    const teamId = getUserTeamId(state);
+    if (!teamId) return;
+
+    saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
-    }
-    if (isGameInProgress) return; // mid-drive state is not resumable
-    if (!getUserTeamId(state)) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      syncCurrentSave(state, getActiveSaveId() ?? undefined);
-    } catch {
-      // Silent — can’t show UI in a visibilitychange handler.
-    }
-  };
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-}, [state, isGameInProgress]);
-
-// Drive-boundary checkpoint: save game state at the start of each new drive so
-// a hard-refresh mid-game can resume from the last completed drive boundary.
-useEffect(() => {
-  const prev = prevDriveRef.current;
-  prevDriveRef.current = state.game.driveNumber;
-
-  if (!isGameInProgress) {
-    // Game ended or not started — clear any stale checkpoint
-    try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
-    return;
-  }
-
-  // Only write at drive boundaries (driveNumber incremented)
-  if (state.game.driveNumber > prev) {
-    try {
-      localStorage.setItem(
-        GAME_CHECKPOINT_KEY,
-        JSON.stringify({
-          saveSeed: state.saveSeed,
+      try {
+        syncCurrentSave(state, getActiveSaveId() ?? undefined);
+      } catch (error) {
+        logError("state.save.failure", {
+          phase: state.phase,
+          saveId: getActiveSaveId(),
           season: state.season,
-          leaguePhase: state.league.phase,
-          game: state.game,
-        }),
-      );
-    } catch { /* quota exceeded — silent */ }
-  }
-}, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
+          week: state.week,
+          meta: { message: error instanceof Error ? error.message : String(error) },
+        });
+        console.error("[state-save] Failed to persist save data", error);
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [state, isGameInProgress]);
+
+  // Flush immediately when the tab goes to background (catches any pending
+  // debounced save before the browser suspends execution).
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (isGameInProgress) return; // mid-drive state is not resumable
+      if (!getUserTeamId(state)) return;
+      try {
+        syncCurrentSave(state, getActiveSaveId() ?? undefined);
+      } catch {
+        // Silent — can’t show UI in a visibilitychange handler.
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [state, isGameInProgress]);
+
+  // Drive-boundary checkpoint: save game state at the start of each new drive so
+  // a hard-refresh mid-game can resume from the last completed drive boundary.
+  useEffect(() => {
+    const prev = prevDriveRef.current;
+    prevDriveRef.current = state.game.driveNumber;
+
+    if (!isGameInProgress) {
+      // Game ended or not started — clear any stale checkpoint
+      try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
+      return;
+    }
+
+    // Only write at drive boundaries (driveNumber incremented)
+    if (state.game.driveNumber > prev) {
+      try {
+        localStorage.setItem(
+          GAME_CHECKPOINT_KEY,
+          JSON.stringify({
+            saveSeed: state.saveSeed,
+            season: state.season,
+            leaguePhase: state.league.phase,
+            game: state.game,
+          }),
+        );
+      } catch { /* quota exceeded — silent */ }
+    }
+  }, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;

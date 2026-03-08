@@ -27,15 +27,21 @@ function normalizeContract(raw: any, seasonFallback: number): PlayerContractOver
 
 export function buildContractIndex(state: GameState): ContractIndex {
   const out: ContractIndex = {};
+  // Priority: Overrides take precedence over DB contracts to prevent phantom contracts.
+  // First, apply all DB contracts as the base layer.
   for (const player of getPlayers()) {
     const playerId = String(player.playerId);
     const contract = player.contractId ? getContractById(player.contractId) : undefined;
     if (contract) out[playerId] = normalizeContract(contract, Number(state.season ?? 1));
   }
+  // Then, explicitly override with game-managed contracts.
+  // This ensures that any runtime modifications take precedence.
   for (const [playerId, override] of Object.entries(state.playerContractOverrides ?? {})) {
     out[String(playerId)] = normalizeContract(override, Number(state.season ?? 1));
   }
 
+  // Apply transaction ledger events to build the final contract state.
+  // This ensures that all runtime transactions (trades, signings, cuts) are reflected.
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
   for (const event of events) {
     const contract = event.details?.contract;

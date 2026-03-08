@@ -24,7 +24,7 @@ export default function PrivateWorkouts() {
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
         <div className="font-semibold">Private Workouts</div>
         <div className="mt-1 text-xs text-muted-foreground">Run scripted workouts with deterministic drill grades that can move projection bands.</div>
-        <div className="mt-1 text-xs opacity-80">Workouts left: {scouting.visits.privateWorkoutsRemaining}</div>
+        <div className="mt-1 text-xs opacity-80">Cost: 4 budget + 1 private workout visit · Workouts left: {scouting.visits.privateWorkoutsRemaining} · Budget: {scouting.budget.remaining}</div>
       </div>
       {prospects.map((prospect) => {
         const result = scouting.workouts.resultsByProspectId?.[prospect.id];

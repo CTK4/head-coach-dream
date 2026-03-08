@@ -30,7 +30,9 @@ export default function LoadSave() {
       window.location.href = "/hub";
       return;
     }
-    setError(`Could not load save: ${loaded.message}`);
+    if (!loaded.ok && "message" in loaded) {
+      setError(`Could not load save: ${loaded.message}`);
+    }
   }, [quickSaveId]);
 
   const onImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -38,7 +40,7 @@ export default function LoadSave() {
     if (!file) return;
     const text = await file.text();
     const result = importSave(text);
-    if (!result.ok) {
+    if (!result.ok && "message" in result) {
       setError(`Import failed: ${result.message}`);
       return;
     }
@@ -71,7 +73,9 @@ export default function LoadSave() {
                   window.location.href = '/hub';
                   return;
                 }
-                setError(`Could not load \"${save.teamName}\": ${result.message}`);
+                if (!result.ok && "message" in result) {
+                  setError(`Could not load \"${save.teamName}\": ${result.message}`);
+                }
               }}>Load</Button>
               <Button variant="secondary" onClick={() => {
                 const exported = exportSave(save.saveId);

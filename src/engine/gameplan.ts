@@ -1,8 +1,9 @@
-import type { PlayType } from "@/engine/gameSim";
+import type { PlayType, TeamGameplan } from "@/engine/gameSim";
 import { hashSeed, rng } from "@/engine/rng";
 
-export type WeeklyGameplan = {
+export type WeeklyGameplan = TeamGameplan & {
   offensiveFocus: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
+  offenseSchemeId?: string;
   tempo: "SLOW" | "NORMAL" | "FAST";
   aggression: "CONSERVATIVE" | "STANDARD" | "AGGRESSIVE";
   defensiveFocus: "STOP_RUN" | "STOP_PASS" | "BALANCED";

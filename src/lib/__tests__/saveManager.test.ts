@@ -314,4 +314,18 @@ describe("saveManager", () => {
       expect(loaded.state.season).toBe(2025);
     }
   });
+
+  it("preserves jerseyNumber in player attribute overrides through migration", () => {
+    const migrated = migrateSaveSchema({
+      ...baseState,
+      playerAttrOverrides: { "player-1": { jerseyNumber: 22 } },
+      playerTeamOverrides: {},
+      playerContractOverrides: {},
+      userTeamId: "MILWAUKEE_NORTHSHORE",
+      saveVersion: 6,
+      schemaVersion: 2,
+    } as any, "slot-jersey");
+    expect((migrated.playerAttrOverrides as any)["player-1"].jerseyNumber).toBe(22);
+  });
+
 });

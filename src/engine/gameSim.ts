@@ -26,6 +26,7 @@ import type { WeeklyGameplan } from "@/engine/gameplan";
 import type { GameWeather } from "@/engine/weather/generateGameWeather";
 import type { PlayerUnicorn, UnicornArchetypeId } from "@/engine/unicorns/types";
 import { describeUnicornBoost, resolveUnicornModifiers } from "@/engine/unicorns/effects";
+import type { OffenseSchemeId } from "@/lib/schemeLabels";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -161,6 +162,7 @@ export type DefensiveFocus = "BALANCED" | "STOP_RUN" | "STOP_PASS";
 export type PressureRate = "LOW" | "NORMAL" | "HIGH";
 
 export type TeamGameplan = {
+  offenseSchemeId?: OffenseSchemeId;
   offensiveFocus?: OffensiveFocus;
   defensiveFocus?: DefensiveFocus;
   pressureRate?: PressureRate;
@@ -295,8 +297,6 @@ export type GameSim = {
   lastPlayResult?: PlayResult;
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
   lastPlayDiag?: PassPlayDiag;
-  homeGameplan?: TeamGameplan;
-  awayGameplan?: TeamGameplan;
   defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
   pendingDefensiveCall?: DefensiveCall;
   lastDefensiveCall?: DefensiveCall;
@@ -488,7 +488,7 @@ function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRati
   const qbId = sim.trackedPlayers[sim.possession]?.QB;
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
 
   if (isRun) {
     const olVsRunDef = (off.olPassBlock - def.runStop) / 15; // OL run-block vs DL run-stop
@@ -583,7 +583,7 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
   const schemeId = sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId;
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, schemeId as any);
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, schemeId);
 
   // PAS = weighted sum
   const pas = 0.35 * cvl + 0.35 * me + 0.2 * sf + 0.1 * (exec * schemeFit);
@@ -731,7 +731,7 @@ function buildResultTags(
   const qbId = sim.trackedPlayers[sim.possession]?.QB;
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
 
   // Pick the largest contributing factor
   const factors: { key: string; val: number }[] = [
@@ -847,6 +847,7 @@ function resolveWithPAS(
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
   const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
   const weatherLabel = currentWeatherLabel(sim);
   const qbUnicorn = getUnicornForPlayer(sim, qbId);
   const rbId = sim.trackedPlayers[sim.possession]?.RB;
@@ -1030,7 +1031,7 @@ function resolveWithPAS(
     : outcomeLabel === "incomplete" ? "FAILURE"
     : "SUCCESS";
 
-  const tags = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
+  const tags: ResultTag[] = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
 
   if (sim.ballOn + yards >= 100 && !turnover) {
     td = true;
@@ -1063,6 +1064,13 @@ function scriptMode(sim: GameSim): "SLOW" | "NORMAL" | "FAST" | "HURRY_UP" | "MI
   if (q === 4 && myDiff <= -15) return t <= 120 ? "EXTREME_HURRY" : "HURRY_UP";
   if (q === 2 && t <= 120 && myDiff < 0) return "HURRY_UP";
   return "NORMAL";
+}
+
+function canRunSpike(sim: GameSim): boolean {
+  const q = sim.clock.quarter;
+  const t = sim.clock.timeRemainingSec;
+  const lateGameWindow = (q === 2 || q === 4) && t <= 60;
+  return lateGameWindow && sim.clock.clockRunning && sim.down < 4;
 }
 
 function isClockStoppedResult(tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE") {
@@ -1264,7 +1272,8 @@ function isGranularPlay(playType: PlayType): boolean {
 function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}): { sim: GameSim; tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE"; live: number; admin: number; playDiag?: PassPlayDiag } {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
-    return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE"), playDiag: undefined };
+    const spiked = advanceDown({ ...sim, lastResult: "Spike (clock stopped).", lastResultTags: [] as ResultTag[] }, 0);
+    return { sim: spiked, tag: "INCOMPLETE" as const, live, admin: 0, playDiag: undefined };
   }
 
   // ── PAS-driven resolution for granular play types ──────────────────────
@@ -1300,6 +1309,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
       side.turnovers += 1;
       const desc = sack ? `Sack for ${yards}y.` : incomplete ? "Intercepted!" : `Fumble! Ball lost.`;
       let s2 = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
+      let s2: GameSim = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
       if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       if (sack) {
         const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
@@ -1643,6 +1653,17 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = quarterAdvanceIfNeeded(s);
   if (s.clock.timeRemainingSec === 0) return { sim: s, ended: s.clock.quarter === 4 };
 
+  if (playType === "SPIKE" && !canRunSpike(s)) {
+    return {
+      sim: {
+        ...s,
+        lastResult: "Spike not available in this situation.",
+        lastResultTags: [{ kind: "SITUATION", text: "SPIKE_BLOCKED" }],
+      },
+      ended: false,
+    };
+  }
+
   const preSnapRng = contextualRng(hashSeed(s.seed, "presnap", s.driveNumber, s.playNumberInDrive + 1));
   s = applySnapLoopTime(s, preSnapRng);
   if (s.clock.timeRemainingSec === 0) {
@@ -1788,7 +1809,7 @@ export function autoPickPlay(sim: GameSim): PlayType {
   const plan = offenseGameplan(sim);
 
   if (sim.down === 4) return decideFourthDown(sim);
-  if ((q === 2 || q === 4) && t <= 15 && myDiff < 0 && !sim.clock.clockRunning) return "SPIKE";
+  if ((q === 2 || q === 4) && myDiff < 0 && canRunSpike(sim)) return "SPIKE";
   if (q === 4 && myDiff > 0 && t <= 120) return "KNEEL";
   if (q === 4 && myDiff < 0 && t <= 90) return sim.distance >= 8 ? "DROPBACK" : "QUICK_GAME";
   if (sim.distance >= 9) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "QUICK_GAME" : "DROPBACK";
@@ -1797,7 +1818,7 @@ export function autoPickPlay(sim: GameSim): PlayType {
   return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "DROPBACK";
 }
 
-export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: TeamGameplan; awayGameplan?: TeamGameplan; includePlayLog?: boolean }) {
+export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: WeeklyGameplan; awayGameplan?: WeeklyGameplan; includePlayLog?: boolean }) {
   let sim = initGameSim({ ...params });
   sim = { ...sim, clock: { ...sim.clock, clockRunning: false, restartMode: "SNAP" } };
 
