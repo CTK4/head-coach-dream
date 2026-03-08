@@ -20,7 +20,7 @@ export default function AnalyticsPage() {
     <div className="p-4 md:p-6 space-y-4">
       <Card className="rounded-2xl border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03]">
         <CardHeader>
-          <CardTitle>Analytics Hub (Stub)</CardTitle>
+          <CardTitle>Analytics Hub</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           Career leaderboards combine retained historical telemetry with current season in-progress data.

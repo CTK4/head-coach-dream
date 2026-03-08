@@ -273,14 +273,6 @@ export default function PlayerContractScreen() {
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-white/10 px-4 py-3 flex gap-2 backdrop-blur-md">
         <Button
           variant="outline"
-          className="flex-1 rounded-xl border-white/15 text-xs"
-          disabled
-          title="Extend: coming soon"
-        >
-          Extend
-        </Button>
-        <Button
-          variant="outline"
           className={`flex-1 rounded-xl text-xs ${
             restructureElig.eligible
               ? "border-blue-500/40 text-white hover:bg-blue-500/10"

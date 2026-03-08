@@ -457,15 +457,6 @@ function InjuryDrawer({
                 >
                   Start Practice Window
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled
-                  className="border-slate-300/20 text-slate-400 opacity-40 cursor-not-allowed"
-                  title="Not yet implemented"
-                >
-                  Release / Injury Settlement
-                </Button>
               </div>
             </div>
           ) : null}
