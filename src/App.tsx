@@ -60,6 +60,7 @@ import FreePlaySetup from "@/pages/FreePlaySetup";
 import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES } from "@/routes/appRoutes";
+import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
 import { getUserTeamId } from "@/lib/userTeam";
 import PlayoffsPage from "@/pages/hub/Playoffs";
 import GameplanPage from "@/pages/hub/Gameplan";

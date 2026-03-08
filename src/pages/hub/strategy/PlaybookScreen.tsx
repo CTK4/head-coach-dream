@@ -46,6 +46,42 @@ import {
 import { DEFENSE_SCHEMES, OFFENSE_SCHEMES, canonicalSchemeId, type Side } from "@/lib/schemeCatalog";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID } from "@/lib/schemeLabels";
 
+const OFFENSE_COMPONENTS: Record<OffenseSchemeId, React.ComponentType> = {
+  AIR_RAID,
+  SHANAHAN_WIDE_ZONE,
+  VERTICAL_PASSING,
+  PRO_STYLE_BALANCED,
+  POWER_GAP,
+  ERHARDT_PERKINS,
+  RUN_AND_SHOOT,
+  SPREAD_RPO,
+  WEST_COAST,
+  AIR_CORYELL,
+  MODERN_TRIPLE_OPTION,
+  CHIP_KELLY_RPO,
+  TWO_TE_POWER_I,
+  MOTION_BASED_MISDIRECTION,
+  POWER_SPREAD,
+};
+
+const DEFENSE_COMPONENTS: Record<DefenseSchemeId, React.ComponentType> = {
+  THREE_FOUR_TWO_GAP,
+  FOUR_TWO_FIVE,
+  SEATTLE_COVER_3,
+  COVER_SIX,
+  FANGIO_TWO_HIGH,
+  TAMPA_2,
+  MULTIPLE_HYBRID,
+  CHAOS_FRONT,
+  PHILLIPS_BASE_THREE_FOUR,
+  LEBEAU_ZONE_BLITZ_THREE_FOUR,
+  BEARS_FOUR_SIX,
+  FOUR_THREE_OVER,
+  SINGLE_HIGH_COVER_3,
+  SABAN_COVER_4_MATCH,
+  RYAN_NICKEL_PRESSURE,
+};
+
 function deepGet(obj: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, key) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[key] : undefined), obj);
 }
