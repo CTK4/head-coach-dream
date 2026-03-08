@@ -1065,6 +1065,13 @@ function scriptMode(sim: GameSim): "SLOW" | "NORMAL" | "FAST" | "HURRY_UP" | "MI
   return "NORMAL";
 }
 
+function canRunSpike(sim: GameSim): boolean {
+  const q = sim.clock.quarter;
+  const t = sim.clock.timeRemainingSec;
+  const lateGameWindow = (q === 2 || q === 4) && t <= 60;
+  return lateGameWindow && sim.clock.clockRunning && sim.down < 4;
+}
+
 function isClockStoppedResult(tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE") {
   if (tag === "IN_BOUNDS") return { running: true, restart: "READY" as const };
   return { running: false, restart: "SNAP" as const };
@@ -1264,7 +1271,8 @@ function isGranularPlay(playType: PlayType): boolean {
 function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, snapKey: string, opts: { aggression?: AggressionLevel; tempo?: TempoMode } = {}): { sim: GameSim; tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE"; live: number; admin: number; playDiag?: PassPlayDiag } {
   if (playType === "SPIKE") {
     const live = liveTime(rng, "SPIKE");
-    return { sim: { ...sim, lastResult: "Spike.", lastResultTags: [] as ResultTag[] }, tag: "INCOMPLETE" as const, live, admin: adminTime(rng, "ROUTINE"), playDiag: undefined };
+    const spiked = advanceDown({ ...sim, lastResult: "Spike (clock stopped).", lastResultTags: [] as ResultTag[] }, 0);
+    return { sim: spiked, tag: "INCOMPLETE" as const, live, admin: 0, playDiag: undefined };
   }
 
   // ── PAS-driven resolution for granular play types ──────────────────────
@@ -1643,6 +1651,17 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
   s = quarterAdvanceIfNeeded(s);
   if (s.clock.timeRemainingSec === 0) return { sim: s, ended: s.clock.quarter === 4 };
 
+  if (playType === "SPIKE" && !canRunSpike(s)) {
+    return {
+      sim: {
+        ...s,
+        lastResult: "Spike not available in this situation.",
+        lastResultTags: [{ kind: "SITUATION", text: "SPIKE_BLOCKED" }],
+      },
+      ended: false,
+    };
+  }
+
   const preSnapRng = contextualRng(hashSeed(s.seed, "presnap", s.driveNumber, s.playNumberInDrive + 1));
   s = applySnapLoopTime(s, preSnapRng);
   if (s.clock.timeRemainingSec === 0) {
@@ -1788,7 +1807,7 @@ export function autoPickPlay(sim: GameSim): PlayType {
   const plan = offenseGameplan(sim);
 
   if (sim.down === 4) return decideFourthDown(sim);
-  if ((q === 2 || q === 4) && t <= 15 && myDiff < 0 && !sim.clock.clockRunning) return "SPIKE";
+  if ((q === 2 || q === 4) && myDiff < 0 && canRunSpike(sim)) return "SPIKE";
   if (q === 4 && myDiff > 0 && t <= 120) return "KNEEL";
   if (q === 4 && myDiff < 0 && t <= 90) return sim.distance >= 8 ? "DROPBACK" : "QUICK_GAME";
   if (sim.distance >= 9) return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "QUICK_GAME" : "DROPBACK";
