@@ -150,3 +150,48 @@ describe("defensive tendency window + confidence", () => {
     expect(confidencePct).toBe(100);
   });
 });
+
+
+describe("spike semantics", () => {
+  it("legal spike burns a small amount of time, advances the down, and stops the clock", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 333 });
+    sim = {
+      ...sim,
+      down: 2,
+      distance: 7,
+      ballOn: 61,
+      clock: { ...sim.clock, quarter: 4, timeRemainingSec: 42, clockRunning: true, restartMode: "READY" },
+    };
+
+    const beforeTime = sim.clock.timeRemainingSec;
+    const out = stepPlay(sim, "SPIKE").sim;
+
+    expect(out.down).toBe(3);
+    expect(out.distance).toBe(7);
+    expect(out.ballOn).toBe(61);
+    expect(out.clock.clockRunning).toBe(false);
+    expect(out.clock.restartMode).toBe("SNAP");
+    expect(out.clock.timeRemainingSec).toBeLessThan(beforeTime);
+    expect(out.lastResult).toContain("Spike");
+  });
+
+  it("invalid spike is safely blocked as a no-op", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 444 });
+    sim = {
+      ...sim,
+      down: 2,
+      distance: 6,
+      ballOn: 48,
+      clock: { ...sim.clock, quarter: 4, timeRemainingSec: 38, clockRunning: false, restartMode: "SNAP" },
+    };
+
+    const out = stepPlay(sim, "SPIKE").sim;
+
+    expect(out.down).toBe(2);
+    expect(out.distance).toBe(6);
+    expect(out.ballOn).toBe(48);
+    expect(out.clock.timeRemainingSec).toBe(38);
+    expect(out.lastResult).toBe("Spike not available in this situation.");
+    expect(out.lastResultTags?.some((t) => t.text === "SPIKE_BLOCKED")).toBe(true);
+  });
+});
