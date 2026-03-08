@@ -846,6 +846,7 @@ function resolveWithPAS(
   const qbId = sim.trackedPlayers[sim.possession]?.QB;
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
+  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId as any);
   const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
   const weatherLabel = currentWeatherLabel(sim);
   const qbUnicorn = getUnicornForPlayer(sim, qbId);
@@ -1307,6 +1308,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (isTO) {
       side.turnovers += 1;
       const desc = sack ? `Sack for ${yards}y.` : incomplete ? "Intercepted!" : `Fumble! Ball lost.`;
+      let s2 = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
       let s2: GameSim = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
       if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       if (sack) {
