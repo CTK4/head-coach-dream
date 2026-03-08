@@ -32,6 +32,7 @@ export default function MedicalBoard() {
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
         <div className="font-semibold">Medical</div>
         <div className="mt-1 text-xs text-muted-foreground">Request full medical packets to surface deterministic risk tiers and adjust grades.</div>
+        <div className="mt-1 text-xs opacity-80">Cost: 3 budget per request · Budget: {scouting.budget.remaining}</div>
       </div>
       {prospects.map((prospect) => {
         const result = scouting.medical.resultsByProspectId?.[prospect.id];
@@ -41,10 +42,10 @@ export default function MedicalBoard() {
               <span className="font-medium text-sm">{prospect.name}</span>
               <button
                 className="rounded border border-white/20 px-2 py-1 disabled:opacity-40"
-                disabled={scouting.budget.remaining < 3}
+                disabled={scouting.budget.remaining < 3 || Boolean(result)}
                 onClick={() => dispatch({ type: "SCOUT_REQUEST_MEDICAL", payload: { prospectId: prospect.id } })}
               >
-                Request Medical
+                {result ? "Medical Requested" : "Request Medical"}
               </button>
             </div>
             {result ? (
