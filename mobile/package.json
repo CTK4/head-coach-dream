@@ -1,0 +1,28 @@
+{
+  "name": "head-coach-dream-mobile",
+  "version": "1.0.0",
+  "description": "iOS wrapper for Head Coach Dream using Capacitor",
+  "scripts": {
+    "build:web": "cd ../head-coach-dream && npm run build",
+    "cap:sync": "cap sync",
+    "cap:sync:ios": "cap sync ios",
+    "cap:build:ios": "cap build ios",
+    "cap:open:ios": "cap open ios",
+    "cap:run:ios": "cap run ios",
+    "ios:dev": "npm run build:web && npm run cap:sync:ios && npm run cap:open:ios",
+    "ios:build": "npm run build:web && npm run cap:sync:ios && npm run cap:build:ios"
+  },
+  "keywords": [
+    "capacitor",
+    "ios",
+    "head-coach-dream"
+  ],
+  "author": "CTK4",
+  "license": "MIT",
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0",
+    "typescript": "^5.9.3"
+  }
+}
