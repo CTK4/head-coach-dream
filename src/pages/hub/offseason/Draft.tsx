@@ -3,12 +3,28 @@ import { useGame } from "@/context/GameContext";
 import { IntelMeters } from "@/components/IntelMeters";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
+import { hashSeed, mulberry32 } from "@/engine/rng";
 
 type DraftTab = "RESULTS" | "POOL" | "MY_PICKS";
 
 function clampDelay(value: number): number {
   if (Number.isNaN(value)) return 800;
   return Math.max(0, Math.min(5000, Math.round(value)));
+}
+
+function getDeterministicCpuDelayMs(params: {
+  minDelayMs: number;
+  maxDelayMs: number;
+  saveSeed: number;
+  season: number;
+  cursor: number;
+  slotOverall?: number;
+}): number {
+  const minDelay = Math.min(params.minDelayMs, params.maxDelayMs);
+  const maxDelay = Math.max(params.minDelayMs, params.maxDelayMs);
+  const seed = hashSeed("DRAFT_CPU_DELAY", params.saveSeed, params.season, params.cursor, params.slotOverall ?? -1);
+  const roll = mulberry32(seed)();
+  return Math.floor(roll * (maxDelay - minDelay + 1)) + minDelay;
 }
 
 export default function Draft() {
@@ -32,16 +48,32 @@ export default function Draft() {
   useEffect(() => {
     if (!sim.started || sim.complete || onClock) return;
 
-    const minDelay = Math.min(cpuDelayMinMs, cpuDelayMaxMs);
-    const maxDelay = Math.max(cpuDelayMinMs, cpuDelayMaxMs);
-    const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+    const delay = getDeterministicCpuDelayMs({
+      minDelayMs: cpuDelayMinMs,
+      maxDelayMs: cpuDelayMaxMs,
+      saveSeed: Number(state.saveSeed ?? 1),
+      season: Number(state.season ?? 0),
+      cursor: sim.cursor,
+      slotOverall: currentSlot?.overall,
+    });
 
     const timer = window.setTimeout(() => {
       dispatch({ type: "DRAFT_CPU_ADVANCE" });
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [dispatch, onClock, sim.complete, sim.cursor, sim.started, cpuDelayMinMs, cpuDelayMaxMs]);
+  }, [
+    currentSlot?.overall,
+    cpuDelayMaxMs,
+    cpuDelayMinMs,
+    dispatch,
+    onClock,
+    sim.complete,
+    sim.cursor,
+    sim.started,
+    state.saveSeed,
+    state.season,
+  ]);
 
   const available = useMemo(() => {
     let list = sim.prospectPool.filter((p) => !sim.takenProspectIds[p.prospectId]);
@@ -67,6 +99,28 @@ export default function Draft() {
     [myOwnedSlots, currentSlot?.overall],
   );
 
+  const nextUserSlot = useMemo(
+    () => sim.slots.slice(sim.cursor).find((slot) => slot.teamId === sim.userTeamId) ?? null,
+    [sim.cursor, sim.slots, sim.userTeamId],
+  );
+
+  const nearClock = useMemo(() => {
+    if (!currentSlot || !nextUserSlot || onClock) return false;
+    return nextUserSlot.overall - currentSlot.overall <= 8;
+  }, [currentSlot, nextUserSlot, onClock]);
+
+  const shouldShowTradeOffers = onClock || nearClock;
+  const incomingTradeOffers = useMemo(
+    () => sim.tradeOffers.filter((offer) => offer.source === "INCOMING"),
+    [sim.tradeOffers],
+  );
+
+  useEffect(() => {
+    if (!sim.started || sim.complete || !currentSlot || !shouldShowTradeOffers) return;
+    if (sim.tradeOffersForOverall === currentSlot.overall && incomingTradeOffers.length > 0) return;
+    dispatch({ type: "DRAFT_SHOP" });
+  }, [currentSlot, dispatch, incomingTradeOffers.length, shouldShowTradeOffers, sim.complete, sim.started, sim.tradeOffersForOverall]);
+
   const myCompletedPicks = useMemo(
     () => myOwnedSlots.map((slot) => ({ slot, selection: selectionsByOverall.get(slot.overall) })).filter((row) => !!row.selection),
     [myOwnedSlots, selectionsByOverall],
@@ -81,6 +135,14 @@ export default function Draft() {
     const canPick = !!slot && slot.teamId === sim.userTeamId;
     if (!canPick || sim.takenProspectIds[prospectId]) return;
     dispatch({ type: "DRAFT_USER_PICK", payload: { prospectId } });
+  };
+
+  const acceptTradeOffer = (offerId: string) => {
+    dispatch({ type: "DRAFT_ACCEPT_TRADE", payload: { offerId } });
+  };
+
+  const declineTradeOffer = (offerId: string) => {
+    dispatch({ type: "DRAFT_DECLINE_OFFER", payload: { offerId } });
   };
 
   return (
@@ -123,7 +185,7 @@ export default function Draft() {
               />
             </label>
           </div>
-          <div className="text-xs text-slate-500">CPU picks wait a random delay between min and max before dispatching advance.</div>
+          <div className="text-xs text-slate-500">CPU picks wait a deterministic pseudo-random delay between min and max before dispatching advance.</div>
         </div>
       </div>
 
@@ -248,7 +310,34 @@ export default function Draft() {
 
           <div className="rounded border border-dashed p-3">
             <div className="font-semibold">Trade Offers</div>
-            <div className="text-sm text-slate-500">Trade offers coming soon.</div>
+            {!shouldShowTradeOffers && (
+              <div className="text-sm text-slate-500">
+                Trade offers unlock when you are on the clock or within 8 picks of your next slot.
+              </div>
+            )}
+            {shouldShowTradeOffers && (
+              <div className="space-y-2">
+                {incomingTradeOffers.length === 0 && <div className="text-sm text-slate-500">No offers right now.</div>}
+                {incomingTradeOffers.map((offer) => (
+                  <div key={offer.offerId} className="rounded border p-2 text-sm space-y-2">
+                    <div className="font-medium">{offer.note}</div>
+                    <div className="text-xs text-slate-500">Receive: {offer.receive.map((slot) => `O${slot.overall}`).join(", ")}</div>
+                    <div className="text-xs text-slate-500">Give: {offer.give.map((slot) => `O${slot.overall}`).join(", ")}</div>
+                    <div className="flex gap-2">
+                      <button className="min-h-11 rounded border px-3 py-1" onClick={() => acceptTradeOffer(offer.offerId)}>
+                        Accept
+                      </button>
+                      <button className="min-h-11 rounded border px-3 py-1" onClick={() => declineTradeOffer(offer.offerId)}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button className="min-h-11 rounded border px-3 py-1 text-sm" onClick={() => dispatch({ type: "DRAFT_SHOP" })}>
+                  Refresh Offers
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}

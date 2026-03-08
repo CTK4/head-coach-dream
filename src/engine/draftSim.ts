@@ -481,7 +481,6 @@ function maybeIncomingTradeUpOffers(args: { saveSeed: number; sim: DraftSimState
   const sim = normalizeOffersForCursor(args.sim);
   const slot = sim.slots[sim.cursor];
   if (!slot || slot.teamId === sim.userTeamId) return [];
-  if (mulberry32(hashSeed(args.saveSeed, "DRAFT_TRADE_UP_INCOMING_GATE", sim.season, slot.overall))() > 0.28) return [];
 
   const userPicks = listFuturePicksForTeam(sim, sim.userTeamId);
   const nextUser = userPicks[0];
@@ -518,6 +517,24 @@ function maybeIncomingTradeUpOffers(args: { saveSeed: number; sim: DraftSimState
     if (!offerIsReasonableForCpuIncoming({ give: offer.give, receive: offer.receive })) continue;
 
     offers.push(offer);
+  }
+
+  if (!offers.length) {
+    const fallbackAdd = candidatesToAdd[0] ?? null;
+    const give = fallbackAdd ? [nextUser, fallbackAdd] : [nextUser];
+    const receive: DraftPickSlot[] = [slot];
+    offers.push({
+      offerId: `DTO_UP_IN_FALLBACK_${slot.overall}_${sim.userTeamId}_${Math.floor(rng() * 1e9)}`,
+      source: "INCOMING",
+      direction: "UP",
+      fromTeamId: slot.teamId,
+      toTeamId: sim.userTeamId,
+      give,
+      receive,
+      valueGive: give.reduce((acc, p) => acc + pickValue(p.overall), 0),
+      valueReceive: pickValue(slot.overall),
+      note: `Trade up to Overall ${slot.overall}`,
+    });
   }
 
   offers.sort((a, b) => a.valueGive - b.valueGive);
@@ -598,7 +615,7 @@ function buildCounterOfferRegression(args: { saveSeed: number; sim: DraftSimStat
   const offeredSet = new Set(args.offer.give.map((p) => p.overall));
   const addPool = userFuture.filter((p) => !offeredSet.has(p.overall));
 
-  let give = [...args.offer.give];
+  const give = [...args.offer.give];
   let receive = [slot];
 
   if (args.offer.receive.length > 1) {
