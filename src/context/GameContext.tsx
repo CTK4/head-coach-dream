@@ -157,10 +157,12 @@ import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
 import { getActiveSaveId, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
-import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
-import { validateConfigPins } from "@/engine/config/validateConfig";
+import { hydrateLoadedState } from "@/context/boot/hydrateState";
+import { restoreCheckpointOverlay } from "@/context/boot/checkpointRestore";
+import { applyBootValidators } from "@/context/boot/validators";
+import { migrateSave as migrateSaveBoot, ensureLeagueGmMap } from "@/context/boot/migrateSave";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
@@ -187,6 +189,7 @@ import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/en
 import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
+const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type { CareerStage };
@@ -9869,320 +9872,32 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
   }
 }
 
-const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
-
-function ensureLeagueGmMap(state: GameState): GameState {
-  const ids = Object.keys(state.league?.standings ?? {});
-  const gmByTeamId = state.league?.gmByTeamId ?? {};
-  if (ids.length && Object.keys(gmByTeamId).length === ids.length) return state;
-  const seeded = initLeagueState(ids.length ? ids : getTeams().map((t) => t.teamId), state.saveSeed);
-  return { ...state, league: { ...state.league, gmByTeamId: { ...seeded.gmByTeamId, ...gmByTeamId } } };
-}
-
 export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
-  const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  // Preserve the existing saveSeed to ensure deterministic simulation replay.
-  // If missing, generate a new one using a deterministic method.
-  const saveSeed = oldState.saveSeed ?? (Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647);
-  const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
-  const schedule = oldState.hub?.schedule ?? createSchedule(saveSeed);
-  const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
-  const migratedNews = ensureNewsItems((oldState as any).hub?.news, now);
-  const legacyReadCount = Number((oldState as any).hub?.newsReadCount ?? 0);
-  const newsReadIds: Record<string, true> = { ...((oldState as any).hub?.newsReadIds ?? {}) };
-  if (legacyReadCount > 0 && migratedNews.length > 0) {
-    for (const item of migratedNews.slice(0, legacyReadCount)) newsReadIds[item.id] = true;
-  }
-
-  const game =
-    oldState.game && (oldState.game as any).clock
-      ? ({
-          ...oldState.game,
-          driveNumber: (oldState.game as any).driveNumber ?? 1,
-          playNumberInDrive: (oldState.game as any).playNumberInDrive ?? 0,
-          driveLog: (oldState.game as any).driveLog ?? [],
-        } as GameSim)
-      : initGameSim({
-          homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",
-          awayTeamId: (oldState.game as any)?.opponentTeamId ?? "AWAY",
-          seed: saveSeed,
-          coachArchetypeId: oldState.coach?.archetypeId,
-          coachTenureYear: oldState.coach?.tenureYear,
-        });
-
-  const nextDepthChart = {
-    startersByPos: { ...((oldState as any).depthChart?.startersByPos ?? {}) },
-    lockedBySlot: { ...((oldState as any).depthChart?.lockedBySlot ?? {}) },
-  };
-
-  const normalizedLeague: LeagueState = league.postseason
-    ? (league as LeagueState)
-    : ({ ...league, postseason: { season: Number(oldState.season ?? 2026), resultsByTeamId: {} } } as LeagueState);
-  if (!normalizedLeague.gmByTeamId) {
-    normalizedLeague.gmByTeamId = initLeagueState(Object.keys(normalizedLeague.standings), saveSeed).gmByTeamId;
-  }
-  if (!("tradeDeadlineWeek" in normalizedLeague)) {
-    console.warn(JSON.stringify({ level: "warn", event: "trade.deadline_missing_in_save", appliedWeek: TRADE_DEADLINE_DEFAULT_WEEK }));
-  }
-  normalizedLeague.tradeDeadlineWeek = resolveTradeDeadlineWeek((normalizedLeague as any).tradeDeadlineWeek);
-  normalizedLeague.week = Number((normalizedLeague as any).week ?? Number(oldState.week ?? 1));
-
-  const VALID_MIGRATE_PHASES = new Set(["CREATE", "BACKGROUND", "INTERVIEWS", "OFFERS", "COORD_HIRING", "HUB"]);
-  const normalizedPhase = VALID_MIGRATE_PHASES.has(String(oldState.phase ?? "")) ? oldState.phase : "HUB";
-
-  let s: Partial<GameState> = {
-    ...oldState,
-    configVersion: String((oldState as any).configVersion ?? DEFAULT_CONFIG_VERSION),
-    calibrationPackId: String((oldState as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID),
-    phase: normalizedPhase as GameState["phase"],
-    saveSeed,
-    season: Number((oldState as any).season ?? 2026),
-    week: Number((oldState as any).week ?? 1),
-    careerSeed: Number((oldState as any).careerSeed ?? (saveSeed ^ 0x85ebca6b)),
-    careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
-    seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
-    earnedMilestoneIds: Array.isArray(oldState.earnedMilestoneIds) ? oldState.earnedMilestoneIds.map(String) : [],
-    seasonAwards: oldState.seasonAwards,
-    lastSeasonSummary: oldState.lastSeasonSummary,
-    orgRoles: oldState.orgRoles ?? {},
-    offseason:
-      oldState.offseason ??
-      ({
-        stepId: OFFSEASON_STEPS[0].id,
-        completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
-        stepsComplete: {},
-      } as OffseasonState),
-    offseasonData:
-      oldState.offseasonData ??
-      ({
-        resigning: { decisions: {} },
-        tagCenter: { applied: undefined },
-        rosterAudit: { cutDesignations: {} },
-        combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
-      scouting: {
-        windowId: "COMBINE",
-        budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
-        carryover: 0,
-        intelByProspectId: {},
-        intelByFAId: {},
-      },
-        tampering: { offers: [] },
-        freeAgency: {
-          offers: [],
-          signings: [],
-          rejected: {},
-          withdrawn: {},
-          capTotal: 82_000_000,
-          capUsed: 54_000_000,
-          capHitsByPlayerId: {},
-          decisionReasonByPlayerId: {},
-        },
-        preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
-        draft: { board: [], picks: [], completed: false },
-        camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
-        cutDowns: { decisions: {} },
-      } as OffseasonData),
-    scheme: {
-      offense: {
-        style: oldState.scheme?.offense?.style ?? "BALANCED",
-        tempo: oldState.scheme?.offense?.tempo ?? "NORMAL",
-        schemeId: oldState.scheme?.offense?.schemeId ?? "PRO_STYLE_BALANCED",
-      },
-      defense: {
-        style: oldState.scheme?.defense?.style ?? "MIXED",
-        aggression: oldState.scheme?.defense?.aggression ?? "NORMAL",
-        schemeId: oldState.scheme?.defense?.schemeId ?? "MULTIPLE_HYBRID",
-      },
-    },
-    playbooks: {
-      offensePlaybookId: ((oldState as any).playbooks?.offensePlaybookId ?? oldState.scheme?.offense?.schemeId ?? DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId,
-      defensePlaybookId: ((oldState as any).playbooks?.defensePlaybookId ?? oldState.scheme?.defense?.schemeId ?? DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId,
-      userOverride: {
-        offense: Boolean((oldState as any).playbooks?.userOverride?.offense),
-        defense: Boolean((oldState as any).playbooks?.userOverride?.defense),
-      },
-    },
-    strategy: { ...DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
-    scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
-    hub: {
-      ...(oldState.hub ?? ({} as any)),
-      news: migratedNews,
-      newsReadIds,
-      newsFilter: String((oldState as any).hub?.newsFilter ?? "ALL"),
-      schedule,
-      preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
-      regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
-    },
-    offseasonNews: [],
-    newsHistory: Array.isArray((oldState as any).newsHistory) ? (oldState as any).newsHistory : [],
-    retiredPlayers: Array.isArray((oldState as any).retiredPlayers) ? (oldState as any).retiredPlayers : [],
-    playerAgingDeltasById: { ...((oldState as any).playerAgingDeltasById ?? {}) },
-    playerAttributeDeltasById: { ...((oldState as any).playerAttributeDeltasById ?? {}) },
-    playerAgeOffsetById: { ...((oldState as any).playerAgeOffsetById ?? {}) },
-    playerSnapCountsById: { ...((oldState as any).playerSnapCountsById ?? {}) },
-    playerProgressionSeasonStatsById: { ...((oldState as any).playerProgressionSeasonStatsById ?? {}) },
-    playerDevelopmentById: { ...((oldState as any).playerDevelopmentById ?? {}) },
-    playerBadges: { ...((oldState as any).playerBadges ?? {}) },
-    playerUnicorns: { ...((oldState as any).playerUnicorns ?? {}) },
-    finances:
-      (oldState as any).finances ??
-      {
-        cap: LEAGUE_SALARY_CAP,
-        carryover: 0,
-        incentiveTrueUps: 0,
-        deadCapThisYear: 0,
-        deadCapNextYear: 0,
-        baseCommitted: 0,
-        capCommitted: 0,
-        capSpace: LEAGUE_SALARY_CAP,
-        cash: 150_000_000,
-        postJune1Sim: false,
-      },
-    staffBudget: (oldState as any).staffBudget ?? { total: 23_000_000, used: 0, byPersonId: {} },
-    teamFinances: (oldState as any).teamFinances ?? { cash: 60_000_000, deadMoneyBySeason: {} },
-    memoryLog: Array.isArray((oldState as any).memoryLog) ? (oldState as any).memoryLog : [],
-    league: normalizedLeague,
-    teamGameplans: { ...((oldState as any).teamGameplans ?? {}) },
-    weatherByGameKey: { ...((oldState as any).weatherByGameKey ?? {}) },
-    game,
-    playerFatigueById: Object.fromEntries(getPlayers().map((pl) => {
-      const v = (oldState as any).playerFatigueById?.[String(pl.playerId)];
-      return [String(pl.playerId), { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }];
-    })),
-    practicePlan: migratePracticePlan((oldState as any).practicePlan),
-    practicePlanConfirmed: Boolean((oldState as any).practicePlanConfirmed ?? false),
-    practiceNeglectCounters: {
-      ...DEFAULT_PRACTICE_PLAN.neglectWeeks,
-      ...((oldState as any).practiceNeglectCounters ?? {}),
-    },
-    cumulativeNeglectPenalty: Number((oldState as any).cumulativeNeglectPenalty ?? 0),
-    weeklyFamiliarityBonus: Number((oldState as any).weeklyFamiliarityBonus ?? 0),
-    weeklyMentalErrorMod: Number((oldState as any).weeklyMentalErrorMod ?? 0),
-    weeklySchemeConceptBonus: Number((oldState as any).weeklySchemeConceptBonus ?? 0),
-    weeklyLateGameRetentionBonus: Number((oldState as any).weeklyLateGameRetentionBonus ?? 0),
-    nextGameInjuryRiskMod: Number((oldState as any).nextGameInjuryRiskMod ?? 0),
-    lastPracticeOutcomeSummary: (oldState as any).lastPracticeOutcomeSummary,
-    playerDevXpById: { ...((oldState as any).playerDevXpById ?? {}) },
-    pendingTradeOffers: Array.isArray((oldState as any).pendingTradeOffers) ? (oldState as any).pendingTradeOffers : [],
-    tradeError: undefined,
-    draft: (oldState.draft ?? {
-      started: false,
-      completed: false,
-      totalRounds: 7,
-      currentOverall: 1,
-      orderTeamIds: [],
-      leaguePicks: [],
-      onClockTeamId: undefined,
-      withdrawnBoardIds: {},
-      prospectPool: generateDraftClass({ year: Number((oldState as any).season ?? 2026), count: 224, leagueSeed: saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
-      appliedSelectionCount: 0,
-    }) as DraftState,
-    upcomingDraftClass: (oldState as any).upcomingDraftClass ?? generateDraftClass({ year: Number((oldState as any).season ?? 2026), count: 224, leagueSeed: saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
-    futureClasses: (oldState as any).futureClasses ?? {},
-    rookies: oldState.rookies ?? [],
-    rookieContracts: oldState.rookieContracts ?? {},
-    nextPlayerId: Number((oldState as any).nextPlayerId ?? (maxExistingPlayerNumericId() + 1)),
-    firing: oldState.firing ?? { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
-    depthChart: nextDepthChart,
-    leagueDepthCharts: (oldState as any).leagueDepthCharts ?? {},
-    playerAccolades: (oldState as any).playerAccolades ?? {},
-    contracts: (oldState as any).contracts ?? { playerTeamInterestById: {} },
-    resign: (oldState as any).resign ?? { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
-    telemetry: {
-      playLogsByGameKey: { ...((oldState as any).telemetry?.playLogsByGameKey ?? {}) },
-      gameAggsByGameKey: { ...((oldState as any).telemetry?.gameAggsByGameKey ?? {}) },
-      seasonAgg: {
-        version: 1 as const,
-        appliedGameKeys: { ...((oldState as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
-        byTeamId: { ...((oldState as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
-      },
-      percentiles: { ...((oldState as any).telemetry?.percentiles ?? {}) },
-    },
-    historicalTelemetry: {
-      bySeason: { ...((oldState as any).historicalTelemetry?.bySeason ?? {}) },
-    },
-    ui: (oldState as any).ui ?? {},
-  };
-
-  if (s.offseason?.stepId === OffseasonStepEnum.TAMPERING) {
-    s.offseason = { ...s.offseason, stepId: OffseasonStepEnum.FREE_AGENCY };
-  }
-  if (s.careerStage === "TAMPERING") {
-    s.careerStage = "FREE_AGENCY";
-  }
-  const scoutingState = (s as any).scoutingState;
-  if (scoutingState?.combine) {
-    const legacyDay = Number(scoutingState.combine.day ?? 1);
-    const normalizedDay = clamp(legacyDay, 1, COMBINE_DAY_COUNT) as 1 | 2 | 3 | 4;
-    const legacyInterviews = Number(scoutingState.interviews?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
-    const nextDays = defaultCombineDays();
-    const savedDays = scoutingState.combine.days ?? {};
-    for (let d = 1; d <= COMBINE_DAY_COUNT; d++) {
-      const saved = savedDays[d] ?? savedDays[String(d)] ?? {};
-      nextDays[d as 1 | 2 | 3 | 4] = {
-        dayIndex: d as 1 | 2 | 3 | 4,
-        categoryKey: String(saved.categoryKey ?? nextDays[d as 1 | 2 | 3 | 4].categoryKey),
-        interviewsRemaining: clamp(Number(saved.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS), 0, COMBINE_DEFAULT_INTERVIEW_TOKENS),
-      };
-    }
-    if (!scoutingState.combine.days) {
-      nextDays[normalizedDay].interviewsRemaining = clamp(legacyInterviews, 0, COMBINE_DEFAULT_INTERVIEW_TOKENS);
-    }
-
-    const legacyProspects = scoutingState.combine.prospects ?? {};
-    const prospects: Record<string, { characterRevealPct: number; intelligenceRevealPct: number; interviewCount: number; notes: string[] }> = {};
-    for (const [prospectId, raw] of Object.entries<any>(legacyProspects)) {
-      prospects[String(prospectId)] = {
-        characterRevealPct: clamp(Number((raw as any)?.characterRevealPct ?? 0), 0, 100),
-        intelligenceRevealPct: clamp(Number((raw as any)?.intelligenceRevealPct ?? 0), 0, 100),
-        interviewCount: Math.max(0, Number((raw as any)?.interviewCount ?? 0) || 0),
-        notes: Array.isArray((raw as any)?.notes) ? (raw as any).notes.map(String) : [],
-      };
-    }
-
-    scoutingState.combine = {
-      ...scoutingState.combine,
-      day: normalizedDay,
-      selectedByDay: scoutingState.combine.selectedByDay ?? {},
-      interviewResultsByProspectId: scoutingState.combine.interviewResultsByProspectId ?? {},
-      days: nextDays,
-      prospects,
-      recapByDay: Object.fromEntries(
-        Object.entries(scoutingState.combine.recapByDay ?? {}).filter(([k]) => {
-          const day = Number(k);
-          return Number.isFinite(day) && day >= 1 && day <= COMBINE_DAY_COUNT;
-        }),
-      ),
-    };
-    delete scoutingState.combine.hoursRemaining;
-  }
-
-  if (scoutingState) {
-    scoutingState.interviews = {
-      interviewsRemaining: Number(scoutingState.interviews?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS),
-      history: scoutingState.interviews?.history ?? {},
-      modelARevealByProspectId: scoutingState.interviews?.modelARevealByProspectId ?? {},
-      resultsByProspectId: scoutingState.interviews?.resultsByProspectId ?? {},
-    };
-    scoutingState.medical = {
-      requests: scoutingState.medical?.requests ?? {},
-      resultsByProspectId: scoutingState.medical?.resultsByProspectId ?? {},
-    };
-    scoutingState.workouts = {
-      resultsByProspectId: scoutingState.workouts?.resultsByProspectId ?? {},
-    };
-  }
-
-  // Ensure scoutingState has at minimum a myBoardOrder so migrations can validate IDs
-  if (!s.scoutingState) {
-    const boardOrder = (draftClassJson as any[]).map((row: any, i: number) => String(row["Player ID"] ?? `DC_${i + 1}`));
-    s = { ...s, scoutingState: { myBoardOrder: boardOrder } as any };
-  }
-
-  s = ensureOffseasonCombineData(s as GameState);
-  s = migrateDraftClassIdsInSave(s);
-  s = ensureAccolades(bootstrapAccolades(s as GameState));
-  return ensureLeagueGmMap(s as GameState);
+  return migrateSaveBoot(oldState, {
+    createSchedule,
+    ensureNewsItems,
+    ensureOffseasonCombineData,
+    ensureAccolades,
+    bootstrapAccolades,
+    COMBINE_DEFAULT_INTERVIEW_TOKENS,
+    DEFAULT_OFFENSE_SCHEME_ID,
+    DEFAULT_DEFENSE_SCHEME_ID,
+    DEFAULT_STRATEGY,
+    normalizePriorityList,
+    LEAGUE_SALARY_CAP,
+    getPlayers,
+    clampFatigue,
+    FATIGUE_DEFAULT,
+    migratePracticePlan,
+    DEFAULT_PRACTICE_PLAN,
+    generateDraftClass,
+    getActiveSaveId,
+    maxExistingPlayerNumericId,
+    OffseasonStepEnum,
+    clamp,
+    COMBINE_DAY_COUNT,
+    defaultCombineDays,
+  });
 }
 
 
@@ -10248,204 +9963,13 @@ function loadState(): GameState {
     const parsed = loadResult.state as Partial<GameState>;
     const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
-    let out: GameState = {
-      ...initial,
-      ...migrated,
-      coach: { ...initial.coach, ...migrated.coach },
-      interviews: { ...initial.interviews, ...migrated.interviews },
-      hub: { ...initial.hub, ...migrated.hub },
-      offseasonNews: Array.isArray((migrated as any).offseasonNews) ? (migrated as any).offseasonNews : [],
-      newsHistory: Array.isArray((migrated as any).newsHistory) ? (migrated as any).newsHistory : [],
-      retiredPlayers: Array.isArray((migrated as any).retiredPlayers) ? (migrated as any).retiredPlayers : [],
-      playerAgingDeltasById: { ...(initial.playerAgingDeltasById ?? {}), ...((migrated as any).playerAgingDeltasById ?? {}) },
-      playerAttributeDeltasById: { ...(initial.playerAttributeDeltasById ?? {}), ...((migrated as any).playerAttributeDeltasById ?? {}) },
-      playerAgeOffsetById: { ...(initial.playerAgeOffsetById ?? {}), ...((migrated as any).playerAgeOffsetById ?? {}) },
-      playerSnapCountsById: { ...(initial.playerSnapCountsById ?? {}), ...((migrated as any).playerSnapCountsById ?? {}) },
-      playerProgressionSeasonStatsById: { ...(initial.playerProgressionSeasonStatsById ?? {}), ...((migrated as any).playerProgressionSeasonStatsById ?? {}) },
-      playerDevelopmentById: { ...(initial.playerDevelopmentById ?? {}), ...((migrated as any).playerDevelopmentById ?? {}) },
-      finances: { ...initial.finances, ...(migrated as any).finances },
-      staff: { ...initial.staff, ...migrated.staff },
-      orgRoles: { ...initial.orgRoles, ...migrated.orgRoles },
-      assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
-      staffRoster: {
-        ...initial.staffRoster,
-        ...((migrated as any).staffRoster ?? {}),
-        coaches: Array.isArray((migrated as any).staffRoster?.coaches) ? (migrated as any).staffRoster.coaches : initial.staffRoster.coaches,
-      },
-      staffOffers: Array.isArray((migrated as any).staffOffers) ? (migrated as any).staffOffers : [],
-      firing: { ...initial.firing, ...migrated.firing },
-      careerHistory: { firings: Array.isArray((migrated as any).careerHistory?.firings) ? (migrated as any).careerHistory.firings : [] },
-      owner: { ...initial.owner, ...migrated.owner },
-      teamOwnerExpectationsByTeamId: { ...initial.teamOwnerExpectationsByTeamId, ...((migrated as any).teamOwnerExpectationsByTeamId ?? {}) },
-      ownerState: { ...initial.ownerState, ...((migrated as any).ownerState ?? {}) },
-      coaching: {
-        ...initial.coaching,
-        ...((migrated as any).coaching ?? {}),
-        coachesById: { ...initial.coaching.coachesById, ...((migrated as any).coaching?.coachesById ?? {}) },
-        staffByTeamId: { ...initial.coaching.staffByTeamId, ...((migrated as any).coaching?.staffByTeamId ?? {}) },
-        market: { ...initial.coaching.market, ...((migrated as any).coaching?.market ?? {}) },
-      },
-      media: { ...initial.media, ...((migrated as any).media ?? {}), storiesByWeek: { ...initial.media.storiesByWeek, ...((migrated as any).media?.storiesByWeek ?? {}) } },
-      wire: { ...initial.wire, ...((migrated as any).wire ?? {}), items: Array.isArray((migrated as any).wire?.items) ? (migrated as any).wire.items : initial.wire.items },
-      medical: {
-        ...initial.medical,
-        ...((migrated as any).medical ?? {}),
-        playerMedicalById: { ...initial.medical.playerMedicalById, ...((migrated as any).medical?.playerMedicalById ?? {}) },
-        staffByTeamId: { ...initial.medical.staffByTeamId, ...((migrated as any).medical?.staffByTeamId ?? {}) },
-        injuryReportsByWeek: { ...initial.medical.injuryReportsByWeek, ...((migrated as any).medical?.injuryReportsByWeek ?? {}) },
-      },
-      liveGames: { ...initial.liveGames, ...((migrated as any).liveGames ?? {}) },
-      telemetry: {
-        ...initial.telemetry,
-        ...((migrated as any).telemetry ?? {}),
-        playLogsByGameKey: { ...(initial.telemetry?.playLogsByGameKey ?? {}), ...((migrated as any).telemetry?.playLogsByGameKey ?? {}) },
-        percentiles: { ...(initial.telemetry?.percentiles ?? {}), ...((migrated as any).telemetry?.percentiles ?? {}) },
-        gameAggsByGameKey: { ...(initial.telemetry?.gameAggsByGameKey ?? {}), ...((migrated as any).telemetry?.gameAggsByGameKey ?? {}) },
-        seasonAgg: {
-          ...(initial.telemetry?.seasonAgg ?? { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }),
-          ...((migrated as any).telemetry?.seasonAgg ?? {}),
-          byTeamId: { ...(initial.telemetry?.seasonAgg?.byTeamId ?? {}), ...((migrated as any).telemetry?.seasonAgg?.byTeamId ?? {}) },
-          appliedGameKeys: { ...(initial.telemetry?.seasonAgg?.appliedGameKeys ?? {}), ...((migrated as any).telemetry?.seasonAgg?.appliedGameKeys ?? {}) },
-        },
-      },
-      historicalTelemetry: {
-        bySeason: {
-          ...(initial.historicalTelemetry?.bySeason ?? {}),
-          ...((migrated as any).historicalTelemetry?.bySeason ?? {}),
-        },
-      },
-      dynasty: { ...initial.dynasty, ...((migrated as any).dynasty ?? {}), seasonLog: Array.isArray((migrated as any).dynasty?.seasonLog) ? (migrated as any).dynasty.seasonLog : initial.dynasty.seasonLog, milestones: Array.isArray((migrated as any).dynasty?.milestones) ? (migrated as any).dynasty.milestones : initial.dynasty.milestones },
-      teamFinances: {
-        ...initial.teamFinances,
-        ...migrated.teamFinances,
-        deadMoneyBySeason: { ...initial.teamFinances.deadMoneyBySeason, ...(migrated.teamFinances?.deadMoneyBySeason ?? {}) },
-      },
-      buyouts: { ...initial.buyouts, ...migrated.buyouts, bySeason: { ...initial.buyouts.bySeason, ...(migrated.buyouts?.bySeason ?? {}) } },
-      depthChart: {
-        ...initial.depthChart,
-        ...migrated.depthChart,
-        startersByPos: { ...initial.depthChart.startersByPos, ...(migrated.depthChart?.startersByPos ?? {}) },
-        lockedBySlot: { ...initial.depthChart.lockedBySlot, ...(migrated.depthChart?.lockedBySlot ?? {}) },
-      },
-      preseason: {
-        ...initial.preseason,
-        ...migrated.preseason,
-        rotation: { ...initial.preseason.rotation, ...(migrated.preseason?.rotation ?? {}), byPlayerId: { ...initial.preseason.rotation.byPlayerId, ...(migrated.preseason?.rotation?.byPlayerId ?? {}) } },
-        appliedWeeks: { ...initial.preseason.appliedWeeks, ...(migrated.preseason?.appliedWeeks ?? {}) },
-      },
-      offseason: {
-        ...initial.offseason,
-        ...migrated.offseason,
-        completed: { ...initial.offseason.completed, ...migrated.offseason?.completed },
-        stepsComplete: { ...initial.offseason.stepsComplete, ...migrated.offseason?.stepsComplete },
-      },
-      tampering: {
-        ...initial.tampering,
-        ...migrated.tampering,
-        interestByPlayerId: { ...initial.tampering.interestByPlayerId, ...(migrated.tampering?.interestByPlayerId ?? {}) },
-        nameByPlayerId: { ...initial.tampering.nameByPlayerId, ...(migrated.tampering?.nameByPlayerId ?? {}) },
-        softOffersByPlayerId: { ...initial.tampering.softOffersByPlayerId, ...(migrated.tampering?.softOffersByPlayerId ?? {}) },
-        shortlistPlayerIds: migrated.tampering?.shortlistPlayerIds ?? initial.tampering.shortlistPlayerIds,
-      },
-      offseasonData: {
-        ...initial.offseasonData,
-        ...migrated.offseasonData,
-        resigning: { ...initial.offseasonData.resigning, ...migrated.offseasonData?.resigning },
-        tagCenter: { ...initial.offseasonData.tagCenter, ...migrated.offseasonData?.tagCenter },
-        rosterAudit: { ...initial.offseasonData.rosterAudit, ...migrated.offseasonData?.rosterAudit, cutDesignations: { ...initial.offseasonData.rosterAudit.cutDesignations, ...(migrated.offseasonData?.rosterAudit?.cutDesignations ?? {}) } },
-        combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
-        scouting: { ...initial.offseasonData.scouting, ...migrated.offseasonData?.scouting },
-        tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
-        freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
-        preDraft: { ...initial.offseasonData.preDraft, ...migrated.offseasonData?.preDraft },
-        draft: { ...initial.offseasonData.draft, ...migrated.offseasonData?.draft },
-        camp: { ...initial.offseasonData.camp, ...migrated.offseasonData?.camp },
-        cutDowns: { ...initial.offseasonData.cutDowns, ...migrated.offseasonData?.cutDowns },
-      },
-      strategy: { ...initial.strategy, ...((migrated as any).strategy ?? {}), draftFaPriorities: normalizePriorityList((migrated as any).strategy?.draftFaPriorities) },
-      freeAgency: {
-        ...initial.freeAgency,
-        ...migrated.freeAgency,
-        initStatus: (migrated.freeAgency as any)?.initStatus ?? "idle",
-        offersByPlayerId: { ...initial.freeAgency.offersByPlayerId, ...(migrated.freeAgency?.offersByPlayerId ?? {}) },
-        signingsByPlayerId: { ...initial.freeAgency.signingsByPlayerId, ...(migrated.freeAgency?.signingsByPlayerId ?? {}) },
-      },
-      contracts: {
-        ...initial.contracts,
-        ...(migrated as any).contracts,
-        playerTeamInterestById: { ...initial.contracts.playerTeamInterestById, ...((migrated as any).contracts?.playerTeamInterestById ?? {}) },
-      },
-      resign: {
-        ...initial.resign,
-        ...(migrated as any).resign,
-        lastOfferAavByPlayerId: { ...initial.resign.lastOfferAavByPlayerId, ...((migrated as any).resign?.lastOfferAavByPlayerId ?? {}) },
-        rejectionCountByPlayerId: { ...initial.resign.rejectionCountByPlayerId, ...((migrated as any).resign?.rejectionCountByPlayerId ?? {}) },
-      },
-      league: migrated.league ?? initial.league,
-      playoffs: (migrated as any).playoffs ?? initial.playoffs,
-      game: { ...initial.game, ...migrated.game },
-      gameHistory: Array.isArray((migrated as any).gameHistory) ? (migrated as any).gameHistory : [],
-      playerSeasonStatsById: { ...(initial.playerSeasonStatsById ?? {}), ...((migrated as any).playerSeasonStatsById ?? {}) },
-      playerCareerStatsById: { ...(initial.playerCareerStatsById ?? {}), ...((migrated as any).playerCareerStatsById ?? {}) },
-      leagueRecords: { ...defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
-      draft: { ...initial.draft, ...migrated.draft },
-      upcomingDraftClass: (migrated as any).upcomingDraftClass ?? initial.upcomingDraftClass,
-      futureClasses: (migrated as any).futureClasses ?? initial.futureClasses,
-      rookies: migrated.rookies ?? initial.rookies,
-      rookieContracts: { ...initial.rookieContracts, ...migrated.rookieContracts },
-      nextPlayerId: Number((migrated as any).nextPlayerId ?? initial.nextPlayerId),
-      playerTeamOverrides: { ...initial.playerTeamOverrides, ...migrated.playerTeamOverrides },
-      personnelTeamOverrides: { ...((migrated as any).personnelTeamOverrides ?? {}) },
-      staffContractsByPersonId: { ...((migrated as any).staffContractsByPersonId ?? {}) },
-      franchiseTags: { ...initial.franchiseTags, ...((migrated as any).franchiseTags ?? {}) },
-      playerContractOverrides: Object.fromEntries(
-        Object.entries({ ...initial.playerContractOverrides, ...migrated.playerContractOverrides }).map(([k, v]: any) => {
-          if (Array.isArray(v?.salaries)) return [k, v];
-          const years = Math.max(1, Number(v?.endSeason ?? initial.season) - Number(v?.startSeason ?? initial.season) + 1);
-          const aav = Number(v?.aav ?? 0);
-          return [k, { startSeason: Number(v?.startSeason ?? initial.season), endSeason: Number(v?.endSeason ?? initial.season), salaries: Array.from({ length: years }, () => aav), signingBonus: Number(v?.signingBonus ?? 0) }];
-        }),
-      ) as Record<string, PlayerContractOverride>,
-      playerAttrOverrides: { ...(initial as any).playerAttrOverrides, ...((migrated as any).playerAttrOverrides ?? {}) },
-      qbRunContactExposureByPlayerId: { ...(initial as any).qbRunContactExposureByPlayerId, ...((migrated as any).qbRunContactExposureByPlayerId ?? {}) },
-      playerFatigueById: Object.fromEntries(
-        Object.entries((migrated as any).playerFatigueById ?? {}).map(([k, v]: [string, any]) => [k, { fatigue: clampFatigue(Number(v?.fatigue ?? FATIGUE_DEFAULT)), last3SnapLoads: Array.isArray(v?.last3SnapLoads) ? v.last3SnapLoads.map((n: unknown) => Math.max(0, Number(n) || 0)).slice(-3) : [] }]),
-      ) as Record<string, PersistedFatigue>,
-      practicePlan: migratePracticePlan((migrated as any).practicePlan),
-      practicePlanConfirmed: Boolean((migrated as any).practicePlanConfirmed ?? false),
-      practiceNeglectCounters: {
-        ...DEFAULT_PRACTICE_PLAN.neglectWeeks,
-        ...((migrated as any).practiceNeglectCounters ?? {}),
-      },
-      cumulativeNeglectPenalty: Number((migrated as any).cumulativeNeglectPenalty ?? 0),
-      weeklyFamiliarityBonus: Number((migrated as any).weeklyFamiliarityBonus ?? 0),
-      weeklyMentalErrorMod: Number((migrated as any).weeklyMentalErrorMod ?? 0),
-      weeklySchemeConceptBonus: Number((migrated as any).weeklySchemeConceptBonus ?? 0),
-      weeklyLateGameRetentionBonus: Number((migrated as any).weeklyLateGameRetentionBonus ?? 0),
-      nextGameInjuryRiskMod: Number((migrated as any).nextGameInjuryRiskMod ?? 0),
-      lastPracticeOutcomeSummary: (migrated as any).lastPracticeOutcomeSummary,
-      playerDevXpById: { ...(initial.playerDevXpById ?? {}), ...((migrated as any).playerDevXpById ?? {}) },
-      pendingTradeOffers: Array.isArray((migrated as any).pendingTradeOffers) ? (migrated as any).pendingTradeOffers : [],
-      tradeError: undefined,
-      saveVersion: CURRENT_SAVE_VERSION,
-      memoryLog: migrated.memoryLog ?? initial.memoryLog,
-      leagueDepthCharts: { ...initial.leagueDepthCharts, ...((migrated as any).leagueDepthCharts ?? {}) },
-      playerAccolades: { ...initial.playerAccolades, ...((migrated as any).playerAccolades ?? {}) },
-      transactions: (migrated as any).transactions ?? [],
-      transactionLedger: (migrated as any).transactionLedger ?? initial.transactionLedger,
-      feedbackQueue: Array.isArray((migrated as any).feedbackQueue) ? (migrated as any).feedbackQueue : [],
-      feedbackHistory: Array.isArray((migrated as any).feedbackHistory) ? (migrated as any).feedbackHistory : [],
-      pendingInjuryAlert: (migrated as any).pendingInjuryAlert,
-      ui: { ...initial.ui, ...((migrated as any).ui ?? {}) },
-      deterministicCounters: {
-        ...DEFAULT_DETERMINISTIC_COUNTERS,
-        ...((migrated as any).deterministicCounters ?? {}),
-      },
-      hotSeatStatus: (migrated as any).hotSeatStatus ?? initial.hotSeatStatus,
-      unreadNewsCount: Number((migrated as any).unreadNewsCount ?? 0),
-      lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
-      storySetup: (migrated as any).storySetup,
-    };
+    let out = hydrateLoadedState(
+      initial,
+      migrated,
+      CURRENT_SAVE_VERSION,
+      DEFAULT_DETERMINISTIC_COUNTERS,
+      { normalizePriorityList, defaultLeagueRecords, clampFatigue, FATIGUE_DEFAULT, migratePracticePlan, DEFAULT_PRACTICE_PLAN },
+    );
     if (!out.transactionLedger?.events?.length) {
       const migrationEvents = buildMigrationEvents(out);
       if (migrationEvents.length > 0) {
@@ -10476,40 +10000,8 @@ function loadState(): GameState {
     // Mid-game checkpoint restore: if a drive-boundary checkpoint exists for this
     // save and the main save doesn't already have an active game, overlay the
     // in-progress game state so the user can resume after a hard-refresh.
-    try {
-      const cpRaw = localStorage.getItem(GAME_CHECKPOINT_KEY);
-      if (cpRaw) {
-        const cp = JSON.parse(cpRaw) as { saveSeed?: number; season?: number; leaguePhase?: string; game?: GameSim };
-        const cpActive =
-          cp.leaguePhase === "REGULAR_SEASON_GAME" ||
-          (cp.game?.weekType === "PLAYOFFS" && cp.game?.homeTeamId !== "HOME");
-        const mainIdle =
-          out.league.phase !== "REGULAR_SEASON_GAME" &&
-          !(out.game?.weekType === "PLAYOFFS" && out.game?.homeTeamId !== "HOME");
-        if (cp.saveSeed === out.saveSeed && cp.season === out.season && cpActive && mainIdle && cp.game) {
-          out = { ...out, game: cp.game, league: { ...out.league, phase: cp.leaguePhase as typeof out.league.phase } };
-        }
-      }
-    } catch { /* corrupt checkpoint — ignore and proceed with main save */ }
-    const pinValidation = validateConfigPins(loadedConfig.registry, {
-      configVersion: (out as any).configVersion,
-      calibrationPackId: (out as any).calibrationPackId,
-    });
-    if (!pinValidation.ok) {
-      out = { ...out, recoveryNeeded: true, recoveryErrors: [pinValidation.message] };
-      return out;
-    }
-    out = {
-      ...out,
-      configVersion: loadedConfig.registry.configVersion,
-      calibrationPackId: loadedConfig.registry.calibrationPackId,
-    };
-
-    // Boot-time integrity check: flag saves with invalid phase/stage for recovery UI.
-    const criticalResult = validateCriticalSaveState(out);
-    if (!criticalResult.ok) {
-      out = { ...out, recoveryNeeded: true, recoveryErrors: [criticalResult.message] };
-    }
+    out = restoreCheckpointOverlay(out);
+    out = applyBootValidators(out, loadedConfig.registry);
 
     return out;
   } catch (error) {
