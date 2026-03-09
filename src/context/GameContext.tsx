@@ -172,6 +172,7 @@ import { offseasonReducer } from "@/context/offseasonReducer";
 import { draftReducer } from "@/context/draftReducer";
 import { seasonReducer } from "@/context/seasonReducer";
 import { freeAgencyReducer } from "@/context/freeAgencyReducer";
+import { staffingReducer, isStaffingAction } from "@/context/reducers/staffingReducer";
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed } from "@/engine/rng";
@@ -197,6 +198,7 @@ import { createInitialTelemetryState } from "@/context/state/defaults/telemetry"
 import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
 import { finalizeWeekController } from "@/context/controllers/weekAdvance";
 import { applyCanonicalTx } from "@/context/controllers/transactions";
+import { bootstrapInitialGameState } from "@/context/state/bootstrap";
 import type {
   TeamId as SharedTeamId,
   OwnerGoalSet as SharedOwnerGoalSet,
@@ -1889,12 +1891,12 @@ function createInitialState(): GameState {
     hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
-  let initialized = ensureAccolades(bootstrapAccolades(base));
-  initialized = gameReducer(initialized, { type: "COACHING_BOOTSTRAP", payload: { seed: initialized.saveSeed } });
-  initialized = gameReducer(initialized, { type: "DYNASTY_INIT", payload: { seed: initialized.saveSeed } });
-  const userTeamId = getUserTeamId(initialized);
-  if (userTeamId) initialized = gameReducer(initialized, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: initialized.season, teamId: userTeamId } });
-  return initialized;
+  return bootstrapInitialGameState(base, {
+    ensureAccolades,
+    bootstrapAccolades,
+    gameReducer,
+    resolveUserTeamId: getUserTeamId,
+  });
 }
 
 function hashStr(s: string): number {
@@ -4987,6 +4989,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   if (t.startsWith("FA_") || t.startsWith("FREE_AGENCY_")) {
     return freeAgencyReducer(state, action as GameAction);
   }
+  if (isStaffingAction(action)) {
+    const delegated = staffingReducer(state, action, {
+      addMemoryEvent,
+      gameReducer,
+    });
+    if (delegated) return delegated;
+  }
   return gameReducerMonolith(state, action);
 }
 
@@ -4995,6 +5004,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     buildMigrationEvents,
   });
   if (recoveryState) return recoveryState;
+
+  if (isStaffingAction(action)) {
+    const delegated = staffingReducer(state, action, {
+      addMemoryEvent,
+      gameReducer,
+    });
+    if (delegated) return delegated;
+  }
 
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
@@ -5765,130 +5782,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         ...next,
         uiToast: `${String((person as any).fullName ?? "Candidate")} accepted your offer.`,
         memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { ...action.payload, years, salary }),
-      };
-    }
-    case "STAFF_COUNTER_OFFER": {
-      const offer = state.staffOffers.find((x) => x.id === action.payload.offerId);
-      if (!offer || offer.status !== "COUNTERED") return state;
-      if ((offer.revisionCount ?? 0) >= 1) return { ...state, uiToast: "You can only revise a counter-offer once." };
-
-      const revisedYears = Math.max(1, Math.min(5, Math.round(Number(action.payload.years) || 1)));
-      const revisedSalary = Math.max(0, Math.round(Number(action.payload.salary) || 0));
-      if (!revisedSalary) return { ...state, uiToast: "Offer salary must be greater than $0." };
-
-      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
-      if (revisedSalary > staffBudgetRemaining) {
-        return { ...state, uiToast: `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).` };
-      }
-
-      const person = getPersonnelById(offer.personId);
-      if (!person) return state;
-
-      const personRep = Number((person as any)?.reputation ?? 55);
-      const expSalary = expectedSalary(offer.role as any, personRep);
-      const perkMod = getPerkHiringModifier(state.coach, offer.roleType === "COORDINATOR" ? "COORD" : "ASST");
-      const userTeamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
-      const revisedAccepted = isOfferAccepted({
-        season: state.season,
-        teamId: userTeamId,
-        personId: offer.personId,
-        roleKey: String(offer.role),
-        reputation: personRep,
-        expectedSalary: expSalary,
-        offeredSalary: revisedSalary,
-        isCoordinator: offer.roleType === "COORDINATOR",
-        hiringModifier: perkMod,
-      });
-
-      if (!revisedAccepted) {
-        const rejected = state.staffOffers.map((x) =>
-          x.id === offer.id
-            ? { ...x, status: "REJECTED" as const, years: revisedYears, salary: revisedSalary, revisionCount: (x.revisionCount ?? 0) + 1, counterProposal: null, reason: "Revised offer rejected." }
-            : x,
-        );
-        return {
-          ...state,
-          staffOffers: rejected,
-          uiToast: `${String((person as any).fullName ?? "Candidate")} rejected your revised offer.`,
-          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { personId: offer.personId, role: offer.role, years: revisedYears, salary: revisedSalary, reason: "Revised offer rejected." }),
-        };
-      }
-
-      const acceptedState: GameState = {
-        ...state,
-        staffOffers: state.staffOffers.map((x) =>
-          x.id === offer.id
-            ? { ...x, status: "ACCEPTED" as const, years: revisedYears, salary: revisedSalary, revisionCount: (x.revisionCount ?? 0) + 1, counterProposal: null, reason: "Revised offer accepted." }
-            : x,
-        ),
-      };
-
-      const next =
-        offer.roleType === "COORDINATOR"
-          ? gameReducer(acceptedState, {
-              type: "HIRE_STAFF",
-              payload: { role: offer.role as "OC" | "DC" | "STC", personId: offer.personId, salary: revisedSalary },
-            })
-          : gameReducer(acceptedState, {
-              type: "HIRE_ASSISTANT",
-              payload: { role: offer.role as keyof AssistantStaff, personId: offer.personId, salary: revisedSalary },
-            });
-
-      return {
-        ...next,
-        uiToast: `${String((person as any).fullName ?? "Candidate")} accepted your revised offer.`,
-        memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { personId: offer.personId, role: offer.role, years: revisedYears, salary: revisedSalary, revisedFromCounter: true }),
-      };
-    }
-    case "STAFF_COUNTER_OFFER_RESPONSE": {
-      const offer = state.staffOffers.find((x) => x.id === action.payload.offerId);
-      if (!offer || offer.status !== "COUNTERED") return state;
-      const person = getPersonnelById(offer.personId);
-      if (!person) return state;
-
-      if (!action.payload.accepted) {
-        return {
-          ...state,
-          staffOffers: state.staffOffers.map((x) =>
-            x.id === offer.id ? { ...x, status: "REJECTED" as const, counterProposal: null, reason: "Counter-offer rejected by team." } : x,
-          ),
-          uiToast: "Counter-offer rejected.",
-          memoryLog: addMemoryEvent(state, "STAFF_OFFER_REJECTED", { personId: offer.personId, role: offer.role, years: offer.years, salary: offer.salary, reason: "Counter-offer rejected by team." }),
-        };
-      }
-
-      const proposal = offer.counterProposal;
-      if (!proposal) return state;
-
-      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
-      if (proposal.salary > staffBudgetRemaining) {
-        return { ...state, uiToast: `Counter exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).` };
-      }
-
-      const acceptedState: GameState = {
-        ...state,
-        staffOffers: state.staffOffers.map((x) =>
-          x.id === offer.id
-            ? { ...x, status: "ACCEPTED" as const, years: proposal.years, salary: proposal.salary, counterProposal: null, reason: "Counter-offer accepted." }
-            : x,
-        ),
-      };
-
-      const next =
-        offer.roleType === "COORDINATOR"
-          ? gameReducer(acceptedState, {
-              type: "HIRE_STAFF",
-              payload: { role: offer.role as "OC" | "DC" | "STC", personId: offer.personId, salary: proposal.salary },
-            })
-          : gameReducer(acceptedState, {
-              type: "HIRE_ASSISTANT",
-              payload: { role: offer.role as keyof AssistantStaff, personId: offer.personId, salary: proposal.salary },
-            });
-
-      return {
-        ...next,
-        uiToast: `${String((person as any).fullName ?? "Candidate")} accepted after counter negotiation.`,
-        memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { personId: offer.personId, role: offer.role, years: proposal.years, salary: proposal.salary, acceptedCounter: true }),
       };
     }
     case "OFFSEASON_SET_TASK": {
@@ -9576,6 +9469,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "DRAFT_SIM_TO_USER":
     case "DRAFT_SIM_ALL":
     case "NAV_TO_DRAFT_RESULTS":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
+    case "STAFF_COUNTER_OFFER":
+    case "STAFF_COUNTER_OFFER_RESPONSE":
       throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
     case "RECOVERY_RETURN_TO_HUB":
     case "RECOVERY_REBUILD_INDICES":
