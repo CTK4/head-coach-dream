@@ -203,7 +203,7 @@ export function selectInterviewQuestions(params: SelectInterviewQuestionsParams)
   const teamPoolIds = new Set(rawTeamPool.map((question) => question.question_id));
   const normalizedTeam = selectedTeam.slice(0, 3).map((question) => ({
     ...question,
-    sourceBucket: teamPoolIds.has(question.question_id) ? "team_pool" : "fallback_pool",
+    sourceBucket: (teamPoolIds.has(question.question_id) ? "team_pool" : "fallback_pool") as "team_pool" | "fallback_pool",
   }));
 
   return {

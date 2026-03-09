@@ -80,7 +80,7 @@ export const ARCHETYPE_TRAITS: Record<ArchetypeId, ArchetypeTraits> = {
         triggerCondition: () => true,
         effectFn: ({ sim }) => ({
           penaltyRateMultiplier: 0.9,
-          closeGameExecutionBonus: Math.abs(sim.homeScore - sim.awayScore) <= 7 && sim.clock.quarter >= 4 ? 5 : 0,
+          closeGameExecutionBonus: Math.abs(Number(sim.homeScore) - Number(sim.awayScore)) <= 7 && Number(sim.clock.quarter) >= 4 ? 5 : 0,
           notes: ["DISCIPLINE_CULTURE"],
         }),
       },

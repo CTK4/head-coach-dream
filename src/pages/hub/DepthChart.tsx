@@ -671,10 +671,7 @@ export default function DepthChart() {
                                     ? "Locked slots cannot move"
                                     : "Drag to reorder within this position group"
                                 }
-                                onPointerDown={onHandlePointerDown(
-                                  slot,
-                                  locked,
-                                )}
+                                onPointerDown={onHandlePointerDown(slot, locked, chosenPlayer(state.depthChart.startersByPos[slot]))}
                                 onPointerMove={onHandlePointerMove}
                                 onPointerUp={onHandlePointerUp}
                                 onPointerCancel={onHandlePointerCancel}

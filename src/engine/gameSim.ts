@@ -154,12 +154,12 @@ export type GameBoxScore = {
 };
 
 // ─── Aggression / tempo ────────────────────────────────────────────────────
-export type AggressionLevel = "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
+export type AggressionLevel = "CONSERVATIVE" | "STANDARD" | "NORMAL" | "AGGRESSIVE";
 export type TempoMode = "NORMAL" | "HURRY_UP" | "MILK";
 
 export type OffensiveFocus = "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
 export type DefensiveFocus = "BALANCED" | "STOP_RUN" | "STOP_PASS";
-export type PressureRate = "LOW" | "NORMAL" | "HIGH";
+export type PressureRate = "LOW" | "MEDIUM" | "NORMAL" | "HIGH";
 
 export type TeamGameplan = {
   offenseSchemeId?: OffenseSchemeId;

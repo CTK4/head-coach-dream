@@ -289,8 +289,8 @@ export default function ScoutingCombine() {
           {shortlist.map((prospect) => {
             const combinedReveal = Math.max(prospect.profile.clarity.CHAR ?? 0, prospect.profile.clarity.FIT ?? 0);
             const reveal = scouting.interviews.modelARevealByProspectId?.[prospect.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-            const charRange = getDeterministicRevealRange(65, reveal.characterRevealPct);
-            const iqRange = getDeterministicRevealRange(65, reveal.intelligenceRevealPct);
+            const charRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.characterRevealPct });
+            const iqRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.intelligenceRevealPct });
             return (
               <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <div className="min-w-0">
@@ -308,7 +308,7 @@ export default function ScoutingCombine() {
                     <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
                   </div>
                   <div className="mt-1 text-xs opacity-70">
-                    Character: {charRange.low}-{charRange.high} • Football IQ: {iqRange.low}-{iqRange.high} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
+                    Character: {charRange[0]}-{charRange[1]} • Football IQ: {iqRange[0]}-{iqRange[1]} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
                   <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>

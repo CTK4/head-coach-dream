@@ -28,7 +28,7 @@ export default function PlayerContracts() {
         const c = contractId ? getContractById(contractId) : null;
         const summary = getContractSummaryForPlayer(state, String(p.playerId));
         const capHit = Number(summary?.capHit ?? c?.capHit ?? c?.aav ?? 0);
-        const yearsLeft = Number(summary?.yearsLeft ?? c?.yearsLeft ?? 0);
+        const yearsLeft = Number(summary?.yearsRemaining ?? c?.yearsRemaining ?? 0);
         return {
           playerId: String(p.playerId),
           name: String(p.fullName),

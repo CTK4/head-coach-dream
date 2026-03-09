@@ -15,7 +15,7 @@ import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logInfo } from "@/lib/logger";
 
 type SimSpeed = "SLOW" | "NORMAL" | "FAST";
-type Theme = "DARK" | "OLED";
+type Theme = "DARK" | "OLED" | "SYSTEM" | "LIGHT";
 
 type UserSettings = {
   simSpeed: SimSpeed;

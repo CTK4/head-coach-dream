@@ -1,5 +1,5 @@
 import type { GameState } from "@/context/GameContext";
-import { getUserTeamId } from "@/lib/userTeam";
+import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
@@ -164,7 +164,7 @@ function migrateV0toV1(state: Partial<GameState>): Partial<GameState> {
     (next as any).careerSeed = Number((next as any).saveSeed ?? 1);
   }
   if (!(next as any).userTeamId) {
-    const userTeamId = getUserTeamId(next as GameState);
+    const userTeamId = resolveCurrentUserTeamId(next);
     if (userTeamId) (next as any).userTeamId = userTeamId;
   }
   return { ...next, schemaVersion: 1 };
@@ -205,7 +205,7 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   if (!(next as any).userTeamId) {
-    const userTeamId = getUserTeamId(next as GameState);
+    const userTeamId = resolveCurrentUserTeamId(next);
     if (userTeamId) (next as any).userTeamId = userTeamId;
   }
 
@@ -251,32 +251,28 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
   // Keep a single declaration here; duplicate declarations break esbuild in production builds.
-  const teamId = getUserTeamId(state);
+  const teamId = resolveCurrentUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };
   }
 
-  if (!(state as any).coach || typeof (state as any).coach.name !== "string") {
+  if (!state.coach || typeof state.coach.name !== "string") {
     return { ok: false, code: "INVALID_COACH", message: "Coach data is missing or invalid." };
   }
 
   const loadedConfig = loadConfigRegistry();
-  if (!loadedConfig.ok) {
+  if (loadedConfig.ok === false) {
     return { ok: false, code: "INVALID_CONFIG_PIN", message: loadedConfig.validation.message };
   }
 
   const pinResult = validateConfigPins(loadedConfig.registry, {
-    configVersion: (state as any).configVersion,
-    calibrationPackId: (state as any).calibrationPackId,
+    configVersion: state.configVersion,
+    calibrationPackId: state.calibrationPackId,
   });
-  if (!pinResult.ok) {
+  if (pinResult.ok === false) {
     return { ok: false, code: "INVALID_CONFIG_PIN", message: pinResult.message };
   }
 
   return { ok: true };
 }
 
-export function getUserTeamId(state: Partial<GameState>): string | null {
-  const teamId = (state as any).acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
-  return typeof teamId === "string" && teamId.trim().length > 0 ? teamId : null;
-}

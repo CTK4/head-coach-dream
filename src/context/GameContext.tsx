@@ -164,7 +164,7 @@ import { getActiveSaveId } from "@/lib/saveManager";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
-import { getUserTeamId } from "@/lib/userTeam";
+import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
@@ -186,10 +186,20 @@ import { useGamePersistence } from "@/context/persistence/useGamePersistence";
 import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
 import { loadStateFromStorage } from "@/context/boot/loadState";
 import { DEFAULT_DETERMINISTIC_COUNTERS } from "@/context/state/defaults/deterministicCounters";
+import { createInitialCoachingState } from "@/context/state/defaults/coaching";
+import { createInitialDraftState } from "@/context/state/defaults/draft";
 import { defaultDynastyProfile } from "@/context/state/defaults/dynasty";
+import { createInitialFreeAgencyState } from "@/context/state/defaults/freeAgency";
 import { defaultMedicalStaffByTeamId } from "@/context/state/defaults/medical";
+import { createInitialMedicalState } from "@/context/state/defaults/medical";
+import { createInitialMediaState } from "@/context/state/defaults/media";
+import { createInitialOffseasonDataState, createInitialOffseasonState } from "@/context/state/defaults/offseason";
 import { defaultOwnerGoals, defaultOwnerState } from "@/context/state/defaults/owner";
+import { createInitialPracticeState } from "@/context/state/defaults/practice";
 import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
+import { createInitialTamperingState } from "@/context/state/defaults/tampering";
+import { createInitialTelemetryState } from "@/context/state/defaults/telemetry";
+import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
 import type {
   TeamId as SharedTeamId,
   OwnerGoalSet as SharedOwnerGoalSet,
@@ -1749,6 +1759,15 @@ function createInitialState(): GameState {
   // Use a deterministic seed derived from current time and a random component.
   // This ensures reproducibility while avoiding collisions across multiple saves.
   const saveSeed = Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647;
+  const season = 2026;
+  const coachingMarketWeekKey = toWeekKey(season, 0);
+  const offseasonStepId = OFFSEASON_STEPS[0].id;
+  const news = defaultNews(season);
+  const schedule = createSchedule(saveSeed);
+  const league = initLeagueState(teams, saveSeed);
+  const currentStandings = initTeamStandings(teams);
+  const careerSeed = saveSeed ^ 0x85ebca6b;
+  const draftContext = { season, saveSeed, userTeamId: "MILWAUKEE_NORTHSHORE" };
 
   const base: GameState = {
     coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
@@ -1757,64 +1776,16 @@ function createInitialState(): GameState {
     earnedMilestoneIds: [],
     phase: "CREATE",
     careerStage: "OFFSEASON_HUB",
-    offseason: {
-      stepId: OFFSEASON_STEPS[0].id,
-      completed: { SCOUTING: false, INSTALL: false, MEDIA: false, STAFF: false },
-      stepsComplete: {},
-    },
-    offseasonData: {
-      resigning: { decisions: {} },
-      tagCenter: { applied: undefined },
-      rosterAudit: { cutDesignations: {} },
-      combine: { prospects: [], results: {}, generated: false, resultsByProspectId: {}, interviewPoolIds: [], lastRunSeed: 0, shortlist: {} },
-      scouting: {
-        windowId: "COMBINE",
-        budget: { total: 0, spent: 0, remaining: 0, carryIn: 0 },
-        carryover: 0,
-        intelByProspectId: {},
-        intelByFAId: {},
-      },
-      tampering: { offers: [] },
-      freeAgency: {
-        offers: [],
-        signings: [],
-        rejected: {},
-        withdrawn: {},
-        capTotal: 82_000_000,
-        capUsed: 54_000_000,
-        capHitsByPlayerId: {},
-        decisionReasonByPlayerId: {},
-      },
-      preDraft: { board: [], visits: {}, workouts: {}, reveals: {}, viewMode: "CONSENSUS", intelByProspectId: {} },
-      draft: { board: [], picks: [], completed: false },
-      camp: { settings: { intensity: "NORMAL", installFocus: "BALANCED", positionFocus: "NONE" } },
-      cutDowns: { decisions: {} },
-    },
+    offseason: createInitialOffseasonState(offseasonStepId),
+    offseasonData: createInitialOffseasonDataState(),
     interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
-    tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
+    tampering: createInitialTamperingState(),
     franchise: { yR1QBByTeamId: {} },
-    freeAgency: {
-      initStatus: "idle",
-      isResolving: false,
-      progress: undefined,
-      lastResolveWeekKey: undefined,
-      ui: { mode: "NONE" },
-      offersByPlayerId: {},
-      signingsByPlayerId: {},
-      nextOfferSeq: 1,
-      bootstrappedFromTampering: false,
-      resolvesUsedThisPhase: 0,
-      maxResolvesPerPhase: 5,
-      activity: [],
-      draftByPlayerId: {},
-      resolveRoundByPlayerId: {},
-      pendingCounterTeamByPlayerId: {},
-      cpuTickedOnOpen: false,
-    },
+    freeAgency: createInitialFreeAgencyState(),
     contracts: { playerTeamInterestById: {} },
     resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     offers: [],
-    season: 2026,
+    season,
     week: 1,
     schemaVersion: 1,
     saveVersion: CURRENT_SAVE_VERSION,
@@ -1825,16 +1796,12 @@ function createInitialState(): GameState {
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
     teamOwnerExpectationsByTeamId: {},
     ownerState: defaultOwnerState(),
-    coaching: {
-      coachesById: {},
-      staffByTeamId: {},
-      market: { weekKey: toWeekKey(2026, 0), candidates: [], pendingOffers: [], poaching: [] },
-    },
-    media: { storiesByWeek: {} },
+    coaching: createInitialCoachingState(coachingMarketWeekKey),
+    media: createInitialMediaState(),
     wire: { items: [] },
-    medical: { playerMedicalById: {}, staffByTeamId: defaultMedicalStaffByTeamId(teams), injuryReportsByWeek: {} },
+    medical: createInitialMedicalState(teams),
     liveGames: {},
-    telemetry: { playLogsByGameKey: {}, percentiles: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} } },
+    telemetry: createInitialTelemetryState(),
     historicalTelemetry: { bySeason: {} },
     dynasty: defaultDynastyProfile(),
     staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
@@ -1862,7 +1829,7 @@ function createInitialState(): GameState {
     },
     strategy: DEFAULT_STRATEGY,
     scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
-    hub: { news: defaultNews(2026), newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule: createSchedule(saveSeed) },
+    hub: { news, newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule },
     unreadNewsCount: 0,
     lastNewsReadWeek: 0,
     offseasonNews: [],
@@ -1886,36 +1853,22 @@ function createInitialState(): GameState {
       cash: 150_000_000,
       postJune1Sim: false,
     },
-    league: initLeagueState(teams, saveSeed),
+    league,
     teamGameplans: {},
     weatherByGameKey: {},
     playoffs: null,
-    currentStandings: initTeamStandings(teams),
+    currentStandings,
     weeklyResults: [],
     leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
     saveSeed,
-    careerSeed: saveSeed ^ 0x85ebca6b,
-    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: saveSeed ^ 0x85ebca6b }),
+    careerSeed,
+    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: careerSeed }),
     gameHistory: [],
     playerSeasonStatsById: {},
     playerCareerStatsById: {},
     leagueRecords: defaultLeagueRecords(),
-    draft: {
-      started: false,
-      completed: false,
-      totalRounds: 7,
-      currentOverall: 1,
-      orderTeamIds: [],
-      leaguePicks: [],
-      onClockTeamId: undefined,
-      withdrawnBoardIds: {},
-      prospectPool: generateDraftClass({ year: 2026, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
-      appliedSelectionCount: 0,
-      ...initDraftSim({ saveSeed, season: 2026, userTeamId: "MILWAUKEE_NORTHSHORE" }),
-      rosterCountsByTeamBucket: {},
-      draftedCountsByTeamBucket: {},
-    },
-    upcomingDraftClass: generateDraftClass({ year: 2026, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
+    draft: createInitialDraftState(draftContext),
+    upcomingDraftClass: generateDraftClass({ year: season, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
     futureClasses: {},
     rookies: [],
     rookieContracts: {},
@@ -1927,25 +1880,10 @@ function createInitialState(): GameState {
     playerAttrOverrides: {},
     qbRunContactExposureByPlayerId: {},
     franchiseTags: {},
-    playerFatigueById: {},
-    practicePlan: DEFAULT_PRACTICE_PLAN,
-    practicePlanConfirmed: false,
-    practiceNeglectCounters: { ...DEFAULT_PRACTICE_PLAN.neglectWeeks },
-    cumulativeNeglectPenalty: 0,
-    weeklyFamiliarityBonus: 0,
-    weeklyMentalErrorMod: 0,
-    weeklySchemeConceptBonus: 0,
-    weeklyLateGameRetentionBonus: 0,
-    nextGameInjuryRiskMod: 0,
-    lastPracticeOutcomeSummary: undefined,
-    playerDevXpById: {},
-    pendingTradeOffers: [],
-    tradeError: undefined,
-    tradeBlockByPlayerId: {},
+    ...createInitialPracticeState(),
+    ...createInitialTransactionsState(),
     firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
     careerHistory: { firings: [] },
-    transactions: [],
-    transactionLedger: { events: [], counter: 0, migrationComplete: false },
     feedbackQueue: [],
     feedbackHistory: [],
     pendingInjuryAlert: undefined,
@@ -2020,7 +1958,7 @@ function prospectEvalDetRand(saveSeed: number, key: string) {
 }
 
 export function getUserProspectEval(state: GameState, prospect: Prospect) {
-  const userTeamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+  const userTeamId = resolveCurrentUserTeamId(state) ?? "";
   const gmPersonId = state.league.gmByTeamId[userTeamId];
   const gm = getGmTraits(gmPersonId);
   const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
@@ -3706,25 +3644,8 @@ function seasonRollover(state: GameState): GameState {
     },
     unreadNewsCount: 0,
     lastNewsReadWeek: 0,
-    tampering: { interestByPlayerId: {}, nameByPlayerId: {}, shortlistPlayerIds: [], softOffersByPlayerId: {}, ui: { mode: "NONE" } },
-    freeAgency: {
-      initStatus: "idle",
-      isResolving: false,
-      progress: undefined,
-      lastResolveWeekKey: undefined,
-      ui: { mode: "NONE" },
-      offersByPlayerId: {},
-      signingsByPlayerId: {},
-      nextOfferSeq: 1,
-      bootstrappedFromTampering: false,
-      resolvesUsedThisPhase: 0,
-      maxResolvesPerPhase: 5,
-      activity: [],
-      draftByPlayerId: {},
-      resolveRoundByPlayerId: {},
-      pendingCounterTeamByPlayerId: {},
-      cpuTickedOnOpen: false,
-    },
+    tampering: createInitialTamperingState(),
+    freeAgency: createInitialFreeAgencyState(),
     resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
     playerTeamOverrides,
     playerContractOverrides,
@@ -4083,7 +4004,7 @@ function applyDraftSelectionToState(state: GameState, selection: import("@/engin
     total: contract.totalValue,
   };
 
-  const base = {
+  const base: GameState = {
     ...state,
     nextPlayerId: state.nextPlayerId + 1,
     rookies: [...state.rookies, rookie],
@@ -4893,7 +4814,7 @@ function normalizeCombinePosition(pos: string): string {
 function combineDayForPosition(pos: string): 1 | 2 | 3 | 4 {
   const normalized = normalizeCombinePosition(pos);
   for (const [day, bucket] of Object.entries(COMBINE_DAY_POSITION_BUCKETS)) {
-    if (bucket.positions.includes(normalized as any)) return Number(day) as 1 | 2 | 3 | 4;
+    if ((bucket.positions as readonly string[]).includes(normalized)) return Number(day) as 1 | 2 | 3 | 4;
   }
   return 2;
 }
@@ -5062,7 +4983,7 @@ function reconcileJerseyNumbersForTx(state: GameState, tx: TransactionEvent): Ga
     if (beforeTeam) affectedTeams.add(beforeTeam);
   }
 
-  let nextAttr = { ...(state.playerAttrOverrides ?? {}) };
+  const nextAttr = { ...(state.playerAttrOverrides ?? {}) };
   for (const teamId of affectedTeams) {
     if (!teamId || teamId === "FREE_AGENT" || teamId === "RETIRED") continue;
     const assigned = assignTeamRosterNumbers({ ...state, playerAttrOverrides: nextAttr }, teamId);
@@ -5376,7 +5297,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         }),
       );
 
-      const capDeltaA = tradeCapDelta(state, outgoingPlayerIds, incomingPlayerIds);
+      const capDeltaA = outgoingPlayerIds.reduce((sum, playerId) => sum + tradeCapDelta(state, String(teamA), String(playerId), String(teamB)), 0)
+        - incomingPlayerIds.reduce((sum, playerId) => sum + tradeCapDelta(state, String(teamB), String(playerId), String(teamA)), 0);
       const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
       const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
       const gmRelationship = Math.max(0, Math.min(100, Number(next.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
@@ -5560,7 +5482,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         reputation: Number((person as any).reputation ?? 55),
         expectedSalary: expected,
         offeredSalary: offeredWithArchetype,
-        isCoordinator: offer.roleType === "COORDINATOR",
+        isCoordinator: true,
         hiringModifier: perkHireMod,
       });
 
@@ -5617,7 +5539,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
       const person = getPersonnelById(action.payload.personId) as any;
       const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase().replace(/\s+/g, "_");
-      let nextPlaybooks = {
+      const nextPlaybooks = {
         ...nextState.playbooks,
         userOverride: {
           offense: Boolean(nextState.playbooks.userOverride?.offense),
@@ -6353,7 +6275,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const applied = state.offseasonData.tagCenter.applied;
       if (!applied) return state;
 
-      let next = applyCanonicalTx(state, Tx.franchiseTagRemove(String(applied.teamId ?? state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? ""), applied.playerId, applied.priorContract));
+      const next = applyCanonicalTx(state, Tx.franchiseTagRemove(String(applied.teamId ?? state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? ""), applied.playerId, applied.priorContract));
       const franchiseTags = { ...next.franchiseTags };
       delete franchiseTags[applied.playerId];
 
@@ -7044,7 +6966,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const hist = s.interviews.history[prospectId] ?? [];
       const history = {
         ...s.interviews.history,
-        [prospectId]: [...hist, { category: "LEADERSHIP", outcome: `${category}: ${result.score}${result.reveal ? ` (${result.reveal})` : ""}`, windowKey: s.windowKey }],
+        [prospectId]: [...hist, { category: "LEADERSHIP" as const, outcome: `${category}: ${result.score}${result.reveal ? ` (${result.reveal})` : ""}`, windowKey: s.windowKey }],
       };
       const existing = s.interviews.resultsByProspectId?.[prospectId] ?? [];
       return {
@@ -7145,7 +7067,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "SCOUTING_WINDOW_INIT": {
-      const teamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+      const teamId = resolveCurrentUserTeamId(state) ?? "";
       const gm = getGmTraits(state.league.gmByTeamId[teamId]);
       const budget = computeWindowBudget(gm, action.payload.windowId, state.offseasonData.scouting.carryover);
       return {
@@ -7164,7 +7086,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "SCOUTING_SPEND": {
       const scouting = state.offseasonData.scouting;
       const budget = { ...scouting.budget };
-      const teamId = state.acceptedOffer?.teamId ?? state.coach.hometownTeamId ?? "";
+      const teamId = resolveCurrentUserTeamId(state) ?? "";
       const gm = getGmTraits(state.league.gmByTeamId[teamId]);
       const windowKey = `${state.season}:${state.offseason.stepId}:${scouting.windowId}`;
       if (action.payload.targetType === "PROSPECT") {
@@ -7658,7 +7580,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return expireRemainingFreeAgencyOffers(state, "Expired: resolve cap reached");
       }
 
-      let next0 = expireUserCounters(state);
+      const next0 = expireUserCounters(state);
       const offersByPlayerId = { ...next0.freeAgency.offersByPlayerId };
       const signingsByPlayerId = { ...next0.freeAgency.signingsByPlayerId };
       const resolveRoundByPlayerId = { ...next0.freeAgency.resolveRoundByPlayerId };
@@ -9065,7 +8987,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
         const winnerTeamId = state.game.homeScore >= state.game.awayScore ? state.game.homeTeamId : state.game.awayTeamId;
         const finalizedBox = buildGameBoxScore(stepped.sim, state.season);
-        let out = gameReducer({
+        const out = gameReducer({
           ...nextWithPractice,
           gameHistory: [...(state.gameHistory ?? []), finalizedBox],
           game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
@@ -9207,12 +9129,12 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       };
       const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
       if (!appliedPlayWeek.applied) return state;
-      let nextWithPractice = appliedPlayWeek.state;
+      const nextWithPractice = appliedPlayWeek.state;
 
       if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
         const winnerTeamId = sim.homeScore >= sim.awayScore ? sim.homeTeamId : sim.awayTeamId;
         const finalizedBox = buildGameBoxScore(sim, state.season);
-        let out = gameReducer(
+        const out = gameReducer(
           { ...nextWithPractice, gameHistory: [...(state.gameHistory ?? []), finalizedBox], game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }) },
           { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: sim.homeScore, awayScore: sim.awayScore, winnerTeamId } },
         );
@@ -9518,7 +9440,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const pendingOffers = state.coaching.market.pendingOffers.map((offer) => {
         if (offer.status !== "PENDING") return offer;
         const roll = deterministicRand(seedFor(state.saveSeed, state.season, offer.salary, offer.years));
-        return { ...offer, status: roll > 0.45 ? "ACCEPTED" : "DECLINED" };
+        return { ...offer, status: (roll > 0.45 ? "ACCEPTED" : "DECLINED") as "ACCEPTED" | "DECLINED" };
       });
       let next = { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, pendingOffers } } };
       for (const offer of pendingOffers.filter((o) => o.status === "ACCEPTED")) {
@@ -9547,7 +9469,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "COACHING_POACHING_RESOLVE": {
       const poaching = state.coaching.market.poaching.map((event, idx) => {
         const leaves = deterministicRand(seedFor(state.saveSeed, state.season, idx, 404)) > 0.5;
-        return { ...event, status: leaves ? "LEFT" : "STAYED", toTeamId: leaves ? state.acceptedOffer?.teamId : undefined };
+        return { ...event, status: (leaves ? "LEFT" : "STAYED") as "LEFT" | "STAYED", toTeamId: leaves ? state.acceptedOffer?.teamId : undefined };
       });
       return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
     }
@@ -9713,6 +9635,22 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "RESET":
       return createInitialState();
+    case "FA_WITHDRAW":
+    case "FA_WITHDRAW_OFFER":
+    case "FA_ACCEPT_OFFER":
+    case "FA_REJECT_OFFER":
+    case "DRAFT_SIM_NEXT":
+    case "DRAFT_SIM_TO_USER":
+    case "DRAFT_SIM_ALL":
+    case "NAV_TO_DRAFT_RESULTS":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
+    case "RECOVERY_RETURN_TO_HUB":
+    case "RECOVERY_REBUILD_INDICES":
+    case "RECOVERY_SKIP_STEP":
+    case "RECOVERY_RESTORE_BACKUP":
+    case "RECOVERY_HYDRATE_STATE":
+    case "RECOVERY_SET_ERRORS":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
     default:
       return assertNever(action);
   }
