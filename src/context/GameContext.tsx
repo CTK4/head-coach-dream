@@ -185,6 +185,22 @@ import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster
 import { useGamePersistence } from "@/context/persistence/useGamePersistence";
 import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
 import { loadStateFromStorage } from "@/context/boot/loadState";
+import { DEFAULT_DETERMINISTIC_COUNTERS } from "@/context/state/defaults/deterministicCounters";
+import { defaultDynastyProfile } from "@/context/state/defaults/dynasty";
+import { defaultMedicalStaffByTeamId } from "@/context/state/defaults/medical";
+import { defaultOwnerGoals, defaultOwnerState } from "@/context/state/defaults/owner";
+import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
+import type {
+  TeamId as SharedTeamId,
+  OwnerGoalSet as SharedOwnerGoalSet,
+  OwnerState as SharedOwnerState,
+  OwnerUltimatum as SharedOwnerUltimatum,
+  MedicalStaff as SharedMedicalStaff,
+  SidelineAdjustments as SharedSidelineAdjustments,
+  DynastySeasonLog as SharedDynastySeasonLog,
+  DynastyProfile as SharedDynastyProfile,
+  DeterministicCounters as SharedDeterministicCounters,
+} from "@/context/state/types/defaultStateTypes";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
@@ -193,17 +209,11 @@ export type { CareerStage };
 export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
 
 export type WeekKey = `${number}-W${number}`;
-export type TeamId = string;
+export type TeamId = SharedTeamId;
 export type PlayerId = string;
 export type CoachId = string;
 
-export type OwnerGoalSet = {
-  minWins: number;
-  playoffRoundTarget: "MISS" | "WILD_CARD" | "DIVISIONAL" | "CONF_TITLE" | "CHAMPION";
-  topUnitTarget?: { unit: "OFFENSE" | "DEFENSE" | "ST"; rankMax: number };
-  disciplineTarget?: { maxPenaltiesRank?: number };
-  financeTarget?: { capOverageAllowed: number; deadCapMax: number };
-};
+export type OwnerGoalSet = SharedOwnerGoalSet;
 
 export type OwnerExpectationsConfig = {
   patience: number;
@@ -214,15 +224,8 @@ export type OwnerExpectationsConfig = {
   goalsBySeason: Record<string, OwnerGoalSet>;
 };
 
-export type OwnerUltimatum = { year: number; trigger: string; resolved: boolean };
-export type OwnerState = {
-  approval: number;
-  pressure: number;
-  trust: number;
-  lastEvaluation?: { year: number; summary: string; delta: number };
-  ultimatums: OwnerUltimatum[];
-  currentGoals?: OwnerGoalSet;
-};
+export type OwnerUltimatum = SharedOwnerUltimatum;
+export type OwnerState = SharedOwnerState;
 
 export type Coach = {
   coachId: CoachId;
@@ -330,12 +333,7 @@ export type PlayerMedical = {
   current?: PlayerInjury;
 };
 
-export type MedicalStaff = {
-  diagnosis: number;
-  rehab: number;
-  prevention: number;
-  riskTolerance: number;
-};
+export type MedicalStaff = SharedMedicalStaff;
 
 export type InjuryReport = {
   playerId: PlayerId;
@@ -352,26 +350,7 @@ export type MedicalState = {
   injuryReportsByWeek: Record<WeekKey, InjuryReport[]>;
 };
 
-export type SidelineAdjustments = {
-  offense: {
-    tempo: "SLOW" | "NORMAL" | "NO_HUDDLE";
-    aggressiveness: number;
-    runBias: number;
-    passProtection: "BASE" | "MAX_PROTECT" | "SLIDE_LEFT" | "SLIDE_RIGHT";
-    targetFocus?: PlayerId;
-  };
-  defense: {
-    shellPreference: "AUTO" | "SINGLE_HIGH" | "TWO_HIGH";
-    blitzRate: number;
-    spyQB: boolean;
-    bracket?: PlayerId;
-    runFit: "LIGHT_BOX" | "NORMAL" | "HEAVY_BOX";
-  };
-  specialTeams: {
-    returnAggression: number;
-    puntStrategy: "NORMAL" | "PIN_DEEP" | "RUGBY" | "FAKE_ALERT";
-  };
-};
+export type SidelineAdjustments = SharedSidelineAdjustments;
 
 export type LiveGameState = {
   gameId: string;
@@ -383,24 +362,9 @@ export type LiveGameState = {
   gameplanSideline: SidelineAdjustments;
 };
 
-export type DynastySeasonLog = {
-  year: number;
-  wins: number;
-  playoffResult: string;
-  awards: string[];
-  rankOff?: number;
-  rankDef?: number;
-  rankST?: number;
-  ownerOutcome: "EXTENDED" | "WARNED" | "ULTIMATUM" | "FIRED" | "STABLE";
-  legacyDelta: number;
-};
+export type DynastySeasonLog = SharedDynastySeasonLog;
 
-export type DynastyProfile = {
-  legacyScore: number;
-  seasonLog: DynastySeasonLog[];
-  milestones: Array<{ key: string; achievedYear: number }>;
-  unlockedCosmetics?: string[];
-};
+export type DynastyProfile = SharedDynastyProfile;
 
 export type GmMode = "REBUILD" | "RELOAD" | "CONTEND";
 
@@ -925,14 +889,7 @@ export type OfferResultModalState = {
   ts: number;
 };
 
-export type DeterministicCounters = {
-  news: number;
-  feedback: number;
-  ui: number;
-  offer: number;
-  staff: number;
-  injury: number;
-};
+export type DeterministicCounters = SharedDeterministicCounters;
 
 export type GameState = {
   coach: {
@@ -1785,37 +1742,6 @@ function toWeekKey(year: number, weekIndex: number): WeekKey {
 
 function seedFor(leagueSeed: number, a: number, b: number, c: number): number {
   return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
-}
-
-const DEFAULT_DETERMINISTIC_COUNTERS: DeterministicCounters = {
-  news: 0,
-  feedback: 0,
-  ui: 0,
-  offer: 0,
-  staff: 0,
-  injury: 0,
-};
-
-const DEFAULT_SIDELINE: SidelineAdjustments = {
-  offense: { tempo: "NORMAL", aggressiveness: 50, runBias: 50, passProtection: "BASE" },
-  defense: { shellPreference: "AUTO", blitzRate: 35, spyQB: false, runFit: "NORMAL" },
-  specialTeams: { returnAggression: 50, puntStrategy: "NORMAL" },
-};
-
-function defaultOwnerGoals(): OwnerGoalSet {
-  return { minWins: 9, playoffRoundTarget: "WILD_CARD", topUnitTarget: { unit: "OFFENSE", rankMax: 16 } };
-}
-
-function defaultOwnerState(): OwnerState {
-  return { approval: 60, pressure: 40, trust: 55, ultimatums: [], currentGoals: defaultOwnerGoals() };
-}
-
-function defaultMedicalStaffByTeamId(teamIds: TeamId[]): Record<TeamId, MedicalStaff> {
-  return Object.fromEntries(teamIds.map((teamId) => [teamId, { diagnosis: 60, rehab: 60, prevention: 60, riskTolerance: 50 }]));
-}
-
-function defaultDynastyProfile(): DynastyProfile {
-  return { legacyScore: 0, seasonLog: [], milestones: [], unlockedCosmetics: [] };
 }
 
 function createInitialState(): GameState {
