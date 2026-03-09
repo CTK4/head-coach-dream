@@ -7,11 +7,11 @@ const MIN_STARTERS: Record<string, number> = {
   QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, EDGE: 2, LB: 3, CB: 3, S: 2,
 };
 
-const PLAYOFF_ROUND_MAP: Record<string, "missed" | "wc" | "div" | "conf" | "sb" | "champ"> = {
-  WILD_CARD: "wc",
-  DIVISIONAL: "div",
-  CONF_FINALS: "conf",
-  SUPER_BOWL: "sb",
+const PLAYOFF_ROUND_MAP: Record<string, "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion"> = {
+  WILD_CARD: "wildCard",
+  DIVISIONAL: "divisional",
+  CONF_FINALS: "conference",
+  SUPER_BOWL: "superbowlLoss",
 };
 
 function toCpuPlayer(p: any): CpuPlayer {
@@ -41,14 +41,14 @@ export function buildCpuTeamContext(state: any, teamId: string): CpuTeamContext 
   const wins = Number(standing?.w ?? 0);
   const losses = Number(standing?.l ?? 0);
   const winPct = wins + losses > 0 ? wins / (wins + losses) : 0.5;
-  const capTotal = Number(cap.capTotal ?? 0);
-  const capUsed = Number(cap.capUsed ?? 0);
+  const capTotal = Number((cap as { cap?: number }).cap ?? 0);
+  const capUsed = Number((cap as { committed?: number }).committed ?? 0);
   const capSpace = Math.max(0, capTotal - capUsed);
   const avgRosterAge = roster.length ? roster.reduce((sum: number, p: any) => sum + Number(p.age ?? 26), 0) / roster.length : 26;
 
   const postseasonResult = state.league?.postseason?.resultsByTeamId?.[teamId];
   const playoffResult = postseasonResult?.isChampion
-    ? "champ"
+    ? "champion"
     : PLAYOFF_ROUND_MAP[String(postseasonResult?.eliminatedIn ?? "")] ?? "missed";
 
   const positionalNeeds: Record<string, number> = {};
@@ -74,7 +74,6 @@ export function buildCpuTeamContext(state: any, teamId: string): CpuTeamContext 
       avgRosterAge,
       playoffResult,
       positionalNeeds,
-      priorWinPct,
     }),
   };
 }

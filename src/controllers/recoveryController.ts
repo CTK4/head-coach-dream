@@ -22,8 +22,9 @@ export function useRecoveryController() {
 
     const restored = loadSaveResult(activeSaveId);
     if (!restored.ok) {
-      setError(restored.message);
-      dispatch({ type: "RECOVERY_SET_ERRORS", payload: { errors: [restored.message] } });
+      const message = "message" in restored ? restored.message : "Failed to restore backup.";
+      setError(message);
+      dispatch({ type: "RECOVERY_SET_ERRORS", payload: { errors: [message] } });
       setBusyAction(null);
       return;
     }

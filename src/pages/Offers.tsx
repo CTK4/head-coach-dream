@@ -97,7 +97,7 @@ const Offers = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-xl font-semibold">{team?.name ?? offer.teamId}</h2>
-                      <p className="text-sm text-muted-foreground">{team?.city ?? team?.region ?? ""}</p>
+                      <p className="text-sm text-muted-foreground">{team?.region ?? ""}</p>
                     </div>
                     <Badge variant="secondary">{OFFER_STRATEGY_LABELS[offer.mediaNarrativeKey] ?? safeLabel(offer.mediaNarrativeKey)}</Badge>
                   </div>

@@ -7,6 +7,7 @@ import type { ContractRow, PersonnelOverride } from "@/data/leagueDb";
 import { restoreCheckpointOverlay } from "@/context/boot/checkpointRestore";
 import { hydrateLoadedState } from "@/context/boot/hydrateState";
 import { ensureLeagueGmMap } from "@/context/boot/migrateSave";
+import type { LeagueRecords } from "@/engine/leagueRecords";
 import { applyBootValidators } from "@/context/boot/validators";
 import type { GameState } from "@/context/GameContext";
 
@@ -23,7 +24,7 @@ type LoadStateDeps = {
   migrateSave: (state: Partial<GameState>) => Partial<GameState>;
   defaultDeterministicCounters: GameState["deterministicCounters"];
   normalizePriorityList: (list: unknown) => string[];
-  defaultLeagueRecords: () => Record<string, unknown>;
+  defaultLeagueRecords: () => LeagueRecords;
   clampFatigue: (fatigue: number) => number;
   fatigueDefault: number;
   migratePracticePlan: (plan: unknown) => GameState["practicePlan"];

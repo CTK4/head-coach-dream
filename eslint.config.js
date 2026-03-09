@@ -23,6 +23,13 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+
+  {
+    files: ["src/context/GameContext.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
   {
     files: ["src/pages/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
     rules: {

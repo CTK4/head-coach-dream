@@ -163,7 +163,7 @@ function statValue(stats: PlayerSeasonStats, stat: string): number {
     const attempts = Math.max(1, Number(stats.fieldGoalAttempts ?? 0));
     return made / attempts;
   }
-  return Number((stats as Record<string, unknown>)[stat] ?? 0);
+  return Number((stats as unknown as Record<string, unknown>)[stat] ?? 0);
 }
 
 function meetsDefinition(definition: BadgeDefinition, player: PlayerRow, stats: PlayerSeasonStats): boolean {

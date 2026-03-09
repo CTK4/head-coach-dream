@@ -122,7 +122,7 @@ const BOX_COUNT_BY_PACKAGE: Record<DefensivePackage, Record<DefensiveLook["box"]
 
 function toSituationLabel(bucket?: SituationBucket): string {
   if (!bucket) return "Unknown";
-  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replaceAll("_", " ").replace("3RD", "3rd").replace("4TH", "4th");
+  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replace(/_/g, " ").replace("3RD", "3rd").replace("4TH", "4th");
 }
 
 function compactCallLabel(signature: string): string {

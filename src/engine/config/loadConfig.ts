@@ -22,7 +22,7 @@ export function loadConfigRegistry(options?: { calibrationPackId?: string; confi
 
   const validation = validateConfigRegistry(registry);
   if (!validation.ok) {
-    return { ok: false, validation };
+    return { ok: false, validation: validation as ConfigValidationResult & { ok: false } };
   }
 
   return { ok: true, registry };

@@ -21,11 +21,34 @@ function levelFromScore(score: number): HotSeatLevel {
   return "SECURE";
 }
 
+
+function deriveCurrentStreak(state: GameState, teamId: string | undefined): number {
+  if (!teamId) return 0;
+  const games = (state.weeklyResults ?? [])
+    .flatMap((w) => (w as { allGameResults?: Array<{ homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number }> }).allGameResults ?? [])
+    .filter((g) => g.homeTeamId === teamId || g.awayTeamId === teamId);
+  let streak = 0;
+  for (let i = games.length - 1; i >= 0; i -= 1) {
+    const g = games[i];
+    const teamWon = (g.homeTeamId === teamId && g.homeScore > g.awayScore) || (g.awayTeamId === teamId && g.awayScore > g.homeScore);
+    const teamLost = (g.homeTeamId === teamId && g.homeScore < g.awayScore) || (g.awayTeamId === teamId && g.awayScore < g.homeScore);
+    if (!teamWon && !teamLost) break;
+    if (streak === 0) {
+      streak = teamWon ? 1 : -1;
+      continue;
+    }
+    if (streak > 0 && teamWon) streak += 1;
+    else if (streak < 0 && teamLost) streak -= 1;
+    else break;
+  }
+  return streak;
+}
+
 export function computeHotSeatScore(coach: GameState["coach"], gameState: GameState): HotSeatStatus {
   const factors: HotSeatFactor[] = [];
   const record = gameState.currentStandings.find((s) => s.teamId === gameState.acceptedOffer?.teamId);
-  const wins = Number(record?.w ?? 0);
-  const losses = Number(record?.l ?? 0);
+  const wins = Number((record as { wins?: number; w?: number } | undefined)?.wins ?? (record as { wins?: number; w?: number } | undefined)?.w ?? 0);
+  const losses = Number((record as { losses?: number; l?: number } | undefined)?.losses ?? (record as { losses?: number; l?: number } | undefined)?.l ?? 0);
   const games = Math.max(1, wins + losses);
   const over500 = wins - losses;
   const week = Number(gameState.hub.regularSeasonWeek ?? gameState.week ?? 1);
@@ -47,7 +70,7 @@ export function computeHotSeatScore(coach: GameState["coach"], gameState: GameSt
   if ((rep?.leaguePrestige ?? 50) < 45) factors.push({ label: "Limited prestige", contribution: 8 });
   if ((coach.lockerRoomCred ?? 55) < 50) factors.push({ label: "Locker room concerns", contribution: 12 });
 
-  const streak = Number(gameState.league.streakByTeamId?.[gameState.acceptedOffer?.teamId ?? ""] ?? 0);
+  const streak = deriveCurrentStreak(gameState, gameState.acceptedOffer?.teamId);
   if (streak <= -4) factors.push({ label: "Losing streak", contribution: 15 });
   if (streak >= 4) factors.push({ label: "Winning streak", contribution: -10 });
 

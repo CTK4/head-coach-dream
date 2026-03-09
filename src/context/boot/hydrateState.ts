@@ -1,8 +1,9 @@
 import type { GameState, PersistedFatigue, PlayerContractOverride } from "@/context/GameContext";
+import type { LeagueRecords } from "@/engine/leagueRecords";
 
 interface HydrateStateDependencies {
   normalizePriorityList: (value: unknown) => string[];
-  defaultLeagueRecords: () => Record<string, unknown>;
+  defaultLeagueRecords: () => LeagueRecords;
   clampFatigue: (value: number) => number;
   FATIGUE_DEFAULT: number;
   migratePracticePlan: (plan: unknown) => GameState["practicePlan"];

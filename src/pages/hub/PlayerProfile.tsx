@@ -84,7 +84,7 @@ export default function PlayerProfile() {
   const qbFitSignal = qbTag ? getQbSchemeFitSignal(qbFitMult) : undefined;
 
 
-  const careerStats = state.playerCareerStatsById?.[playerId];
+  const careerStats = state.playerCareerStatsById?.[playerId] as any;
   const careerSeasons = careerStats?.seasons ?? [];
   const hof = computeHOFm({ pos, overall: ovr, careerStats, accolades: state.playerAccolades?.[playerId] as any });
 
