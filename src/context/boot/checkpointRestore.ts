@@ -1,7 +1,6 @@
 import type { GameSim } from "@/engine/gameSim";
 import type { GameState } from "@/context/GameContext";
-
-export const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
+import { GAME_CHECKPOINT_KEY } from "@/context/persistence/gameCheckpoint";
 
 export function restoreCheckpointOverlay(out: GameState): GameState {
   try {

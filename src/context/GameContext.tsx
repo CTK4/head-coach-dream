@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useReducer, useRef } from "react";
+import React, { createContext, useContext, useEffect, useReducer } from "react";
 import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
 import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
@@ -155,7 +155,7 @@ import { updateChemistry } from "@/engine/chemistry";
 import { updateStaffTrust } from "@/engine/staffTrust";
 import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
-import { getActiveSaveId, loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
+import { getActiveSaveId, loadSaveResult } from "@/lib/saveManager";
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
@@ -187,10 +187,9 @@ import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
 import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
+import { useGamePersistence } from "@/context/persistence/useGamePersistence";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
-const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
-
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type { CareerStage };
 
@@ -9996,11 +9995,8 @@ function loadState(): GameState {
     out = migrateDraftClassIdsInSave(out) as GameState;
     out = ensureLeagueGmMap(out);
     out = applyCapModeQuery(out);
-
-    // Mid-game checkpoint restore: if a drive-boundary checkpoint exists for this
-    // save and the main save doesn't already have an active game, overlay the
-    // in-progress game state so the user can resume after a hard-refresh.
     out = restoreCheckpointOverlay(out);
+
     out = applyBootValidators(out, loadedConfig.registry);
 
     return out;
@@ -10032,125 +10028,7 @@ const GameContext = createContext<GameContextType | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, undefined, loadState);
 
-// —————————————————————————
-// Autosave: debounced and game-phase-aware.
-//
-// BEFORE: fired on every state change — including every RESOLVE_PLAY during
-// a game (~70 serialise+write calls per game → main-thread freeze on mobile
-// and risk of localStorage quota overflow).
-//
-// AFTER:
-//   • Mid-game plays are SKIPPED. The save fires once automatically when the
-//     game ends because that causes a state update where isGameInProgress is
-//     false. There is no safe resume point mid-drive anyway.
-//   • All other saves are DEBOUNCED (600 ms). This smooths out rapid
-//     consecutive updates (CPU draft advance bursts, FA bidding rounds, etc.)
-//     without losing data — the last state in the burst is written.
-//   • A visibilitychange listener flushes immediately when the tab hides,
-//     catching any pending debounced save before the browser suspends the tab.
-// —————————————————————————
-
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevDriveRef = useRef(state.game.driveNumber);
-  const AUTOSAVE_DEBOUNCE_MS = 600;
-
-  // True when we are mid-play-by-play and saves should be suppressed.
-  //
-  // Regular season: START_GAME sets league.phase = "REGULAR_SEASON_GAME".
-  // RESOLVE_PLAY transitions it back to "REGULAR_SEASON" when the game ends,
-  // which triggers a save automatically (no extra wiring needed).
-  //
-  // Playoffs: league.phase stays as the round name (WILD_CARD / DIVISIONAL /
-  // CONFERENCE / CHAMPIONSHIP) throughout the game. We detect an active
-  // playoff game by weekType + real team IDs (placeholder is "HOME" when idle).
-  const isGameInProgress =
-    state.league.phase === "REGULAR_SEASON_GAME" ||
-    (state.game.weekType === "PLAYOFFS" && state.game.homeTeamId !== "HOME");
-
-  useEffect(() => {
-    if (saveTimerRef.current !== null) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-
-    // Suppress saves entirely during active play-by-play.
-    if (isGameInProgress) return;
-
-    const teamId = getUserTeamId(state);
-    if (!teamId) return;
-
-    saveTimerRef.current = setTimeout(() => {
-      saveTimerRef.current = null;
-      try {
-        syncCurrentSave(state, getActiveSaveId() ?? undefined);
-      } catch (error) {
-        logError("state.save.failure", {
-          phase: state.phase,
-          saveId: getActiveSaveId(),
-          season: state.season,
-          week: state.week,
-          meta: { message: error instanceof Error ? error.message : String(error) },
-        });
-        console.error("[state-save] Failed to persist save data", error);
-      }
-    }, AUTOSAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (saveTimerRef.current !== null) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    };
-  }, [state, isGameInProgress]);
-
-  // Flush immediately when the tab goes to background (catches any pending
-  // debounced save before the browser suspends execution).
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== "hidden") return;
-      if (saveTimerRef.current !== null) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      if (isGameInProgress) return; // mid-drive state is not resumable
-      if (!getUserTeamId(state)) return;
-      try {
-        syncCurrentSave(state, getActiveSaveId() ?? undefined);
-      } catch {
-        // Silent — can’t show UI in a visibilitychange handler.
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [state, isGameInProgress]);
-
-  // Drive-boundary checkpoint: save game state at the start of each new drive so
-  // a hard-refresh mid-game can resume from the last completed drive boundary.
-  useEffect(() => {
-    const prev = prevDriveRef.current;
-    prevDriveRef.current = state.game.driveNumber;
-
-    if (!isGameInProgress) {
-      // Game ended or not started — clear any stale checkpoint
-      try { localStorage.removeItem(GAME_CHECKPOINT_KEY); } catch { /* silent */ }
-      return;
-    }
-
-    // Only write at drive boundaries (driveNumber incremented)
-    if (state.game.driveNumber > prev) {
-      try {
-        localStorage.setItem(
-          GAME_CHECKPOINT_KEY,
-          JSON.stringify({
-            saveSeed: state.saveSeed,
-            season: state.season,
-            leaguePhase: state.league.phase,
-            game: state.game,
-          }),
-        );
-      } catch { /* quota exceeded — silent */ }
-    }
-  }, [state.game.driveNumber, isGameInProgress, state.saveSeed, state.season, state.league.phase, state.game]);
+  useGamePersistence(state);
 
   useEffect(() => {
     if (!import.meta.env.DEV || typeof window === "undefined") return;
