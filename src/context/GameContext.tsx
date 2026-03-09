@@ -200,6 +200,7 @@ import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
 import { createInitialTamperingState } from "@/context/state/defaults/tampering";
 import { createInitialTelemetryState } from "@/context/state/defaults/telemetry";
 import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
+import { bootstrapInitialGameState } from "@/context/state/bootstrap";
 import type {
   TeamId as SharedTeamId,
   OwnerGoalSet as SharedOwnerGoalSet,
@@ -1892,12 +1893,12 @@ function createInitialState(): GameState {
     hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
   };
 
-  let initialized = ensureAccolades(bootstrapAccolades(base));
-  initialized = gameReducer(initialized, { type: "COACHING_BOOTSTRAP", payload: { seed: initialized.saveSeed } });
-  initialized = gameReducer(initialized, { type: "DYNASTY_INIT", payload: { seed: initialized.saveSeed } });
-  const userTeamId = getUserTeamId(initialized);
-  if (userTeamId) initialized = gameReducer(initialized, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: initialized.season, teamId: userTeamId } });
-  return initialized;
+  return bootstrapInitialGameState(base, {
+    ensureAccolades,
+    bootstrapAccolades,
+    gameReducer,
+    resolveUserTeamId: getUserTeamId,
+  });
 }
 
 function hashStr(s: string): number {
