@@ -46,7 +46,6 @@ import {
 } from "@/engine/leagueSim";
 import type { TeamStanding } from "@/engine/standings";
 import { checkMilestones } from "@/engine/milestones";
-import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { CORE_ATTRIBUTE_KEYS, calculateProgressionDelta, defaultDevelopmentTrait, type DevelopmentProfile, type SeasonStats, type SnapCounts } from "@/engine/snapBasedProgression";
@@ -166,11 +165,8 @@ import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
-import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
-import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
-import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import { offseasonReducer } from "@/context/offseasonReducer";
 import { draftReducer } from "@/context/draftReducer";
@@ -182,7 +178,6 @@ import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/s
 import { getWeekSeed } from "@/engine/rng";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
-import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 import { useGamePersistence } from "@/context/persistence/useGamePersistence";
 import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
 import { loadStateFromStorage } from "@/context/boot/loadState";
@@ -201,6 +196,8 @@ import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
 import { createInitialTamperingState } from "@/context/state/defaults/tampering";
 import { createInitialTelemetryState } from "@/context/state/defaults/telemetry";
 import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
+import { finalizeWeekController } from "@/context/controllers/weekAdvance";
+import { applyCanonicalTx } from "@/context/controllers/transactions";
 import { bootstrapInitialGameState } from "@/context/state/bootstrap";
 import type {
   TeamId as SharedTeamId,
@@ -4975,70 +4972,6 @@ function assertNever(x: never): never {
   throw new Error(`Unhandled action: ${JSON.stringify(x)}`);
 }
 
-function reconcileJerseyNumbersForTx(state: GameState, tx: TransactionEvent): GameState {
-  const affectedTeams = new Set<string>();
-  if (tx.teamId) affectedTeams.add(String(tx.teamId));
-  if (tx.otherTeamId) affectedTeams.add(String(tx.otherTeamId));
-
-  for (const playerId of tx.playerIds ?? []) {
-    const beforeTeam = String(state.playerTeamOverrides?.[playerId] ?? "");
-    if (beforeTeam) affectedTeams.add(beforeTeam);
-  }
-
-  const nextAttr = { ...(state.playerAttrOverrides ?? {}) };
-  for (const teamId of affectedTeams) {
-    if (!teamId || teamId === "FREE_AGENT" || teamId === "RETIRED") continue;
-    const assigned = assignTeamRosterNumbers({ ...state, playerAttrOverrides: nextAttr }, teamId);
-    for (const [playerId, jerseyNumber] of Object.entries(assigned)) {
-      nextAttr[playerId] = { ...(nextAttr[playerId] ?? {}), jerseyNumber };
-    }
-  }
-
-  return nextAttr === state.playerAttrOverrides ? state : { ...state, playerAttrOverrides: nextAttr };
-}
-
-function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId" | "season" | "weekIndex" | "ts">): GameState {
-  const tx: TransactionEvent = {
-    ...draft,
-    txId: buildTxId(state),
-    season: Number(state.season ?? 1),
-    weekIndex: Number(state.week ?? 0),
-    ts: Number(state.season ?? 1) * 10_000 + Number(state.week ?? 0) * 100 + Number(state.transactionLedger?.counter ?? 0) + 1,
-  };
-  const draftState = applyTransaction(state, tx);
-  const withJerseys = reconcileJerseyNumbersForTx(draftState, tx);
-  const validation = validatePostTx(withJerseys);
-  if (validation.ok) return withJerseys;
-  if ("errors" in validation) {
-    const errs = validation.errors;
-    if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${errs.join("|")}`);
-    return { ...state, uiToast: `Transaction blocked: ${errs[0] ?? "invalid state"}` };
-  }
-  return withJerseys;
-}
-
-function finalizeWeek(
-  state: GameState,
-  context: { season: number; week: number; gameType: GameType; weekKey: WeekKey; seed: number },
-): GameState {
-  let out = state;
-  const alreadyProcessed = Boolean(out.medical.injuryReportsByWeek[context.weekKey]) && Boolean(out.media.storiesByWeek[context.weekKey]);
-  if (!alreadyProcessed) {
-    out = resolveInjuriesEngine(out);
-    out = gameReducer(out, { type: "MEDICAL_TICK_RECOVERY", payload: { weekKey: context.weekKey } });
-    out = gameReducer(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey: context.weekKey, seed: seedFor(context.seed, context.season, context.week, 202) } });
-    out = gameReducer(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: context.weekKey, seed: seedFor(context.seed, context.season, context.week, 101) } });
-  }
-
-  if (context.gameType === "REGULAR_SEASON" && context.week >= REGULAR_SEASON_WEEKS) {
-    if (!out.playoffs) out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
-    out = gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-    if (out.league.phase !== "WILD_CARD") out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
-  }
-
-  return out;
-}
-
 export function gameReducer(state: GameState, action: GameAction): GameState {
   const blockedState = applyCentralMutationPhaseGuard(state, action);
   if (blockedState) return blockedState;
@@ -8978,13 +8911,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       nextState = applyTelemetryAggregatesForGame(nextState, stepped.sim);
       if (state.game.weekType === "REGULAR_SEASON") {
         const weekKey = toWeekKey(nextState.season, Number(state.game.weekNumber));
-        nextState = finalizeWeek(nextState, {
+        nextState = finalizeWeekController(nextState, {
           season: nextState.season,
           week: Number(state.game.weekNumber),
           gameType: "REGULAR_SEASON",
           weekKey,
           seed: nextState.saveSeed,
-        });
+        }, gameReducer);
         // Narrative pulse (N3): wire orphaned modules into live game path
         try { nextState = updateMorale(nextState); } catch (e) { logError("narrative.morale", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
         try { nextState = updateChemistry(nextState); } catch (e) { logError("narrative.chemistry", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
@@ -9076,7 +9009,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       simNextState = applyTelemetryAggregatesForGame(simNextState, sim);
       if (state.game.weekType === "REGULAR_SEASON") {
         const weekKey = toWeekKey(simNextState.season, Number(state.game.weekNumber));
-        simNextState = finalizeWeek(simNextState, { season: simNextState.season, week: Number(state.game.weekNumber), gameType: "REGULAR_SEASON", weekKey, seed: simNextState.saveSeed });
+        simNextState = finalizeWeekController(simNextState, { season: simNextState.season, week: Number(state.game.weekNumber), gameType: "REGULAR_SEASON", weekKey, seed: simNextState.saveSeed }, gameReducer);
         simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
         if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
           simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
@@ -9154,7 +9087,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       if (!appliedAdvance.applied) return state;
       out = appliedAdvance.state;
       const weekKey = toWeekKey(out.season, week);
-      out = finalizeWeek(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed });
+      out = finalizeWeekController(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed }, gameReducer);
       // Narrative pulse (N3): orphaned modules wired back into active sim path
       if (gameType === "REGULAR_SEASON") {
         try { out = updateMorale(out); } catch (e) { logError("narrative.morale", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
