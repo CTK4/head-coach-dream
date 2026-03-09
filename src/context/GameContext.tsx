@@ -160,7 +160,7 @@ import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassId
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { hydrateLoadedState } from "@/context/boot/hydrateState";
-import { GAME_CHECKPOINT_KEY, restoreCheckpointOverlay } from "@/context/boot/checkpointRestore";
+import { restoreCheckpointOverlay } from "@/context/boot/checkpointRestore";
 import { applyBootValidators } from "@/context/boot/validators";
 import { migrateSave as migrateSaveBoot, ensureLeagueGmMap } from "@/context/boot/migrateSave";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
@@ -189,6 +189,7 @@ import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/en
 import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
+const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
 export type { CareerStage };
