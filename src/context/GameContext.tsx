@@ -155,26 +155,21 @@ import { updateChemistry } from "@/engine/chemistry";
 import { updateStaffTrust } from "@/engine/staffTrust";
 import { updateMedia } from "@/engine/media";
 import { updateOwner, updateAutonomy } from "@/engine/owner";
-import { getActiveSaveId, loadSaveResult } from "@/lib/saveManager";
-import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
-import { loadConfigRegistry } from "@/engine/config/loadConfig";
-import { hydrateLoadedState } from "@/context/boot/hydrateState";
-import { restoreCheckpointOverlay } from "@/context/boot/checkpointRestore";
-import { applyBootValidators } from "@/context/boot/validators";
-import { migrateSave as migrateSaveBoot, ensureLeagueGmMap } from "@/context/boot/migrateSave";
 import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
+import { getActiveSaveId } from "@/lib/saveManager";
+import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId } from "@/lib/userTeam";
-import { buildMigrationEvents, sortTransactionEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
-import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { ContractRow, PlayerRow } from "@/data/leagueDb";
 import { offseasonReducer } from "@/context/offseasonReducer";
@@ -188,6 +183,8 @@ import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
 import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 import { useGamePersistence } from "@/context/persistence/useGamePersistence";
+import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
+import { loadStateFromStorage } from "@/context/boot/loadState";
 
 const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
@@ -5214,6 +5211,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 }
 
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
+  const recoveryState = reduceRecoveryCases(state, action, {
+    buildMigrationEvents,
+  });
+  if (recoveryState) return recoveryState;
+
   switch (action.type) {
     case "INIT_NEW_GAME_FROM_STORY": {
       const isRehire = action.payload.isRehire === true;
@@ -9667,6 +9669,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         wire: { ...state.wire, items: [...state.wire.items, ...wireItems] },
       };
     }
+
     case "MEDICAL_TICK_RECOVERY": {
       const nextById: Record<PlayerId, PlayerMedical> = { ...(state.medical.playerMedicalById ?? {}) };
       for (const [playerId, med] of Object.entries(nextById)) {
@@ -9782,88 +9785,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
     }
-    case "RECOVERY_RETURN_TO_HUB": {
-      return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
-    }
-    case "RECOVERY_REBUILD_INDICES": {
-      // Preserve recoverable source data first, then rebuild derived indices from canonical ledger
-      // when available (fallback: migration events synthesized from overrides).
-      const sourceTeamOverrides = { ...state.playerTeamOverrides };
-      const sourceContractOverrides = { ...state.playerContractOverrides };
-      const sourceState = {
-        ...state,
-        playerTeamOverrides: sourceTeamOverrides,
-        playerContractOverrides: sourceContractOverrides,
-      };
-
-      const existingLedgerEvents = Array.isArray(state.transactionLedger?.events)
-        ? sortTransactionEvents(state.transactionLedger.events)
-        : [];
-      const rebuiltLedgerEvents = existingLedgerEvents.length > 0
-        ? existingLedgerEvents
-        : buildMigrationEvents(sourceState);
-
-      const rebuilt = {
-        ...state,
-        transactionLedger: {
-          events: rebuiltLedgerEvents,
-          counter: rebuiltLedgerEvents.length,
-          migrationComplete: true,
-        },
-        playerTeamOverrides: {},
-        playerContractOverrides: {},
-      };
-
-      const sourceRosterIndex = buildRosterIndex(sourceState);
-      const sourceContractIndex = buildContractIndex(sourceState);
-      const rebuiltRosterIndex = buildRosterIndex(rebuilt);
-      const rebuiltContractIndex = buildContractIndex(rebuilt);
-
-      const teamConsistent = Object.entries(sourceRosterIndex.playerToTeam).every(
-        ([playerId, teamId]) => String(rebuiltRosterIndex.playerToTeam[String(playerId)] ?? "FREE_AGENT") === String(teamId ?? "FREE_AGENT"),
-      );
-      const contractConsistent = Object.entries(sourceContractIndex).every(
-        ([playerId, contract]) => JSON.stringify(rebuiltContractIndex[String(playerId)] ?? null) === JSON.stringify(contract ?? null),
-      );
-      const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
-      const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
-
-      return {
-        ...rebuilt,
-        recoveryNeeded: !rebuildConsistent,
-        recoveryErrors: rebuildConsistent ? [] : ["Rebuild indices consistency check failed"],
-      };
-    }
-    case "RECOVERY_SKIP_STEP": {
-      // Advance the offseason step and clear recovery.
-      const cfg = { enableTamperingStep: state.offseason?.enableTamperingStep ?? false };
-      const next = StateMachine.nextOffseasonStepId(state.offseason?.stepId ?? "RESIGNING", cfg);
-      const nextStep = next ?? "RESIGNING";
-      return {
-        ...state,
-        recoveryNeeded: false,
-        recoveryErrors: [],
-        offseason: { ...state.offseason, stepId: nextStep as import("@/lib/stateMachine").OffseasonStepId },
-      };
-    }
-    case "RECOVERY_RESTORE_BACKUP": {
-      // Restore is orchestrated by recovery controller via saveManager + RECOVERY_HYDRATE_STATE.
-      return {
-        ...state,
-        recoveryNeeded: true,
-        recoveryErrors: ["Backup restore must run from the recovery controller."],
-      };
-    }
-    case "RECOVERY_HYDRATE_STATE": {
-      return action.payload.state;
-    }
-    case "RECOVERY_SET_ERRORS": {
-      return {
-        ...state,
-        recoveryNeeded: true,
-        recoveryErrors: action.payload.errors,
-      };
-    }
     case "RESET":
       return createInitialState();
     default:
@@ -9936,80 +9857,25 @@ function applyCapModeQuery(state: GameState): GameState {
 }
 
 function loadState(): GameState {
-  const initial = applyCapModeQuery(createInitialState());
-  const loadedConfig = loadConfigRegistry();
-  if (!loadedConfig.ok) {
-    return {
-      ...initial,
-      recoveryNeeded: true,
-      recoveryErrors: [loadedConfig.validation.message],
-    };
-  }
-
-  const activeSaveId = getActiveSaveId();
-  if (!activeSaveId) return initial;
-
-  try {
-    const loadResult = loadSaveResult(activeSaveId);
-    if (!loadResult.ok) {
-      return {
-        ...initial,
-        recoveryNeeded: true,
-        recoveryErrors: [loadResult.message],
-      };
-    }
-
-    const parsed = loadResult.state as Partial<GameState>;
-    const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
-
-    let out = hydrateLoadedState(
-      initial,
-      migrated,
-      CURRENT_SAVE_VERSION,
-      DEFAULT_DETERMINISTIC_COUNTERS,
-      { normalizePriorityList, defaultLeagueRecords, clampFatigue, FATIGUE_DEFAULT, migratePracticePlan, DEFAULT_PRACTICE_PLAN },
-    );
-    if (!out.transactionLedger?.events?.length) {
-      const migrationEvents = buildMigrationEvents(out);
-      if (migrationEvents.length > 0) {
-        out = {
-          ...out,
-          transactionLedger: {
-            events: migrationEvents,
-            counter: migrationEvents.length,
-            migrationComplete: true,
-          },
-          playerTeamOverrides: {},
-          playerContractOverrides: {},
-        };
-      }
-    }
-    replayPersonnelOverrides(
-      (out as any).personnelTeamOverrides ?? {},
-      (out as any).staffContractsByPersonId ?? {},
-    );
-    const backfilledUserTeamId = getUserTeamId(out);
-    out = backfilledUserTeamId && !out.userTeamId ? { ...out, userTeamId: backfilledUserTeamId } : out;
-
-    out = ensureAccolades(bootstrapAccolades(out));
-    out = migrateDraftClassIdsInSave(out) as GameState;
-    out = ensureLeagueGmMap(out);
-    out = applyCapModeQuery(out);
-    out = restoreCheckpointOverlay(out);
-
-    out = applyBootValidators(out, loadedConfig.registry);
-
-    return out;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logError("state.load.failure", { saveId: activeSaveId, meta: { message } });
-    console.error("[state-load] Failed to restore saved state, entering recovery mode", error);
-    return {
-      ...initial,
-      recoveryNeeded: true,
-      recoveryErrors: [message],
-    };
-  }
+  return loadStateFromStorage({
+    createInitialState,
+    applyCapModeQuery,
+    loadConfigRegistry,
+    currentSaveVersion: CURRENT_SAVE_VERSION,
+    migrateSave,
+    defaultDeterministicCounters: DEFAULT_DETERMINISTIC_COUNTERS,
+    normalizePriorityList,
+    defaultLeagueRecords,
+    clampFatigue,
+    fatigueDefault: FATIGUE_DEFAULT,
+    migratePracticePlan,
+    defaultPracticePlan: DEFAULT_PRACTICE_PLAN,
+    buildMigrationEvents,
+    replayPersonnelOverrides,
+    getUserTeamId,
+    ensureAccolades,
+    bootstrapAccolades,
+  });
 }
 
 
