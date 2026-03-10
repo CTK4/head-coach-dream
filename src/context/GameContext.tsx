@@ -176,6 +176,7 @@ import { staffingReducer, isStaffingAction } from "@/context/reducers/staffingRe
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed } from "@/engine/rng";
+import { deriveCareerSeed, deriveScoutingBoardSeed, deriveWeeklySeed } from "@/engine/determinism/seedDerivation";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
 import { useGamePersistence } from "@/context/persistence/useGamePersistence";
@@ -1750,12 +1751,6 @@ function toWeekKey(year: number, weekIndex: number): WeekKey {
   return `${year}-W${weekIndex}`;
 }
 
-function seedFor(leagueSeed: number, a: number, b: number, c: number): number {
-  return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
-}
-
-
-
 let transientCareerIdCounter = 0;
 
 function isPersistableCareerSaveId(saveId: string): boolean {
@@ -1782,7 +1777,7 @@ function createInitialState(saveIdInput?: string): GameState {
   const schedule = createSchedule(saveSeed);
   const league = initLeagueState(teams, saveSeed);
   const currentStandings = initTeamStandings(teams);
-  const careerSeed = saveSeed ^ 0x85ebca6b;
+  const careerSeed = deriveCareerSeed(saveSeed);
   const draftContext = { season, saveSeed, userTeamId: "MILWAUKEE_NORTHSHORE" };
 
   const base: GameState = {
@@ -1845,7 +1840,7 @@ function createInitialState(saveIdInput?: string): GameState {
       defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
     },
     strategy: DEFAULT_STRATEGY,
-    scouting: { boardSeed: saveSeed ^ 0x9e3779b9 },
+    scouting: { boardSeed: deriveScoutingBoardSeed(saveSeed) },
     hub: { news, newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule },
     unreadNewsCount: 0,
     lastNewsReadWeek: 0,
@@ -3168,7 +3163,7 @@ function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number
   //   101 = MEDIA_GENERATE_WEEKLY_STORIES
   //   202 = MEDICAL_GENERATE_WEEKLY_INJURIES
   //   303 = news fallback injury items (this call)
-  const injurySeed = seedFor(state.saveSeed, state.season, Number(week), 303);
+  const injurySeed = deriveWeeklySeed(state.saveSeed, state.season, Number(week), 303);
 
   const injuryNews = generateInjuryNews(state.injuries ?? [], context, injurySeed);
   const transactionNews = generateTransactionNews((state.transactions ?? []).filter((t) => Number(t.week ?? week) === Number(week)).slice(0, 8), context);
@@ -3678,7 +3673,7 @@ function seasonRollover(state: GameState): GameState {
   if (teamId) {
     next = gameReducer(next, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: nextSeason, teamId } });
   }
-  next = gameReducer(next, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: toWeekKey(nextSeason, 0), seed: seedFor(next.saveSeed, nextSeason, 0, 101) } });
+  next = gameReducer(next, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: toWeekKey(nextSeason, 0), seed: deriveWeeklySeed(next.saveSeed, nextSeason, 0, 101) } });
   next = gameReducer(next, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(nextSeason, 0) } });
   next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 2) as ClassYear } });
   next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 3) as ClassYear } });
@@ -9227,7 +9222,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             item: {
               id: `wire-owner-fired-${year}`,
               weekKey,
-              ts: seedFor(next.saveSeed, year, 99, 999),
+              ts: deriveWeeklySeed(next.saveSeed, year, 99, 999),
               category: "OWNER",
               headline: `${next.coach.name || "Head coach"} fired by ownership`,
               tone: "NEGATIVE",
@@ -9291,7 +9286,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "COACHING_RESOLVE_OFFERS": {
       const pendingOffers = state.coaching.market.pendingOffers.map((offer) => {
         if (offer.status !== "PENDING") return offer;
-        const roll = deterministicRand(seedFor(state.saveSeed, state.season, offer.salary, offer.years));
+        const roll = deterministicRand(deriveWeeklySeed(state.saveSeed, state.season, offer.salary, offer.years));
         return { ...offer, status: (roll > 0.45 ? "ACCEPTED" : "DECLINED") as "ACCEPTED" | "DECLINED" };
       });
       let next = { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, pendingOffers } } };
@@ -9320,7 +9315,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "COACHING_POACHING_RESOLVE": {
       const poaching = state.coaching.market.poaching.map((event, idx) => {
-        const leaves = deterministicRand(seedFor(state.saveSeed, state.season, idx, 404)) > 0.5;
+        const leaves = deterministicRand(deriveWeeklySeed(state.saveSeed, state.season, idx, 404)) > 0.5;
         return { ...event, status: (leaves ? "LEFT" : "STAYED") as "LEFT" | "STAYED", toTeamId: leaves ? state.acceptedOffer?.teamId : undefined };
       });
       return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
@@ -9457,7 +9452,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           ...state.wire,
           items: [
             ...state.wire.items,
-            { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: seedFor(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
+            { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: deriveWeeklySeed(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
           ],
         },
       }));

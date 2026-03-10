@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { getTeams } from "@/data/leagueDb";
 import { initTeamStandings, simulateWeek } from "@/engine/leagueSim";
 import { getWeekSeed } from "@/engine/rng";
+import { deriveCareerSeed } from "@/engine/determinism/seedDerivation";
 import { generateLeagueSchedule, type GameType } from "@/engine/schedule";
 
 describe("week seed parity", () => {
   it("keeps CPU game results identical between Sim Week and PBP resolve routes", () => {
     const saveSeed = 872341;
-    const baseSeed = saveSeed ^ 0x85ebca6b;
+    const baseSeed = deriveCareerSeed(saveSeed);
     const season = 2029;
     const gameType: GameType = "REGULAR_SEASON";
     const week = 3;
