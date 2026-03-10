@@ -11,6 +11,51 @@ import { deriveSaveSeedFromState } from "@/context/state/seedPolicy";
 import { deriveCareerSeed, deriveScoutingBoardSeed } from "@/engine/determinism/seedDerivation";
 import type { CareerStage } from "@/types/careerStage";
 
+const OFFSEASON_STEP_TO_STAGE: Partial<Record<OffseasonState["stepId"], CareerStage>> = {
+  RESIGNING: "RESIGN",
+  COMBINE: "COMBINE",
+  TAMPERING: "TAMPERING",
+  FREE_AGENCY: "FREE_AGENCY",
+  PRE_DRAFT: "PRE_DRAFT",
+  DRAFT: "DRAFT",
+  TRAINING_CAMP: "TRAINING_CAMP",
+  PRESEASON: "PRESEASON",
+  CUT_DOWNS: "OFFSEASON_HUB",
+};
+
+const OFFSEASON_STAGE_SET = new Set<CareerStage>([
+  "OFFSEASON_HUB",
+  "RESIGN",
+  "COMBINE",
+  "TAMPERING",
+  "FREE_AGENCY",
+  "PRE_DRAFT",
+  "DRAFT",
+  "TRAINING_CAMP",
+  "PRESEASON",
+]);
+
+
+function inferLegacyCareerStage(oldState: Partial<GameState>): CareerStage {
+  const leaguePhase = String(oldState.league?.phase ?? "").toUpperCase();
+
+  if (leaguePhase === "OFFSEASON") return "OFFSEASON_HUB";
+  if (leaguePhase === "PRESEASON") return "PRESEASON";
+  if (leaguePhase === "REGULAR_SEASON" || leaguePhase === "REGULAR_SEASON_GAME" || leaguePhase === "REGULAR_SEASON_GAMEPLAN") {
+    return "REGULAR_SEASON";
+  }
+  if (leaguePhase === "WILD_CARD" || leaguePhase === "DIVISIONAL" || leaguePhase === "CONFERENCE" || leaguePhase === "SUPER_BOWL") {
+    return "PLAYOFFS";
+  }
+
+  const playoffRound = String((oldState as any).playoffs?.round ?? "").toUpperCase();
+  if (playoffRound === "WILD_CARD" || playoffRound === "DIVISIONAL" || playoffRound === "CONFERENCE" || playoffRound === "CHAMPIONSHIP") {
+    return "PLAYOFFS";
+  }
+
+  return "OFFSEASON_HUB";
+}
+
 interface MigrateSaveDependencies {
   createSchedule: (seed: number) => GameState["hub"]["schedule"];
   ensureNewsItems: (items: unknown, now: number) => GameState["hub"]["news"];
@@ -105,7 +150,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
     season: Number((oldState as any).season ?? 2026),
     week: Number((oldState as any).week ?? 1),
     careerSeed: Number((oldState as any).careerSeed ?? deriveCareerSeed(saveSeed)),
-    careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
+    careerStage: (oldState.careerStage as CareerStage) ?? inferLegacyCareerStage(oldState),
     seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
     earnedMilestoneIds: Array.isArray(oldState.earnedMilestoneIds) ? oldState.earnedMilestoneIds.map(String) : [],
     seasonAwards: oldState.seasonAwards,
@@ -276,6 +321,18 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
   if (s.careerStage === "TAMPERING") {
     s.careerStage = "FREE_AGENCY";
   }
+  const inferredOffseasonStage = OFFSEASON_STEP_TO_STAGE[s.offseason?.stepId as OffseasonState["stepId"]];
+  if (inferredOffseasonStage) {
+    const currentCareerStage = (s.careerStage as CareerStage) ?? "OFFSEASON_HUB";
+    const priorCareerStage = oldState.careerStage as CareerStage | undefined;
+    const hasExplicitOffseasonCareerStage = !!priorCareerStage && OFFSEASON_STAGE_SET.has(priorCareerStage);
+    const hasOffseasonLeagueSignal = String(oldState.league?.phase ?? "").toUpperCase() === "OFFSEASON";
+    const shouldAlignOffseasonStage = hasExplicitOffseasonCareerStage
+      || (!priorCareerStage && hasOffseasonLeagueSignal);
+    if (shouldAlignOffseasonStage && currentCareerStage !== inferredOffseasonStage) {
+      s.careerStage = inferredOffseasonStage;
+    }
+  }
   const scoutingState = (s as any).scoutingState;
   if (scoutingState?.combine) {
     const legacyDay = Number(scoutingState.combine.day ?? 1);
@@ -350,4 +407,3 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
   s = deps.ensureAccolades(deps.bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
 }
-
