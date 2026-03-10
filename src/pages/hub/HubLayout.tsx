@@ -1,46 +1,30 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { useGame } from "@/context/GameContext";
-import { Button } from "@/components/ui/button";
+import { Outlet, useLocation } from "react-router-dom";
+import { HubShell } from "@/components/franchise-hub/HubShell";
 
-const links = [
-  { to: "/hub", label: "Hub" },
-  { to: "/hub/assistant-hiring", label: "Assistant Hiring" },
-  { to: "/hub/roster", label: "Roster" },
-  { to: "/hub/draft", label: "Draft" },
-  { to: "/hub/preseason", label: "Preseason" },
-  { to: "/hub/regular-season", label: "Regular Season" },
-  { to: "/hub/playcall", label: "Game" },
-];
-
-const HubLayout = () => {
-  const { state } = useGame();
-  const location = useLocation();
-
-  return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-4">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Franchise Hub</h1>
-          <p className="text-sm text-muted-foreground">Career stage: {state.careerStage.replaceAll("_", " ")}</p>
-        </div>
-
-        <nav className="flex flex-wrap gap-2">
-          {links.map((item) => (
-            <Button
-              key={item.to}
-              asChild
-              variant={location.pathname === item.to ? "default" : "secondary"}
-              size="sm"
-            >
-              <Link to={item.to}>{item.label}</Link>
-            </Button>
-          ))}
-        </nav>
-
-        <Outlet />
-      </div>
-    </div>
-  );
+const TITLES: Record<string, string> = {
+  "/hub/assistant-hiring": "HIRE STAFF",
+  "/hub/roster": "ROSTER",
+  "/hub/depth-chart": "DEPTH CHART",
+  "/hub/roster-audit": "ROSTER REVIEW",
+  "/hub/combine": "COMBINE",
+  "/hub/pre-draft": "PRE-DRAFT",
+  "/hub/draft": "DRAFT",
+  "/hub/finances": "FINANCES",
+  "/hub/staff-management": "STAFF MANAGEMENT",
+  "/hub/league-news": "LEAGUE NEWS",
+  "/hub/trades": "TRADES",
+  "/hub/re-sign": "RE-SIGN",
+  "/hub/tag-center": "TAG CENTER",
+  "/hub/cap-baseline": "CAP BASELINE",
+  "/hub/dead-money": "DEAD MONEY",
 };
 
-export default HubLayout;
+export default function HubLayout() {
+  const location = useLocation();
+  if (location.pathname === "/hub") return <Outlet />;
+  return (
+    <HubShell title={TITLES[location.pathname] ?? "FRANCHISE HUB"}>
+      <Outlet />
+    </HubShell>
+  );
+}

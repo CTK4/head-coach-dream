@@ -5,15 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/validateJson.mjs",
+    "prebuild": "node scripts/validateSourceArtifacts.mjs && node scripts/validateJson.mjs && node scripts/validateGameSimSyntax.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "repair:leagueDb": "node scripts/repairLeagueDbJson.mjs",
+    "smoke": "node scripts/smokeTest.mjs",
+    "smoke:prebuild:no-csv": "node scripts/smokePrebuildWithoutCsv.mjs",
+    "test:ui": "playwright test",
+    "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "verify": "node scripts/verify.mjs",
+    "cap:sync": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "cap:open:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "cap:build:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "cap:build:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
+    "check:determinism": "node scripts/checkDeterminismTripwire.mjs",
+    "lint:changed": "node scripts/lintChangedFiles.mjs",
+    "test:lint:changed": "node --test scripts/lintChangedFilesLib.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -64,12 +76,12 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
+    "vitest": "^4.0.18",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@testing-library/jest-dom": "^6.6.0",
-    "@testing-library/react": "^16.0.0",
+    "@playwright/test": "^1.48.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
@@ -80,13 +92,16 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
-    "jsdom": "^20.0.3",
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19",
-    "vitest": "^3.2.4"
-  }
+    "vite": "^5.4.19"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10"
 }

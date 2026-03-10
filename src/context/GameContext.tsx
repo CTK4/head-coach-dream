@@ -1,5 +1,122 @@
 import React, { createContext, useContext, useEffect, useReducer } from "react";
+import type { Injury } from "@/engine/injuryTypes";
+import draftClassJson from "@/data/draftClass.json";
+import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
+import {
+  clearPersonnelTeam,
+  expireContract,
+  getContractById,
+  getLeague,
+  getPersonnelById,
+  getPersonnelContract,
+  getPlayerById,
+  getPlayerContract,
+  getPersonnel,
+  getPlayers,
+  getPlayersByTeam,
+  getTeamFinancesRow,
+  getTeamRosterPlayers,
+  getTeams,
+  getTeamById,
+  replayPersonnelOverrides,
+  setPersonnelTeamAndContract,
+} from "@/data/leagueDb";
+import type { CoachReputation } from "@/engine/reputation";
+import { clamp01, clamp100, defenseInterestBoost, offenseInterestBoost, enforceArchetypeReputationCaps, applyPerkReputationBonuses } from "@/engine/reputation";
+import { applyStaffRejection, computeStaffAcceptance, type RoleFocus } from "@/engine/assistantHiring";
+import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSalary";
+import { isOfferAccepted } from "@/engine/coachAcceptance";
+import { applyFlagsToContext } from "@/engine/perkEngine";
+import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
+import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
+import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
+import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
+import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
+import { applyGameAggToSeasonAgg } from "@/engine/telemetry/aggregateSeason";
+import type { GameAggV1, PlayEventV1Minimal, SeasonAggV1 } from "@/engine/telemetry/types";
+import { computeTeamGameRatings } from "@/engine/game/teamRatings";
+import {
+  initLeagueState,
+  initTeamStandings,
+  simulateWeek,
+  standingsToRecord,
+  type LeagueState,
+  type LeagueStatLeaders,
+  type WeekResult,
+} from "@/engine/leagueSim";
+import type { TeamStanding } from "@/engine/standings";
+import { checkMilestones } from "@/engine/milestones";
 import { generateOffers } from "@/engine/offers";
+import { genFreeAgents } from "@/engine/offseasonGen";
+import { CORE_ATTRIBUTE_KEYS, calculateProgressionDelta, defaultDevelopmentTrait, type DevelopmentProfile, type SeasonStats, type SnapCounts } from "@/engine/snapBasedProgression";
+import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
+import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
+import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
+import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
+import { advancePlayoffRound, buildPlayoffBracket, buildPostseasonResults, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
+import type { PlayoffsState } from "@/engine/postseason";
+import { advanceLeaguePhase, type LeaguePhase, type PlayoffMatchup } from "@/engine/leaguePhase";
+import { DEFAULT_WEEKLY_GAMEPLAN, buildCpuGameplan, type WeeklyGameplan } from "@/engine/gameplan";
+import { buyoutTotal, splitBuyout } from "@/engine/buyout";
+import { getRestructureEligibility } from "@/engine/contractMath";
+import { autoFillDepthChartGaps } from "@/engine/depthChart";
+import { getAvailableEffectivePlayersByTeam, getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { migrateExpiredContractsToFreeAgency } from "@/context/seasonRollover";
+import { projectedMarketApy } from "@/engine/marketModel";
+import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
+import type { CoachProfile, StaffRoster } from "@/data/coachTraits";
+import { applyFullStaffImpact, coachesForPosition } from "@/engine/coachImpact";
+import { computeCapLedger } from "@/engine/capLedger";
+import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
+import { getGmTraits } from "@/engine/gmScouting";
+import { evalProspectForGm } from "@/engine/prospectEval";
+import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
+import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
+import type { PersonnelPackage } from "@/engine/personnel";
+import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
+import { isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
+import {
+  DEFAULT_PRACTICE_PLAN,
+  PRACTICE_EXEC_SCALE,
+  applyPracticeFatigue,
+  buildNextNeglectTracker,
+  getEffectPreview,
+  getPracticeEffect,
+  migratePracticePlan,
+  resolveInstallFamiliarity,
+  type PracticeNeglectTracker,
+  type PracticePlan,
+} from "@/engine/practiceFocus";
+import type { ScoutingState, GMScoutingTraits, ProspectTrueProfile } from "@/engine/scouting/types";
+import { detRand as detRand2 } from "@/engine/scouting/rng";
+import { computeBudget, initScoutProfile, addClarity, tightenBand, revealMedicalIfUnlocked, revealCharacterIfUnlocked, getQbScoutingDivergenceByArchetype } from "@/engine/scouting/core";
+import { runInterview } from "@/engine/scouting/interviews";
+import { requestMedical } from "@/engine/scouting/medical";
+import { conductPrivateWorkout } from "@/engine/scouting/workouts";
+import { generateCombineResult } from "@/engine/prospectIntel";
+import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
+import { evaluateContractOffer } from "@/engine/contracts/offerDecision";
+import { advanceToDraft, advanceToFreeAgency, advanceToRegularSeason } from "@/engine/phaseTransitions";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
+import { getArchetypeTraits } from "@/data/archetypeTraits";
+import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
+import {
+  COMBINE_DAY_COUNT,
+  COMBINE_DAY_POSITION_BUCKETS,
+  COMBINE_DEFAULT_INTERVIEW_TOKENS,
+  COMBINE_FEED_MAX_PER_DAY,
+  COMBINE_FEED_TEMPLATES,
+  COMBINE_FOCUS_HOURS_COST,
+  COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
+} from "@/engine/scouting/combineConstants";
+import type {
+  CampSettings,
+  CutDecision,
+  FreeAgentOffer,
+  Prospect,
+  ResignDecision,
+  ScoutingCombineResult,
+} from "@/engine/offseasonData";
 import {
   PRESEASON_WEEKS,
   REGULAR_SEASON_WEEKS,
@@ -8,31 +125,393 @@ import {
   type GameType,
   type LeagueSchedule,
 } from "@/engine/schedule";
-import { getTeams } from "@/data/leagueDb";
+import {
+  applySelection,
+  applyTrade,
+  buildUserTradeUpOffer,
+  cpuAdvanceUntilUser,
+  generateTradeOffers,
+  initDraftSim,
+  submitUserTradeUpOffer,
+  type DraftSimState,
+} from "@/engine/draftSim";
+import { buildRookieContract } from "@/engine/contracts/rookieContract";
+import { generateDraftClass } from "@/engine/draftClass/generateDraftClass";
+import { generateDraftClass as generateParameterizedDraftClass, type GeneratedPlayer } from "@/engine/playerGenerator";
+import type { ClassYear } from "@/data/playerGeneratorConfig";
+import { applySeasonBadges } from "@/engine/badges/engine";
+import type { PlayerBadge } from "@/engine/badges/types";
+import { applySeasonUnicorns, getProspectUnicornSignal } from "@/engine/unicorns/engine";
+import type { PlayerUnicorn } from "@/engine/unicorns/types";
+import type { SeasonSummary } from "@/types/season";
+import type { CoachCareerRecord, PlayerSeasonStats } from "@/types/stats";
+import type { NewsItem as LeagueNewsItem } from "@/types/news";
+import { appendNewsHistory, generateGameResultNews, generateInjuryNews, generateMilestoneNews, generateRetirementNews, generateTransactionNews } from "@/engine/newsGen";
+import { createFeedbackEvent, type FeedbackCategory, type FeedbackEvent, type FeedbackPayloadByCategory } from "@/engine/feedbackEvents";
+import { computeHotSeatScore, type HotSeatStatus } from "@/engine/hotSeat";
+import { updateMorale } from "@/engine/morale";
+import { updateChemistry } from "@/engine/chemistry";
+import { updateStaffTrust } from "@/engine/staffTrust";
+import { updateMedia } from "@/engine/media";
+import { updateOwner, updateAutonomy } from "@/engine/owner";
+import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
+import { runDevAction, type DevAction } from "@/dev/runDevAction";
+import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
+import { logError, logInfo } from "@/lib/logger";
+import { allocateSaveId, getActiveSaveId, setActiveSaveId } from "@/lib/saveManager";
+import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
+import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
+import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
+import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
+import { Tx } from "@/engine/transactions/transactionAPI";
+import { buildContractIndex } from "@/engine/transactions/contractIndex";
+import type { ContractRow, PlayerRow } from "@/data/leagueDb";
+import { offseasonReducer } from "@/context/offseasonReducer";
+import { draftReducer } from "@/context/draftReducer";
+import { seasonReducer } from "@/context/seasonReducer";
+import { freeAgencyReducer } from "@/context/freeAgencyReducer";
+import { staffingReducer, isStaffingAction } from "@/context/reducers/staffingReducer";
+import { buildCpuTeamContext } from "@/engine/cpuContext";
+import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
+import { getWeekSeed } from "@/engine/rng";
+import { deriveCareerSeed, deriveScoutingBoardSeed, deriveWeeklySeed } from "@/engine/determinism/seedDerivation";
+import type { CareerStage } from "@/types/careerStage";
+import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
+import { useGamePersistence } from "@/context/persistence/useGamePersistence";
+import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
+import { loadStateFromStorage } from "@/context/boot/loadState";
+import { DEFAULT_DETERMINISTIC_COUNTERS } from "@/context/state/defaults/deterministicCounters";
+import { deriveSaveSeedFromIdentity } from "@/context/state/seedPolicy";
+import { createInitialCoachingState } from "@/context/state/defaults/coaching";
+import { createInitialDraftState } from "@/context/state/defaults/draft";
+import { defaultDynastyProfile } from "@/context/state/defaults/dynasty";
+import { createInitialFreeAgencyState } from "@/context/state/defaults/freeAgency";
+import { defaultMedicalStaffByTeamId } from "@/context/state/defaults/medical";
+import { createInitialMedicalState } from "@/context/state/defaults/medical";
+import { createInitialMediaState } from "@/context/state/defaults/media";
+import { createInitialOffseasonDataState, createInitialOffseasonState } from "@/context/state/defaults/offseason";
+import { defaultOwnerGoals, defaultOwnerState } from "@/context/state/defaults/owner";
+import { createInitialPracticeState } from "@/context/state/defaults/practice";
+import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
+import { createInitialTamperingState } from "@/context/state/defaults/tampering";
+import { createInitialTelemetryState } from "@/context/state/defaults/telemetry";
+import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
+import { finalizeWeekController } from "@/context/controllers/weekAdvance";
+import { applyCanonicalTx } from "@/context/controllers/transactions";
+import { bootstrapInitialGameState } from "@/context/state/bootstrap";
+import type {
+  TeamId as SharedTeamId,
+  OwnerGoalSet as SharedOwnerGoalSet,
+  OwnerState as SharedOwnerState,
+  OwnerUltimatum as SharedOwnerUltimatum,
+  MedicalStaff as SharedMedicalStaff,
+  SidelineAdjustments as SharedSidelineAdjustments,
+  DynastySeasonLog as SharedDynastySeasonLog,
+  DynastyProfile as SharedDynastyProfile,
+  DeterministicCounters as SharedDeterministicCounters,
+} from "@/context/state/types/defaultStateTypes";
 
+const LEAGUE_SALARY_CAP = getLeague().salaryCap;
 export type GamePhase = "CREATE" | "BACKGROUND" | "INTERVIEWS" | "OFFERS" | "COORD_HIRING" | "HUB";
+export type { CareerStage };
 
-export type CareerStage =
-  | "OFFSEASON_HUB"
-  | "ASSISTANT_HIRING"
-  | "ROSTER_REVIEW"
-  | "RESIGN"
-  | "COMBINE"
-  | "FREE_AGENCY"
-  | "DRAFT"
-  | "PRESEASON"
-  | "REGULAR_SEASON";
+export type OffseasonTaskId = "SCOUTING" | "INSTALL" | "MEDIA" | "STAFF";
+
+export type WeekKey = `${number}-W${number}`;
+export type TeamId = SharedTeamId;
+export type PlayerId = string;
+export type CoachId = string;
+
+export type OwnerGoalSet = SharedOwnerGoalSet;
+
+export type OwnerExpectationsConfig = {
+  patience: number;
+  spendTolerance: number;
+  riskTolerance: number;
+  rebuildPreference: "WIN_NOW" | "BALANCED" | "REBUILD";
+  identityPreference?: { offense?: string; defense?: string };
+  goalsBySeason: Record<string, OwnerGoalSet>;
+};
+
+export type OwnerUltimatum = SharedOwnerUltimatum;
+export type OwnerState = SharedOwnerState;
+
+export type Coach = {
+  coachId: CoachId;
+  name: string;
+  role: "HC" | "OC" | "DC" | "ST" | "POSITION";
+  side?: "OFFENSE" | "DEFENSE" | "ST";
+  schemePrefs?: { offense?: string; defense?: string };
+  traits: string[];
+  ratings: { teaching: number; strategy: number; discipline: number; recruiting: number };
+  reputation: number;
+  career: {
+    yearsExp: number;
+    treeRootCoachId?: CoachId;
+    history: Array<{ year: number; teamId: TeamId; role: string; resultSummary: string }>;
+  };
+  contract: { years: number; salary: number };
+};
+
+export type TeamStaff = {
+  hc: CoachId;
+  oc: CoachId;
+  dc: CoachId;
+  st: CoachId;
+  assistants: CoachId[];
+};
+
+export type CoachMarketItem = {
+  coachId: CoachId;
+  askingRole: "HC" | "OC" | "DC" | "ST";
+  interest: number;
+  expectedYears: number;
+  expectedSalary: number;
+  reasons: string[];
+};
+
+export type CoachingState = {
+  coachesById: Record<CoachId, Coach>;
+  staffByTeamId: Record<TeamId, TeamStaff>;
+  market: {
+    weekKey: WeekKey;
+    candidates: CoachMarketItem[];
+    pendingOffers: Array<{
+      offerId: string;
+      coachId: CoachId;
+      teamId: TeamId;
+      role: "HC" | "OC" | "DC" | "ST";
+      years: number;
+      salary: number;
+      status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+    }>;
+    poaching: Array<{
+      eventId: string;
+      coachId: CoachId;
+      fromTeamId: TeamId;
+      toTeamId?: TeamId;
+      role: "OC" | "DC" | "ST";
+      status: "RUMOR" | "OFFERED" | "LEFT" | "STAYED";
+    }>;
+  };
+};
+
+export type WireCategory = "MEDIA" | "OWNER" | "INJURY" | "COACHING" | "TRANSACTION" | "GAME" | "DYNASTY";
+export type WireItem = {
+  id: string;
+  weekKey: WeekKey;
+  ts: number;
+  category: WireCategory;
+  headline: string;
+  body?: string;
+  tags?: string[];
+  teamIds?: TeamId[];
+  playerIds?: PlayerId[];
+  coachIds?: CoachId[];
+  tone?: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+};
+
+export type MediaStory = {
+  storyId: string;
+  weekKey: WeekKey;
+  headline: string;
+  body: string;
+  tags: string[];
+  teams: TeamId[];
+  players?: PlayerId[];
+  tone: "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+  heatDelta?: number;
+  moraleDelta?: number;
+};
+
+export type MediaState = { storiesByWeek: Record<WeekKey, MediaStory[]> };
+export type WireState = { items: WireItem[]; lastPruneWeekKey?: WeekKey };
+
+export type PlayerInjury = {
+  injuryType: string;
+  severity: number;
+  expectedWeeks: number;
+  remainingWeeks: number;
+  riskOfReinjury: number;
+  cleared: boolean;
+};
+
+export type PlayerMedical = {
+  durability: number;
+  injuryHistory: Array<{ type: string; weekKey: WeekKey; severity: number; gamesMissed: number }>;
+  current?: PlayerInjury;
+};
+
+export type MedicalStaff = SharedMedicalStaff;
+
+export type InjuryReport = {
+  playerId: PlayerId;
+  teamId: TeamId;
+  weekKey: WeekKey;
+  status: "OUT" | "DOUBTFUL" | "QUESTIONABLE" | "PROBABLE" | "CLEARED";
+  displayedWeeksRange: [number, number];
+  recommendation: "HOLD" | "LIMITED" | "RUSH_BACK";
+};
+
+export type MedicalState = {
+  playerMedicalById: Record<PlayerId, PlayerMedical>;
+  staffByTeamId: Record<TeamId, MedicalStaff>;
+  injuryReportsByWeek: Record<WeekKey, InjuryReport[]>;
+};
+
+export type SidelineAdjustments = SharedSidelineAdjustments;
+
+export type LiveGameState = {
+  gameId: string;
+  weekKey: WeekKey;
+  homeTeamId: TeamId;
+  awayTeamId: TeamId;
+  userTeamId: TeamId;
+  sideline: SidelineAdjustments;
+  gameplanSideline: SidelineAdjustments;
+};
+
+export type DynastySeasonLog = SharedDynastySeasonLog;
+
+export type DynastyProfile = SharedDynastyProfile;
+
+export type GmMode = "REBUILD" | "RELOAD" | "CONTEND";
+
+export type PriorityPos = "QB" | "RB" | "WR" | "TE" | "OL" | "DL" | "EDGE" | "LB" | "CB" | "S" | "K" | "P";
+
+export type StrategyState = {
+  draftFaPriorities: PriorityPos[];
+  gmMode: GmMode;
+};
+
+const DEFAULT_STRATEGY: StrategyState = { draftFaPriorities: ["QB", "OL", "EDGE"], gmMode: "CONTEND" };
+
+function normalizePriorityPos(pos: string): PriorityPos | null {
+  const p = String(pos || "").toUpperCase().trim();
+  const ok: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
+  return (ok as string[]).includes(p) ? (p as PriorityPos) : null;
+}
+
+function normalizePriorityList(list: unknown): PriorityPos[] {
+  if (!Array.isArray(list)) return DEFAULT_STRATEGY.draftFaPriorities.slice();
+  const out: PriorityPos[] = [];
+  for (const item of list) {
+    const p = normalizePriorityPos(String(item));
+    if (!p || out.includes(p)) continue;
+    out.push(p);
+  }
+  return out.length ? out : DEFAULT_STRATEGY.draftFaPriorities.slice();
+}
+
+function priorityWeight(priorities: PriorityPos[], pos: string): number {
+  const p = normalizePriorityPos(pos);
+  if (!p) return 0;
+  const idx = priorities.indexOf(p);
+  if (idx < 0) return 0;
+  return Math.max(0, 1 - idx * 0.25);
+}
+
+export type OffseasonState = {
+  stepId: OffseasonStepId;
+  completed: Record<OffseasonTaskId, boolean>;
+  stepsComplete: Partial<Record<OffseasonStepId, boolean>>;
+};
+
+export type OffseasonData = {
+  resigning: { decisions: Record<string, ResignDecision> };
+  tagCenter: { applied?: TagApplied };
+  rosterAudit: { cutDesignations: Record<string, "NONE" | "POST_JUNE_1"> };
+  combine: {
+    prospects: Prospect[];
+    results: Record<string, any>;
+    generated: boolean;
+    resultsByProspectId?: Record<string, any>;
+    interviewPoolIds?: string[];
+    lastRunSeed?: number;
+    shortlist: Record<string, boolean>;
+  };
+  scouting: {
+    windowId: ScoutingWindowId;
+    budget: { total: number; spent: number; remaining: number; carryIn: number };
+    carryover: number;
+    intelByProspectId: Record<string, PlayerIntel>;
+    intelByFAId: Record<string, PlayerIntel>;
+  };
+  tampering: { offers: FreeAgentOffer[] };
+  freeAgency: {
+    offers: FreeAgentOffer[];
+    signings: string[];
+    rejected: Record<string, boolean>;
+    withdrawn: Record<string, boolean>;
+    capTotal: number;
+    capUsed: number;
+    capHitsByPlayerId: Record<string, number>;
+    decisionReasonByPlayerId: Record<string, string>;
+  };
+  preDraft: { board: Prospect[]; visits: Record<string, boolean>; workouts: Record<string, boolean>; reveals: Record<string, PreDraftReveal>; viewMode?: "CONSENSUS" | "GM" | "TEAM"; intelByProspectId: Record<string, number> };
+  draft: { board: Prospect[]; picks: Prospect[]; completed: boolean };
+  camp: { settings: CampSettings };
+  cutDowns: { decisions: Record<string, CutDecision> };
+};
+
+export type MedicalFlagLevel = "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+export type CharacterFlagLevel = "BLUE" | "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+
+type PreDraftReveal = {
+  flags: string[];
+  hasMedicalRedFlag?: boolean;
+  medicalLevel?: MedicalFlagLevel;
+  characterLevel?: CharacterFlagLevel;
+  footballTags?: string[];
+  symbols?: string[];
+};
+
+export type TagType = "FRANCHISE_NON_EX" | "FRANCHISE_EX" | "TRANSITION";
+export type TagApplied = { playerId: string; type: TagType; cost: number; teamId?: string; appliedWeek?: number; priorContract?: PlayerContractOverride };
+
+export type OrgRoles = {
+  hcCoachId?: string;
+  ocCoachId?: string;
+  dcCoachId?: string;
+  stcCoachId?: string;
+  ahcCoachId?: string;
+};
+
+export type OfferTier = "PREMIUM" | "STANDARD" | "CONDITIONAL" | "REJECT";
+export type StaffOfferStatus = "PENDING" | "COUNTERED" | "ACCEPTED" | "REJECTED";
+export type StaffOffer = {
+  id: string;
+  roleType: "COORDINATOR" | "ASSISTANT";
+  role: "OC" | "DC" | "STC" | keyof AssistantStaff;
+  personId: string;
+  years: number;
+  salary: number;
+  status: StaffOfferStatus;
+  submittedSeason: number;
+  reason?: string;
+  counterProposal?: { years: number; salary: number } | null;
+  revisionCount?: number;
+};
 
 const CAREER_STAGE_ORDER: CareerStage[] = [
   "OFFSEASON_HUB",
+  "SEASON_AWARDS",
   "ASSISTANT_HIRING",
+  "STAFF_CONSTRUCTION",
   "ROSTER_REVIEW",
   "RESIGN",
   "COMBINE",
+  "TAMPERING",
   "FREE_AGENCY",
+  "PRE_DRAFT",
   "DRAFT",
+  "TRAINING_CAMP",
   "PRESEASON",
+  "CUTDOWNS",
   "REGULAR_SEASON",
+  "PLAYOFFS",
 ];
 
 export type InterviewResult = {
@@ -43,15 +522,14 @@ export type InterviewResult = {
   autonomyDelta: number;
   leashDelta: number;
   axisTotals: Record<string, number>;
+  canonicalAxisTotals: Record<string, number>;
+  interviewScore: number;
+  offerTier: OfferTier;
+  premiumGatesPassed: boolean;
 };
 
-export type InterviewItem = {
-  teamId: string;
-  completed: boolean;
-  answers: Record<string, number>;
-  result?: InterviewResult;
-};
-
+export type InterviewItem = { teamId: string; completed: boolean; answers: Record<string, number>; result?: InterviewResult };
+export type OfferNegotiationStatus = "NONE" | "PENDING" | "ACCEPTED" | "DECLINED" | "COUNTERED";
 export type OfferItem = {
   teamId: string;
   years: number;
@@ -59,17 +537,200 @@ export type OfferItem = {
   autonomy: number;
   patience: number;
   mediaNarrativeKey: string;
+  score?: number;
+  base: { years: number; salary: number; autonomy: number };
+  negotiation?: {
+    status: OfferNegotiationStatus;
+    attempts?: number;
+    lastRequest?: { years: number; salary: number; autonomy: number };
+    lastChance?: number;
+    message?: string;
+    counter?: { years: number; salary: number; autonomy: number } | null;
+  };
 };
+export type MemoryEvent = { type: string; season: number; week?: number; payload: unknown };
+export type NewsItem = { id: string; title: string; body?: string; createdAt: number; category?: string };
+export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
-export type MemoryEvent = {
-  type: string;
-  season: number;
-  week?: number;
-  payload: unknown;
-};
-
-const CURRENT_SAVE_VERSION = 2;
+const CURRENT_SAVE_VERSION = 6;
 const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
+type DraftRow = Record<string, any>;
+const DRAFT_ROWS = getDraftClassRows() as DraftRow[];
+
+const num = (v: any, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const str = (v: any, d = "") => (v == null ? d : String(v));
+
+function toProspect(r: DraftRow, idx: number): Prospect {
+  const id = str(r["Player ID"], `DC_${String(idx + 1).padStart(4, "0")}`);
+  const name = str(r["Name"], "Unknown");
+  const pos = str(r["POS"], "UNK").toUpperCase();
+  const grade = Math.round(num(r["Grade"], num(r["Overall"], 70)));
+  const ras = Math.round(num(r["RAS"], 50));
+  const interview = Math.round(num(r["Interview"], 50));
+  const archetype = str(r["Archetype"], str(r["Style"], "Prospect"));
+  return { id, name, pos, archetype, grade, ras, interview };
+}
+
+function draftBoard(): Prospect[] {
+  const rows = DRAFT_ROWS.slice();
+  rows.sort((a, b) => num(a["Rank"], 9999) - num(b["Rank"], 9999));
+  return rows.map(toProspect);
+}
+
+function buildActiveDraftClassProspects(state: GameState): Prospect[] {
+  const fromState = (state.upcomingDraftClass ?? [])
+    .map((p: any, idx: number) => ({
+      id: String(p?.prospectId ?? p?.id ?? `UP_${idx + 1}`),
+      name: String(p?.name ?? `Prospect ${idx + 1}`),
+      pos: String(p?.pos ?? "UNK").toUpperCase(),
+      archetype: String(p?.archetype ?? "Prospect"),
+      grade: Number(p?.overall ?? p?.trueOVR ?? 65),
+      ras: Number(p?.athleticism ?? p?.speed ?? 60),
+      interview: 50,
+    }))
+    .filter((p: Prospect) => !!p.id);
+  if (fromState.length > 0) return fromState;
+
+  const boardProspects = draftBoard().slice(0, 220);
+  if (boardProspects.length > 0) return boardProspects;
+
+  const fallbackSeed = Number(state.careerSeed ?? state.saveSeed ?? 1);
+  return Array.from({ length: 32 }, (_, idx) => {
+    const posList = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"];
+    const pos = posList[idx % posList.length];
+    const seed = detRand(fallbackSeed, `combine-placeholder:${idx}`);
+    return {
+      id: `PL_${state.season}_${String(idx + 1).padStart(3, "0")}`,
+      name: `Placeholder Prospect ${idx + 1}`,
+      pos,
+      archetype: "Generated",
+      grade: Math.round(55 + seed * 30),
+      ras: Math.round(45 + seed * 45),
+      interview: 50,
+    } satisfies Prospect;
+  });
+}
+
+function ensureOffseasonCombineData(state: GameState): GameState {
+  const combine = state.offseasonData.combine;
+  const prospects = buildActiveDraftClassProspects(state);
+  const resultsByProspectId = combine.resultsByProspectId ?? combine.results ?? {};
+
+  if (combine.generated && prospects.length > 0 && Object.keys(resultsByProspectId).length > 0) {
+    return {
+      ...state,
+      offseasonData: {
+        ...state.offseasonData,
+        combine: {
+          ...combine,
+          prospects: combine.prospects.length ? combine.prospects : prospects,
+          resultsByProspectId,
+          results: resultsByProspectId,
+          interviewPoolIds: combine.interviewPoolIds ?? [],
+        },
+      },
+    };
+  }
+
+  const generatedResults = Object.fromEntries(
+    prospects.map((p) => [p.id, generateCombineResult((k) => detRand(state.saveSeed, `${p.id}:${k}`), p)]),
+  );
+
+  return {
+    ...state,
+    offseasonData: {
+      ...state.offseasonData,
+      combine: {
+        ...combine,
+        prospects,
+        generated: true,
+        results: generatedResults,
+        resultsByProspectId: generatedResults,
+        interviewPoolIds: combine.interviewPoolIds ?? [],
+      },
+    },
+  };
+}
+
+// GM mode draft scoring constants
+const REBUILD_PRIME_AGE = 24;    // Age at which REBUILD mode gives zero age bonus (younger = higher bonus)
+const REBUILD_AGE_WEIGHT = 1.5;  // Points per year younger than prime age
+const CONTEND_BASELINE_GRADE = 60; // Neutral grade for CONTEND mode bonus (higher = bigger bonus)
+const CONTEND_GRADE_WEIGHT = 0.5;  // Points per grade point above baseline
+const FA_AUTO_OFFERS_MAX = 5;      // Hard cap on auto-seeded FA offers
+
+function applyDraftPriorities(state: GameState, board: Prospect[]): Prospect[] {
+  const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  const gmMode = state.strategy?.gmMode ?? DEFAULT_STRATEGY.gmMode;
+  return board
+    .slice()
+    .map((p: any) => {
+      const rank = Number(p.rank ?? p.Rank ?? 9999);
+      const grade = Number(p.grade ?? 0);
+      const age = Number(p.age ?? 22);
+      // gmMode adjustments: REBUILD boosts young/high-ceiling prospects, CONTEND boosts immediate OVR
+      const gmBonus =
+        gmMode === "REBUILD" ? (REBUILD_PRIME_AGE - age) * REBUILD_AGE_WEIGHT :
+        gmMode === "CONTEND" ? (grade - CONTEND_BASELINE_GRADE) * CONTEND_GRADE_WEIGHT :
+        0;
+      const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01 + gmBonus;
+      return { ...p, __score: score };
+    })
+    .sort((a: any, b: any) => (b.__score ?? 0) - (a.__score ?? 0));
+}
+
+function seedUserAutoFaOffersFromPriorities(state: GameState, maxOffers = 3): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+  if ((state.coach.autonomy ?? 60) >= 50) return state;
+  const teamId = String(state.acceptedOffer?.teamId ?? "");
+  if (!teamId) return state;
+
+  const priorities = state.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities;
+  const gmMode = state.strategy?.gmMode ?? DEFAULT_STRATEGY.gmMode;
+  // REBUILD mode limits auto-seeded offers to save cap space; CONTEND mode allows one more
+  const effectiveMax = Math.min(
+    gmMode === "REBUILD" ? Math.min(maxOffers, 1) : gmMode === "CONTEND" ? maxOffers + 1 : maxOffers,
+    FA_AUTO_OFFERS_MAX,
+  );
+
+  const candidates = getEffectiveFreeAgents(state)
+    .map((p: any) => ({ p, id: String(p.playerId), pos: normalizePos(String(p.pos ?? "UNK")), ovr: Number(p.overall ?? 0) }))
+    .filter((x) => !state.freeAgency.signingsByPlayerId[x.id]);
+
+  const ranked = candidates
+    .map((x) => {
+      const need = teamNeedsScore(state, teamId, x.pos);
+      const w = priorityWeight(priorities, x.pos);
+      return { ...x, score: need * 0.55 + w * 0.35 + (x.ovr / 100) * 0.1 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 24);
+
+  let next = state;
+  let created = 0;
+  for (const pick of ranked) {
+    if (created >= effectiveMax) break;
+    const existing = next.freeAgency.offersByPlayerId[pick.id] ?? [];
+    if (existing.some((o) => o.isUser && o.status === "PENDING")) continue;
+    const { years, aav } = cpuOfferParams(next, teamId, pick.p);
+    next = gameReducer(next, { type: "FA_SET_DRAFT", payload: { playerId: pick.id, years, aav } });
+    next = gameReducer(next, { type: "FA_SUBMIT_OFFER", payload: { playerId: pick.id } });
+    created += 1;
+  }
+
+  return next;
+}
+
+function mergeOffers(a: FreeAgentOffer[], b: FreeAgentOffer[]): FreeAgentOffer[] {
+  const out: FreeAgentOffer[] = [];
+  const seen = new Set<string>();
+  for (const o of [...a, ...b]) {
+    if (seen.has(o.playerId)) continue;
+    seen.add(o.playerId);
+    out.push(o);
+  }
+  return out;
+}
 
 export type AssistantStaff = {
   assistantHcId?: string;
@@ -82,12 +743,179 @@ export type AssistantStaff = {
   wrCoachId?: string;
 };
 
+export type TeamFinances = {
+  cap: number;
+  carryover?: number;
+  incentiveTrueUps?: number;
+  deadCapThisYear?: number;
+  deadCapNextYear?: number;
+  baseCommitted: number;
+  capCommitted: number;
+  capSpace: number;
+  cash: number;
+  postJune1Sim?: boolean;
+};
+
+export type PlayerContractOverride = {
+  startSeason: number;
+  endSeason: number;
+  salaries: number[];
+  signingBonus: number;
+  guaranteedAtSigning?: number;
+  prorationBySeason?: Record<number, number>;
+  contractType?: "STANDARD" | "FRANCHISE_TAG";
+};
+
+export type FranchiseTagRecord = {
+  season: number;
+  amount: number;
+  timesUsed: number;
+};
+
+export type TransactionType = "CUT" | "TRADE" | "VOID" | "TAG";
+export type AccelerationType = "PRE_JUNE_1" | "POST_JUNE_1" | "NONE";
+export type Transaction = {
+  id: string;
+  type: TransactionType;
+  playerId: string;
+  playerName: string;
+  playerPos: string;
+  fromTeamId: string;
+  toTeamId?: string;
+  season: number;
+  week?: number;
+  june1Designation: AccelerationType;
+  notes?: string;
+  deadCapThisYear: number;
+  deadCapNextYear: number;
+  remainingProration: number;
+  contractSnapshot?: {
+    startSeason: number;
+    endSeason: number;
+    signingBonus: number;
+    salaries: number[];
+  };
+};
+
+export type BuyoutLedger = { bySeason: Record<number, number> };
+export type DepthChart = {
+  startersByPos: Record<string, string | undefined>;
+  lockedBySlot: Record<string, true | undefined>;
+};
+export type PreseasonRotation = { byPlayerId: Record<string, number> };
+type TamperingSoftOffer = { years: number; aav: number };
+export type FreeAgencyOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COUNTERED" | "WITHDRAWN";
+
+export type FreeAgencyOffer = {
+  offerId: string;
+  playerId: string;
+  teamId: string;
+  isUser: boolean;
+  years: number;
+  aav: number;
+  createdWeek: number;
+  status: FreeAgencyOfferStatus;
+  fromTampering?: boolean;
+  isCounter?: boolean;
+  counterCreatedAtResolve?: number;
+  decisionReason?: string;
+};
+
+export type FreeAgencyUI =
+  | { mode: "NONE" }
+  | { mode: "PLAYER"; playerId: string }
+  | { mode: "MY_OFFERS" };
+
+export type FreeAgencyState = {
+  status?: "idle" | "initializing" | "ready" | "resolving" | "complete" | "error";
+  initStatus: "idle" | "loading" | "ready" | "error";
+  isResolving: boolean;
+  progress?: { done: number; total: number };
+  lastResolveWeekKey?: string;
+  ui: FreeAgencyUI;
+  offersByPlayerId: Record<string, FreeAgencyOffer[]>;
+  signingsByPlayerId: Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
+  nextOfferSeq: number;
+  bootstrappedFromTampering: boolean;
+  resolvesUsedThisPhase: number;
+  maxResolvesPerPhase: number;
+  activity: Array<{ ts: number; text: string; playerId?: string }>;
+  draftByPlayerId: Record<string, { years: number; aav: number }>;
+  boardPlayerIds?: string[];
+  marketApyByPlayerId?: Record<string, { years: number; apy: number }>;
+  initializedForSeason?: number;
+  lastResolvedTick?: number;
+  error?: string;
+  resolveRoundByPlayerId: Record<string, number>;
+  pendingCounterTeamByPlayerId: Record<string, string | null>;
+  cpuTickedOnOpen: boolean;
+};
+
+export type FiringMeter = {
+  pWeekly: number;
+  pSeasonEnd: number;
+  drivers: Array<{ label: string; value: number }>;
+  lastWeekComputed: number;
+  lastSeasonComputed: number;
+  fired: boolean;
+  firedAt?: { season: number; week?: number; checkpoint: "WEEKLY" | "SEASON_END" };
+};
+
+export type FiringRecap = {
+  season: number;
+  week: number;
+  teamId: string;
+  record: { wins: number; losses: number };
+  topDrivers: string[];
+  ownerApproval: number;
+  tenureWeeks: number;
+  autonomyAtFiring: number;
+};
+
+export type CareerHistory = {
+  firings: FiringRecap[];
+};
+
+export type PlayerAccolades = {
+  formerMvp?: boolean;
+  formerAllPro?: boolean;
+  formerOPOY?: boolean;
+  formerDPOY?: boolean;
+  proBowls?: number;
+};
+
+export type PersistedFatigue = { fatigue: number; last3SnapLoads: number[] };
+export type PersistedSnapCounts = SnapCounts;
+export type PersistedSeasonStats = SeasonStats;
+export type PersistedDevelopment = DevelopmentProfile;
+
+export type PendingTradeOffer = {
+  id: string;
+  playerId: string;
+  fromTeamId: string;
+  toTeamId: string;
+  createdWeek: number;
+  status: "PENDING" | "CANCELLED" | "ACCEPTED";
+};
+
+export type OfferResultModalState = {
+  open: boolean;
+  title: string;
+  message: string;
+  variant: "success" | "danger";
+  ts: number;
+};
+
+export type DeterministicCounters = SharedDeterministicCounters;
+
 export type GameState = {
   coach: {
     name: string;
     ageTier: string;
     hometown: string;
     archetypeId: string;
+    coachId?: string;
+    careerRecord?: CoachCareerRecord;
     hometownTeamId?: string;
     repBaseline?: number;
     autonomy?: number;
@@ -97,96 +925,1011 @@ export type GameState = {
     mediaExpectation?: number;
     lockerRoomCred?: number;
     volatility?: number;
+    tenureYear: number;
+    reputation?: CoachReputation;
+    perkPoints?: number;
+    unlockedPerkIds?: string[];
+    perkPointLog?: { source: string; amount: number; season: number }[];
+    autonomyHistory?: Array<{ week: number; value: number; reason: string }>;
+    autonomyLastChangeReason?: string;
+  };
+  lastSeasonSummary?: SeasonSummary;
+  seasonHistory: SeasonSummary[];
+  earnedMilestoneIds: string[];
+  seasonAwards?: {
+    season: number;
+    awarded: { source: string; amount: number }[];
+    totalPoints: number;
+    shown: boolean;
   };
   phase: GamePhase;
   careerStage: CareerStage;
+  offseason: OffseasonState;
+  offseasonData: OffseasonData;
+  franchise: {
+    yR1QBByTeamId: Record<string, number | null>;
+  };
+  tampering: {
+    interestByPlayerId: Record<string, number>;
+    nameByPlayerId: Record<string, string>;
+    shortlistPlayerIds: string[];
+    softOffersByPlayerId: Record<string, TamperingSoftOffer>;
+    ui: { mode: "NONE" | "PLAYER" | "SHORTLIST"; playerId?: string };
+  };
+  freeAgency: FreeAgencyState;
+  contracts: {
+    playerTeamInterestById: Record<string, Record<string, number>>;
+  };
+  resign: {
+    lastOfferAavByPlayerId: Record<string, number>;
+    rejectionCountByPlayerId: Record<string, number>;
+  };
   interviews: { items: InterviewItem[]; completedCount: number };
   offers: OfferItem[];
   acceptedOffer?: OfferItem;
+  storySetup?: {
+    teamId: string;
+    teamName: string;
+    gmName?: string;
+    teamLocked: true;
+  };
+  recoveryNeeded?: boolean;
+  recoveryErrors?: string[];
   autonomyRating?: number;
   ownerPatience?: number;
+  teamOwnerExpectationsByTeamId: Record<TeamId, OwnerExpectationsConfig>;
+  ownerState: OwnerState;
+  coaching: CoachingState;
+  media: MediaState;
+  wire: WireState;
+  medical: MedicalState;
+  liveGames: Record<string, LiveGameState>;
+  telemetry?: {
+    playLogsByGameKey: Record<string, PlayEventV1Minimal[]>;
+    percentiles: TelemetryPercentilesBySeason;
+    gameAggsByGameKey: Record<string, GameAggV1>;
+    seasonAgg: SeasonAggV1;
+  };
+  historicalTelemetry: {
+    bySeason: Record<number, Partial<SeasonAggV1>>;
+  };
+  dynasty: DynastyProfile;
   season: number;
   week?: number;
+  schemaVersion: number;
+  saveId?: string;
   saveVersion: number;
+  configVersion: string;
+  calibrationPackId: string;
   memoryLog: MemoryEvent[];
+  contextFlags: string[];
+  teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
+  owner: { approval: number; budgetBreaches: number; financialRating: number; jobSecurity: number };
+  staffBudget: { total: number; used: number; byPersonId: Record<string, number> };
+  rosterMgmt: { active: Record<string, true>; cuts: Record<string, true>; finalized: boolean };
+  buyouts: BuyoutLedger;
+  depthChart: DepthChart;
+  leagueDepthCharts: Record<string, DepthChart>;
+  playerAccolades: Record<string, PlayerAccolades>;
+  playerBadges: Record<string, PlayerBadge[]>;
+  playerUnicorns: Record<PlayerId, PlayerUnicorn>;
+  preseason: { rotation: PreseasonRotation; appliedWeeks: Record<number, true> };
   staff: { ocId?: string; dcId?: string; stcId?: string };
+  orgRoles: OrgRoles;
   assistantStaff: AssistantStaff;
+  staffRoster: StaffRoster;
+  staffOffers: StaffOffer[];
+  playbooks: {
+    offensePlaybookId?: OffenseSchemeId;
+    defensePlaybookId?: DefenseSchemeId;
+    userOverride?: { offense: boolean; defense: boolean };
+  };
+  scheme?: {
+    offense?: {
+      style: "BALANCED" | "RUN_HEAVY" | "PASS_HEAVY";
+      tempo: "SLOW" | "NORMAL" | "FAST";
+      schemeId?:
+        | "AIR_RAID"
+        | "SHANAHAN_WIDE_ZONE"
+        | "VERTICAL_PASSING"
+        | "PRO_STYLE_BALANCED"
+        | "POWER_GAP"
+        | "ERHARDT_PERKINS"
+        | "RUN_AND_SHOOT"
+        | "SPREAD_RPO"
+        | "WEST_COAST"
+        | "AIR_CORYELL"
+        | "MODERN_TRIPLE_OPTION"
+        | "CHIP_KELLY_RPO"
+        | "TWO_TE_POWER_I"
+        | "MOTION_BASED_MISDIRECTION"
+        | "POWER_SPREAD";
+    };
+    defense?: {
+      style: "MAN" | "ZONE" | "MIXED";
+      aggression: "CONSERVATIVE" | "NORMAL" | "AGGRESSIVE";
+      schemeId?:
+        | "THREE_FOUR_TWO_GAP"
+        | "FOUR_TWO_FIVE"
+        | "SEATTLE_COVER_3"
+        | "COVER_SIX"
+        | "FANGIO_TWO_HIGH"
+        | "TAMPA_2"
+        | "MULTIPLE_HYBRID"
+        | "CHAOS_FRONT"
+        | "PHILLIPS_BASE_THREE_FOUR"
+        | "LEBEAU_ZONE_BLITZ_THREE_FOUR"
+        | "BEARS_FOUR_SIX"
+        | "FOUR_THREE_OVER"
+        | "SINGLE_HIGH_COVER_3"
+        | "SABAN_COVER_4_MATCH"
+        | "RYAN_NICKEL_PRESSURE";
+    };
+  };
+  strategy: StrategyState;
+  scouting?: { boardSeed: number; combineRun?: boolean };
+  scoutingState?: ScoutingState;
   hub: {
-    news: string[];
+    news: NewsItem[];
+    newsReadIds: Record<string, true>;
+    newsFilter: string;
     preseasonWeek: number;
     regularSeasonWeek: number;
     schedule: LeagueSchedule | null;
   };
+  unreadNewsCount: number;
+  lastNewsReadWeek: number;
+  offseasonNews: LeagueNewsItem[];
+  newsHistory: LeagueNewsItem[];
+  retiredPlayers: RetiredPlayerRecord[];
+  playerAgingDeltasById: Record<string, number>;
+  playerAttributeDeltasById: Record<string, Record<string, number>>;
+  playerAgeOffsetById: Record<string, number>;
+  playerSnapCountsById: Record<string, PersistedSnapCounts>;
+  playerProgressionSeasonStatsById: Record<string, PersistedSeasonStats>;
+  playerDevelopmentById: Record<string, PersistedDevelopment>;
+  finances: TeamFinances;
+  league: LeagueState;
+  teamGameplans: Record<string, WeeklyGameplan | undefined>;
+  weatherByGameKey: Record<string, GameWeather>;
+  playoffs: PlayoffsState | null;
+  currentStandings: TeamStanding[];
+  weeklyResults: WeekResult[];
+  leagueStatLeaders: LeagueStatLeaders;
   saveSeed: number;
-  game: {
-    opponentTeamId?: string;
-    homeScore: number;
-    awayScore: number;
-    quarter: number;
-    down: number;
-    distance: number;
-    ballOn: number;
-    lastResult?: string;
-    seed: number;
-    weekType?: GameType;
-    weekNumber?: number;
+  careerSeed: number;
+  game: GameSim;
+  gameHistory: import("@/engine/gameSim").GameBoxScore[];
+  playerSeasonStatsById: Record<string, PlayerSeasonStats[]>;
+  playerCareerStatsById: Record<string, import("@/types/stats").PlayerCareerStats>;
+  leagueRecords: LeagueRecords;
+  draft: DraftState;
+  upcomingDraftClass: import("@/engine/draftSim").Prospect[];
+  futureClasses: Partial<Record<ClassYear, GeneratedPlayer[]>>;
+  rookies: RookiePlayer[];
+  rookieContracts: Record<string, RookieContract>;
+  nextPlayerId: number;
+  playerTeamOverrides: Record<string, string>;
+  personnelTeamOverrides: Record<string, import("@/data/leagueDb").PersonnelOverride>;
+  staffContractsByPersonId: Record<string, import("@/data/leagueDb").ContractRow>;
+  playerContractOverrides: Record<string, PlayerContractOverride>;
+  playerAttrOverrides: Record<string, Partial<PlayerRow>>;
+  qbRunContactExposureByPlayerId: Record<string, number>;
+  franchiseTags: Record<string, FranchiseTagRecord>;
+  playerFatigueById: Record<string, PersistedFatigue>;
+  practicePlan: PracticePlan;
+  practicePlanConfirmed: boolean;
+  practiceNeglectCounters: PracticeNeglectTracker;
+  cumulativeNeglectPenalty: number;
+  weeklyFamiliarityBonus: number;
+  weeklyMentalErrorMod: number;
+  weeklySchemeConceptBonus: number;
+  weeklyLateGameRetentionBonus: number;
+  nextGameInjuryRiskMod: number;
+  lastPracticeOutcomeSummary?: string;
+  playerDevXpById: Record<string, number>;
+  pendingTradeOffers: PendingTradeOffer[];
+  tradeError?: TradeDeadlineError;
+  tradeBlockByPlayerId: Record<string, boolean>;
+  firing: FiringMeter;
+  careerHistory: CareerHistory;
+  transactions: Transaction[];
+  transactionLedger?: TransactionState;
+  userTeamId?: string;
+  teamId?: string;
+  playerMorale?: Record<string, number>;
+  injuries?: Injury[];
+  uiToast?: string;
+  ui: {
+    offerResultModal?: OfferResultModalState;
+  };
+  feedbackQueue: FeedbackEvent[];
+  feedbackHistory: FeedbackEvent[];
+  pendingInjuryAlert?: Injury;
+  hotSeatStatus: HotSeatStatus;
+  deterministicCounters?: DeterministicCounters;
+  trainingFocus?: {
+    posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">>;
   };
 };
 
-function createInitialState(): GameState {
+export type RookieContract = {
+  startSeason: number;
+  years: 4;
+  capBySeason: Record<number, number>;
+  total: number;
+};
+
+export type RookiePlayer = {
+  playerId: string;
+  prospectId: string;
+  name: string;
+  pos: string;
+  age: number;
+  ovr: number;
+  dev: number;
+  apy: number;
+  teamId: string;
+  scoutOvr: number;
+  scoutDev: number;
+  scoutConf: number;
+};
+
+export type DraftPick = {
+  overall: number;
+  round: number;
+  pickInRound: number;
+  teamId: string;
+  prospectId: string;
+  rookiePlayerId: string;
+};
+
+export type DraftState = {
+  started: boolean;
+  completed: boolean;
+  totalRounds: number;
+  currentOverall: number;
+  orderTeamIds: string[];
+  leaguePicks: DraftPick[];
+  onClockTeamId?: string;
+  withdrawnBoardIds: Record<string, true>;
+  prospectPool: import("@/engine/draftSim").Prospect[];
+  appliedSelectionCount: number;
+} &
+  DraftSimState & {
+    rosterCountsByTeamBucket: Record<string, Record<string, number>>;
+    draftedCountsByTeamBucket: Record<string, Record<string, number>>;
+  };
+
+export type GameAction =
+  | { type: "INIT_NEW_GAME_FROM_STORY"; payload: { offer: OfferItem; teamName: string; gmName?: string; interviewOutcome?: import("@/engine/interviewHiring/types").InterviewOutcome; isRehire?: boolean } }
+  | {
+      type: "INIT_FREE_PLAY_CAREER";
+      payload: {
+        teamId: string;
+        teamName: string;
+        offer?: Partial<Pick<OfferItem, "years" | "salary" | "autonomy" | "patience" | "mediaNarrativeKey">>;
+      };
+    }
+  | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
+  | { type: "SET_PHASE"; payload: GamePhase }
+  | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
+  | { type: "GENERATE_OFFERS" }
+  | { type: "ACCEPT_OFFER"; payload: OfferItem }
+  | { type: "NEGOTIATE_OFFER"; payload: { teamId: string; years: number; salary: number; autonomy: number } }
+  | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string; salary: number } }
+  | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string; salary: number } }
+  | { type: "HIRE_COACH"; payload: { coach: CoachProfile } }
+  | { type: "FIRE_COACH"; payload: { coachId: string } }
+  | { type: "INCREMENT_COACH_TENURE" }
+  | { type: "CREATE_STAFF_OFFER"; payload: { roleType: "COORDINATOR" | "ASSISTANT"; role: "OC" | "DC" | "STC" | keyof AssistantStaff; personId: string; years: number; salary: number } }
+  | { type: "STAFF_COUNTER_OFFER"; payload: { offerId: string; years: number; salary: number } }
+  | { type: "STAFF_COUNTER_OFFER_RESPONSE"; payload: { offerId: string; accepted: boolean } }
+  | { type: "SET_SCHEME"; payload: NonNullable<GameState["scheme"]> }
+  | { type: "SET_PLAYBOOK"; payload: { side: "OFFENSE" | "DEFENSE"; playbookId: string } }
+  | { type: "SET_STRATEGY_PRIORITIES"; payload: { positions: PriorityPos[] } }
+  | { type: "SET_GM_MODE"; payload: { gmMode: GmMode } }
+  | { type: "COORD_ATTEMPT_HIRE"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
+  | { type: "ASSISTANT_ATTEMPT_HIRE"; payload: { role: keyof AssistantStaff; personId: string } }
+  | { type: "SET_ORG_ROLE"; payload: { role: keyof OrgRoles; coachId: string | undefined } }
+  | { type: "ADVANCE_CAREER_STAGE" }
+  | { type: "SET_CAREER_STAGE"; payload: CareerStage }
+  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
+  | { type: "ENSURE_GAME_WEATHER"; payload: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string } }
+  | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
+  | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
+  | { type: "SET_DEFENSIVE_CALL"; payload: { call: DefensiveCall } }
+  | { type: "CLEAR_DEFENSIVE_CALL" }
+  | { type: "EXIT_GAME" }
+  | { type: "ADVANCE_WEEK" }
+  | { type: "SIMULATE_REST_OF_GAME" }
+  | { type: "PLAYOFFS_INIT_BRACKET" }
+  | { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" }
+  | { type: "PLAYOFFS_TICK" }
+  | { type: "PLAYOFFS_MARK_GAME_FINAL"; payload: { gameId: string; homeScore: number; awayScore: number; winnerTeamId: string } }
+  | { type: "PLAYOFFS_ADVANCE_ROUND" }
+  | { type: "PLAYOFFS_COMPLETE_SEASON" }
+  | { type: "SET_TEAM_GAMEPLAN"; payload: { teamId: string; gameplan: WeeklyGameplan } }
+  | { type: "LOCK_TEAM_GAMEPLAN"; payload: { teamId: string } }
+  | { type: "ADVANCE_LEAGUE_PHASE" }
+  | { type: "OFFSEASON_SET_TASK"; payload: { taskId: OffseasonTaskId; completed: boolean } }
+  | { type: "OFFSEASON_APPLY_TASK_EFFECT"; payload: { taskId: OffseasonTaskId } }
+  | { type: "OFFSEASON_COMPLETE_STEP"; payload: { stepId: OffseasonStepId } }
+  | { type: "OFFSEASON_ADVANCE_STEP" }
+  | { type: "OFFSEASON_SET_STEP"; payload: { stepId: OffseasonStepId } }
+  | { type: "RESIGN_SET_DECISION"; payload: { playerId: string; decision: ResignDecision } }
+  | { type: "RESIGN_MAKE_OFFER"; payload: { playerId: string; createdFrom: "AUDIT" | "RESIGN_SCREEN" } }
+  | { type: "RESIGN_DRAFT_FROM_AUDIT"; payload: { playerId: string } }
+  | { type: "RESIGN_REJECT_OFFER"; payload: { playerId: string } }
+  | { type: "RESIGN_ACCEPT_OFFER"; payload: { playerId: string } }
+  | { type: "RESIGN_SUBMIT_OFFER"; payload: { playerId: string; offer: ResignOffer } }
+  | { type: "RESIGN_CLEAR_DECISION"; payload: { playerId: string } }
+  | { type: "SHOW_OFFER_RESULT_MODAL"; payload: { title: string; message: string; variant: "success" | "danger" } }
+  | { type: "HIDE_OFFER_RESULT_MODAL" }
+  | { type: "TAG_APPLY"; payload: TagApplied }
+  | { type: "APPLY_FRANCHISE_TAG"; payload: { playerId: string } }
+  | { type: "EXPIRE_EXPIRING_CONTRACTS_TO_FA"; payload: { nextSeason: number } }
+  | { type: "TAG_REMOVE" }
+  | { type: "ROSTERAUDIT_SET_CUT_DESIGNATION"; payload: { playerId: string; designation: "NONE" | "POST_JUNE_1" } }
+  | { type: "CONTRACT_RESTRUCTURE_APPLY"; payload: { playerId: string; amount: number } }
+  | { type: "SCOUTING_WINDOW_INIT"; payload: { windowId: ScoutingWindowId } }
+  | { type: "SCOUTING_SPEND"; payload: { targetType: "PROSPECT" | "FA"; targetId: string; actionType: ScoutAction; prospect?: Prospect } }
+  | { type: "SCOUT_INIT" }
+  | { type: "SCOUT_HYDRATE_MY_BOARD_ORDER"; payload: { prospectIds: string[] } }
+  | { type: "SCOUT_REORDER_MY_BOARD"; payload: { draggedId: string; targetId: string } }
+  | { type: "SCOUT_BOARD_MOVE"; payload: { prospectId: string; dir: "UP" | "DOWN" } }
+  | { type: "SCOUT_BOARD_MOVE_TIER"; payload: { prospectId: string; tierId: "T1" | "T2" | "T3" | "T4" | "T5" } }
+  | { type: "SCOUT_PIN"; payload: { prospectId: string } }
+  | { type: "SCOUT_SPEND"; payload: { prospectId: string; action: "FILM_QUICK" | "FILM_DEEP" | "REQUEST_MED" | "BACKGROUND" } }
+  | { type: "SCOUT_COMBINE_GENERATE" }
+  | { type: "SCOUT_COMBINE_SET_DAY"; payload: { day: 1 | 2 | 3 | 4 } }
+  | { type: "SCOUT_COMBINE_FOCUS"; payload: { prospectId: string } }
+  | { type: "SCOUT_COMBINE_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_COMBINE_SELECT"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_COMBINE_RUN_INTERVIEWS"; payload: { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_PRIVATE_WORKOUT"; payload: { prospectId: string; focus: "TALENT" | "FIT" | "CHAR" | "MED" } }
+  | { type: "SCOUT_INTERVIEW"; payload: { prospectId: string; category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL" } }
+  | { type: "SCOUT_RUN_INTERVIEW"; payload: { prospectId: string; category: "CHARACTER" | "INTELLIGENCE" | "WORK_ETHIC" } }
+  | { type: "SCOUT_REQUEST_MEDICAL"; payload: { prospectId: string } }
+  | { type: "SCOUT_CONDUCT_WORKOUT"; payload: { prospectId: string } }
+  | { type: "SCOUT_ALLOC_ADJ"; payload: { group: string; delta: number } }
+  | { type: "SCOUT_DEV_SIM_WEEK" }
+  | { type: "COMBINE_GENERATE" }
+  | { type: "COMBINE_RUN_EVENTS"; payload?: { seed?: number } }
+  | { type: "COMBINE_GENERATE_INTERVIEW_POOL"; payload?: { seed?: number } }
+  | { type: "COMBINE_TOGGLE_SHORTLIST"; payload: { prospectId: string } }
+  | { type: "TAMPERING_ADD_OFFER"; payload: { offer: FreeAgentOffer } }
+  | { type: "TAMPERING_INIT" }
+  | { type: "TAMPERING_OPEN_PLAYER"; payload: { playerId: string } }
+  | { type: "TAMPERING_OPEN_SHORTLIST" }
+  | { type: "TAMPERING_CLOSE_MODAL" }
+  | { type: "TAMPERING_ADD_SHORTLIST"; payload: { playerId: string } }
+  | { type: "TAMPERING_REMOVE_SHORTLIST"; payload: { playerId: string } }
+  | { type: "TAMPERING_AUTO_SHORTLIST"; payload: { tab: string } }
+  | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
+  | { type: "FA_INIT_OFFERS" }
+  | { type: "FA_ENTER_MARKET" }
+  | { type: "FA_CREATE_DRAFT"; payload: { playerId: string } }
+  | { type: "FA_UPDATE_DRAFT"; payload: { playerId: string; patch: Partial<{ years: number; apy: number }> } }
+  | { type: "FA_SUBMIT_USER_OFFER"; payload: { playerId: string } }
+  | { type: "FA_WITHDRAW_USER_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "FA_ADVANCE_MARKET" }
+  | { type: "FA_COMPLETE_PHASE" }
+  | { type: "FA_INIT_START" }
+  | { type: "FA_INIT_READY" }
+  | { type: "FA_INIT_ERROR" }
+  | { type: "FA_INIT_RESET" }
+  | { type: "FA_REJECT"; payload: { playerId: string } }
+  | { type: "FA_WITHDRAW"; payload: { offerId: string } }
+  | { type: "FA_SIGN"; payload: { offerId: string; years?: number; apy?: number } }
+  | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
+  | { type: "FA_OPEN_MY_OFFERS" }
+  | { type: "FA_CLOSE_MODAL" }
+  | { type: "FA_BOOTSTRAP_FROM_TAMPERING" }
+  | { type: "FA_SET_DRAFT"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "FA_SUBMIT_OFFER"; payload: { playerId: string } }
+  | { type: "FA_UPDATE_USER_OFFER"; payload: { playerId: string; years: number; aav: number } }
+  | { type: "FA_CLEAR_USER_OFFER"; payload: { playerId: string } }
+  | { type: "FA_RESPOND_COUNTER"; payload: { playerId: string; accept: boolean } }
+  | { type: "FA_CPU_TICK" }
+  | { type: "INIT_FREE_AGENCY_MARKET" }
+  | { type: "RESOLVE_FREE_AGENCY_WEEK" }
+  | { type: "FA_SET_RESOLVING"; payload: { value: boolean } }
+  | { type: "FA_RESOLVE" }
+  | { type: "FA_RESOLVE_BATCH" }
+  | { type: "FA_WITHDRAW_OFFER"; payload: { offerId: string; playerId: string } }
+  | { type: "FA_RESOLVE_WEEK"; payload: { week: number } }
+  | { type: "FA_ACCEPT_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "CUT_APPLY"; payload: { teamId: string; playerId: string; designation?: "PRE_JUNE_1" | "POST_JUNE_1" } }
+  | { type: "CUT_PLAYER"; payload: { playerId: string } }
+  | { type: "TRADE_PLAYER"; payload: { playerId: string } }
+  | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
+  | { type: "ADD_NEWS_ITEM"; payload: { title: string; body?: string; category?: string } }
+  | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
+  | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
+  | { type: "EXTEND_PLAYER"; payload: { playerId: string; years: number; apy: number; signingBonus: number; guaranteedAtSigning: number } }
+  | { type: "EXTENSION_SUBMIT_OFFER"; payload: { playerId: string; offer: ExtensionOffer } }
+  | { type: "EXTENSION_CLEAR_OFFER"; payload: { playerId: string } }
+  | { type: "ADVANCE_SEASON" }
+  | { type: "PREGENERATE_FUTURE_CLASS"; payload: { classYear: ClassYear } }
+  | { type: "DISMISS_SEASON_AWARDS" }
+  | { type: "PREDRAFT_TOGGLE_VISIT"; payload: { prospectId: string } }
+  | { type: "PREDRAFT_TOGGLE_WORKOUT"; payload: { prospectId: string } }
+  | { type: "PREDRAFT_SET_VIEWMODE"; payload: { mode: "CONSENSUS" | "GM" | "TEAM" } }
+  | { type: "DRAFT_INIT" }
+  | { type: "DRAFT_CPU_ADVANCE" }
+  | { type: "DRAFT_USER_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_SHOP" }
+  | { type: "DRAFT_ACCEPT_TRADE"; payload: { offerId: string } }
+  | { type: "DRAFT_SEND_TRADE_UP_OFFER"; payload: { giveOveralls: number[]; askBackOverall?: number | null } }
+  | { type: "DRAFT_DECLINE_OFFER"; payload: { offerId: string } }
+  | { type: "DRAFT_CLEAR_TRADE_OFFERS" }
+  | { type: "DRAFT_SIM_NEXT" }
+  | { type: "DRAFT_SIM_TO_USER" }
+  | { type: "DRAFT_SIM_ALL" }
+  | { type: "NAV_TO_DRAFT_RESULTS" }
+  | { type: "DRAFT_PICK"; payload: { prospectId: string } }
+  | { type: "DRAFT_COMPLETE" }
+  | { type: "DRAFT_FINALIZE" }
+  | { type: "CAMP_SET"; payload: { settings: Partial<CampSettings> } }
+  | { type: "CUT_TOGGLE"; payload: { playerId: string } }
+  | { type: "INIT_TRAINING_CAMP_ROSTER" }
+  | { type: "AUTO_CUT_TO_53" }
+  | { type: "TOGGLE_ACTIVE"; payload: { playerId: string } }
+  | { type: "FINALIZE_CUTS" }
+  | { type: "OWNER_PENALTY"; payload: { reason: string; amount: number } }
+  | { type: "FIRE_STAFF"; payload: { personId: string; roleLabel: string; spreadSeasons: 1 | 2 } }
+  | { type: "CHARGE_BUYOUTS_FOR_SEASON"; payload: { season: number } }
+  | { type: "SET_STARTER"; payload: { slot: string; playerId: string | "AUTO" } }
+  | { type: "DEPTH_BULK_SET"; payload: { startersByPos: Record<string, string | undefined> } }
+  | { type: "TOGGLE_DEPTH_SLOT_LOCK"; payload: { slot: string } }
+  | { type: "RECALC_OWNER_FINANCIAL"; payload?: { season?: number } }
+  | { type: "INIT_PRESEASON_ROTATION" }
+  | { type: "SET_PLAYER_SNAP"; payload: { playerId: string; pct: number } }
+  | { type: "APPLY_PRESEASON_DEV"; payload: { week: number } }
+  | { type: "RESET_DEPTH_CHART_BEST" }
+  | { type: "DEPTHCHART_RESET_TO_BEST" }
+  | { type: "DEPTH_RESET_TO_BEST" }
+  | { type: "AUTOFILL_DEPTH_CHART" }
+  | { type: "RECALC_FIRING_METER"; payload: { week: number; winPct?: number; goalsDelta?: number } }
+  | { type: "CHECK_FIRING"; payload: { checkpoint: "WEEKLY" | "SEASON_END"; week?: number; winPct?: number; goalsDelta?: number } }
+  | { type: "FINANCES_PATCH"; payload: Partial<TeamFinances> }
+  | { type: "AUTO_ADVANCE_STAGE_IF_READY" }
+  | { type: "SET_TRAINING_FOCUS"; payload: { posGroupFocus: Partial<Record<"QB" | "OL" | "WR" | "RB" | "TE" | "DL" | "EDGE" | "LB" | "CB" | "S", "LOW" | "NORMAL" | "HIGH">> } }
+  | { type: "HUB_MARK_NEWS_READ" }
+  | { type: "HUB_MARK_NEWS_ITEM_READ"; payload: { id: string } }
+  | { type: "HUB_SET_NEWS_FILTER"; payload: { filter: string } }
+  | { type: "SET_PRACTICE_PLAN"; payload: PracticePlan }
+  | { type: "INJURY_UPSERT"; payload: Injury }
+  | { type: "INJURY_MOVE_TO_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_ACTIVATE_FROM_IR"; payload: { injuryId: string } }
+  | { type: "INJURY_START_PRACTICE_WINDOW"; payload: { injuryId: string } }
+  | { type: "PUSH_FEEDBACK"; payload: { event: FeedbackEvent } }
+  | { type: "DISMISS_FEEDBACK"; payload: { id: string } }
+  | { type: "CLEAR_FEEDBACK_QUEUE" }
+  | { type: "CLEAR_PENDING_INJURY_ALERT" }
+  | { type: "DEV_APPLY_GATE"; payload: { gate: DevGate; options?: { reset?: boolean; saveAfter?: boolean } } }
+  | { type: "OWNER_INIT_SEASON_GOALS"; payload: { year: number; teamId: TeamId } }
+  | { type: "OWNER_WEEKLY_EVALUATE"; payload: { weekKey: WeekKey; teamId: TeamId; deltas: { approval: number; pressure: number; trust: number }; reasons: string[] } }
+  | { type: "OWNER_ENDSEASON_EVALUATE"; payload: { year: number; teamId: TeamId; result: { goalScore: number; ownerOutcome: "EXTENDED" | "WARNED" | "ULTIMATUM" | "FIRED" | "STABLE"; delta: number; summary: string; trigger?: string } } }
+  | { type: "COACHING_BOOTSTRAP"; payload: { seed: number } }
+  | { type: "COACHING_GENERATE_MARKET"; payload: { weekKey: WeekKey; teamId: TeamId; roles: Array<"HC" | "OC" | "DC" | "ST"> } }
+  | { type: "COACHING_MAKE_OFFER"; payload: { offerId: string; coachId: CoachId; teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; years: number; salary: number } }
+  | { type: "COACHING_RESOLVE_OFFERS"; payload: { weekKey: WeekKey } }
+  | { type: "COACHING_ASSIGN_STAFF_ROLE"; payload: { teamId: TeamId; role: "HC" | "OC" | "DC" | "ST"; coachId: CoachId } }
+  | { type: "COACHING_POACHING_GENERATE"; payload: { weekKey: WeekKey } }
+  | { type: "COACHING_POACHING_RESOLVE"; payload: { weekKey: WeekKey } }
+  | { type: "COACH_CAREER_APPEND_HISTORY"; payload: { coachId: CoachId; entry: { year: number; teamId: TeamId; role: string; resultSummary: string } } }
+  | { type: "WIRE_APPEND"; payload: { item: WireItem } }
+  | { type: "WIRE_BULK_APPEND"; payload: { items: WireItem[] } }
+  | { type: "WIRE_PRUNE"; payload: { keepLastN: number } }
+  | { type: "MEDIA_GENERATE_WEEKLY_STORIES"; payload: { weekKey: WeekKey; seed: number } }
+  | { type: "MEDICAL_GENERATE_WEEKLY_INJURIES"; payload: { weekKey: WeekKey; seed: number } }
+  | { type: "MEDICAL_TICK_RECOVERY"; payload: { weekKey: WeekKey } }
+  | { type: "MEDICAL_SET_RETURN_DECISION"; payload: { playerId: PlayerId; teamId: TeamId; decision: "HOLD" | "LIMITED" | "RUSH_BACK"; weekKey: WeekKey } }
+  | { type: "MEDICAL_CLEAR_PLAYER"; payload: { playerId: PlayerId; weekKey: WeekKey } }
+  | { type: "LIVEGAME_INIT"; payload: { gameId: string; weekKey: WeekKey; homeTeamId: TeamId; awayTeamId: TeamId; userTeamId: TeamId; initialSideline?: Partial<SidelineAdjustments> } }
+  | { type: "SIDELINE_SET"; payload: { gameId: string; patch: Partial<SidelineAdjustments> } }
+  | { type: "SIDELINE_RESET_TO_GAMEPLAN"; payload: { gameId: string } }
+  | { type: "DYNASTY_INIT"; payload: { seed: number } }
+  | { type: "DYNASTY_ENDSEASON_SCORE"; payload: { year: number; teamId: TeamId; inputs: { wins: number; playoffResult: string; awards: string[]; powerRanks?: { off?: number; def?: number; st?: number }; ownerOutcome: DynastySeasonLog["ownerOutcome"]; mediaTags: string[]; capDisaster?: boolean } } }
+  | { type: "DYNASTY_ADD_MILESTONE"; payload: { key: string; achievedYear: number } }
+  | { type: "DEV_RUN_ACTION"; payload: { action: DevAction; payload?: Record<string, unknown> } }
+  | { type: "SET_PLAYER_ATTR_OVERRIDE"; payload: { playerId: string; patch: Partial<PlayerRow> } }
+  | { type: "RECOVERY_RETURN_TO_HUB" }
+  | { type: "RECOVERY_REBUILD_INDICES" }
+  | { type: "RECOVERY_SKIP_STEP" }
+  | { type: "RECOVERY_RESTORE_BACKUP" }
+  | { type: "RECOVERY_HYDRATE_STATE"; payload: { state: GameState } }
+  | { type: "RECOVERY_SET_ERRORS"; payload: { errors: string[] } }
+  | { type: "RESET" };
+
+type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
+type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE" | "TRADE_PLAYER";
+
+const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
+  "FA_SIGN",
+  "FA_SUBMIT_OFFER",
+  "FA_WITHDRAW_OFFER",
+  "FA_BOOTSTRAP_FROM_TAMPERING",
+  "TRADE_ACCEPT",
+  "DRAFT_PICK",
+  "DRAFT_USER_PICK",
+  "DRAFT_SEND_TRADE_UP_OFFER",
+  "CUT_APPLY",
+  "CONTRACT_RESTRUCTURE_APPLY",
+  "EXTEND_PLAYER",
+  "EXTENSION_SUBMIT_OFFER",
+  "APPLY_FRANCHISE_TAG",
+  "TAG_APPLY",
+]);
+
+const EXTRA_PHASE_GUARDED_MUTATIONS = new Set<CentralPhaseGuardAction>([
+  "DRAFT_CPU_ADVANCE",
+  "EXECUTE_TRADE",
+  "TRADE_PLAYER",
+]);
+
+function isCentralPhaseGuardAction(type: GameAction["type"]): type is CentralPhaseGuardAction {
+  return MUTATING_FRANCHISE_ACTIONS.has(type as ReducerMutatingAction)
+    || EXTRA_PHASE_GUARDED_MUTATIONS.has(type as CentralPhaseGuardAction);
+}
+
+function getPhaseGuardVerdict(state: GameState, action: GameAction): { allowed: boolean; reason?: string } {
+  if (action.type === "TRADE_PLAYER") {
+    return { allowed: false, reason: "TRADE_PLAYER is a deprecated alias and is intentionally disabled." };
+  }
+
+  if (action.type === "DRAFT_CPU_ADVANCE") {
+    return isActionAllowedInCurrentPhase(state, { type: "DRAFT_USER_PICK", payload: { prospectId: "__phase_guard__" } } as GameAction);
+  }
+
+  if (action.type === "EXECUTE_TRADE") {
+    return isActionAllowedInCurrentPhase(state, {
+      type: "TRADE_ACCEPT",
+      payload: { playerId: "__phase_guard__", toTeamId: "__phase_guard__", valueTier: "__phase_guard__" },
+    } as GameAction);
+  }
+
+  return isActionAllowedInCurrentPhase(state, action);
+}
+
+function applyCentralMutationPhaseGuard(state: GameState, action: GameAction): GameState | null {
+  if (!isCentralPhaseGuardAction(action.type)) return null;
+
+  const verdict = getPhaseGuardVerdict(state, action);
+  if (verdict.allowed) return null;
+
+  if (action.type === "TRADE_ACCEPT" || action.type === "EXECUTE_TRADE") {
+    const currentWeek = Number(state.league.week ?? state.week ?? 1);
+    const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+    if (currentWeek > deadlineWeek) {
+      return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+    }
+    return state;
+  }
+
+  return state;
+}
+
+function pickTopPlayerIdByPos(state: GameState, teamId: string, pos: string): string | undefined {
+  const players = getAvailableEffectivePlayersByTeam(state, teamId)
+    .filter((p) => String(p.pos ?? "").toUpperCase() === pos)
+    .sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  return players[0]?.playerId;
+}
+
+function buildTrackedPlayers(state: GameState, teamId: string): Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>> {
+  const qb = pickTopPlayerIdByPos(state, teamId, "QB");
+  const rb = pickTopPlayerIdByPos(state, teamId, "RB");
+  const wr = pickTopPlayerIdByPos(state, teamId, "WR");
+  const te = pickTopPlayerIdByPos(state, teamId, "TE");
+  const ol = pickTopPlayerIdByPos(state, teamId, "OL");
+  const dl = pickTopPlayerIdByPos(state, teamId, "DL") ?? pickTopPlayerIdByPos(state, teamId, "EDGE");
+  const lb = pickTopPlayerIdByPos(state, teamId, "LB");
+  const db = pickTopPlayerIdByPos(state, teamId, "CB") ?? pickTopPlayerIdByPos(state, teamId, "S");
+  return { QB: qb, RB: rb, WR: wr, TE: te, OL: ol, DL: dl, LB: lb, DB: db };
+}
+
+function hydrateGameFatigue(state: GameState, trackedPlayers: Record<Possession, Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const side of ["HOME", "AWAY"] as const) {
+    for (const playerId of Object.values(trackedPlayers[side])) {
+      if (!playerId) continue;
+      out[playerId] = clampFatigue(state.playerFatigueById[playerId]?.fatigue ?? FATIGUE_DEFAULT);
+    }
+  }
+  return out;
+}
+
+function applyWeeklyFatigueRecovery(state: GameState, snapLoadThisGame: Record<string, number>): Record<string, PersistedFatigue> {
+  const next = { ...state.playerFatigueById };
+  for (const [playerId, load] of Object.entries(snapLoadThisGame)) {
+    const base = next[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    const p = getPlayers().find((pl) => String(pl.playerId) === String(playerId));
+    const recovery = getRecoveryRate(String(p?.pos ?? "WR"));
+    const recovered = recoverFatigue(base.fatigue, recovery);
+    const last3SnapLoads = pushLast3SnapLoad(base.last3SnapLoads, load);
+    next[playerId] = { fatigue: recovered, last3SnapLoads };
+  }
+  return next;
+}
+
+
+function gameTelemetryKey(params: { season: number; weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string }): string {
+  return buildWeatherGameKey(params);
+}
+
+function resolvePersistedWeather(state: GameState, params: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string }): { gameKey: string; weather: GameWeather; weatherByGameKey: Record<string, GameWeather> } {
+  const gameKey = buildWeatherGameKey({ season: state.season, ...params });
+  const existing = state.weatherByGameKey?.[gameKey];
+  if (existing) return { gameKey, weather: existing, weatherByGameKey: state.weatherByGameKey };
+  const generated = generateGameWeather({ saveSeed: state.saveSeed, season: state.season, ...params, gameKey });
+  return { gameKey, weather: generated, weatherByGameKey: { ...(state.weatherByGameKey ?? {}), [gameKey]: generated } };
+}
+
+function persistUserGamePlayLog(state: GameState, game: Pick<GameSim, "weekType" | "weekNumber" | "homeTeamId" | "awayTeamId" | "playLog">): GameState {
+  if (!game.weekType || !game.weekNumber || !game.playLog?.length) return state;
+  const key = gameTelemetryKey({ season: state.season, weekType: game.weekType, weekNumber: game.weekNumber, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId });
   return {
-    coach: {
-      name: "",
-      ageTier: "32-35",
-      hometown: "",
-      archetypeId: "",
+    ...state,
+    telemetry: {
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
+      playLogsByGameKey: {
+        ...(state.telemetry?.playLogsByGameKey ?? {}),
+        [key]: game.playLog,
+      },
+      percentiles: { ...(state.telemetry?.percentiles ?? {}) },
     },
-    phase: "CREATE",
-    careerStage: "OFFSEASON_HUB",
-    interviews: {
-      items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })),
-      completedCount: 0,
-    },
-    offers: [],
-    season: 2026,
-    week: 1,
-    saveVersion: CURRENT_SAVE_VERSION,
-    memoryLog: [],
-    staff: {},
-    assistantStaff: {},
-    hub: {
-      news: [
-        "League announces 2026 salary cap at $250M",
-        "Free agency period opens next week",
-        "Draft combine results expected soon",
-        "Coaching carousel in full swing",
-      ],
-      preseasonWeek: 1,
-      regularSeasonWeek: 1,
-      schedule: null,
-    },
-    saveSeed: Date.now(),
-    game: { homeScore: 0, awayScore: 0, quarter: 1, down: 1, distance: 10, ballOn: 25, seed: Date.now() },
   };
 }
 
-export type GameAction =
-  | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
-  | { type: "SET_PHASE"; payload: GamePhase }
-  | {
-      type: "COMPLETE_INTERVIEW";
-      payload: { teamId: string; answers: Record<string, number>; result: InterviewResult };
+function telemetrySeasonFromGameKey(gameKey: string): number | null {
+  const season = Number(String(gameKey ?? "").split(":")[0]);
+  return Number.isFinite(season) ? season : null;
+}
+
+function compactSeasonTelemetry(state: GameState, season: number): GameState {
+  const targetSeason = Number(season);
+  if (!Number.isFinite(targetSeason)) return state;
+
+  const playLogsByGameKey = state.telemetry?.playLogsByGameKey ?? {};
+  const nextPlayLogsByGameKey = Object.fromEntries(
+    Object.entries(playLogsByGameKey).filter(([gameKey]) => telemetrySeasonFromGameKey(gameKey) !== targetSeason),
+  );
+
+  if (Object.keys(playLogsByGameKey).length === Object.keys(nextPlayLogsByGameKey).length) return state;
+
+  return {
+    ...state,
+    telemetry: {
+      ...(state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} }),
+      playLogsByGameKey: nextPlayLogsByGameKey,
+    },
+  };
+}
+
+function persistSeasonAggToHistorical(state: GameState, season: number): GameState {
+  const seasonAgg = state.telemetry?.seasonAgg;
+  if (!seasonAgg) return state;
+
+  const combined: Record<number, Partial<SeasonAggV1>> = {
+    ...(state.historicalTelemetry?.bySeason ?? {}),
+    [season]: {
+      version: 1 as const,
+      byTeamId: { ...(seasonAgg.byTeamId ?? {}) },
+      appliedGameKeys: { ...(seasonAgg.appliedGameKeys ?? {}) },
+    },
+  };
+
+  const minSeason = Number(season) - 9;
+  const bounded = Object.fromEntries(Object.entries(combined).filter(([k]) => Number(k) >= minSeason));
+
+  return {
+    ...state,
+    historicalTelemetry: { bySeason: bounded },
+  };
+}
+
+function applyTelemetryAggregatesForGame(
+  state: GameState,
+  game: Pick<GameSim, "weekType" | "weekNumber" | "homeTeamId" | "awayTeamId" | "playLog">,
+): GameState {
+  if (!game.weekType || !game.weekNumber || !game.playLog?.length) return state;
+  const gameKey = gameTelemetryKey({ season: state.season, weekType: game.weekType, weekNumber: game.weekNumber, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId });
+  const telemetry = state.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} }, percentiles: {} };
+  if (telemetry.seasonAgg?.appliedGameKeys?.[gameKey]) return state;
+
+  const gameAgg = buildGameAggFromPlayLog({
+    season: state.season,
+    weekType: game.weekType,
+    weekNumber: game.weekNumber,
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    playLog: game.playLog,
+  });
+
+  return {
+    ...state,
+    telemetry: {
+      ...telemetry,
+      gameAggsByGameKey: { ...telemetry.gameAggsByGameKey, [gameKey]: gameAgg },
+      seasonAgg: applyGameAggToSeasonAgg({ seasonAgg: telemetry.seasonAgg, gameAgg, gameKey }),
+    },
+  };
+}
+
+function upsertGameFatigueState(state: GameState, sim: GameSim): GameState {
+  const next = { ...state.playerFatigueById };
+  for (const [playerId, fatigue] of Object.entries(sim.playerFatigue ?? {})) {
+    const prev = next[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    next[playerId] = { ...prev, fatigue: clampFatigue(fatigue) };
+  }
+  return { ...state, playerFatigueById: next };
+}
+
+type PracticeApplicationSummary = { avgFatigueDelta: number; devXpPlayers: number; avgFamiliarityGain: number; injuryRiskMod: number; mentalErrorMod: number; schemeConceptBonus: number; lateGameRetentionBonus: number; neglectPenalty: number };
+
+export function applyPracticePlanForWeek(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { nextState: GameState; summary: PracticeApplicationSummary } {
+  const plan = migratePracticePlan(state.practicePlan ?? DEFAULT_PRACTICE_PLAN);
+  const planWithNeglect: PracticePlan = { ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks };
+  const effect = getPracticeEffect(planWithNeglect);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const fatigue = { ...state.playerFatigueById };
+  const dev = { ...state.playerDevXpById };
+  const injuries = state.injuries ?? [];
+
+  let totalFatigueDelta = 0;
+  let devXpPlayers = 0;
+  let totalFamiliarity = 0;
+
+  for (const p of roster) {
+    const playerId = String((p as { playerId?: string }).playerId ?? "");
+    if (!playerId) continue;
+    if (failAfterPlayerId && playerId === failAfterPlayerId) throw new Error("practice-atomic-test");
+
+    const base = fatigue[playerId] ?? { fatigue: FATIGUE_DEFAULT, last3SnapLoads: [] };
+    const nextFatigue = applyPracticeFatigue(base.fatigue, effect.fatigueBase);
+    fatigue[playerId] = { ...base, fatigue: nextFatigue };
+    totalFatigueDelta += nextFatigue - base.fatigue;
+
+    const isInjured = injuries.some((inj) => inj.playerId === playerId && inj.status !== "QUESTIONABLE");
+    if (!isInjured && effect.devXP > 0) {
+      dev[playerId] = (dev[playerId] ?? 0) + effect.devXP;
+      devXpPlayers += 1;
     }
-  | { type: "GENERATE_OFFERS" }
-  | { type: "ACCEPT_OFFER"; payload: OfferItem }
-  | { type: "HIRE_STAFF"; payload: { role: "OC" | "DC" | "STC"; personId: string } }
-  | { type: "HIRE_ASSISTANT"; payload: { role: keyof AssistantStaff; personId: string } }
-  | { type: "ADVANCE_CAREER_STAGE" }
-  | { type: "SET_CAREER_STAGE"; payload: CareerStage }
-  | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType; weekNumber?: number } }
-  | { type: "RESOLVE_PLAY"; payload: { playType: string } }
-  | { type: "FINISH_GAME" }
-  | { type: "RESET" };
+
+    const famGain = resolveInstallFamiliarity(state.saveSeed, week, playerId, effect.familiarityGain);
+    totalFamiliarity += famGain;
+  }
+
+  const size = Math.max(1, roster.length);
+  const nextNeglect = buildNextNeglectTracker(plan.allocation, state.practiceNeglectCounters ?? DEFAULT_PRACTICE_PLAN.neglectWeeks);
+  const summary: PracticeApplicationSummary = {
+    avgFatigueDelta: totalFatigueDelta / size,
+    devXpPlayers,
+    avgFamiliarityGain: totalFamiliarity / size,
+    injuryRiskMod: effect.injuryRiskMod,
+    mentalErrorMod: effect.mentalErrorMod,
+    schemeConceptBonus: effect.schemeConceptBonus,
+    lateGameRetentionBonus: effect.lateGameRetentionBonus,
+    neglectPenalty: effect.cumulativeNeglectPenalty,
+  };
+
+  const outcome = `Practice complete — discipline ${summary.mentalErrorMod <= 0 ? "improved" : "slipped"}, scheme rhythm ${summary.avgFamiliarityGain.toFixed(1)}, and conditioning ${summary.lateGameRetentionBonus >= 0 ? "supported" : "hurt"} late-game legs.`;
+
+  return {
+    nextState: {
+      ...state,
+      playerFatigueById: fatigue,
+      playerDevXpById: dev,
+      weeklyFamiliarityBonus: summary.avgFamiliarityGain + summary.schemeConceptBonus + Math.max(0, -summary.mentalErrorMod * PRACTICE_EXEC_SCALE) - summary.neglectPenalty * PRACTICE_EXEC_SCALE,
+      weeklyMentalErrorMod: summary.mentalErrorMod,
+      weeklySchemeConceptBonus: summary.schemeConceptBonus,
+      weeklyLateGameRetentionBonus: summary.lateGameRetentionBonus,
+      nextGameInjuryRiskMod: summary.injuryRiskMod,
+      cumulativeNeglectPenalty: summary.neglectPenalty,
+      practiceNeglectCounters: nextNeglect,
+      practicePlan: { ...DEFAULT_PRACTICE_PLAN, neglectWeeks: nextNeglect },
+      practicePlanConfirmed: false,
+      lastPracticeOutcomeSummary: outcome,
+      uiToast: `Practice complete — avg fatigue ${summary.avgFatigueDelta >= 0 ? "+" : ""}${summary.avgFatigueDelta.toFixed(1)} | ${summary.devXpPlayers} players gained Dev XP`,
+    },
+    summary,
+  };
+}
+
+
+export function applyPracticePlanForWeekAtomic(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { state: GameState; applied: boolean } {
+  try {
+    return { state: applyPracticePlanForWeek(state, teamId, week, failAfterPlayerId).nextState, applied: true };
+  } catch {
+    return { state, applied: false };
+  }
+}
+
+function createSchedule(seed: number): LeagueSchedule {
+  const teamIds = getTeams().filter((team) => team.isActive !== false).map((team) => team.teamId);
+  return generateLeagueSchedule(teamIds, seed);
+}
+
+function createInitialAssistantStaff(): AssistantStaff {
+  return {};
+}
+
+
+function toWeekKey(year: number, weekIndex: number): WeekKey {
+  return `${year}-W${weekIndex}`;
+}
+
+let transientCareerIdCounter = 0;
+
+function isPersistableCareerSaveId(saveId: string): boolean {
+  return saveId !== "unslotted-initial-state" && !saveId.startsWith("transient-career-");
+}
+
+function allocateFreshCareerSaveId(): string {
+  try {
+    return allocateSaveId("career");
+  } catch {
+    transientCareerIdCounter += 1;
+    return `transient-career-${transientCareerIdCounter}`;
+  }
+}
+
+function createInitialState(saveIdInput?: string): GameState {
+  const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+  const season = 2026;
+  const saveId = saveIdInput ?? "unslotted-initial-state";
+  const saveSeed = deriveSaveSeedFromIdentity({ saveId });
+  const coachingMarketWeekKey = toWeekKey(season, 0);
+  const offseasonStepId = OFFSEASON_STEPS[0].id;
+  const news = defaultNews(season);
+  const schedule = createSchedule(saveSeed);
+  const league = initLeagueState(teams, saveSeed);
+  const currentStandings = initTeamStandings(teams);
+  const careerSeed = deriveCareerSeed(saveSeed);
+  const draftContext = { season, saveSeed, userTeamId: "MILWAUKEE_NORTHSHORE" };
+
+  const base: GameState = {
+    coach: { name: "", ageTier: "32", hometown: "", archetypeId: "", coachId: "USER_COACH", careerRecord: { coachId: "USER_COACH", seasons: [], allTimeRecord: { wins: 0, losses: 0 }, playoffAppearances: 0, championships: 0 }, tenureYear: 1, perkPoints: 0, unlockedPerkIds: [], perkPointLog: [] },
+    contextFlags: [],
+    seasonHistory: [],
+    earnedMilestoneIds: [],
+    phase: "CREATE",
+    careerStage: "OFFSEASON_HUB",
+    offseason: createInitialOffseasonState(offseasonStepId),
+    offseasonData: createInitialOffseasonDataState(),
+    interviews: { items: INTERVIEW_TEAMS.map((teamId) => ({ teamId, completed: false, answers: {} })), completedCount: 0 },
+    tampering: createInitialTamperingState(),
+    franchise: { yR1QBByTeamId: {} },
+    freeAgency: createInitialFreeAgencyState(),
+    contracts: { playerTeamInterestById: {} },
+    resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
+    offers: [],
+    season,
+    week: 1,
+    schemaVersion: 1,
+    saveVersion: CURRENT_SAVE_VERSION,
+    saveId,
+    configVersion: DEFAULT_CONFIG_VERSION,
+    calibrationPackId: DEFAULT_CALIBRATION_PACK_ID,
+    memoryLog: [],
+    teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
+    owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
+    teamOwnerExpectationsByTeamId: {},
+    ownerState: defaultOwnerState(),
+    coaching: createInitialCoachingState(coachingMarketWeekKey),
+    media: createInitialMediaState(),
+    wire: { items: [] },
+    medical: createInitialMedicalState(teams),
+    liveGames: {},
+    telemetry: createInitialTelemetryState(),
+    historicalTelemetry: { bySeason: {} },
+    dynasty: defaultDynastyProfile(),
+    staffBudget: { total: 23_000_000, used: 0, byPersonId: {} },
+    rosterMgmt: { active: {}, cuts: {}, finalized: false },
+    buyouts: { bySeason: {} },
+    depthChart: { startersByPos: {}, lockedBySlot: {} },
+    leagueDepthCharts: {},
+    playerAccolades: {},
+    playerBadges: {},
+    playerUnicorns: {},
+    preseason: { rotation: { byPlayerId: {} }, appliedWeeks: {} },
+    staff: {},
+    orgRoles: {},
+    assistantStaff: createInitialAssistantStaff(),
+    staffRoster: { teamId: "MILWAUKEE_NORTHSHORE", coaches: [] },
+    staffOffers: [],
+    playbooks: {
+      offensePlaybookId: DEFAULT_OFFENSE_SCHEME_ID,
+      defensePlaybookId: DEFAULT_DEFENSE_SCHEME_ID,
+      userOverride: { offense: false, defense: false },
+    },
+    scheme: {
+      offense: { style: "BALANCED", tempo: "NORMAL", schemeId: "PRO_STYLE_BALANCED" },
+      defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
+    },
+    strategy: DEFAULT_STRATEGY,
+    scouting: { boardSeed: deriveScoutingBoardSeed(saveSeed) },
+    hub: { news, newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, regularSeasonWeek: 1, schedule },
+    unreadNewsCount: 0,
+    lastNewsReadWeek: 0,
+    offseasonNews: [],
+    newsHistory: [],
+    retiredPlayers: [],
+    playerAgingDeltasById: {},
+    playerAttributeDeltasById: {},
+    playerAgeOffsetById: {},
+    playerSnapCountsById: {},
+    playerProgressionSeasonStatsById: {},
+    playerDevelopmentById: {},
+    finances: {
+      cap: LEAGUE_SALARY_CAP,
+      carryover: 0,
+      incentiveTrueUps: 0,
+      deadCapThisYear: 0,
+      deadCapNextYear: 0,
+      baseCommitted: 0,
+      capCommitted: 0,
+      capSpace: LEAGUE_SALARY_CAP,
+      cash: 150_000_000,
+      postJune1Sim: false,
+    },
+    league,
+    teamGameplans: {},
+    weatherByGameKey: {},
+    playoffs: null,
+    currentStandings,
+    weeklyResults: [],
+    leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
+    saveSeed,
+    careerSeed,
+    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: careerSeed }),
+    gameHistory: [],
+    playerSeasonStatsById: {},
+    playerCareerStatsById: {},
+    leagueRecords: defaultLeagueRecords(),
+    draft: createInitialDraftState(draftContext),
+    upcomingDraftClass: generateDraftClass({ year: season, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
+    futureClasses: {},
+    rookies: [],
+    rookieContracts: {},
+    nextPlayerId: maxExistingPlayerNumericId() + 1,
+    playerTeamOverrides: {},
+    personnelTeamOverrides: {},
+    staffContractsByPersonId: {},
+    playerContractOverrides: {},
+    playerAttrOverrides: {},
+    qbRunContactExposureByPlayerId: {},
+    franchiseTags: {},
+    ...createInitialPracticeState(),
+    ...createInitialTransactionsState(),
+    firing: { pWeekly: 0, pSeasonEnd: 0, drivers: [], lastWeekComputed: 0, lastSeasonComputed: 0, fired: false },
+    careerHistory: { firings: [] },
+    feedbackQueue: [],
+    feedbackHistory: [],
+    pendingInjuryAlert: undefined,
+    ui: {},
+    deterministicCounters: { ...DEFAULT_DETERMINISTIC_COUNTERS },
+    hotSeatStatus: { level: "SECURE", score: 0, primaryDriver: "Stable outlook", factors: [] },
+  };
+
+  return bootstrapInitialGameState(base, {
+    ensureAccolades,
+    bootstrapAccolades,
+    gameReducer,
+    resolveUserTeamId: getUserTeamId,
+  });
+}
+
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
 
 function mulberry32(seed: number): () => number {
   let t = seed >>> 0;
@@ -198,11 +1941,2366 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function createSchedule(seed: number): LeagueSchedule {
-  const teamIds = getTeams()
-    .filter((team) => team.isActive !== false)
-    .map((team) => team.teamId);
-  return generateLeagueSchedule(teamIds, seed);
+function detRand(saveSeed: number, key: string): number {
+  return mulberry32(saveSeed ^ hashStr(key))();
+}
+
+function normalPosGroup(pos: string) {
+  const p = pos.toUpperCase();
+  if (["QB", "RB", "WR", "TE", "K", "P"].includes(p)) return p;
+  if (["C", "G", "T", "OL"].includes(p)) return "OL";
+  if (["DT", "NT", "DE", "DL"].includes(p)) return "DL";
+  if (["EDGE", "OLB"].includes(p)) return "EDGE";
+  if (["ILB", "MLB", "LB"].includes(p)) return "LB";
+  if (["CB"].includes(p)) return "CB";
+  if (["FS", "SS", "S"].includes(p)) return "S";
+  return p;
+}
+
+function teamNeedAtPos01(state: GameState, teamId: string, pos: string) {
+  const group = normalPosGroup(pos);
+  const roster = getPlayersByTeam(teamId);
+  const ovs = roster
+    .filter((r) => normalPosGroup(String(r.pos ?? "")) === group)
+    .map((r) => Number((r as any).ovr ?? (r as any).overall ?? 60));
+  const best = ovs.length ? Math.max(...ovs) : 55;
+  return clamp01((80 - best) / 20);
+}
+
+function prospectSpentProxyForUser(state: GameState, prospectId: string) {
+  const v = !!state.offseasonData.preDraft.visits[prospectId];
+  const w = !!state.offseasonData.preDraft.workouts[prospectId];
+  return (v ? 26 : 0) + (w ? 14 : 0);
+}
+
+function prospectSpentProxyForCpu(gmPersonId: string) {
+  const gm = getGmTraits(gmPersonId);
+  return Math.round(12 + gm.eval_bandwidth * 0.25);
+}
+
+function prospectEvalDetRand(saveSeed: number, key: string) {
+  return mulberry32(saveSeed ^ hashStr(key));
+}
+
+export function getUserProspectEval(state: GameState, prospect: Prospect) {
+  const userTeamId = resolveCurrentUserTeamId(state) ?? "";
+  const gmPersonId = state.league.gmByTeamId[userTeamId];
+  const gm = getGmTraits(gmPersonId);
+  const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
+  const spent = prospectSpentProxyForUser(state, prospect.id);
+  const need = userTeamId ? teamNeedAtPos01(state, userTeamId, prospect.pos) : 0;
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+}
+
+export function getCpuProspectEval(state: GameState, teamId: string, prospect: Prospect) {
+  const gmPersonId = state.league.gmByTeamId[teamId];
+  const gm = getGmTraits(gmPersonId);
+  const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
+  const spent = prospectSpentProxyForCpu(gmPersonId);
+  const need = teamNeedAtPos01(state, teamId, prospect.pos);
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+}
+
+function makeOfferId(state: GameState) {
+  return `FA_OFFER_${state.season}_${state.freeAgency.nextOfferSeq}`;
+}
+
+function upsertOffers(state: GameState, playerId: string, nextOffers: FreeAgencyOffer[]): FreeAgencyState {
+  return {
+    ...state.freeAgency,
+    offersByPlayerId: { ...state.freeAgency.offersByPlayerId, [playerId]: nextOffers },
+  };
+}
+
+function moneyRound(n: number) {
+  return Math.round(n / 50_000) * 50_000;
+}
+
+type ResignOffer = {
+  years: number;
+  apy: number;
+  guaranteesPct: number;
+  discountPct: number;
+  createdFrom?: "AUDIT" | "RESIGN_SCREEN";
+  rejectedCount?: number;
+};
+
+type ExtensionOffer = ResignOffer;
+
+function hashSeed(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function seededFloat01(seed: number) {
+  let x = seed >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return ((x >>> 0) % 1_000_000) / 1_000_000;
+}
+
+function discountPctForOffer(state: GameState, playerId: string) {
+  const s = hashSeed(`${state.saveSeed}|DISC|${playerId}`);
+  const r = seededFloat01(s);
+  const pct = 0.05 + r * 0.07;
+  return Math.round(pct * 1000) / 1000;
+}
+
+function buildResignOffer(state: GameState, playerId: string, createdFrom: ResignOffer["createdFrom"]) {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return null;
+
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+
+  const market = projectedMarketApy(pos, ovr, age);
+
+  const existing = state.offseasonData.resigning.decisions?.[playerId] as any;
+  const rejectedCount = Number(existing?.offer?.rejectedCount ?? 0);
+
+  const baseDisc = discountPctForOffer(state, String(playerId));
+  const disc = Math.max(0, baseDisc - rejectedCount * 0.02);
+  const bump = 1 + rejectedCount * 0.03;
+
+  const apy = Math.round((market * bump * (1 - disc)) / 50_000) * 50_000;
+  const years = pos === "QB" ? 4 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 3 : 2;
+  const guaranteesPct = pos === "QB" ? 0.62 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 0.55 : 0.48;
+
+  return {
+    years,
+    apy,
+    guaranteesPct,
+    discountPct: disc,
+    createdFrom,
+    rejectedCount,
+  } satisfies ResignOffer;
+}
+
+function contractOverrideFromOffer(state: GameState, offer: ResignOffer): PlayerContractOverride {
+  return createContractOverride({
+    startSeason: state.season + 1,
+    years: offer.years,
+    salary: offer.apy,
+    guarantees: offer.guaranteesPct,
+    type: "STANDARD",
+  });
+}
+
+function contractOverrideFromExtensionOffer(state: GameState, playerId: string, offer: ExtensionOffer): PlayerContractOverride {
+  const current = getContractSummaryForPlayer(state, String(playerId));
+  if (!current || current.yearsRemaining <= 0) return contractOverrideFromOffer(state, offer);
+
+  const preserveStartSeason = Number(state.season);
+  const preservedSalaries: number[] = [];
+  for (let season = preserveStartSeason; season <= Number(current.endSeason); season++) {
+    preservedSalaries.push(moneyRound(Number(current.capHitBySeason?.[season] ?? current.capHit ?? 0)));
+  }
+
+  const extension = createContractOverride({
+    startSeason: Number(current.endSeason) + 1,
+    years: offer.years,
+    salary: offer.apy,
+    guarantees: offer.guaranteesPct,
+    type: "STANDARD",
+  });
+
+  const extYears = Math.max(1, extension.endSeason - extension.startSeason + 1);
+  const extProration = extension.signingBonus > 0 ? moneyRound(extension.signingBonus / extYears) : 0;
+  const prorationBySeason: Record<number, number> = {};
+  for (let season = preserveStartSeason; season <= extension.endSeason; season++) {
+    prorationBySeason[season] = season >= extension.startSeason ? extProration : 0;
+  }
+
+  return {
+    startSeason: preserveStartSeason,
+    endSeason: extension.endSeason,
+    salaries: [...preservedSalaries, ...extension.salaries],
+    signingBonus: extension.signingBonus,
+    prorationBySeason,
+    contractType: "STANDARD",
+  };
+}
+
+function resolveDeterministicExtensionSubmission(state: GameState, playerId: string, offer: ExtensionOffer): GameState {
+  const normalizedOffer = sanitizeResignOffer(offer);
+  if (!normalizedOffer) return state;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+  if (!teamId) return state;
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return state;
+
+  const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+  const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+  const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+  const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+  const decision = evaluateContractOffer({
+    player: {
+      id: String(playerId),
+      age: Number(p.age ?? 26),
+      overall: Number(p.overall ?? p.ovr ?? 60),
+      position: String(p.pos ?? "UNK"),
+    },
+    offer: {
+      years: Number(normalizedOffer.years),
+      aav: Number(normalizedOffer.apy),
+      guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+    },
+    context: {
+      saveSeed: Number(state.saveSeed ?? 1),
+      season: Number(state.season ?? 2026),
+      week: Number(state.week ?? 1),
+      teamId: String(teamId),
+      phase: "RESIGN",
+      schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+      roleProjection: resolveRoleProjection(state, p),
+      contenderStatus: resolveContenderStatus(state, String(teamId)),
+      locationPreference: resolveLocationPreference(state, String(teamId), p),
+      desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+    },
+    interest: interestBefore,
+    priorOfferAav,
+    rejectionCount,
+  });
+
+  const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+  contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+  const resign = {
+    lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+    rejectionCountByPlayerId: {
+      ...state.resign.rejectionCountByPlayerId,
+      [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+    },
+  };
+
+  const modalAlloc = buildOfferResultModal(state, {
+    title: decision.accepted ? "Extension Accepted" : "Extension Rejected",
+    message: decision.reason,
+    variant: decision.accepted ? "success" : "danger",
+  });
+
+  if (!decision.accepted) {
+    const decisions = { ...state.offseasonData.resigning.decisions } as any;
+    decisions[String(playerId)] = {
+      action: "EXTEND_EARLY",
+      offer: { ...normalizedOffer, rejectedCount: rejectionCount + 1 },
+    };
+    return {
+      ...modalAlloc.state,
+      contracts: { playerTeamInterestById: contractsByPlayer },
+      resign,
+      offseasonData: { ...state.offseasonData, resigning: { decisions } },
+      ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    };
+  }
+
+  const ovr = contractOverrideFromExtensionOffer(state, String(playerId), normalizedOffer);
+  const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+  const decisions = { ...state.offseasonData.resigning.decisions } as any;
+  delete decisions[String(playerId)];
+
+  const morale = { ...(state.playerMorale ?? {}) };
+  const curMorale = Number(morale[String(playerId)] ?? 60);
+  morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+  let next = applyFinances({
+    ...modalAlloc.state,
+    playerContractOverrides,
+    playerMorale: morale,
+    offseasonData: { ...state.offseasonData, resigning: { decisions } },
+    contracts: { playerTeamInterestById: contractsByPlayer },
+    resign,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+  });
+
+  if (isNewsworthyRecommit(p)) {
+    next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+  }
+  return next;
+}
+
+function createContractOverride(args: {
+  startSeason: number;
+  years: number;
+  salary: number;
+  guarantees: number;
+  type?: "STANDARD" | "FRANCHISE_TAG";
+}): PlayerContractOverride {
+  const years = Math.max(1, Math.min(5, Math.floor(Number(args.years) || 1)));
+  const apy = Math.max(0, Math.round(Number(args.salary) || 0));
+  const guaranteesPct = clamp01(Number(args.guarantees ?? 0));
+  const totalCash = apy * years;
+
+  const signingBonus = Math.round((totalCash * guaranteesPct * 0.40) / 50_000) * 50_000;
+  const remaining = Math.max(0, totalCash - signingBonus);
+  const salaries: number[] = [];
+  for (let i = 0; i < years; i++) {
+    const step = 1 + i * 0.03;
+    salaries.push(Math.round(((remaining / years) * step) / 50_000) * 50_000);
+  }
+  const sum = salaries.reduce((a, b) => a + b, 0);
+  const drift = remaining - sum;
+  salaries[salaries.length - 1] = Math.round((salaries[salaries.length - 1] + drift) / 50_000) * 50_000;
+
+  return {
+    startSeason: args.startSeason,
+    endSeason: args.startSeason + years - 1,
+    salaries,
+    signingBonus,
+    ...(args.type ? { contractType: args.type } : {}),
+  };
+}
+
+function sanitizeResignOffer(offer: ResignOffer): ResignOffer | null {
+  const years = Math.floor(Number(offer?.years));
+  const apy = Math.round(Number(offer?.apy));
+  if (!Number.isFinite(years) || years < 1) return null;
+  if (!Number.isFinite(apy) || apy <= 0) return null;
+
+  return {
+    ...offer,
+    years: Math.min(5, years),
+    apy,
+    guaranteesPct: clamp01(Number(offer?.guaranteesPct ?? 0)),
+    discountPct: Number(offer?.discountPct ?? 0),
+  };
+}
+
+function isNewsworthyRecommit(p: any) {
+  return Number(p?.overall ?? 0) >= 90;
+}
+
+function clearResignOffers(state: GameState): GameState {
+  const decisions = { ...(state.offseasonData?.resigning?.decisions ?? {}) };
+  const hadAny = Object.keys(decisions).length > 0;
+  if (!hadAny) return state;
+  return {
+    ...state,
+    offseasonData: {
+      ...state.offseasonData,
+      resigning: { ...state.offseasonData.resigning, decisions: {} },
+    },
+  };
+}
+
+type DeterministicCounterKey = keyof DeterministicCounters;
+
+function allocateDeterministic(state: GameState, key: DeterministicCounterKey, prefix: string): { state: GameState; id: string; ts: number; counter: number } {
+  const prior = state.deterministicCounters ?? DEFAULT_DETERMINISTIC_COUNTERS;
+  const counter = Number(prior[key] ?? 0) + 1;
+  const counters = { ...DEFAULT_DETERMINISTIC_COUNTERS, ...prior, [key]: counter };
+  const season = Number(state.season ?? 0);
+  const week = Number(state.week ?? 0);
+  const ts = season * 1_000_000 + week * 10_000 + counter;
+  return {
+    state: { ...state, deterministicCounters: counters },
+    id: `${prefix}_${season}_W${week}_${counter}`,
+    ts,
+    counter,
+  };
+}
+
+function buildOfferResultModal(
+  state: GameState,
+  payload: { title: string; message: string; variant: "success" | "danger" },
+): { state: GameState; modal: OfferResultModalState } {
+  const allocated = allocateDeterministic(state, "ui", "UI_MODAL");
+  return {
+    state: allocated.state,
+    modal: { open: true, title: payload.title, message: payload.message, variant: payload.variant, ts: allocated.ts },
+  };
+}
+
+function createDeterministicFeedbackEvent<C extends FeedbackCategory>(
+  state: GameState,
+  category: C,
+  payload: FeedbackPayloadByCategory[C],
+): { state: GameState; event: FeedbackEvent } {
+  const allocated = allocateDeterministic(state, "feedback", `FEEDBACK_${category}`);
+  return {
+    state: allocated.state,
+    event: createFeedbackEvent(category, payload, { id: allocated.id, timestamp: allocated.ts }),
+  };
+}
+
+function faPush(state: GameState, text: string, playerId?: string): GameState {
+  const allocated = allocateDeterministic(state, "offer", "FA_ACTIVITY");
+  const activity = [{ ts: allocated.ts, text, playerId }, ...allocated.state.freeAgency.activity].slice(0, 80);
+  return { ...allocated.state, freeAgency: { ...allocated.state.freeAgency, activity } };
+}
+
+function countPendingUserOffers(state: GameState) {
+  let n = 0;
+  for (const offers of Object.values(state.freeAgency.offersByPlayerId)) {
+    for (const o of offers) if (o.isUser && o.status === "PENDING") n++;
+  }
+  return n;
+}
+
+function asMoney(n: number) {
+  return Math.round(n / 50_000) * 50_000;
+}
+
+function offerScore(state: GameState, playerId: string, offer: FreeAgencyOffer, market: number) {
+  const interest = state.tampering.interestByPlayerId[playerId] ?? 0;
+  const moneyScore = clamp01((offer.aav - market * 0.85) / (market * 0.6)) * 0.62;
+  const termScore = clamp01((offer.years - 1) / 4) * 0.1;
+  const intScore = clamp01(interest) * 0.18;
+  const userBoost = offer.isUser ? 0.06 : 0;
+  const noise = detRand(state.saveSeed, `FA_SC|S${state.season}|P${playerId}|O${offer.offerId}`) * 0.04;
+  return moneyScore + termScore + intScore + userBoost + noise;
+}
+
+function resolveRoleProjection(state: GameState, player: any) {
+  const pos = normalizePos(String(player?.pos ?? "UNK"));
+  const starters = state.depthChart?.startersByPos ?? {};
+  const starterForPos = String(starters[pos] ?? "");
+  if (starterForPos && starterForPos === String(player?.playerId ?? "")) return 92;
+  const roster = getEffectivePlayersByTeam(state, String(state.acceptedOffer?.teamId ?? ""))
+    .filter((x: any) => normalizePos(String(x.pos ?? "UNK")) === pos)
+    .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const idx = roster.findIndex((x: any) => String(x.playerId) === String(player?.playerId));
+  if (idx === 0) return 88;
+  if (idx === 1) return 72;
+  if (idx >= 0) return 58;
+  return 66;
+}
+
+function resolveContenderStatus(state: GameState, teamId: string) {
+  const row = state.league?.standings?.[String(teamId)] as any;
+  const wins = Number(row?.wins ?? 0);
+  const losses = Number(row?.losses ?? 0);
+  const games = Math.max(1, wins + losses);
+  const winPct = wins / games;
+  return Math.round(clamp01((winPct - 0.35) / 0.35) * 100);
+}
+
+function resolveLocationPreference(state: GameState, teamId: string, player: any) {
+  const teamRegion = String(getTeamById(teamId)?.region ?? "").toLowerCase();
+  const playerHome = String((player as any)?.hometown ?? (player as any)?.homeTown ?? state.coach?.hometown ?? "").toLowerCase();
+  if (!teamRegion || !playerHome) return 55;
+  return teamRegion.includes(playerHome) || playerHome.includes(teamRegion) ? 80 : 45;
+}
+
+function buildOfferDecisionContext(state: GameState, teamId: string, player: any) {
+  const schemeFit = Math.round(((computeFaInterest(state, player) - 0.35) / 0.75) * 100);
+  return {
+    saveSeed: Number(state.saveSeed ?? 1),
+    season: Number(state.season ?? 2026),
+    week: Number(state.week ?? 1),
+    teamId: String(teamId),
+    phase: "FA" as const,
+    schemeFit: clamp100(schemeFit),
+    roleProjection: resolveRoleProjection(state, player),
+    contenderStatus: resolveContenderStatus(state, teamId),
+    locationPreference: resolveLocationPreference(state, teamId, player),
+    desiredGuaranteeRatio: normalizePos(String(player?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+  };
+}
+
+function evaluateFaOffer(state: GameState, player: any, offer: FreeAgencyOffer) {
+  const interest = clamp100((state.tampering.interestByPlayerId[String(offer.playerId)] ?? 0.55) * 100);
+  return evaluateContractOffer({
+    player: {
+      id: String(player?.playerId ?? offer.playerId),
+      age: Number(player?.age ?? 26),
+      overall: Number(player?.overall ?? 65),
+      position: String(player?.pos ?? "UNK"),
+    },
+    offer: { years: Number(offer.years ?? 2), aav: Number(offer.aav ?? 0), guarantees: undefined },
+    context: buildOfferDecisionContext(state, String(offer.teamId), player),
+    interest,
+  });
+}
+
+function cpuWillAcceptCounter(state: GameState, teamId: string, p: any, years: number, aav: number) {
+  const pos = normalizePos(String(p?.pos ?? "UNK"));
+  const market = projectedMarketApy(pos, Number(p?.overall ?? 0), Number(p?.age ?? 26));
+  const need = teamNeedsScore(state, teamId, pos);
+  const noise = detRand(state.saveSeed, `CPU_CNT|S${state.season}|T${teamId}|P${String(p?.playerId ?? "")}`);
+  const max = market * (0.95 + need * 0.28 + noise * 0.12);
+  return aav <= max;
+}
+
+function closeAllOffers(offers: FreeAgencyOffer[], acceptedOfferId?: string) {
+  return offers.map((o) => {
+    if (acceptedOfferId && o.offerId === acceptedOfferId) return o;
+    if (o.status === "PENDING" || o.status === "COUNTERED") return { ...o, status: "REJECTED" as const };
+    return o;
+  });
+}
+
+function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffer, signingTeamId: string, reason = "Top offer") {
+  const years = Math.max(1, offer.years);
+  const totalCash = offer.aav * years;
+  const signingBonus = asMoney(totalCash * 0.22);
+  const salaries = makeEscalatingSalaries(totalCash - signingBonus, years, 0.06);
+  const ovr: PlayerContractOverride = { startSeason: state.season, endSeason: state.season + years - 1, salaries, signingBonus };
+  const cashY1 = (salaries[0] ?? 0) + signingBonus;
+
+  let next: GameState;
+  try {
+    next = applyCanonicalTx(state, Tx.signFA(signingTeamId, playerId, ovr));
+  } catch (error: any) {
+    const modalAlloc = buildOfferResultModal(state, {
+      title: "Signing Failed",
+      message: "Unable to finalize signing transaction.",
+      variant: "danger",
+    });
+    return {
+      ...modalAlloc.state,
+      uiToast: `Transaction blocked: ${String(error?.message ?? "invalid transaction")}`,
+      ui: {
+        ...modalAlloc.state.ui,
+        offerResultModal: modalAlloc.modal,
+      },
+    };
+  }
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? state.userTeamId ?? "");
+  if (signingTeamId === userTeamId) {
+    next = applyFinances({
+      ...next,
+      finances: { ...next.finances, cash: next.finances.cash - cashY1 },
+    });
+  }
+
+  const p: any = (getPlayers() as any[]).find((x: any) => String(x.playerId) === String(playerId));
+  next = pushNews(next, `Signed: ${String(p?.fullName ?? "Player")} (${String(p?.pos ?? "")}) agrees to terms.`);
+  const faAlloc = createDeterministicFeedbackEvent(next, "FA_SIGNED", {
+    playerName: String(p?.fullName ?? "Player"),
+    position: String(p?.pos ?? "UNK"),
+    years,
+    totalValue: `$${Math.round(totalCash / 1_000_000)}M`,
+    capHit: `$${Math.round((salaries[0] ?? 0) / 1_000_000)}M`,
+    playerIds: [String(playerId)],
+  });
+  const capAlloc = createDeterministicFeedbackEvent(faAlloc.state, "CAP_CHANGE", {
+    playerName: String(p?.fullName ?? "Player"),
+    capDelta: Math.round(cashY1 / 1000),
+    remainingCap: Math.round((next.finances.capSpace ?? 0) / 1000),
+    playerIds: [String(playerId)],
+  });
+  const modalAlloc = buildOfferResultModal(capAlloc.state, {
+    title: "Offer Accepted",
+    message: reason,
+    variant: "success",
+  });
+  const withFeedback = {
+    ...modalAlloc.state,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    feedbackQueue: [capAlloc.event, faAlloc.event, ...modalAlloc.state.feedbackQueue].slice(0, 50),
+  };
+  return faPush(withFeedback, `Signed: ${String(p?.fullName ?? "Player")} — ${years} yrs @ $${Math.round(offer.aav / 1_000_000)}M/yr.`, playerId);
+}
+
+function expireUserCounters(state: GameState): GameState {
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  if (!userTeamId) return state;
+  const offersByPlayerId: Record<string, FreeAgencyOffer[]> = { ...state.freeAgency.offersByPlayerId };
+  let changed = false;
+
+  for (const [pid, offers] of Object.entries(offersByPlayerId)) {
+    const myCounters = offers.filter((o) => o.status === "COUNTERED" && o.teamId === userTeamId);
+    if (!myCounters.length) continue;
+
+    for (const c of myCounters) {
+      const createdAt = Number(c.counterCreatedAtResolve ?? -1);
+      if (createdAt < 0) continue;
+      if (state.freeAgency.resolvesUsedThisPhase >= createdAt) {
+        offersByPlayerId[pid] = offersByPlayerId[pid].map((o) => (o.offerId === c.offerId ? { ...o, status: "REJECTED" as const } : o));
+        changed = true;
+      }
+    }
+  }
+
+  return changed ? { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } } : state;
+}
+
+function collectFaInvariantViolations(state: GameState): string[] {
+  const violations: string[] = [];
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const resolveCount = Number(state.freeAgency.resolvesUsedThisPhase ?? 0);
+
+  for (const [pid, offers] of Object.entries(state.freeAgency.offersByPlayerId)) {
+    const signed = !!state.freeAgency.signingsByPlayerId[pid];
+    const accepted = offers.filter((o) => o.status === "ACCEPTED");
+    const active = offers.filter((o) => o.status === "PENDING" || o.status === "COUNTERED");
+
+    if (signed) {
+      if (accepted.length !== 1) violations.push(`[${pid}] signed player must have exactly one ACCEPTED offer (found ${accepted.length}).`);
+      const openOthers = offers.filter((o) => o.status !== "ACCEPTED" && o.status !== "REJECTED" && o.status !== "WITHDRAWN");
+      if (openOthers.length) violations.push(`[${pid}] signed player has non-closed non-winner offers: ${openOthers.map((o) => `${o.offerId}:${o.status}`).join(", ")}.`);
+    } else if (accepted.length) {
+      violations.push(`[${pid}] unsigned player has ACCEPTED offers (${accepted.length}).`);
+    }
+
+    for (const o of offers) {
+      if (o.status !== "COUNTERED") continue;
+      if (typeof o.counterCreatedAtResolve !== "number") {
+        violations.push(`[${pid}] counter ${o.offerId} missing counterCreatedAtResolve.`);
+        continue;
+      }
+      if (o.isUser && userTeamId && String(o.teamId) === userTeamId) {
+        const age = resolveCount - Number(o.counterCreatedAtResolve);
+        if (age > 1) violations.push(`[${pid}] user counter ${o.offerId} is stale (age=${age} resolves).`);
+      }
+    }
+
+    if (signed && active.length) {
+      violations.push(`[${pid}] player is signed but still has active offers (${active.length}).`);
+    }
+  }
+
+  return violations;
+}
+
+function reportFaInvariantViolations(state: GameState, source: "FA_CPU_TICK" | "FA_RESOLVE") {
+  if (!import.meta.env.DEV) return;
+  const violations = collectFaInvariantViolations(state);
+  if (!violations.length) return;
+  console.error(`[FA_INVARIANTS][${source}] ${violations.length} violation(s)`, {
+    resolve: state.freeAgency.resolvesUsedThisPhase,
+    violations,
+  });
+}
+
+function getAllTeamIds(): string[] {
+  try {
+    const t: any[] = getTeams() as any[];
+    return t.map((x) => String(x.teamId));
+  } catch {
+    return [];
+  }
+}
+
+function teamNeedsScore(state: GameState, teamId: string, posRaw: string) {
+  const pos = normalizePos(posRaw);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const count = roster.filter((p: any) => normalizePos(String(p.pos ?? "")) === pos).length;
+
+  const target: Record<string, number> = { QB: 3, RB: 3, WR: 5, TE: 3, OL: 7, DL: 4, EDGE: 3, LB: 3, CB: 4, S: 3, K: 1, P: 1 };
+  const t = target[pos] ?? 3;
+  const short = Math.max(0, t - count);
+  return clamp01(short / t);
+}
+
+
+function qb1OvrByTeam(state: GameState, teamId: string) {
+  const qbs = getEffectivePlayersByTeam(state, teamId)
+    .filter((p: any) => normalizePos(String(p.pos ?? "")) === "QB")
+    .map((p: any) => Number(p.overall ?? 0))
+    .sort((a, b) => b - a);
+  return qbs[0] ?? 0;
+}
+
+function computeBadQbTeams(state: GameState) {
+  const teamIds = getAllTeamIds();
+  const starters = teamIds.map((t) => ({ t, ovr: qb1OvrByTeam(state, t) }));
+  const byTeam: Record<string, { ovr: number; pct: number; bad: boolean }> = {};
+
+  for (const a of starters) {
+    let le = 0;
+    for (const b of starters) {
+      if (b.t === a.t) continue;
+      if (b.ovr <= a.ovr) le++;
+    }
+    const pct = starters.length <= 1 ? 1 : le / (starters.length - 1);
+    byTeam[a.t] = { ovr: a.ovr, pct, bad: pct <= 0.1 };
+  }
+  return byTeam;
+}
+
+function qbLockActive(state: GameState, teamId: string) {
+  const y = state.franchise.yR1QBByTeamId[teamId];
+  if (y == null) return false;
+  return state.season - y < 3;
+}
+
+function qbGateAllowsAcquisition(state: GameState, teamId: string, role: "STARTER" | "BACKUP", apy: number) {
+  if (!qbLockActive(state, teamId)) return true;
+
+  const bad = computeBadQbTeams(state)[teamId]?.bad ?? false;
+  if (bad) return true;
+
+  if (role === "BACKUP") {
+    const cap = Math.max(1, capSpaceForTeam(state, teamId) + (computeCapLedger(state, teamId, { useTop51: !!state.finances.postJune1Sim })?.capSpace ?? 0));
+    return apy <= cap * 0.06;
+  }
+  return false;
+}
+
+const FRANCHISE_TAG_BASE_BY_POS: Record<string, number> = {
+  QB: 38_000_000,
+  EDGE: 24_000_000,
+  WR: 22_000_000,
+  CB: 20_000_000,
+  LT: 21_000_000,
+  OL: 19_000_000,
+  DL: 18_000_000,
+  LB: 16_000_000,
+  RB: 13_000_000,
+  TE: 14_000_000,
+  S: 15_000_000,
+  K: 7_000_000,
+  P: 5_000_000,
+  UNK: 12_000_000,
+};
+
+function resolveFranchiseTagAmount(state: GameState, player: any): number {
+  const pos = normalizePos(String(player?.pos ?? "UNK"));
+  const marketGuess = projectedMarketApy(pos, Number(player?.overall ?? 60), Number(player?.age ?? 26));
+  const table = FRANCHISE_TAG_BASE_BY_POS[pos] ?? FRANCHISE_TAG_BASE_BY_POS.UNK;
+  return moneyRound(Math.max(table, marketGuess));
+}
+
+function applyFranchiseTag(state: GameState, playerIdRaw: string, tagType: TagType = "FRANCHISE_NON_EX"): GameState {
+  const playerId = String(playerIdRaw);
+  const teamId = String(state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "");
+  if (!teamId) throw new Error("NO_USER_TEAM");
+
+  const player = getPlayers().find((x: any) => String(x.playerId) === playerId);
+  if (!player) throw new Error("PLAYER_NOT_FOUND");
+
+  const effectiveTeamId = String(state.playerTeamOverrides[playerId] ?? (player as any).teamId ?? "");
+  if (effectiveTeamId !== teamId) throw new Error("TAG_PLAYER_NOT_ON_USER_TEAM");
+
+  const nextSeason = Number(state.season) + 1;
+  if (state.franchiseTags[playerId]?.season === nextSeason) throw new Error("TAG_ALREADY_APPLIED");
+
+  const summary = getContractSummaryForPlayer(state, playerId);
+  if (!summary || Number(summary.endSeason) !== Number(state.season)) throw new Error("TAG_PLAYER_NOT_EXPIRING");
+
+  const amount = resolveFranchiseTagAmount(state, player);
+  const priorTag = state.franchiseTags[playerId];
+  const priorContract = buildContractIndex(state)[playerId];
+  // Franchise tag is a 1-year fully guaranteed contract at the tag amount.
+  // Keep salary = full amount (no signing bonus split) so ledger reflects real cap hit.
+  const tagContract: PlayerContractOverride = {
+    startSeason: nextSeason,
+    endSeason: nextSeason,
+    salaries: [amount],
+    signingBonus: 0,
+    contractType: "FRANCHISE_TAG",
+    guaranteedAtSigning: amount,
+  };
+
+  let next = applyCanonicalTx(state, Tx.franchiseTag(teamId, playerId, tagContract, priorContract));
+  next = applyFinances({
+    ...next,
+    franchiseTags: {
+      ...next.franchiseTags,
+      [playerId]: { season: nextSeason, amount, timesUsed: Number(priorTag?.timesUsed ?? 0) + 1 },
+    },
+    offseasonData: {
+      ...next.offseasonData,
+      resigning: {
+        decisions: Object.fromEntries(Object.entries(next.offseasonData.resigning.decisions).filter(([id]) => String(id) !== playerId)),
+      },
+      tagCenter: {
+        applied: {
+          playerId,
+          type: tagType,
+          cost: amount,
+          teamId,
+          appliedWeek: state.week ?? 0,
+          priorContract,
+        },
+      },
+    },
+  });
+
+  return pushNews(next, `Franchise tag applied: ${String((player as any)?.fullName ?? "Player")} (${Math.round(amount / 1_000_000)}M).`);
+}
+
+function noteR1QBDraft(state: GameState, teamId: string, round: number, posRaw: string): GameState {
+  if (round !== 1) return state;
+  if (normalizePos(posRaw) !== "QB") return state;
+  return {
+    ...state,
+    franchise: {
+      ...state.franchise,
+      yR1QBByTeamId: { ...state.franchise.yR1QBByTeamId, [String(teamId)]: state.season },
+    },
+  };
+}
+
+export function qbTradeOfferAllowed(state: GameState, acquiringTeamId: string, playerPosRaw: string) {
+  if (normalizePos(playerPosRaw) !== "QB") return true;
+  const role = teamNeedsScore(state, acquiringTeamId, "QB") >= 0.5 ? "STARTER" : "BACKUP";
+  if (role === "BACKUP") return true;
+  return qbGateAllowsAcquisition(state, acquiringTeamId, "STARTER", Number.POSITIVE_INFINITY);
+}
+
+function cpuOfferParams(state: GameState, teamId: string, p: any) {
+  const pid = String(p.playerId);
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+  const market = projectedMarketApy(pos, ovr, age);
+
+  const need = teamNeedsScore(state, teamId, pos);
+  const noise = detRand(state.saveSeed, `CPU_FA|S${state.season}|T${teamId}|P${pid}`);
+
+  const mult = 0.88 + need * 0.2 + noise * 0.14;
+  const yearsBase = pos === "QB" ? 3 : pos === "WR" || pos === "EDGE" || pos === "CB" ? 3 : 2;
+  const years = Math.max(1, Math.min(5, yearsBase + (noise > 0.75 ? 1 : 0)));
+
+  const aav = Math.max(750_000, Math.round((market * mult) / 50_000) * 50_000);
+  return { years, aav };
+}
+
+function cpuOfferTick(state: GameState, offerLimit = 70): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const teamIds = getAllTeamIds().filter((t) => t && t !== userTeamId);
+
+  const fa = getEffectiveFreeAgents(state)
+    .map((p: any) => ({ p, id: String(p.playerId), pos: normalizePos(String(p.pos ?? "UNK")), ovr: Number(p.overall ?? 0), age: Number(p.age ?? 26) }))
+    .filter((x) => !state.freeAgency.signingsByPlayerId[x.id])
+    .sort((a, b) => b.ovr - a.ovr);
+
+  let next = state;
+  let created = 0;
+
+  const offerCounts: Record<string, number> = {};
+  for (const [pid, offers] of Object.entries(state.freeAgency.offersByPlayerId)) {
+    offerCounts[pid] = offers.filter((o) => o.status === "PENDING" || o.status === "COUNTERED").length;
+  }
+
+  const orderedFa = fa
+    .slice(0, 160)
+    .sort((a, b) => (offerCounts[b.id] ?? 0) - (offerCounts[a.id] ?? 0) || b.ovr - a.ovr);
+
+  for (const teamId of teamIds) {
+    if (created >= offerLimit) break;
+
+    const cpuContext = buildCpuTeamContext(state, teamId);
+    const rankedTargets = rankFreeAgencyTargets(
+      cpuContext,
+      orderedFa.map((x) => ({
+        playerId: x.id,
+        pos: x.pos,
+        age: x.age,
+        overall: x.ovr,
+        devTrait: String((x.p as any)?.development?.trait ?? "normal"),
+      }))
+    );
+    const rankedTargetIds = new Set(rankedTargets.map((p) => p.playerId));
+    const orderedForTeam = orderedFa.filter((x) => rankedTargetIds.has(x.id));
+
+    const needs = ["QB", "RB", "WR", "TE", "DL", "EDGE", "LB", "CB", "S", "K", "P"]
+      .map((pos) => ({ pos, s: teamNeedsScore(state, teamId, pos) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, 3);
+
+    let targets = orderedForTeam.filter((x) => needs.some((n) => n.s > 0.15 && n.pos === x.pos)).slice(0, 10);
+    targets = targets.filter((x) => {
+      if (x.pos !== "QB") return true;
+      const { aav } = cpuOfferParams(next, teamId, x.p);
+      const role = teamNeedsScore(next, teamId, "QB") >= 0.5 ? "STARTER" : "BACKUP";
+      return qbGateAllowsAcquisition(next, teamId, role, aav);
+    });
+
+    const pick = targets.length
+      ? targets[Math.floor(detRand(state.saveSeed, `CPU_PICK|${teamId}|R${state.freeAgency.resolvesUsedThisPhase}`) * targets.length)]
+      : orderedFa.find((x) => x.pos !== "QB") ?? orderedFa[0];
+
+    if (!pick) continue;
+
+    const pid = pick.id;
+    const existing = next.freeAgency.offersByPlayerId[pid] ?? [];
+    const alreadyPending = existing.some((o) => !o.isUser && o.teamId === teamId && (o.status === "PENDING" || o.status === "COUNTERED"));
+    if (alreadyPending) continue;
+
+    const { years, aav } = cpuOfferParams(next, teamId, pick.p);
+    if (pick.pos === "QB") {
+      const role = teamNeedsScore(next, teamId, "QB") >= 0.5 ? "STARTER" : "BACKUP";
+      if (!qbGateAllowsAcquisition(next, teamId, role, aav)) continue;
+    }
+
+    const offerId = makeOfferId(next);
+    const cpuOffer: FreeAgencyOffer = { offerId, playerId: pid, teamId, isUser: false, years, aav, createdWeek: next.hub.regularSeasonWeek ?? 1, status: "PENDING" };
+
+    next = upsertStateOffers(next, pid, [...existing, cpuOffer]);
+    created++;
+  }
+
+  return cpuWithdrawOffers(next);
+}
+
+function upsertStateOffers(state: GameState, playerId: string, nextOffers: FreeAgencyOffer[]) {
+  return { ...state, freeAgency: upsertOffers({ ...state, freeAgency: { ...state.freeAgency, nextOfferSeq: state.freeAgency.nextOfferSeq + 1 } }, playerId, nextOffers) };
+}
+function hasPendingFreeAgencyOffers(state: GameState): boolean {
+  return Object.values(state.freeAgency.offersByPlayerId).some((offers) => offers.some((o) => o.status === "PENDING" || o.status === "COUNTERED"));
+}
+
+function expireRemainingFreeAgencyOffers(state: GameState, reason: string): GameState {
+  const offersByPlayerId: Record<string, FreeAgencyOffer[]> = {};
+  let changed = false;
+  for (const [playerId, offers] of Object.entries(state.freeAgency.offersByPlayerId)) {
+    const nextOffers = offers.map((offer) => {
+      if (offer.status !== "PENDING" && offer.status !== "COUNTERED") return offer;
+      changed = true;
+      return { ...offer, status: "REJECTED" as const, decisionReason: offer.decisionReason ?? reason };
+    });
+    offersByPlayerId[playerId] = nextOffers;
+  }
+  if (!changed) return state;
+  return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } };
+}
+
+
+function capSpaceForTeam(state: GameState, teamId: string) {
+  try {
+    return computeCapLedger(state, teamId).capSpace;
+  } catch {
+    return state.finances.capSpace;
+  }
+}
+
+export function tradeCapDelta(state: GameState, fromTeamId: string, playerId: string, toTeamId: string) {
+  const before = capSpaceForTeam(state, fromTeamId);
+  const sim = { ...state, playerTeamOverrides: { ...state.playerTeamOverrides, [String(playerId)]: String(toTeamId) } };
+  const after = capSpaceForTeam(sim, fromTeamId);
+  return after - before;
+}
+
+function cpuWithdrawOffers(state: GameState): GameState {
+  if (state.careerStage !== "FREE_AGENCY") return state;
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const teamIds = getAllTeamIds().filter((t) => t && t !== userTeamId);
+  const playerIndex: Record<string, any> = {};
+  for (const p of getPlayers() as any[]) playerIndex[String(p.playerId)] = p;
+
+  const offersByPlayerId: Record<string, FreeAgencyOffer[]> = { ...state.freeAgency.offersByPlayerId };
+  let changed = false;
+
+  for (const [playerId, offers] of Object.entries(offersByPlayerId)) {
+    const pos = normalizePos(String(playerIndex[String(playerId)]?.pos ?? "UNK"));
+    let nextOffers = offers;
+
+    for (const teamId of teamIds) {
+      const need = teamNeedsScore(state, teamId, pos);
+      const cap = capSpaceForTeam(state, teamId);
+      const shouldWithdraw = need <= 0.1 || cap < 0;
+      if (!shouldWithdraw) continue;
+
+      const had = nextOffers.some((o) => !o.isUser && o.teamId === teamId && o.status === "PENDING");
+      if (!had) continue;
+
+      nextOffers = nextOffers.map((o) => (!o.isUser && o.teamId === teamId && o.status === "PENDING" ? { ...o, status: "REJECTED" as const } : o));
+      changed = true;
+    }
+
+    if (nextOffers !== offers) offersByPlayerId[playerId] = nextOffers;
+  }
+
+  return changed ? { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId } } : state;
+}
+
+function needsBoostForPos(state: GameState, posRaw: string) {
+  const pos = normalizePos(posRaw);
+  const roster = getEffectivePlayersByTeam(state, state.acceptedOffer?.teamId ?? "");
+  const count = roster.filter((p: any) => normalizePos(String(p.pos ?? "")) === pos).length;
+  const target: Record<string, number> = { QB: 3, RB: 3, WR: 5, TE: 3, OL: 7, DL: 4, EDGE: 3, LB: 3, CB: 4, S: 3, K: 1, P: 1 };
+  const t = target[pos] ?? 3;
+  const short = Math.max(0, t - count);
+  return clamp01(short / t) * 0.18;
+}
+
+function computeFaInterest(state: GameState, p: any) {
+  const rep = state.coach.reputation;
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  const ovr = Number(p.overall ?? 0);
+  const age = Number(p.age ?? 26);
+
+  let base = 0.35 + clamp01((ovr - 70) / 35) * 0.35 + clamp01((30 - age) / 10) * 0.10;
+  if (rep) {
+    const off = ["QB", "RB", "WR", "TE", "OL"].includes(pos) ? clamp01((rep.offCred - 50) / 700) : 0;
+    const def = ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? clamp01((rep.defCred - 50) / 650) : 0;
+    base += off + def;
+    base += clamp01((rep.playerRespect - 55) / 400) * 0.08;
+    base += clamp01((rep.mediaRep - 55) / 450) * 0.05;
+  }
+  base += needsBoostForPos(state, pos);
+  base += getPerkFaInterestModifier(state.coach, pos);
+  const traits = getArchetypeTraits(state.coach.archetypeId);
+  if (traits?.faInterestModifiers?.[pos as keyof typeof traits.faInterestModifiers] != null) {
+    base += Number(traits.faInterestModifiers[pos as keyof typeof traits.faInterestModifiers]) / 100;
+  }
+  base += detRand(state.saveSeed, `FA_INT|S${state.season}|P${p.playerId}`) * 0.10;
+  return clamp01(base);
+}
+
+function applyOffseasonAgingAndRetirement(state: GameState): GameState {
+  const alreadyProcessed = (state.memoryLog ?? []).some((e) => e.type === "LEAGUE_AGING" && Number(e.season) === Number(state.season));
+  if (alreadyProcessed) return state;
+
+  const teams = getTeams().filter((t) => t.isActive).map((t) => ({
+    teamId: String(t.teamId),
+    roster: getEffectivePlayersByTeam(state, String(t.teamId)).map((p: any) => {
+      const playerId = String(p.playerId);
+      const snap = state.playerSnapCountsById?.[playerId] ?? { offense: 0, defense: 0, specialTeams: 0 };
+      const perf = state.playerProgressionSeasonStatsById?.[playerId] ?? {
+        gamesPlayed: Number(p.gamesPlayed ?? 0),
+        starts: Number(p.starts ?? 0),
+        performanceScore: 0.5,
+      };
+      const injuryGamesMissed = (state.injuries ?? []).filter((inj) => String(inj.playerId) === playerId).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0);
+      const development = state.playerDevelopmentById?.[playerId] ?? {
+        trait: defaultDevelopmentTrait(playerId, state.saveSeed),
+        hiddenDev: true,
+        highSnapSeasons: 0,
+      };
+      return {
+        playerId,
+        fullName: String(p.fullName ?? p.name ?? "Unknown"),
+        pos: String(p.pos ?? "UNK"),
+        age: Number(p.age ?? 22),
+        overall: Number(p.overall ?? 60),
+        snapCounts: snap,
+        seasonStats: { ...perf, performanceScore: clamp01(Number(perf.performanceScore ?? 0.5)), injuryGamesMissed },
+        development,
+      };
+    }),
+  }));
+
+  const deltaById = { ...(state.playerAgingDeltasById ?? {}) };
+  const attributeDeltasById = { ...(state.playerAttributeDeltasById ?? {}) };
+  const ageOffsetById = { ...(state.playerAgeOffsetById ?? {}) };
+  const devById = { ...(state.playerDevelopmentById ?? {}) };
+  const retirees: Array<{ playerId: string; fullName: string; pos?: string; age: number; overall: number }> = [];
+
+  for (const team of teams) {
+    const teamTotalSnaps = Math.max(1, team.roster.reduce((sum, pl) => sum + Number(pl.snapCounts.offense ?? 0) + Number(pl.snapCounts.defense ?? 0) + Number(pl.snapCounts.specialTeams ?? 0), 0));
+    for (const pl of team.roster) {
+      const result = calculateProgressionDelta(pl, teamTotalSnaps);
+      deltaById[pl.playerId] = Number(deltaById[pl.playerId] ?? 0) + Number(result.delta);
+      ageOffsetById[pl.playerId] = Number(ageOffsetById[pl.playerId] ?? 0) + 1;
+      const playerAttr = { ...(attributeDeltasById[pl.playerId] ?? {}) };
+      for (const key of CORE_ATTRIBUTE_KEYS) playerAttr[key] = Number(playerAttr[key] ?? 0) + Number(result.delta);
+      attributeDeltasById[pl.playerId] = playerAttr;
+      devById[pl.playerId] = {
+        ...(pl.development ?? { trait: defaultDevelopmentTrait(pl.playerId, state.saveSeed), hiddenDev: true, highSnapSeasons: 0 }),
+        hiddenDev: result.revealed ? false : Boolean(pl.development.hiddenDev),
+        highSnapSeasons: result.nextHighSnapSeasons,
+      };
+
+      const nextAge = Number(pl.age ?? 0) + 1;
+      const nextOverall = Math.max(40, Math.min(99, Number(pl.overall ?? 0) + Number(result.delta)));
+      if (nextAge >= 40 || (nextAge >= 36 && nextOverall < 70) || (nextAge >= 33 && nextOverall < 65) || (nextAge >= 30 && nextOverall < 60)) {
+        retirees.push({ playerId: pl.playerId, fullName: pl.fullName, pos: pl.pos, age: nextAge, overall: nextOverall });
+      }
+    }
+  }
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  for (const r of retirees) playerTeamOverrides[String(r.playerId)] = "RETIRED";
+
+  const retiredPlayers = [
+    ...(state.retiredPlayers ?? []),
+    ...retirees.map((r) => ({
+      playerId: String(r.playerId),
+      name: String(r.fullName),
+      pos: String(r.pos ?? "UNK"),
+      age: Number(r.age ?? 0),
+      overall: Number(r.overall ?? 0),
+      season: Number(state.season),
+    })),
+  ];
+
+  const retirementNews = generateRetirementNews(retirees as any[], {
+    week: 0,
+    season: Number(state.season),
+    userTeamId: String(state.acceptedOffer?.teamId ?? ""),
+  });
+
+  return {
+    ...state,
+    playerTeamOverrides,
+    playerAgingDeltasById: deltaById,
+    playerAttributeDeltasById: attributeDeltasById,
+    playerAgeOffsetById: ageOffsetById,
+    playerDevelopmentById: devById,
+    playerSnapCountsById: {},
+    playerProgressionSeasonStatsById: {},
+    retiredPlayers,
+    offseasonNews: [...retirementNews, ...(state.offseasonNews ?? [])].slice(0, 300),
+    newsHistory: appendNewsHistory(state.newsHistory ?? [], retirementNews),
+    hub: { ...state.hub, news: state.hub.news },
+    memoryLog: addMemoryEvent(state, "LEAGUE_AGING", { retirees: retirees.length, deltas: Object.keys(deltaById).length }),
+  };
+}
+
+function resetFaPhase(state: GameState): GameState {
+  return {
+    ...state,
+    freeAgency: { ...state.freeAgency, initStatus: "idle", isResolving: false, resolvesUsedThisPhase: 0, activity: [], ui: { mode: "NONE" }, resolveRoundByPlayerId: {}, pendingCounterTeamByPlayerId: {}, cpuTickedOnOpen: false },
+  };
+}
+
+function makeEscalatingSalaries(totalCash: number, years: number, annualGrowth = 0.06): number[] {
+  const y = Math.max(1, years);
+  const g = Math.max(0, annualGrowth);
+  const weights = Array.from({ length: y }, (_, i) => Math.pow(1 + g, i));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const base = totalCash / sum;
+  return weights.map((w) => Math.round((base * w) / 50_000) * 50_000);
+}
+
+function proration(o: PlayerContractOverride, season: number): number {
+  if (o.prorationBySeason?.[season] != null) return moneyRound(o.prorationBySeason[season] ?? 0);
+  const years = Math.max(1, o.endSeason - o.startSeason + 1);
+  return moneyRound(o.signingBonus / years);
+}
+
+function capHitForOverride(o: PlayerContractOverride, season: number): number {
+  const idx = season - o.startSeason;
+  const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
+  return moneyRound(salary + proration(o, season));
+}
+
+function computeUserCapCommitted(state: GameState): number {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId) return state.finances.baseCommitted;
+
+  let sum = 0;
+  try {
+    const roster = getPlayersByTeam(String(teamId));
+    for (const player of roster) {
+      const playerId = String((player as any).playerId ?? "");
+      if (!playerId) continue;
+      const contract = getPersonnelContract(playerId);
+      if (contract && String(contract.teamId) === String(teamId) && String(contract.entityType) === "PLAYER") {
+        sum += Number((contract as any).salaryY1 ?? 0);
+      }
+    }
+  } catch {
+    // Keep defensive fallback to overrides/base only.
+  }
+
+  sum += state.finances.baseCommitted;
+
+  for (const [pid, o] of Object.entries(state.playerContractOverrides)) {
+    const t = state.playerTeamOverrides[pid];
+    if (String(t) !== String(teamId)) continue;
+    if (state.season > o.endSeason) continue;
+    sum += capHitForOverride(o, state.season);
+  }
+  return sum;
+}
+
+function applyFinances(state: GameState, patch: Partial<TeamFinances> = {}): GameState {
+  const next = { ...state, finances: { ...state.finances, ...patch } };
+  const capCommitted = computeUserCapCommitted(next);
+  const capSpace = Math.round((next.finances.cap - capCommitted) / 50_000) * 50_000;
+  return { ...next, finances: { ...next.finances, capCommitted, capSpace } };
+}
+
+function stableHashId(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `n_${(h >>> 0).toString(16)}`;
+}
+
+function makeNewsItem(
+  title: string,
+  opts: { id: string; body?: string; category?: string; createdAt: number },
+): NewsItem {
+  return { id: opts.id, title, body: opts.body, category: opts.category, createdAt: opts.createdAt };
+}
+
+function defaultNews(season: number): NewsItem[] {
+  return [
+    makeNewsItem(`League announces ${season} salary cap at $250M`, { id: stableHashId(`default:${season}:0`), category: "LEAGUE", createdAt: season * 1_000_000 - 10 }),
+    makeNewsItem("Coaching staffs begin offseason installs", { id: stableHashId(`default:${season}:1`), category: "COACHING", createdAt: season * 1_000_000 - 9 }),
+    makeNewsItem("Front offices prepare for free agency", { id: stableHashId(`default:${season}:2`), category: "LEAGUE", createdAt: season * 1_000_000 - 8 }),
+    makeNewsItem("Draft prospects begin pro day circuit", { id: stableHashId(`default:${season}:3`), category: "DRAFT", createdAt: season * 1_000_000 - 7 }),
+  ];
+}
+
+function ensureNewsItems(raw: unknown, now: number): NewsItem[] {
+  if (!Array.isArray(raw)) return [];
+  if (!raw.length) return [];
+  if (typeof raw[0] === "object" && raw[0] && "id" in (raw[0] as any)) {
+    return (raw as any[]).map((x) => ({
+      id: String((x as any).id),
+      title: String((x as any).title ?? ""),
+      body: (x as any).body ? String((x as any).body) : undefined,
+      category: (x as any).category ? String((x as any).category) : undefined,
+      createdAt: Number((x as any).createdAt ?? now),
+    }));
+  }
+  return (raw as any[]).map((line, idx) => ({
+    id: stableHashId(`${String(line ?? "")}:${idx}`),
+    title: String(line ?? ""),
+    createdAt: now - idx * 60_000,
+  }));
+}
+
+function pushNews(state: GameState, line: string): GameState {
+  const allocated = allocateDeterministic(state, "news", "NEWS");
+  const news = [
+    makeNewsItem(line, { id: allocated.id, createdAt: allocated.ts }),
+    ...(allocated.state.hub.news ?? []),
+  ].slice(0, 200);
+  return { ...allocated.state, hub: { ...allocated.state.hub, news } };
+}
+
+function addNews(state: GameState, item: { title: string; body?: string; category?: string }): GameState {
+  const allocated = allocateDeterministic(state, "news", "NEWS");
+  const news = [
+    makeNewsItem(item.title, { id: allocated.id, body: item.body, category: item.category, createdAt: allocated.ts }),
+    ...(allocated.state.hub.news ?? []),
+  ].slice(0, 200);
+  return { ...allocated.state, hub: { ...allocated.state.hub, news }, unreadNewsCount: (allocated.state.unreadNewsCount ?? 0) + 1 };
+}
+
+function appendWeeklyNews(state: GameState, weekResult: WeekResult, week: number): LeagueNewsItem[] {
+  const context = { week: Number(week), season: Number(state.season), userTeamId: String(state.acceptedOffer?.teamId ?? "") };
+
+  // H4 FIX: pass a deterministic seed so generateInjuryNews never calls Math.random().
+  // Slot 303 matches the convention used by other weekly generators:
+  //   101 = MEDIA_GENERATE_WEEKLY_STORIES
+  //   202 = MEDICAL_GENERATE_WEEKLY_INJURIES
+  //   303 = news fallback injury items (this call)
+  const injurySeed = deriveWeeklySeed(state.saveSeed, state.season, Number(week), 303);
+
+  const injuryNews = generateInjuryNews(state.injuries ?? [], context, injurySeed);
+  const transactionNews = generateTransactionNews((state.transactions ?? []).filter((t) => Number(t.week ?? week) === Number(week)).slice(0, 8), context);
+  const gameNews = generateGameResultNews(weekResult.allGameResults, context);
+  const milestoneNews = generateMilestoneNews(weekResult.statLeaders, context);
+  return appendNewsHistory(state.newsHistory ?? [], [...gameNews, ...injuryNews, ...transactionNews, ...milestoneNews]);
+}
+
+function ensureAccolades(state: GameState): GameState {
+  return { ...state, playerAccolades: state.playerAccolades ?? {} };
+}
+
+function bootstrapAccolades(state: GameState): GameState {
+  if (state.playerAccolades && Object.keys(state.playerAccolades).length) return state;
+
+  const ps: any[] = getPlayers();
+  const byOvr = [...ps].sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const qbs = byOvr.filter((p) => normalizePos(String(p.pos ?? "UNK")) === "QB");
+  const topQB = qbs[0];
+
+  const map: Record<string, PlayerAccolades> = {};
+  if (topQB) map[String(topQB.playerId)] = { ...(map[String(topQB.playerId)] ?? {}), formerMvp: true };
+
+  for (const p of byOvr.slice(0, 12)) {
+    const id = String(p.playerId);
+    map[id] = { ...(map[id] ?? {}), formerAllPro: true, proBowls: 1 };
+  }
+
+  const topO = byOvr.find((p) => normalizePos(String(p.pos ?? "UNK")) !== "QB");
+  if (topO) map[String(topO.playerId)] = { ...(map[String(topO.playerId)] ?? {}), formerOPOY: true };
+
+  const def = byOvr.find((p) => ["CB", "S", "LB", "EDGE", "DL"].includes(normalizePos(String(p.pos ?? "UNK"))));
+  if (def) map[String(def.playerId)] = { ...(map[String(def.playerId)] ?? {}), formerDPOY: true };
+
+  return { ...state, playerAccolades: map };
+}
+
+function accoladesFor(playerId: string): PlayerAccolades {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  const fromData: PlayerAccolades =
+    (p?.accolades as PlayerAccolades) ??
+    ({
+      formerMvp: p?.formerMvp,
+      formerAllPro: p?.formerAllPro,
+      formerOPOY: p?.formerOPOY,
+      formerDPOY: p?.formerDPOY,
+      proBowls: p?.proBowls,
+    } as any);
+  return fromData ?? {};
+}
+
+const STARTER_SLOTS = new Set(["QB1", "RB1", "WR1", "TE1", "DL1", "EDGE1", "LB1", "CB1", "S1"]);
+const ALLOWED_NEWS_POS = new Set(["QB", "RB", "WR", "TE", "EDGE", "DL", "LB", "CB", "S"]);
+
+function accoladesMerged(state: GameState, playerId: string): PlayerAccolades {
+  return { ...(state.playerAccolades?.[String(playerId)] ?? {}), ...accoladesFor(playerId) };
+}
+
+function isLegendForNews(state: GameState, playerId: string): boolean {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return false;
+  const pos = normalizePos(String(p.pos ?? "UNK"));
+  if (!ALLOWED_NEWS_POS.has(pos)) return false;
+
+  const a = accoladesMerged(state, playerId);
+  const pb = Number(a.proBowls ?? 0);
+  if (a.formerMvp) return true;
+  if (a.formerOPOY || a.formerDPOY) return true;
+  if (a.formerAllPro && pb >= 2) return true;
+  if (pb >= 5) return true;
+  return false;
+}
+
+function playerNamePos(playerId: string) {
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  return { name: String(p?.fullName ?? "Unknown"), pos: normalizePos(String(p?.pos ?? "UNK")) };
+}
+
+function teamLabel(teamId: string) {
+  const t: any = getTeams()?.find((x: any) => String(x.teamId) === String(teamId));
+  return String(t?.name ?? t?.city ?? t?.abbr ?? teamId);
+}
+
+function slotIndex(slot: string) {
+  const m = slot.match(/(\d+)$/);
+  return m ? Number(m[1]) : 1;
+}
+
+function isQBChangeNewsworthy(state: GameState, prevQB1: string | null, nextQB1: string | null): boolean {
+  if (!prevQB1 || !nextQB1 || prevQB1 === nextQB1) return false;
+  return isLegendForNews(state, prevQB1) || isLegendForNews(state, nextQB1);
+}
+
+function pushMajorDepthNews(
+  state: GameState,
+  teamId: string,
+  prevSlots: Record<string, string | undefined>,
+  nextSlots: Record<string, string | undefined>,
+): GameState {
+  const prevByPlayer = new Map<string, string>();
+  const nextByPlayer = new Map<string, string>();
+  for (const [s, pid] of Object.entries(prevSlots)) if (pid) prevByPlayer.set(String(pid), s);
+  for (const [s, pid] of Object.entries(nextSlots)) if (pid) nextByPlayer.set(String(pid), s);
+
+  const lines: string[] = [];
+  const prevQB1 = prevSlots["QB1"] ? String(prevSlots["QB1"]) : null;
+  const nextQB1 = nextSlots["QB1"] ? String(nextSlots["QB1"]) : null;
+
+  if (isQBChangeNewsworthy(state, prevQB1, nextQB1)) {
+    const a = playerNamePos(prevQB1!);
+    const b = playerNamePos(nextQB1!);
+    lines.push(`${teamLabel(teamId)}: QB change — ${a.name} → ${b.name}`);
+  }
+
+  for (const [pid, prevSlot] of prevByPlayer.entries()) {
+    if (!STARTER_SLOTS.has(prevSlot)) continue;
+    if (!isLegendForNews(state, pid)) continue;
+
+    const nextSlot = nextByPlayer.get(pid) ?? null;
+    const benched =
+      !nextSlot ||
+      (!STARTER_SLOTS.has(nextSlot) && slotIndex(nextSlot) > 1) ||
+      (STARTER_SLOTS.has(prevSlot) && STARTER_SLOTS.has(nextSlot) && prevSlot !== nextSlot && slotIndex(nextSlot) > slotIndex(prevSlot));
+
+    if (!benched) continue;
+    if (prevSlot === "QB1" && prevQB1 && nextQB1 && prevQB1 !== nextQB1) continue;
+
+    const p = playerNamePos(pid);
+    lines.push(`${teamLabel(teamId)}: ${p.pos} ${p.name} benched (${prevSlot} → ${nextSlot ?? "BENCH"})`);
+  }
+
+  if (!lines.length) return state;
+  return pushNews(state, `Lineup shocker: ${lines[0]}`);
+}
+
+function bestDepthForTeam(state: GameState, teamId: string, prev?: DepthChart): DepthChart {
+  const roster = getEffectivePlayersByTeam(state, teamId) as any[];
+  const sorted = [...roster].sort((a, b) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  const used = new Set<string>();
+  const slots: Record<string, string | undefined> = {};
+
+  const pick = (slot: string, posList: string[]) => {
+    const p = sorted.find((r) => posList.includes(normalizePos(String(r.pos ?? "UNK"))) && !used.has(String(r.playerId)));
+    if (!p) return;
+    slots[slot] = String(p.playerId);
+    used.add(String(p.playerId));
+  };
+
+  pick("QB1", ["QB"]);
+  pick("RB1", ["RB"]);
+  pick("WR1", ["WR"]);
+  pick("TE1", ["TE"]);
+  pick("DL1", ["DL"]);
+  pick("EDGE1", ["EDGE"]);
+  pick("LB1", ["LB"]);
+  pick("CB1", ["CB"]);
+  pick("S1", ["S"]);
+
+  return { startersByPos: { ...(prev?.startersByPos ?? {}), ...slots }, lockedBySlot: {} };
+}
+
+function recomputeLeagueDepthAndNews(state: GameState): GameState {
+  const teams = getTeams() ?? [];
+  const userTeamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+
+  let next = state;
+  const leagueDepthCharts = { ...(state.leagueDepthCharts ?? {}) };
+
+  for (const t of teams) {
+    const teamId = String((t as any).teamId);
+    if (userTeamId && teamId === userTeamId) continue;
+
+    const prev = leagueDepthCharts[teamId] ?? { startersByPos: {}, lockedBySlot: {} };
+    const computed = bestDepthForTeam(state, teamId, prev);
+
+    leagueDepthCharts[teamId] = computed;
+    next = pushMajorDepthNews(next, teamId, prev.startersByPos, computed.startersByPos);
+  }
+
+  return { ...next, leagueDepthCharts };
+}
+
+function seedDepthForTeam(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+  if (!teamId) return state;
+
+  const prevSlots = state.depthChart.startersByPos;
+  const cleared = { ...state.depthChart, lockedBySlot: {} };
+  const filled = { ...cleared, startersByPos: autoFillDepthChartGaps({ ...state, depthChart: cleared }, teamId) };
+
+  let next = { ...state, depthChart: filled };
+  next = pushMajorDepthNews(next, teamId, prevSlots, filled.startersByPos);
+  next = recomputeLeagueDepthAndNews(next);
+  return next;
+}
+
+function fillDepthForTrainingCamp(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+  if (!teamId) return state;
+
+  const prevSlots = state.depthChart.startersByPos;
+  const startersByPos = autoFillDepthChartGaps(state, teamId);
+  const nextDepth = { ...state.depthChart, startersByPos };
+
+  let next = { ...state, depthChart: nextDepth };
+  next = pushMajorDepthNews(next, teamId, prevSlots, startersByPos);
+  next = recomputeLeagueDepthAndNews(next);
+  return next;
+}
+
+function shouldRecomputeDepthOnTransition(prev: CareerStage, next: CareerStage) {
+  if (prev === "FREE_AGENCY" && next === "PRE_DRAFT") return true;
+  if (prev === "DRAFT" && next === "TRAINING_CAMP") return true;
+  if (prev !== "PRESEASON" && next === "PRESEASON") return true;
+  return false;
+}
+
+function shouldRecomputeDepthOnWeekly(_state: GameState) {
+  return false;
+}
+
+const MIN_FREE_AGENT_POOL = 80;
+
+function ensureMinimumFreeAgencyPool(state: GameState): GameState {
+  const existing = getEffectiveFreeAgents(state);
+  if (existing.length >= MIN_FREE_AGENT_POOL) return state;
+
+  const need = MIN_FREE_AGENT_POOL - existing.length;
+  const countsByTeam: Record<string, number> = {};
+  for (const p of getEffectivePlayers(state)) {
+    const teamId = String((p as any).teamId ?? "");
+    if (!teamId || teamId === "FREE_AGENT") continue;
+    countsByTeam[teamId] = (countsByTeam[teamId] ?? 0) + 1;
+  }
+
+  const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+  const seedBase = Number(state.saveSeed ?? 1) ^ Number(state.season ?? 0) ^ 999;
+  const candidates = getEffectivePlayers(state)
+    .filter((p: any) => {
+      const teamId = String(p.teamId ?? "");
+      if (!teamId || teamId === "FREE_AGENT") return false;
+      if (teamId === userTeamId) return false;
+      return (countsByTeam[teamId] ?? 0) > 53;
+    })
+    .slice()
+    .sort((a: any, b: any) => {
+      const ovrDiff = Number(a.overall ?? 0) - Number(b.overall ?? 0);
+      if (ovrDiff !== 0) return ovrDiff;
+      const ageDiff = Number(b.age ?? 0) - Number(a.age ?? 0);
+      if (ageDiff !== 0) return ageDiff;
+      const aKey = detRand2(seedBase, `fa-safeguard:${String(a.playerId)}`);
+      const bKey = detRand2(seedBase, `fa-safeguard:${String(b.playerId)}`);
+      if (aKey !== bKey) return aKey - bKey;
+      return String(a.playerId).localeCompare(String(b.playerId));
+    });
+
+  if (!candidates.length) return state;
+
+  const playerTeamOverrides = { ...state.playerTeamOverrides };
+  let moved = 0;
+  for (const p of candidates) {
+    if (moved >= need) break;
+    const teamId = String((p as any).teamId ?? "");
+    if ((countsByTeam[teamId] ?? 0) <= 53) continue;
+    countsByTeam[teamId] -= 1;
+    playerTeamOverrides[String((p as any).playerId)] = "FREE_AGENT";
+    moved += 1;
+  }
+
+  if (moved === 0) return state;
+  return { ...state, playerTeamOverrides };
+}
+
+function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: number): GameState {
+  let next = state;
+
+  for (const p of getPlayers()) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+
+    const currentTeamId = String(next.playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    if (!currentTeamId || currentTeamId === "FREE_AGENT") continue;
+
+    const tagged = next.franchiseTags[playerId];
+    if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
+
+    const override = next.playerContractOverrides[playerId];
+    if (override) {
+      if (Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason)) continue;
+      if (Number(override.endSeason) < nextSeason) {
+        next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
+      }
+      continue;
+    }
+
+    const contractId = String((p as any).contractId ?? "");
+    if (!contractId) continue;
+    const contract = getContractById(contractId);
+    if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
+
+    if (Number((contract as any).endSeason ?? 0) < nextSeason) {
+      next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
+    }
+  }
+
+  return next;
+}
+
+function migrateExpiredStaffContracts(state: GameState, season: number): Pick<GameState, "personnelTeamOverrides" | "staffContractsByPersonId" | "staff" | "orgRoles" | "assistantStaff" | "staffBudget"> {
+  const trackedPersonIds = new Set<string>();
+  for (const personId of Object.keys(state.staffBudget.byPersonId ?? {})) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of [state.staff.ocId, state.staff.dcId, state.staff.stcId]) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of Object.values(state.orgRoles ?? {})) if (personId) trackedPersonIds.add(String(personId));
+  for (const personId of Object.values(state.assistantStaff ?? {})) if (personId) trackedPersonIds.add(String(personId));
+
+  if (trackedPersonIds.size === 0) {
+    return {
+      personnelTeamOverrides: state.personnelTeamOverrides,
+      staffContractsByPersonId: state.staffContractsByPersonId,
+      staff: state.staff,
+      orgRoles: state.orgRoles,
+      assistantStaff: state.assistantStaff,
+      staffBudget: state.staffBudget,
+    };
+  }
+
+  const personnelTeamOverrides = { ...state.personnelTeamOverrides };
+  const staffContractsByPersonId = { ...state.staffContractsByPersonId };
+  const expiredStaffIds = new Set<string>();
+
+  for (const personId of trackedPersonIds) {
+    const overrideContract = staffContractsByPersonId[personId];
+    const baseContractId = String(getPersonnelById(personId)?.contractId ?? "");
+    const baseContract = baseContractId ? getContractById(baseContractId) : undefined;
+    const contract = overrideContract ?? baseContract;
+    if (!contract) continue;
+
+    const contractEndSeason = Number(contract.endSeason ?? season);
+    if (season <= contractEndSeason) continue;
+
+    personnelTeamOverrides[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
+    staffContractsByPersonId[personId] = { ...contract, isExpired: true };
+    expiredStaffIds.add(personId);
+  }
+
+  if (expiredStaffIds.size === 0) {
+    return {
+      personnelTeamOverrides: state.personnelTeamOverrides,
+      staffContractsByPersonId: state.staffContractsByPersonId,
+      staff: state.staff,
+      orgRoles: state.orgRoles,
+      assistantStaff: state.assistantStaff,
+      staffBudget: state.staffBudget,
+    };
+  }
+
+  const staff = { ...state.staff };
+  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
+  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
+  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
+
+  const orgRoles = { ...state.orgRoles };
+  for (const key of Object.keys(orgRoles) as Array<keyof OrgRoles>) {
+    const personId = orgRoles[key];
+    if (personId && expiredStaffIds.has(String(personId))) delete orgRoles[key];
+  }
+
+  const assistantStaff = { ...state.assistantStaff };
+  for (const [slot, personId] of Object.entries(assistantStaff)) {
+    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
+  }
+
+  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
+  for (const personId of expiredStaffIds) delete staffBudgetByPersonId[personId];
+  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
+
+  return {
+    personnelTeamOverrides,
+    staffContractsByPersonId,
+    staff,
+    orgRoles,
+    assistantStaff,
+    staffBudget: { ...state.staffBudget, byPersonId: staffBudgetByPersonId, used: staffBudgetUsed },
+  };
+}
+
+function seasonRollover(state: GameState): GameState {
+  state = applySeasonUnicorns(applySeasonBadges(state));
+  state = persistSeasonAggToHistorical(state, state.season);
+  for (const seasonKey of Object.keys(state.historicalTelemetry.bySeason ?? {})) {
+    const season = Number(seasonKey);
+    if (!Number.isFinite(season) || season > state.season - 5) continue;
+    state = compactSeasonTelemetry(state, season);
+  }
+  const teamId = state.acceptedOffer?.teamId;
+  const nextSeason = state.season + 1;
+
+  const expiredState = migrateExpiredContractsToFreeAgency(state, state.season);
+  const playerTeamOverrides = { ...expiredState.playerTeamOverrides };
+  const playerContractOverrides = { ...expiredState.playerContractOverrides };
+
+  for (const p of getPlayers()) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+
+    const effectiveTeamId = String(playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    if (!effectiveTeamId || effectiveTeamId === "FREE_AGENT") continue;
+
+    const tagged = expiredState.franchiseTags[playerId];
+    if (tagged && Number(tagged.season) === Number(nextSeason)) continue;
+
+    const override = playerContractOverrides[playerId];
+    const overrideCoversNextSeason =
+      !!override && Number(override.startSeason) <= nextSeason && nextSeason <= Number(override.endSeason);
+    if (overrideCoversNextSeason) continue;
+
+    const contractId = String((p as any).contractId ?? "");
+    if (!contractId) continue;
+
+    const contract = getContractById(contractId);
+    if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
+
+    const baseEndSeason = Number((contract as any).endSeason ?? 0);
+    if (nextSeason <= baseEndSeason) continue;
+
+    expireContract(contractId, baseEndSeason);
+    playerTeamOverrides[playerId] = "FREE_AGENT";
+  }
+
+  const expiredStaffState = migrateExpiredStaffContracts(state, nextSeason);
+  replayPersonnelOverrides(expiredStaffState.personnelTeamOverrides, expiredStaffState.staffContractsByPersonId);
+  const expiredStaffIds = new Set<string>();
+  const personnelOverrides_expire: Record<string, import("@/data/leagueDb").PersonnelOverride> = {};
+  const staffContractsByPersonId_expire: Record<string, ContractRow> = {};
+  for (const person of getPersonnel()) {
+    const personId = String((person as any).personId ?? "");
+    if (!personId) continue;
+    const contract = getPersonnelContract(personId);
+    if (!contract) continue;
+    const contractEndSeason = Number(contract.endSeason ?? nextSeason);
+    if (nextSeason <= contractEndSeason) continue;
+    clearPersonnelTeam(personId);
+    expireContract(String(contract.contractId ?? ""), contractEndSeason);
+    personnelOverrides_expire[personId] = { teamId: "FREE_AGENT", status: "FREE_AGENT" };
+    staffContractsByPersonId_expire[personId] = { ...contract, isExpired: true };
+    expiredStaffIds.add(personId);
+  }
+
+  const staff = { ...state.staff };
+  if (staff.ocId && expiredStaffIds.has(staff.ocId)) delete staff.ocId;
+  if (staff.dcId && expiredStaffIds.has(staff.dcId)) delete staff.dcId;
+  if (staff.stcId && expiredStaffIds.has(staff.stcId)) delete staff.stcId;
+
+  const assistantStaff = { ...state.assistantStaff };
+  for (const [slot, personId] of Object.entries(assistantStaff)) {
+    if (personId && expiredStaffIds.has(String(personId))) delete (assistantStaff as Record<string, string | undefined>)[slot];
+  }
+
+  const staffBudgetByPersonId = { ...state.staffBudget.byPersonId };
+  for (const personId of expiredStaffIds) {
+    delete staffBudgetByPersonId[personId];
+  }
+  const staffBudgetUsed = Object.values(staffBudgetByPersonId).reduce((sum, val) => sum + Number(val ?? 0), 0);
+
+  let cash = state.finances.cash;
+  if (teamId) {
+    for (const [pid, o] of Object.entries(playerContractOverrides)) {
+      if (String(playerTeamOverrides[pid]) !== String(teamId)) continue;
+      const idx = nextSeason - o.startSeason;
+      const salary = o.salaries[Math.max(0, Math.min(o.salaries.length - 1, idx))] ?? 0;
+      cash -= salary;
+    }
+  }
+
+  const schedule = createSchedule(state.saveSeed ^ nextSeason);
+
+  let next = applyFinances({
+    ...state,
+    transactionLedger: expiredState.transactionLedger, // preserve RELEASE events from contract expiry
+    season: nextSeason,
+    week: 1,
+    careerStage: "OFFSEASON_HUB",
+    hub: {
+      ...state.hub,
+      news: defaultNews(nextSeason),
+      newsReadIds: {},
+      preseasonWeek: 1,
+      regularSeasonWeek: 1,
+      schedule,
+    },
+    unreadNewsCount: 0,
+    lastNewsReadWeek: 0,
+    tampering: createInitialTamperingState(),
+    freeAgency: createInitialFreeAgencyState(),
+    resign: { lastOfferAavByPlayerId: {}, rejectionCountByPlayerId: {} },
+    playerTeamOverrides,
+    playerContractOverrides,
+    personnelTeamOverrides: expiredStaffState.personnelTeamOverrides,
+    staffContractsByPersonId: expiredStaffState.staffContractsByPersonId,
+    staff: expiredStaffState.staff,
+    orgRoles: expiredStaffState.orgRoles,
+    assistantStaff: expiredStaffState.assistantStaff,
+    staffBudget: expiredStaffState.staffBudget,
+    finances: { ...state.finances, cash },
+  });
+
+  if (teamId) {
+    next = gameReducer(next, { type: "OWNER_INIT_SEASON_GOALS", payload: { year: nextSeason, teamId } });
+  }
+  next = gameReducer(next, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: toWeekKey(nextSeason, 0), seed: deriveWeeklySeed(next.saveSeed, nextSeason, 0, 101) } });
+  next = gameReducer(next, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(nextSeason, 0) } });
+  next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 2) as ClassYear } });
+  next = gameReducer(next, { type: "PREGENERATE_FUTURE_CLASS", payload: { classYear: (nextSeason + 3) as ClassYear } });
+  return next;
+}
+
+
+function computeSeasonSummary(state: GameState): SeasonSummary {
+  const teamId = state.acceptedOffer?.teamId ?? "";
+  const standingRows = Object.entries(state.league.standings ?? {}).map(([id, row]) => ({
+    teamId: id,
+    w: Number(row?.w ?? 0),
+    l: Number(row?.l ?? 0),
+    pf: Number(row?.pf ?? 0),
+    pa: Number(row?.pa ?? 0),
+  }));
+  const byRecord = standingRows.slice().sort((a, b) => b.w - a.w || (b.pf - b.pa) - (a.pf - a.pa) || b.pf - a.pf);
+  const byOffense = standingRows.slice().sort((a, b) => b.pf - a.pf);
+  const byDefense = standingRows.slice().sort((a, b) => a.pa - b.pa);
+
+  const rep = state.coach.reputation;
+  const team = getTeams().find((t) => t.teamId === teamId);
+  const divisionTeams = team ? getTeams().filter((t) => t.divisionId === team.divisionId).map((t) => t.teamId) : [];
+  const divisionRows = byRecord.filter((row) => divisionTeams.includes(row.teamId));
+  const divisionWinner = divisionRows[0]?.teamId === teamId;
+  const teamStanding = byRecord.find((row) => row.teamId === teamId);
+
+  const postseasonResult = state.league.postseason?.resultsByTeamId?.[teamId];
+  const playoffResult: SeasonSummary["playoffResult"] = postseasonResult?.isChampion
+    ? "champion"
+    : postseasonResult?.eliminatedIn === "SUPER_BOWL"
+      ? "superbowlLoss"
+      : postseasonResult?.eliminatedIn === "CONF_FINALS"
+        ? "conference"
+        : postseasonResult?.eliminatedIn === "DIVISIONAL"
+          ? "divisional"
+          : postseasonResult?.eliminatedIn === "WILD_CARD"
+            ? "wildCard"
+            : "missed";
+
+  const volatilityEvents = (state.memoryLog ?? []).filter((event) => String(event.type ?? "").toLowerCase().includes("volatility") && Number(event.season) === Number(state.season)).length;
+  const leagueAwards = state.weeklyResults.at(-1)?.awardsWinners ?? undefined;
+
+  return {
+    tenureYear: Number(state.coach.tenureYear ?? 1),
+    wins: Number(teamStanding?.w ?? 0),
+    losses: Number(teamStanding?.l ?? 0),
+    playoffResult,
+    finalStanding: Math.max(1, byRecord.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    divisionWinner,
+    offenseRank: Math.max(1, byOffense.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    defenseRank: Math.max(1, byDefense.findIndex((row) => row.teamId === teamId) + 1 || 32),
+    specialTeamsRank: Math.max(1, Math.round(((byOffense.findIndex((row) => row.teamId === teamId) + 1 || 32) + (byDefense.findIndex((row) => row.teamId === teamId) + 1 || 32)) / 2)),
+    reputationSnapshot: {
+      leaguePrestige: Number(rep?.leaguePrestige ?? state.coach.repBaseline ?? 50),
+      offCred: Number(rep?.offCred ?? 50),
+      defCred: Number(rep?.defCred ?? 50),
+      leadershipTrust: Number(rep?.leadershipTrust ?? 50),
+      mediaRep: Number(rep?.mediaRep ?? 50),
+      playerRespect: Number(rep?.playerRespect ?? 50),
+    },
+    reputationDeltas: {
+      leaguePrestige: Number(rep?.leaguePrestige ?? 50) - Number(state.coach.repBaseline ?? 50),
+      offCred: Number(rep?.offCred ?? 50) - 50,
+      defCred: Number(rep?.defCred ?? 50) - 50,
+      leadershipTrust: Number(rep?.leadershipTrust ?? 50) - 50,
+      mediaRep: Number(rep?.mediaRep ?? 50) - 50,
+      playerRespect: Number(rep?.playerRespect ?? 50) - 50,
+    },
+    ownerConfidence: Number(state.owner.approval ?? 50),
+    gmRelationship: Number(state.coach.gmRelationship ?? 50),
+    lockerRoomCred: Number(state.coach.lockerRoomCred ?? 50),
+    volatilityEvents,
+    archetypeId: state.coach.archetypeId,
+    leagueAwards,
+  };
+}
+
+function applySeasonMilestoneAwards(state: GameState): GameState {
+  const summary = computeSeasonSummary(state);
+  const milestoneResult = checkMilestones(summary, new Set(state.earnedMilestoneIds ?? []));
+  const awardedWithSeason = milestoneResult.awarded.map((entry) => ({ ...entry, season: Number(state.coach.tenureYear ?? 1) }));
+
+  return {
+    ...state,
+    coach: {
+      ...state.coach,
+      perkPoints: (state.coach.perkPoints ?? 0) + milestoneResult.totalPoints,
+      perkPointLog: [...(state.coach.perkPointLog ?? []), ...awardedWithSeason],
+    },
+    earnedMilestoneIds: Array.from(milestoneResult.newEarnedIds),
+    lastSeasonSummary: summary,
+    seasonHistory: [...(state.seasonHistory ?? []), summary],
+    seasonAwards: {
+      season: state.season,
+      awarded: milestoneResult.awarded,
+      totalPoints: milestoneResult.totalPoints,
+      shown: false,
+    },
+  };
+}
+
+function rookieApyFromRank(rank: number): number {
+  const r = Math.max(1, Math.min(300, rank));
+  const max = 6_000_000;
+  const min = 850_000;
+  const t = (300 - r) / 299;
+  return moneyRound(min + (max - min) * t ** 1.25);
+}
+
+function rookieOvrFromRank(rank: number): number {
+  const r = Math.max(1, Math.min(300, rank));
+  const t = (300 - r) / 299;
+  return Math.round(58 + t * 26);
+}
+
+function rookieDevFromTier(row: Record<string, unknown>): number {
+  const x = Number(row["DraftTier"] ?? row["Tier"] ?? 60);
+  if (!Number.isFinite(x)) return 60;
+  return Math.max(40, Math.min(90, Math.round(x)));
+}
+
+function resolveDraftUncertainty(args: {
+  saveSeed: number;
+  season: number;
+  prospectId: string;
+  baseOvr: number;
+  baseDev: number;
+  characterRevealPct: number;
+  intelligenceRevealPct: number;
+}) {
+  const cReveal = clamp100(args.characterRevealPct);
+  const iReveal = clamp100(args.intelligenceRevealPct);
+  const bustUncertainty = 1 - cReveal / 100;
+  const installUncertainty = 1 - iReveal / 100;
+  const seedKey = `draft:uncertainty:${args.season}:${args.prospectId}`;
+
+  const bustRoll = detRand2(args.saveSeed, `${seedKey}:bust`);
+  const bustNoise = (detRand2(args.saveSeed, `${seedKey}:bust:noise`) - 0.5) * 8 * bustUncertainty;
+  const bustPenalty = bustRoll < 0.2 * bustUncertainty ? Math.round(8 * bustUncertainty) : 0;
+
+  const installRoll = detRand2(args.saveSeed, `${seedKey}:install`);
+  const installNoise = (detRand2(args.saveSeed, `${seedKey}:install:noise`) - 0.5) * 6 * installUncertainty;
+  const installPenalty = installRoll < 0.25 * installUncertainty ? Math.round(7 * installUncertainty) : 0;
+
+  return {
+    ovr: Math.max(45, Math.min(99, Math.round(args.baseOvr + bustNoise - bustPenalty))),
+    dev: Math.max(35, Math.min(95, Math.round(args.baseDev + installNoise - installPenalty))),
+  };
+}
+
+function rookieContractFromApy(startSeason: number, apy: number): RookieContract {
+  const y1 = moneyRound(apy);
+  const y2 = moneyRound(apy * 1.05);
+  const y3 = moneyRound(apy * 1.1);
+  const y4 = moneyRound(apy * 1.15);
+  const capBySeason: Record<number, number> = { [startSeason]: y1, [startSeason + 1]: y2, [startSeason + 2]: y3, [startSeason + 3]: y4 };
+  return { startSeason, years: 4, capBySeason, total: y1 + y2 + y3 + y4 };
+}
+
+export function getProspectRow(prospectId: string): Record<string, unknown> | null {
+  return (getProspectById(prospectId) as Record<string, unknown> | null) ?? null;
+}
+
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+
+
+function hasMedicalRedFlag(state: GameState, prospectId: string) {
+  const row = getProspectRow(prospectId);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const d = (injury + stamina) / 2;
+  const p = clamp(0.03 + clamp((58 - d) / 28, 0, 1) * 0.22, 0.03, 0.35);
+  return detRand(state.saveSeed, `MED_RED|${state.season}|${prospectId}`) < p;
+}
+
+function medicalLevelFromDurability(stamina: number, injury: number, redFlag: boolean, blackFlag: boolean): MedicalFlagLevel {
+  if (blackFlag) return "BLACK";
+  if (redFlag) return "RED";
+  const d = (stamina + injury) / 2;
+  if (d >= 78) return "GREEN";
+  if (d >= 68) return "YELLOW";
+  if (d >= 58) return "ORANGE";
+  return "RED";
+}
+
+function characterLevelFromRow(maturity: number, leadership: number, incidents: number, cultureDq: boolean): CharacterFlagLevel {
+  if (cultureDq) return "BLACK";
+  if (incidents >= 2) return "RED";
+  if (incidents === 1) return "ORANGE";
+  const x = maturity * 0.65 + leadership * 0.35;
+  if (leadership >= 85 && maturity >= 78) return "BLUE";
+  if (x >= 72) return "GREEN";
+  if (x >= 62) return "YELLOW";
+  if (x >= 54) return "ORANGE";
+  return "RED";
+}
+
+function footballTagsFromRow(row: Record<string, unknown> | null) {
+  const out: string[] = [];
+  const rank = Number(row?.["Rank"] ?? 9999);
+  const ras = Number(row?.["RAS"] ?? row?.["RAS_Score"] ?? 0);
+  const arm = Number(row?.["Arm_Strength"] ?? 0);
+  const speed = Number(row?.["Speed"] ?? 0);
+  const tier = Number(row?.["DraftTier"] ?? 60);
+
+  if (rank <= 32 || tier >= 80) out.push("Gold: 1st");
+  if (ras >= 90 || arm >= 90 || speed >= 92) out.push("Purple: Elite Trait");
+  return out;
+}
+
+function hasMedicalBlackFlag(state: GameState, prospectId: string) {
+  const row = getProspectRow(prospectId);
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const d = (stamina + injury) / 2;
+  const p = clamp(0.002 + clamp((52 - d) / 25, 0, 1) * 0.03, 0, 0.05);
+  return detRand(state.saveSeed, `MED_BLACK|${state.season}|${prospectId}`) < p;
+}
+
+function incidentCountFromRow(row: Record<string, unknown> | null) {
+  const explicit = Number(row?.["Incidents"] ?? row?.["OffField_Incidents"] ?? NaN);
+  if (Number.isFinite(explicit)) return clamp(explicit, 0, 3);
+
+  const discipline = Number(row?.["Discipline"] ?? 60);
+  const maturity = Number(row?.["Maturity"] ?? 65);
+  const volatility = Number(row?.["Volatility"] ?? 60);
+
+  let n = 0;
+  if (discipline <= 55) n++;
+  if (maturity <= 55) n++;
+  if (volatility >= 82) n++;
+  return clamp(n, 0, 3);
+}
+
+function cultureDqFromRow(state: GameState, prospectId: string, row: Record<string, unknown> | null) {
+  const incidents = incidentCountFromRow(row);
+  if (incidents < 2) return false;
+  const p = incidents === 3 ? 0.35 : 0.18;
+  return detRand(state.saveSeed, `CULTURE_DQ|${state.season}|${prospectId}`) < p;
+}
+
+function genVisitReveal(state: GameState, prospectId: string): PreDraftReveal {
+  const row = getProspectRow(prospectId);
+
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const maturity = Number(row?.["Maturity"] ?? 65);
+  const leadership = Number(row?.["Leadership"] ?? 60);
+
+  const red = hasMedicalRedFlag(state, prospectId);
+  const black = hasMedicalBlackFlag(state, prospectId);
+  const incidents = incidentCountFromRow(row);
+  const cultureDq = cultureDqFromRow(state, prospectId, row);
+
+  const medicalLevel = medicalLevelFromDurability(stamina, injury, red, black);
+  const characterLevel = characterLevelFromRow(maturity, leadership, incidents, cultureDq);
+  const footballTags = footballTagsFromRow(row);
+
+  const symbols: string[] = [];
+  if (leadership >= 85) symbols.push("★");
+  if (characterLevel === "BLUE") symbols.push("C");
+  if (incidents >= 1) symbols.push("X");
+  if (maturity <= 58) symbols.push("△");
+
+  const flags: string[] = [];
+  flags.push(`Medical: ${medicalLevel}`);
+  flags.push(`Character: ${characterLevel}`);
+  if (footballTags.length) flags.push(...footballTags);
+  if (cultureDq) flags.unshift("Character: Remove From Board");
+
+  return { flags, hasMedicalRedFlag: medicalLevel === "RED" || medicalLevel === "BLACK", medicalLevel, characterLevel, footballTags, symbols };
+}
+
+export function predictVisitReveal(state: GameState, prospectId: string): PreDraftReveal {
+  return genVisitReveal(state, prospectId);
+}
+function posNormDraft(pos: string) {
+  const p = String(pos ?? "").toUpperCase();
+  if (p === "HB") return "RB";
+  if (["OLB", "ILB", "MLB"].includes(p)) return "LB";
+  if (["FS", "SS"].includes(p)) return "S";
+  if (p === "DT") return "DL";
+  if (p === "DE") return "EDGE";
+  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
+  if (p === "DB") return "CB";
+  return p || "UNK";
+}
+
+function computeDraftOrder(state: GameState): string[] {
+  return getTeams()
+    .filter((t) => t.isActive)
+    .map((t) => String(t.teamId))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function draftRoundPick(overall: number, teamsCount: number) {
+  const round = Math.floor((overall - 1) / teamsCount) + 1;
+  const pickInRound = ((overall - 1) % teamsCount) + 1;
+  return { round, pickInRound };
+}
+
+function maxExistingPlayerNumericId() {
+  const ids = getPlayers().map((pl: any) => Number(String(pl.playerId ?? "").replace(/\D/g, ""))).filter((v) => Number.isFinite(v));
+  return ids.length ? Math.max(...ids) : 0;
+}
+
+function applyDraftSelectionToState(state: GameState, selection: import("@/engine/draftSim").DraftSelection): GameState {
+  if (state.draft.withdrawnBoardIds[selection.prospectId]) return state;
+  const playerId = `ROOK_${String(state.nextPlayerId).padStart(6, "0")}`;
+  const contract = buildRookieContract({ overallPick: selection.overall, round: selection.round, pickInRound: selection.pickInRound, year: state.season });
+  const ovr = rookieOvrFromRank(selection.rank);
+  const dev = rookieDevFromTier({ DraftTier: "" });
+  const rookie: RookiePlayer = {
+    playerId,
+    prospectId: selection.prospectId,
+    name: selection.name,
+    pos: selection.pos,
+    age: 22,
+    ovr,
+    dev,
+    apy: contract.aav,
+    teamId: selection.teamId,
+    scoutOvr: ovr,
+    scoutDev: dev,
+    scoutConf: 80,
+  };
+  const legacyContract: RookieContract = {
+    startSeason: state.season,
+    years: 4,
+    capBySeason: {
+      [state.season]: contract.capHitsByYear[0] ?? 0,
+      [state.season + 1]: contract.capHitsByYear[1] ?? 0,
+      [state.season + 2]: contract.capHitsByYear[2] ?? 0,
+      [state.season + 3]: contract.capHitsByYear[3] ?? 0,
+    },
+    total: contract.totalValue,
+  };
+
+  const base: GameState = {
+    ...state,
+    nextPlayerId: state.nextPlayerId + 1,
+    rookies: [...state.rookies, rookie],
+    rookieContracts: { ...state.rookieContracts, [playerId]: legacyContract },
+    draft: {
+      ...state.draft,
+      withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [selection.prospectId]: true },
+      prospectPool: state.draft.prospectPool.filter((p) => p.prospectId !== selection.prospectId),
+      leaguePicks: [...state.draft.leaguePicks, { overall: selection.overall, round: selection.round, pickInRound: selection.pickInRound, teamId: selection.teamId, prospectId: selection.prospectId, rookiePlayerId: playerId }],
+      appliedSelectionCount: state.draft.appliedSelectionCount + 1,
+    },
+  };
+  return applyCanonicalTx(base, Tx.rookieSign(selection.teamId, playerId, { startSeason: state.season, endSeason: state.season + 3, salaries: [...contract.capHitsByYear], signingBonus: 0 }));
+}
+
+function finalizeDraftIfComplete(state: GameState): GameState {
+  if (!state.draft.complete) return state;
+  const nextYear = state.season + 1;
+  return {
+    ...state,
+    offseason: {
+      ...state.offseason,
+      stepsComplete: { ...state.offseason.stepsComplete, DRAFT: true },
+    },
+    draft: { ...state.draft, completed: true, prospectPool: [] },
+    upcomingDraftClass: generateDraftClass({ year: nextYear, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 }),
+  };
+}
+
+function coachScoutRep(state: GameState) {
+  return clamp(Number(state.coach.reputation?.leaguePrestige ?? state.coach.repBaseline ?? 60), 0, 100);
+}
+
+function scoutConfidenceForProspect(state: GameState, prospectId: string) {
+  const rep = coachScoutRep(state);
+  const visited = !!state.offseasonData.preDraft.visits[prospectId];
+  const worked = !!state.offseasonData.preDraft.workouts[prospectId];
+  const combine = !!state.offseasonData.combine.generated;
+  const base = clamp(40 + rep * 0.45, 40, 85);
+  return clamp(base + (visited ? 10 : 0) + (worked ? 6 : 0) + (combine ? 5 : 0), 0, 99);
+}
+
+function applyScoutNoise(state: GameState, seedKey: string, conf: number, trueVal: number, rangeAtZeroConf: number, minV: number, maxV: number) {
+  const t = 1 - conf / 100;
+  const range = t * rangeAtZeroConf;
+  const r = detRand(state.saveSeed, seedKey) * 2 - 1;
+  return clamp(Math.round(trueVal + r * range), minV, maxV);
+}
+
+function teamNeedScoreDraft(state: GameState, teamId: string, posRaw: string): number {
+  const pos = posNormDraft(posRaw);
+  const roster = getEffectivePlayersByTeam(state, teamId);
+  const atPos = roster.filter((pl: any) => posNormDraft(String(pl.pos ?? "")) === pos);
+  const best = atPos.sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
+  const bestOvr = Number(best?.overall ?? 0);
+  const minStarter = ["QB", "OL", "WR", "CB", "EDGE"].includes(pos) ? 72 : 68;
+  const starterGap = clamp((minStarter - bestOvr) / 22, 0, 1);
+  const depthGap = clamp((2 - atPos.length) / 2, 0, 1);
+  const weight =
+    pos === "QB"
+      ? 1.25
+      : pos === "OL"
+        ? 1.1
+        : ["WR", "CB", "EDGE"].includes(pos)
+          ? 1.0
+          : ["RB", "TE", "LB", "S", "DL"].includes(pos)
+            ? 0.85
+            : 0.55;
+  return clamp((starterGap * 0.7 + depthGap * 0.3) * weight, 0, 1);
+}
+
+
+function medicalLevelEstimateFromRow(row: any): "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK" {
+  const stamina = Number(row?.["Stamina"] ?? 65);
+  const injury = Number(row?.["Injury"] ?? row?.["Durability"] ?? 65);
+  const d = (stamina + injury) / 2;
+
+  if (d <= 45) return "BLACK";
+  if (d >= 78) return "GREEN";
+  if (d >= 68) return "YELLOW";
+  if (d >= 58) return "ORANGE";
+  return "RED";
+}
+
+function medicalDraftPenalty(level: string) {
+  if (level === "GREEN") return 0.0;
+  if (level === "YELLOW") return 0.01;
+  if (level === "ORANGE") return 0.03;
+  if (level === "RED") return 0.06;
+  return 0.12;
+}
+
+function cpuDraftPickProspectId(
+  state: GameState,
+  teamId: string,
+  opts?: { avoidRevealedBlack?: boolean; userTeamId?: string }
+): string | null {
+  const used = state.draft.withdrawnBoardIds;
+  const avoid = !!opts?.avoidRevealedBlack && String(opts?.userTeamId ?? "") === String(teamId);
+  const reveals = state.offseasonData.preDraft.reveals;
+  const rows = (draftClassJson as Record<string, unknown>[])
+    .slice()
+    .sort((a, b) => Number((a as any)["Rank"] ?? 9999) - Number((b as any)["Rank"] ?? 9999))
+    .filter((r) => !used[String((r as any)["Player ID"])])
+    .filter((r) => {
+      if (!avoid) return true;
+      const pid = String((r as any)["Player ID"]);
+      const rev = reveals[pid];
+      if (!rev) return true;
+      return rev.characterLevel !== "BLACK" && rev.medicalLevel !== "BLACK";
+    })
+    .slice(0, 110);
+
+  if (!rows.length) return null;
+
+  const board = buildCpuDraftBoard(
+    buildCpuTeamContext(state, teamId),
+    rows.map((r) => ({
+      playerId: String((r as any)["Player ID"]),
+      pos: posNormDraft(String((r as any)["POS"] ?? "UNK")),
+      age: Number((r as any)["Age"] ?? 22),
+      overall: Math.max(1, 100 - Math.round(Number((r as any)["Rank"] ?? 300) / 4)),
+      devTrait: "normal",
+    }))
+  );
+  if (board.length > 0) {
+    return board.find((p) => rows.some((r) => String((r as any)["Player ID"]) === p.playerId))?.playerId ?? null;
+  }
+
+  let bestId = String((rows[0] as any)["Player ID"]);
+  let bestScore = -1e9;
+
+  for (const r of rows) {
+    const pid = String((r as any)["Player ID"]);
+    const rank = Number((r as any)["Rank"] ?? 9999);
+    const pos = posNormDraft(String((r as any)["POS"] ?? "UNK"));
+    const need = teamNeedScoreDraft(state, teamId, pos);
+    const base = (450 - rank) / 450;
+    const jitter = detRand(state.saveSeed, `CPU_DRAFT|${state.season}|${teamId}|${pid}|${state.draft.currentOverall}`) * 0.03;
+    const medLevel = medicalLevelEstimateFromRow(r);
+    const medPenalty = medicalDraftPenalty(medLevel);
+    const score = base + need * 0.42 + jitter - medPenalty;
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = pid;
+    }
+  }
+
+  return bestId;
+}
+
+function ensureDraftInitialized(state: GameState): GameState {
+  if (state.draft.started && state.draft.orderTeamIds.length) return state;
+
+  const orderTeamIds = computeDraftOrder(state);
+  const onClockTeamId = orderTeamIds[0];
+
+  return {
+    ...state,
+    draft: {
+      ...state.draft,
+      started: true,
+      completed: false,
+      totalRounds: state.draft.totalRounds || 7,
+      currentOverall: 1,
+      orderTeamIds,
+      leaguePicks: [],
+      onClockTeamId,
+      withdrawnBoardIds: {},
+    },
+  };
+}
+
+function applyLeagueDraftPick(state: GameState, teamId: string, prospectId: string): GameState {
+  if (state.draft.withdrawnBoardIds[prospectId]) return state;
+
+  const row = getProspectRow(prospectId);
+  const rank = row ? Number(row["Rank"] ?? 200) : 200;
+
+  const teamsCount = state.draft.orderTeamIds.length || 32;
+  const { round, pickInRound } = draftRoundPick(state.draft.currentOverall, teamsCount);
+
+  const idx = state.rookies.length + 1;
+  const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+
+  const trueOvr = rookieOvrFromRank(rank);
+  const trueDev = rookieDevFromTier(row ?? {});
+  const apy = rookieApyFromRank(rank);
+
+  const conf = scoutConfidenceForProspect(state, prospectId);
+  const scoutOvr = applyScoutNoise(state, `SCOUT_OVR|${state.season}|${prospectId}`, conf, trueOvr, 12, 40, 92);
+  const scoutDev = applyScoutNoise(state, `SCOUT_DEV|${state.season}|${prospectId}`, conf, trueDev, 20, 35, 95);
+
+  const rookie: RookiePlayer = {
+    playerId,
+    prospectId,
+    name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
+    pos: row ? posNormDraft(String(row["POS"] ?? "UNK")) : "UNK",
+    age: row ? Number(row["Age"] ?? 22) : 22,
+    ovr: trueOvr,
+    dev: trueDev,
+    apy,
+    teamId,
+    scoutOvr,
+    scoutDev,
+    scoutConf: conf,
+  };
+
+  const contract = rookieContractFromApy(state.season + 1, rookie.apy);
+
+  const pick: DraftPick = {
+    overall: state.draft.currentOverall,
+    round,
+    pickInRound,
+    teamId,
+    prospectId,
+    rookiePlayerId: rookie.playerId,
+  };
+
+  const drafted0: GameState = {
+    ...state,
+    rookies: [...state.rookies, rookie],
+    rookieContracts: { ...state.rookieContracts, [rookie.playerId]: contract },
+    draft: {
+      ...state.draft,
+      leaguePicks: [...state.draft.leaguePicks, pick],
+      withdrawnBoardIds: { ...state.draft.withdrawnBoardIds, [prospectId]: true },
+    },
+  };
+
+  const draftedTx = applyCanonicalTx(drafted0, Tx.draftPick(teamId, rookie.playerId, { overall: pick.overall, round: pick.round, pickInRound: pick.pickInRound, prospectId }));
+  const drafted = noteR1QBDraft(draftedTx, teamId, round, rookie.pos);
+
+  const nextOverall = drafted.draft.currentOverall + 1;
+  const totalPicks = drafted.draft.totalRounds * (drafted.draft.orderTeamIds.length || 32);
+  const completed = nextOverall > totalPicks;
+  const nextOnClock = completed ? undefined : drafted.draft.orderTeamIds[(nextOverall - 1) % drafted.draft.orderTeamIds.length];
+
+  return {
+    ...drafted,
+    draft: {
+      ...drafted.draft,
+      currentOverall: nextOverall,
+      completed,
+      onClockTeamId: nextOnClock,
+    },
+  };
+}
+
+function deriveCoordFocus(role: "OC" | "DC" | "STC"): RoleFocus {
+  if (role === "OC") return "OFF";
+  if (role === "DC") return "DEF";
+  return "ST";
+}
+
+function deriveAssistantFocus(role: keyof AssistantStaff): RoleFocus {
+  return role === "qbCoachId" || role === "olCoachId" || role === "rbCoachId" || role === "wrCoachId"
+    ? "OFF"
+    : role === "dlCoachId" || role === "lbCoachId" || role === "dbCoachId"
+      ? "DEF"
+      : "GEN";
+}
+
+function schemeCompatForPerson(state: GameState, personId: string): number {
+  const person = getPersonnelById(personId);
+  if (!person) return 60;
+  const ocScheme = state.staff.ocId ? String(getPersonnelById(state.staff.ocId)?.scheme ?? "").toLowerCase() : "";
+  const dcScheme = state.staff.dcId ? String(getPersonnelById(state.staff.dcId)?.scheme ?? "").toLowerCase() : "";
+  const ps = new Set([ocScheme, dcScheme].filter(Boolean));
+  const scheme = String(person.scheme ?? "").toLowerCase();
+  return ps.size ? (Array.from(ps).some((x) => scheme.includes(x) || x.includes(scheme)) ? 80 : 55) : 60;
 }
 
 function areAllAssistantsHired(assistantStaff: AssistantStaff): boolean {
@@ -218,235 +4316,5309 @@ function areAllAssistantsHired(assistantStaff: AssistantStaff): boolean {
   );
 }
 
+function evaluateStaffOffer(state: GameState, input: { roleType: "COORDINATOR" | "ASSISTANT"; role: "OC" | "DC" | "STC" | keyof AssistantStaff; personId: string; years: number; salary: number }) {
+  const person = getPersonnelById(input.personId);
+  const reputation = Number((person as any)?.reputation ?? 55);
+  const expected = expectedSalary(input.role as any, reputation);
+  const targetYears = reputation >= 80 ? 4 : reputation >= 65 ? 3 : 2;
+  const budgetAfterOffer = state.staffBudget.total - state.staffBudget.used - input.salary;
+  const teamRep = Number(state.coach.repBaseline ?? 55);
+
+  const marketFit = clamp01((input.salary - expected * 0.78) / Math.max(1, expected * 0.4));
+  const yearsFit = clamp01(1 - Math.abs(input.years - targetYears) / 3);
+  const budgetFit = clamp01(budgetAfterOffer / Math.max(1, state.staffBudget.total * 0.25));
+  const reputationFit = clamp01(1 - Math.max(0, reputation - teamRep) / 35);
+
+  const score = marketFit * 0.5 + yearsFit * 0.2 + budgetFit * 0.15 + reputationFit * 0.15;
+  const accepted = budgetAfterOffer >= 0 && score >= 0.57;
+
+  let reason = "Offer accepted.";
+  if (!accepted) {
+    if (budgetAfterOffer < 0) {
+      reason = "Rejected: staff budget cannot absorb this salary.";
+    } else if (marketFit < 0.45) {
+      reason = "Rejected: salary is below market expectations.";
+    } else if (reputationFit < 0.45) {
+      reason = "Rejected: team reputation fit is too low for this candidate.";
+    } else {
+      reason = "Rejected: contract structure was not competitive enough.";
+    }
+  }
+
+  return { accepted, reason };
+}
+
 function nextCareerStage(stage: CareerStage): CareerStage {
   const idx = CAREER_STAGE_ORDER.indexOf(stage);
   if (idx < 0 || idx === CAREER_STAGE_ORDER.length - 1) return stage;
   return CAREER_STAGE_ORDER[idx + 1];
 }
 
-function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
-  return [
-    ...state.memoryLog,
-    {
-      type,
-      season: state.season,
-      week: state.week,
-      payload,
-    },
-  ];
+
+function applySeasonDevelopment(state: GameState): GameState {
+  const teamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
+  if (!teamId) return state;
+  const players = getEffectivePlayersByTeam(state, teamId);
+  if (!players.length) return state;
+
+  const deltas: Record<string, number> = {};
+  const nextDevXp = { ...(state.playerDevXpById ?? {}) };
+  const focusMap = state.trainingFocus?.posGroupFocus ?? {};
+
+  for (const p of players) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+    const pos = normalizePos(String((p as any).pos ?? "UNK")) as keyof typeof focusMap;
+    const delta = computeSeasonDevelopmentDelta({
+      age: (p as any).age,
+      overall: (p as any).overall,
+      dev: (p as any).dev,
+      practiceFocus: (focusMap[pos] ?? "NORMAL") as any,
+    }, state.coach);
+    deltas[playerId] = delta;
+    nextDevXp[playerId] = Number(nextDevXp[playerId] ?? 0) + delta;
+  }
+
+  const nextAttrOverrides = { ...state.playerAttrOverrides };
+  for (const p of players) {
+    const playerId = String((p as any).playerId ?? "");
+    if (!playerId) continue;
+    const pos = normalizePos(String((p as any).pos ?? "UNK"));
+    const relevantStaff = coachesForPosition(state.staffRoster.coaches, pos);
+    if (!relevantStaff.length) continue;
+
+    const baseAttrs: Record<string, number> = {};
+    for (const [k, v] of Object.entries(p as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 99) {
+        baseAttrs[k] = v;
+      }
+    }
+
+    const impacted = applyFullStaffImpact(baseAttrs, relevantStaff);
+    nextAttrOverrides[playerId] = {
+      ...(nextAttrOverrides[playerId] ?? {}),
+      ...impacted,
+    };
+  }
+
+  return {
+    ...state,
+    playerDevXpById: nextDevXp,
+    playerAttrOverrides: nextAttrOverrides,
+    memoryLog: addMemoryEvent(state, "SEASON_DEVELOPMENT", { season: state.season, deltas }),
+  };
 }
 
-function gameReducer(state: GameState, action: GameAction): GameState {
+const MEMORY_LOG_MAX = 200;
+
+function addMemoryEvent(state: GameState, type: string, payload: unknown): MemoryEvent[] {
+  // P3 FIX: cap at 200; newest entries are kept (tail), oldest are dropped.
+  // 200 entries ≈ 10 seasons of normal activity; enough for coach history,
+  // recent staff moves, and penalty audit trail.
+  const next = [...state.memoryLog, { type, season: state.season, week: state.week, payload }];
+  return next.length > MEMORY_LOG_MAX ? next.slice(next.length - MEMORY_LOG_MAX) : next;
+}
+
+function applyOwnerPenalty(state: GameState, amount: number, reason: string): GameState {
+  const approval = clamp100(state.owner.approval - amount);
+  const budgetBreaches = state.owner.budgetBreaches + 1;
+  const season = state.season;
+  const tmp: GameState = {
+    ...state,
+    owner: { ...state.owner, approval, budgetBreaches },
+    memoryLog: addMemoryEvent(state, "OWNER_PENALTY", { reason, amount }),
+  };
+  const financialRating = computeFinancialRating(tmp, season);
+  return { ...tmp, owner: { ...tmp.owner, financialRating, jobSecurity: computeJobSecurity(approval, financialRating) } };
+}
+
+function overBudgetPenaltyAmount(overBy: number) {
+  if (overBy <= 0) return 0;
+  if (overBy <= 500_000) return 1;
+  if (overBy <= 1_500_000) return 2;
+  if (overBy <= 3_000_000) return 3;
+  return 4;
+}
+
+function allowStaffOverageWithPenalty(state: GameState, salary: number, reason: string): GameState {
+  const overBy = state.staffBudget.used + salary - state.staffBudget.total;
+  const penalty = overBudgetPenaltyAmount(overBy);
+  return penalty ? applyOwnerPenalty(state, penalty, `${reason} (over by $${Math.round(overBy / 1_000_000)}M)`) : state;
+}
+
+function addStaffSalaryAndCash(state: GameState, personId: string, salary: number): GameState {
+  const nextCash = state.teamFinances.cash - salary;
+  const base: GameState = {
+    ...state,
+    teamFinances: { ...state.teamFinances, cash: nextCash },
+    staffBudget: {
+      ...state.staffBudget,
+      used: state.staffBudget.used + salary,
+      byPersonId: { ...state.staffBudget.byPersonId, [personId]: salary },
+    },
+  };
+  if (nextCash >= 0) return base;
+  return applyOwnerPenalty(base, 6, "Staff payroll exceeded available cash");
+}
+
+function computeFinancialRating(state: GameState, season: number) {
+  const dm = state.teamFinances.deadMoneyBySeason[season] ?? 0;
+  const cash = state.teamFinances.cash;
+  const dmHit = Math.min(30, (dm / 5_000_000) * 4);
+  const cashHit = cash < 0 ? Math.min(25, (-cash / 5_000_000) * 5) : 0;
+  const breachHit = Math.min(20, state.owner.budgetBreaches * 4);
+  return clamp100(78 - dmHit - cashHit - breachHit);
+}
+
+function computeJobSecurity(approval: number, financialRating: number) {
+  return clamp100(approval * 0.62 + financialRating * 0.38);
+}
+
+function addBuyoutToSeason(state: GameState, season: number, amount: number): GameState {
+  if (amount <= 0) return state;
+  const bySeason = { ...state.buyouts.bySeason, [season]: (state.buyouts.bySeason[season] ?? 0) + amount };
+  return { ...state, buyouts: { bySeason } };
+}
+
+function addDeadMoney(state: GameState, season: number, amount: number): GameState {
+  if (amount <= 0) return state;
+  return {
+    ...state,
+    teamFinances: {
+      ...state.teamFinances,
+      deadMoneyBySeason: { ...state.teamFinances.deadMoneyBySeason, [season]: (state.teamFinances.deadMoneyBySeason[season] ?? 0) + amount },
+    },
+  };
+}
+
+function refundStaffBudget(state: GameState, personId: string): GameState {
+  const cur = state.staffBudget.byPersonId[personId] ?? 0;
+  if (!cur) return state;
+  const byPersonId = { ...state.staffBudget.byPersonId };
+  delete byPersonId[personId];
+  return { ...state, staffBudget: { ...state.staffBudget, used: Math.max(0, state.staffBudget.used - cur), byPersonId } };
+}
+
+function chargeBuyouts(state: GameState, season: number): GameState {
+  const due = state.buyouts.bySeason[season] ?? 0;
+  if (!due) return state;
+  const bySeason = { ...state.buyouts.bySeason };
+  delete bySeason[season];
+  let next: GameState = {
+    ...state,
+    buyouts: { bySeason },
+    teamFinances: {
+      ...state.teamFinances,
+      cash: state.teamFinances.cash - due,
+      deadMoneyBySeason: { ...state.teamFinances.deadMoneyBySeason, [season]: due },
+    },
+    memoryLog: addMemoryEvent(state, "BUYOUT_CHARGED", { season, amount: due }),
+  };
+  const financialRating = computeFinancialRating(next, season);
+  next = { ...next, owner: { ...next.owner, financialRating, jobSecurity: computeJobSecurity(next.owner.approval, financialRating) } };
+  if (next.teamFinances.cash < 0) next = applyOwnerPenalty(next, 4, "Cash went negative paying buyouts");
+  return next;
+}
+
+function isActive53(state: GameState) {
+  return state.rosterMgmt.finalized && Object.keys(state.rosterMgmt.active).length === 53;
+}
+
+function normalizePosKey(pos: string) {
+  const p = pos.toUpperCase();
+  if (["QB"].includes(p)) return "QB";
+  if (["RB"].includes(p)) return "RB";
+  if (["WR"].includes(p)) return "WR";
+  if (["TE"].includes(p)) return "TE";
+  if (["OT", "OG", "C", "OL"].includes(p)) return "OL";
+  if (["EDGE", "DE", "DT", "DL"].includes(p)) return "DL";
+  if (["LB"].includes(p)) return "LB";
+  if (["CB", "S", "DB"].includes(p)) return "DB";
+  return "OTHER";
+}
+
+function normalizeSlotToGroup(slot: string) {
+  const s = slot.toUpperCase();
+  if (s.startsWith("QB")) return "QB";
+  if (s.startsWith("RB")) return "RB";
+  if (s.startsWith("WR")) return "WR";
+  if (s.startsWith("TE")) return "TE";
+  if (["LT", "LG", "C", "RG", "RT", "OL"].includes(s)) return "OL";
+  if (["EDGE", "DE", "DT", "DL"].includes(s)) return "DL";
+  if (s.startsWith("LB")) return "LB";
+  if (["CB1", "CB2", "FS", "SS", "DB"].includes(s) || s.startsWith("CB") || s.startsWith("S")) return "DB";
+  return "OTHER";
+}
+
+function initRotationFromDepthChart(state: GameState): GameState {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId || !isActive53(state)) return state;
+  const activeIds = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeIds.has(String((p as any).playerId)))
+    .map((p) => ({ id: String((p as any).playerId), grp: normalizePosKey(String((p as any).pos ?? "OTHER")), ovr: Number((p as any).overall ?? 0) }));
+
+  const byGroup: Record<string, Array<{ id: string; ovr: number }>> = {};
+  for (const p of roster) (byGroup[p.grp] ??= []).push({ id: p.id, ovr: p.ovr });
+  for (const k of Object.keys(byGroup)) byGroup[k].sort((a, b) => b.ovr - a.ovr);
+
+  const starterByGroup: Record<string, string | undefined> = {};
+  for (const [slot, playerId] of Object.entries(state.depthChart.startersByPos)) {
+    if (!playerId) continue;
+    const g = normalizeSlotToGroup(slot);
+    if (g !== "OTHER" && activeIds.has(String(playerId)) && !starterByGroup[g]) starterByGroup[g] = String(playerId);
+  }
+
+  const byPlayerId: Record<string, number> = {};
+  const applyGroup = (g: string, starterPct: number, backupPct: number, depthPct: number) => {
+    const list = byGroup[g] ?? [];
+    if (!list.length) return;
+    const starterId = starterByGroup[g] ?? list[0].id;
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i].id;
+      if (id === starterId) byPlayerId[id] = starterPct;
+      else if (i === 1 || (i === 0 && starterId !== list[0].id)) byPlayerId[id] = backupPct;
+      else if (i < 5) byPlayerId[id] = depthPct;
+      else byPlayerId[id] = 0;
+    }
+  };
+
+  applyGroup("QB", 65, 55, 15);
+  applyGroup("RB", 55, 45, 20);
+  applyGroup("WR", 55, 45, 25);
+  applyGroup("TE", 55, 45, 20);
+  applyGroup("OL", 45, 35, 15);
+  applyGroup("DL", 45, 35, 15);
+  applyGroup("LB", 45, 35, 15);
+  applyGroup("DB", 45, 35, 15);
+
+  return { ...state, preseason: { ...state.preseason, rotation: { byPlayerId } } };
+}
+
+function preseasonDevFromRotation(state: GameState): { devById: Record<string, number>; riskById: Record<string, number> } {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId || !isActive53(state)) return { devById: {}, riskById: {} };
+
+  const activeIds = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeIds.has(String((p as any).playerId)))
+    .map((p) => ({ id: String((p as any).playerId), age: Number((p as any).age ?? 0) }));
+
+  const devById: Record<string, number> = {};
+  const riskById: Record<string, number> = {};
+
+  for (const p of roster) {
+    const pct = clamp100(state.preseason.rotation.byPlayerId[p.id] ?? 0);
+    if (pct <= 0) continue;
+    const share = pct / 100;
+    const dev = Math.max(0, Math.round(1 + share * 3));
+    const risk = Math.round(2 + share * 8 + Math.max(0, (p.age - 28) * 0.5));
+    devById[p.id] = (devById[p.id] ?? 0) + dev;
+    riskById[p.id] = Math.max(riskById[p.id] ?? 0, risk);
+  }
+
+  return { devById, riskById };
+}
+
+function applyPreseasonDevToRookies(state: GameState, devById: Record<string, number>): GameState {
+  if (!Object.keys(devById).length) return state;
+  const rookies = state.rookies.map((r) => {
+    const t = devById[r.playerId] ?? 0;
+    if (!t) return r;
+    const bump = t >= 4 ? 2 : t >= 3 ? 1 : 0;
+    return bump ? { ...r, ovr: Math.min(99, r.ovr + bump), dev: Math.min(90, r.dev + t) } : { ...r, dev: Math.min(90, r.dev + t) };
+  });
+  return { ...state, rookies };
+}
+
+function getUserTeamRosterIds(teamId: string) {
+  return getTeamRosterPlayers(teamId)
+    .filter((p) => String((p as any).status ?? "").toUpperCase() !== "IR")
+    .map((p) => String((p as any).playerId));
+}
+
+function top53Active(teamId: string) {
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => String((p as any).status ?? "").toUpperCase() !== "IR")
+    .sort((a, b) => Number((b as any).overall ?? 0) - Number((a as any).overall ?? 0));
+
+  const active: Record<string, true> = {};
+  const cuts: Record<string, true> = {};
+
+  roster.forEach((p, i) => {
+    const id = String((p as any).playerId);
+    if (i < 53) active[id] = true;
+    else cuts[id] = true;
+  });
+
+  return { active, cuts };
+}
+
+function ownerAxesFromState(state: GameState) {
+  const owner: any = (state as any).acceptedOffer?.ownerProfile ?? (state as any).acceptedOffer?.owner;
+  return owner?.axis_weights ?? owner?.axes;
+}
+
+function currentDeadMoney(state: GameState, season: number) {
+  return state.teamFinances.deadMoneyBySeason[season] ?? 0;
+}
+
+function computeWinPctFallback(state: GameState): number {
+  const w = Number((state as any).seasonRecord?.wins ?? 0);
+  const l = Number((state as any).seasonRecord?.losses ?? 0);
+  const t = Number((state as any).seasonRecord?.ties ?? 0);
+  const g = Math.max(1, w + l + t);
+  return Math.max(0, Math.min(1, (w + 0.5 * t) / g));
+}
+
+function computeGoalsDeltaFallback(state: GameState): number {
+  return Number((state as any).ownerGoals?.delta ?? 0);
+}
+
+const SLOT_RULES: Array<{ slot: string; pos: string[] }> = [
+  { slot: "QB1", pos: ["QB"] },
+  { slot: "RB1", pos: ["RB"] },
+  { slot: "WR1", pos: ["WR"] },
+  { slot: "WR2", pos: ["WR"] },
+  { slot: "TE1", pos: ["TE"] },
+  { slot: "LT", pos: ["OT", "OL"] },
+  { slot: "LG", pos: ["OG", "OL"] },
+  { slot: "C", pos: ["C", "OL"] },
+  { slot: "RG", pos: ["OG", "OL"] },
+  { slot: "RT", pos: ["OT", "OL"] },
+  { slot: "EDGE1", pos: ["EDGE", "DE", "DL"] },
+  { slot: "DT1", pos: ["DT", "DL"] },
+  { slot: "DT2", pos: ["DT", "DL"] },
+  { slot: "EDGE2", pos: ["EDGE", "DE", "DL"] },
+  { slot: "LB1", pos: ["LB"] },
+  { slot: "LB2", pos: ["LB"] },
+  { slot: "CB1", pos: ["CB", "DB"] },
+  { slot: "CB2", pos: ["CB", "DB"] },
+  { slot: "FS", pos: ["S", "DB"] },
+  { slot: "SS", pos: ["S", "DB"] },
+  { slot: "K", pos: ["K"] },
+  { slot: "P", pos: ["P"] },
+];
+
+function fillDepthChart(state: GameState, mode: "RESET" | "AUTOFILL"): GameState {
+  const teamId = state.acceptedOffer?.teamId;
+  if (!teamId) return state;
+
+  const activeSet = new Set(Object.keys(state.rosterMgmt.active));
+  const roster = getTeamRosterPlayers(teamId)
+    .filter((p) => activeSet.has(String(p.playerId)))
+    .map((p) => ({ id: String(p.playerId), pos: String(p.pos ?? "UNK").toUpperCase(), ovr: Number(p.overall ?? 0) }))
+    .sort((a, b) => b.ovr - a.ovr);
+
+  const locked = state.depthChart.lockedBySlot ?? {};
+  const starters: Record<string, string | undefined> = {};
+  const used = new Set<string>();
+
+  for (const rule of SLOT_RULES) {
+    const cur = state.depthChart.startersByPos[rule.slot];
+    if (cur && activeSet.has(String(cur)) && locked[rule.slot]) {
+      starters[rule.slot] = cur;
+      used.add(String(cur));
+    } else if (mode !== "RESET") {
+      if (cur && activeSet.has(String(cur)) && !locked[rule.slot]) {
+        starters[rule.slot] = cur;
+        used.add(String(cur));
+      }
+    }
+  }
+
+  for (const rule of SLOT_RULES) {
+    if (locked[rule.slot]) continue;
+    if (mode === "AUTOFILL" && starters[rule.slot]) continue;
+
+    const eligible = roster.filter((p) => rule.pos.includes(p.pos));
+    const pick = eligible.find((p) => !used.has(p.id)) ?? eligible[0];
+    if (!pick) continue;
+    starters[rule.slot] = pick.id;
+    used.add(pick.id);
+  }
+
+  return { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+}
+
+function isPreseasonStage(stage: CareerStage | undefined) {
+  return stage === "PRESEASON";
+}
+
+function clearDepthLocksIfEnteringPreseason(prevStage: CareerStage | undefined, nextStage: CareerStage | undefined, state: GameState) {
+  if (!isPreseasonStage(prevStage) && isPreseasonStage(nextStage)) {
+    return { ...state, depthChart: { ...state.depthChart, lockedBySlot: {} } };
+  }
+  return state;
+}
+
+function computeAndStoreFiringMeter(state: GameState, week: number, winPct?: number, goalsDelta?: number): GameState {
+  const seasonYear = state.coach.tenureYear;
+  const seasonNumber = state.season;
+  const win = winPct ?? computeWinPctFallback(state);
+  const goals = goalsDelta ?? computeGoalsDeltaFallback(state);
+  const deadMoneyThisSeason = currentDeadMoney(state, seasonNumber);
+  const ownerAxes = ownerAxesFromState(state);
+
+  const weekly = computeTerminationRisk({
+    saveSeed: state.saveSeed,
+    seasonYear,
+    seasonNumber,
+    week,
+    checkpoint: "WEEKLY",
+    jobSecurity: state.owner.jobSecurity,
+    ownerApproval: state.owner.approval,
+    financialRating: state.owner.financialRating,
+    cash: state.teamFinances.cash,
+    deadMoneyThisSeason,
+    budgetBreaches: state.owner.budgetBreaches,
+    ownerAxes,
+    goalsDelta: goals,
+    winPct: win,
+  });
+
+  const seasonEnd = computeTerminationRisk({
+    saveSeed: state.saveSeed,
+    seasonYear,
+    seasonNumber,
+    week,
+    checkpoint: "SEASON_END",
+    jobSecurity: state.owner.jobSecurity,
+    ownerApproval: state.owner.approval,
+    financialRating: state.owner.financialRating,
+    cash: state.teamFinances.cash,
+    deadMoneyThisSeason,
+    budgetBreaches: state.owner.budgetBreaches,
+    ownerAxes,
+    goalsDelta: goals,
+    winPct: win,
+  });
+
+  return {
+    ...state,
+    firing: {
+      ...state.firing,
+      pWeekly: seasonYear === 1 ? 0 : weekly.p,
+      pSeasonEnd: seasonEnd.p,
+      drivers: seasonEnd.drivers,
+      lastWeekComputed: week,
+      lastSeasonComputed: seasonNumber,
+    },
+  };
+}
+
+
+function posToGroup(pos: string) {
+  const p = String(pos || "").toUpperCase();
+  if (p === "QB") return "QB";
+  if (p === "WR") return "WR";
+  if (p === "RB") return "RB";
+  if (p === "TE") return "TE";
+  if (p === "OL") return "OL";
+  if (p === "DL") return "DL";
+  if (p === "EDGE") return "EDGE";
+  if (p === "LB") return "LB";
+  if (p === "CB" || p === "S") return "DB";
+  return "DB";
+}
+
+
+type CombineFeedCategory = keyof typeof COMBINE_FEED_TEMPLATES;
+
+function normalizeCombinePosition(pos: string): string {
+  const p = String(pos || "").toUpperCase();
+  if (["DE", "OLB"].includes(p)) return "EDGE";
+  if (["DT", "NT"].includes(p)) return "DT";
+  if (["ILB", "MLB"].includes(p)) return "LB";
+  if (["FS", "SS"].includes(p)) return "S";
+  if (["G"].includes(p)) return "OG";
+  if (["T"].includes(p)) return "OT";
+  return p;
+}
+
+function combineDayForPosition(pos: string): 1 | 2 | 3 | 4 {
+  const normalized = normalizeCombinePosition(pos);
+  for (const [day, bucket] of Object.entries(COMBINE_DAY_POSITION_BUCKETS)) {
+    if ((bucket.positions as readonly string[]).includes(normalized)) return Number(day) as 1 | 2 | 3 | 4;
+  }
+  return 2;
+}
+
+function defaultCombineDays() {
+  return {
+    1: { dayIndex: 1 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[1].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    2: { dayIndex: 2 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[2].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    3: { dayIndex: 3 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[3].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+    4: { dayIndex: 4 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[4].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+  };
+}
+
+function defaultCombineProspectState() {
+  return { characterRevealPct: 0, intelligenceRevealPct: 0, interviewCount: 0, notes: [] as string[] };
+}
+
+function defaultCombineRecap() {
+  return {
+    risers: [] as string[],
+    fallers: [] as string[],
+    flags: [] as string[],
+    focusedProspectIds: [] as string[],
+    interviewedProspectIds: [] as string[],
+    focusHoursSpent: 0,
+    interviewsUsed: 0,
+  };
+}
+
+function buildCombineFeedEntry(args: {
+  saveSeed: number;
+  day: number;
+  prospectId: string;
+  name: string;
+  pos: string;
+  ras: number;
+  forty: number;
+  medicalTier?: string;
+}): { id: string; day: number; text: string; prospectId: string; category: CombineFeedCategory } {
+  const { saveSeed, day, prospectId, name, pos, ras, forty, medicalTier } = args;
+  let category: CombineFeedCategory;
+
+  if (medicalTier === "RED" || medicalTier === "BLACK") category = "INJURY";
+  else if (ras >= 9.2 || forty <= 4.42) category = "STANDOUT";
+  else if (ras >= 8.2) category = "SOLID";
+  else if (ras >= 6.2) category = "AVERAGE";
+  else category = "POOR";
+
+  const correctionRoll = detRand2(saveSeed, `combine-feed-correction:${day}:${prospectId}`);
+  if (category === "AVERAGE" && correctionRoll < 0.18) category = "BUZZ_CORRECTION";
+
+  const templates = COMBINE_FEED_TEMPLATES[category];
+  const pick = Math.floor(detRand2(saveSeed, `combine-feed-template:${day}:${prospectId}`) * templates.length) % templates.length;
+  const raw = templates[pick] ?? templates[0];
+  const text = raw
+    .replace("{name}", name)
+    .replace("{pos}", pos);
+
+  return { id: `combine-feed:${day}:${prospectId}`, day, text, prospectId, category };
+}
+
+
+function initDraftRosterCounts(state: GameState): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  const teams = getTeams().map((t) => String((t as any).teamId));
+  for (const teamId of teams) {
+    const players = getPlayers().filter((pl) => String((pl as any).teamId ?? "") === teamId);
+    const counts: Record<string, number> = {};
+    for (const pl of players) {
+      const pos = String((pl as any).pos ?? "").toUpperCase();
+      const bucket =
+        ["OT", "OG", "C"].includes(pos) ? "OL" :
+        ["DT", "NT"].includes(pos) ? "DL" :
+        ["DE"].includes(pos) ? "EDGE" :
+        ["MLB", "ILB", "OLB"].includes(pos) ? "LB" :
+        ["FS", "SS"].includes(pos) ? "S" :
+        pos;
+      counts[bucket] = (counts[bucket] ?? 0) + 1;
+    }
+    out[teamId] = counts;
+  }
+  return out;
+}
+
+
+function offerChance(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  patience: number;
+}): number {
+  const { base, req, patience } = args;
+  const yearsDelta = req.years - base.years;
+  const salaryDeltaPct = (req.salary - base.salary) / Math.max(1, base.salary);
+  const autonomyDelta = req.autonomy - base.autonomy;
+
+  let p = 0.62 + clamp(patience, 0, 100) * 0.0018;
+  p -= Math.max(0, yearsDelta) * 0.08;
+  p += Math.max(0, -yearsDelta) * 0.03;
+  p -= Math.max(0, salaryDeltaPct) * 0.65;
+  p += Math.max(0, -salaryDeltaPct) * 0.25;
+  p -= Math.max(0, autonomyDelta) * 0.004;
+  p += Math.max(0, -autonomyDelta) * 0.0015;
+  return clamp(p, 0.05, 0.92);
+}
+
+function buildCounter(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  rng: () => number;
+}): { years: number; salary: number; autonomy: number } {
+  const { base, req, rng } = args;
+  const years = clamp(Math.round(base.years + (req.years - base.years) * 0.35 + (rng() < 0.25 ? 1 : 0)), 1, 6);
+  const salary = Math.round(base.salary + (req.salary - base.salary) * 0.25 + (rng() < 0.25 ? base.salary * 0.03 : 0));
+  const autonomy = clamp(Math.round(base.autonomy + (req.autonomy - base.autonomy) * 0.2), 0, 100);
+  return { years, salary, autonomy };
+}
+
+function patiencePenalty(args: {
+  base: { years: number; salary: number; autonomy: number };
+  req: { years: number; salary: number; autonomy: number };
+  attempts: number;
+}): number {
+  const { base, req, attempts } = args;
+  const yearsDelta = req.years - base.years;
+  const salaryDeltaPct = (req.salary - base.salary) / Math.max(1, base.salary);
+  const autonomyDelta = req.autonomy - base.autonomy;
+
+  const yearsCost = Math.max(0, yearsDelta) * 6;
+  const salaryCost = Math.max(0, salaryDeltaPct) * 40;
+  const autoCost = Math.max(0, autonomyDelta) * 0.25;
+  const attemptCost = Math.max(0, attempts - 1) * 4;
+  const baseCost = 3;
+  return clamp(Math.round(baseCost + yearsCost + salaryCost + autoCost + attemptCost), 0, 35);
+}
+
+
+function clampRange(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function mergeSideline(base: SidelineAdjustments, patch?: Partial<SidelineAdjustments>): SidelineAdjustments {
+  if (!patch) return base;
+  return {
+    offense: { ...base.offense, ...(patch.offense ?? {}) },
+    defense: { ...base.defense, ...(patch.defense ?? {}) },
+    specialTeams: { ...base.specialTeams, ...(patch.specialTeams ?? {}) },
+  };
+}
+
+function deterministicRand(seed: number): number {
+  const x = Math.sin(seed >>> 0) * 10000;
+  return x - Math.floor(x);
+}
+
+function assertNever(x: never): never {
+  throw new Error(`Unhandled action: ${JSON.stringify(x)}`);
+}
+
+export function gameReducer(state: GameState, action: GameAction): GameState {
+  const blockedState = applyCentralMutationPhaseGuard(state, action);
+  if (blockedState) return blockedState;
+
+  const t = action.type;
+  if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE") {
+    return offseasonReducer(state, action as GameAction);
+  }
+  if (t.startsWith("DRAFT_")) {
+    return draftReducer(state, action as GameAction);
+  }
+  if (t.startsWith("SEASON_") || t.startsWith("PLAYOFFS_")) {
+    return seasonReducer(state, action as GameAction);
+  }
+  if (t.startsWith("FA_") || t.startsWith("FREE_AGENCY_")) {
+    return freeAgencyReducer(state, action as GameAction);
+  }
+  if (isStaffingAction(action)) {
+    const delegated = staffingReducer(state, action, {
+      addMemoryEvent,
+      gameReducer,
+    });
+    if (delegated) return delegated;
+  }
+  return gameReducerMonolith(state, action);
+}
+
+export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
+  const recoveryState = reduceRecoveryCases(state, action, {
+    buildMigrationEvents,
+  });
+  if (recoveryState) return recoveryState;
+
+  if (isStaffingAction(action)) {
+    const delegated = staffingReducer(state, action, {
+      addMemoryEvent,
+      gameReducer,
+    });
+    if (delegated) return delegated;
+  }
+
   switch (action.type) {
-    case "SET_COACH":
-      return { ...state, coach: { ...state.coach, ...action.payload } };
+    case "INIT_NEW_GAME_FROM_STORY": {
+      const isRehire = action.payload.isRehire === true;
+      // For rehires, preserve career history and archetype; for new starts, use fresh state
+      const newSaveId = allocateFreshCareerSaveId();
+      const fresh = createInitialState(newSaveId);
+      if (isPersistableCareerSaveId(newSaveId)) {
+        try {
+          setActiveSaveId(newSaveId);
+        } catch (error) {
+          logError("save.active.update.failure", { saveId: newSaveId, phase: "CREATE", season: fresh.season, week: fresh.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+        }
+      }
+      const base = isRehire ? { ...fresh, coach: state.coach, careerHistory: state.careerHistory } : fresh;
+      const outcome = action.payload.interviewOutcome;
+      // Persist autonomyGrant from interview outcome so downstream systems can read the hire contract
+      const autonomyFromOutcome = outcome?.autonomyGrant ?? action.payload.offer.autonomy;
+      const next = {
+        ...base,
+        phase: "CREATE",
+        acceptedOffer: action.payload.offer,
+        autonomyRating: autonomyFromOutcome,
+        ownerPatience: outcome ? outcome.leashLength * 20 : action.payload.offer.patience,
+        userTeamId: action.payload.offer.teamId,
+        teamId: action.payload.offer.teamId,
+        storySetup: {
+          teamId: action.payload.offer.teamId,
+          teamName: action.payload.teamName,
+          gmName: action.payload.gmName,
+          teamLocked: true as const,
+        },
+        staffRoster: { teamId: action.payload.offer.teamId, coaches: [] },
+        // Apply interview outcome to coach starting values
+        coach: {
+          ...base.coach,
+          autonomy: autonomyFromOutcome,
+        },
+        // Clear firing state for new job
+        firing: { ...fresh.firing },
+        careerStage: "OFFSEASON_HUB" as const,
+      };
+      return ensureMinimumFreeAgencyPool(next as GameState);
+    }
+    case "INIT_FREE_PLAY_CAREER": {
+      const { teamId, teamName, offer } = action.payload;
+      const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
+      const acceptedOffer: OfferItem = {
+        teamId,
+        years: Math.max(1, Number(offer?.years ?? 4)),
+        salary: Math.max(100_000, Math.round(Number(offer?.salary ?? 4_000_000))),
+        autonomy: clamp(Math.round(Number(offer?.autonomy ?? 70)), 0, 100),
+        patience: clamp(Math.round(Number(offer?.patience ?? 60)), 0, 100),
+        mediaNarrativeKey: String(offer?.mediaNarrativeKey ?? "free_play_start"),
+        base: {
+          years: Math.max(1, Number(offer?.years ?? 4)),
+          salary: Math.max(100_000, Math.round(Number(offer?.salary ?? 4_000_000))),
+          autonomy: clamp(Math.round(Number(offer?.autonomy ?? 70)), 0, 100),
+        },
+      };
+      const next = {
+        ...state,
+        acceptedOffer,
+        autonomyRating: acceptedOffer.autonomy,
+        ownerPatience: acceptedOffer.patience,
+        userTeamId: teamId,
+        teamId,
+        storySetup: state.storySetup ?? {
+          teamId,
+          teamName,
+          teamLocked: true as const,
+        },
+        staffRoster: { teamId, coaches: state.staffRoster.coaches ?? [] },
+        memoryLog: [...(state.memoryLog ?? []), { type: "HIRED_COACH", season: Number(state.season), week: state.week, payload: acceptedOffer }],
+        phase: "HUB" as const,
+        careerStage: "RESIGN" as const,
+        offseason: {
+          ...(state.offseason ?? { completed: {}, stepsComplete: {} }),
+          stepId: state.offseason?.stepId ?? OffseasonStepEnum.RESIGNING,
+        },
+        hub: {
+          ...(state.hub ?? { news: [], newsReadIds: {}, newsFilter: "ALL", preseasonWeek: 1, schedule: null }),
+          regularSeasonWeek: state.hub?.regularSeasonWeek ?? 1,
+        },
+        teamFinances: {
+          ...(state.teamFinances ?? { cash: 0, deadMoneyBySeason: {} }),
+          cash: financeRow?.cash ?? state.teamFinances?.cash ?? 0,
+        },
+      };
+      return ensureMinimumFreeAgencyPool(applyFinances(next as GameState));
+    }
+    case "SET_COACH": {
+      const nextCoach = { ...state.coach, ...action.payload };
+      const lockedCoord = nextCoach.archetypeId === "oc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
+        ? Math.max(60, Number(nextCoach.coordDeferenceLevel ?? 60))
+        : nextCoach.archetypeId === "dc_promoted" && Number(nextCoach.tenureYear ?? 1) <= 2
+          ? Math.max(65, Number(nextCoach.coordDeferenceLevel ?? 65))
+          : nextCoach.coordDeferenceLevel;
+      const repBase = nextCoach.reputation ? applyPerkReputationBonuses(nextCoach) : nextCoach.reputation;
+      const rep = repBase
+        ? enforceArchetypeReputationCaps(repBase, { archetypeId: nextCoach.archetypeId, tenureYear: nextCoach.tenureYear, coach: nextCoach })
+        : repBase;
 
+      return {
+        ...state,
+        coach: {
+          ...nextCoach,
+          coordDeferenceLevel: lockedCoord,
+          mediaExpectation:
+            nextCoach.archetypeId === "stc_promoted"
+              ? Math.max(35, Math.min(Number(nextCoach.mediaExpectation ?? 50), 55))
+              : nextCoach.mediaExpectation,
+          reputation: rep,
+        },
+      };
+    }
     case "SET_PHASE":
+      logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
+    case "ADVANCE_LEAGUE_PHASE": {
+      const nextPhase = advanceLeaguePhase(state.league.phase as LeaguePhase);
+      let next: GameState = { ...state, league: { ...state.league, phase: nextPhase } };
+      const userTeamId = getUserTeamId(next);
+      if (!userTeamId) return next;
 
-    case "SET_CAREER_STAGE":
-      return { ...state, careerStage: action.payload };
+      if (nextPhase === "REGULAR_SEASON_GAMEPLAN") {
+        const weekSchedule = next.hub.schedule?.regularSeasonWeeks.find((item) => item.week === next.hub.regularSeasonWeek);
+        const matchup = weekSchedule ? getTeamMatchup(weekSchedule, userTeamId) : null;
+        if (matchup) {
+          const persisted = resolvePersistedWeather(next, { weekType: "REGULAR_SEASON", weekNumber: next.hub.regularSeasonWeek, homeTeamId: matchup.homeTeamId, awayTeamId: matchup.awayTeamId });
+          next = { ...next, weatherByGameKey: persisted.weatherByGameKey };
+        }
+      }
 
-    case "ADVANCE_CAREER_STAGE":
-      return { ...state, careerStage: nextCareerStage(state.careerStage) };
+      if ((nextPhase === "WILD_CARD" || nextPhase === "DIVISIONAL" || nextPhase === "CONFERENCE" || nextPhase === "CHAMPIONSHIP") && next.playoffs?.pendingUserGame) {
+        const pending = next.playoffs.pendingUserGame;
+        const persisted = resolvePersistedWeather(next, { weekType: "PLAYOFFS", weekNumber: Number(next.playoffs.round ?? 1), homeTeamId: pending.homeTeamId, awayTeamId: pending.awayTeamId });
+        next = { ...next, weatherByGameKey: persisted.weatherByGameKey };
+      }
+      return next;
+    }
+    case "SET_TEAM_GAMEPLAN": {
+      return { ...state, teamGameplans: { ...(state.teamGameplans ?? {}), [action.payload.teamId]: action.payload.gameplan } };
+    }
+    case "LOCK_TEAM_GAMEPLAN": {
+      const current = state.teamGameplans?.[action.payload.teamId] ?? DEFAULT_WEEKLY_GAMEPLAN;
+      return { ...state, teamGameplans: { ...(state.teamGameplans ?? {}), [action.payload.teamId]: { ...current, locked: true } } };
+    }
+    case "SET_CAREER_STAGE": {
+      const prevStage = state.careerStage;
+      const nextStage = action.payload;
+      const next = { ...state, careerStage: nextStage };
+      return clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
+    }
+    case "ADVANCE_CAREER_STAGE": {
+      const prevStage = state.careerStage;
+      const nextStage = nextCareerStage(state.careerStage);
+      let next: GameState = { ...state, careerStage: nextStage };
+      next = clearDepthLocksIfEnteringPreseason(prevStage, nextStage, next);
+      if (prevStage !== "PRESEASON" && nextStage === "PRESEASON") next = seedDepthForTeam(next);
+      if (nextStage === "TRAINING_CAMP") next = fillDepthForTrainingCamp(next);
+      if (shouldRecomputeDepthOnTransition(prevStage, nextStage)) next = recomputeLeagueDepthAndNews(next);
+      if (nextStage === "PRE_DRAFT") next = next.offseasonData.preDraft.board.length ? next : {
+        ...next,
+        offseasonData: {
+          ...next.offseasonData,
+          preDraft: {
+            ...next.offseasonData.preDraft,
+            board: applyDraftPriorities(next, draftBoard()),
+          },
+        },
+      };
+      if (nextStage === "DRAFT") next = ensureDraftInitialized(next);
+      if (nextStage === "FREE_AGENCY") next = seedUserAutoFaOffersFromPriorities(resetFaPhase(clearResignOffers(applyOffseasonAgingAndRetirement(next))));
+      if (next.season !== state.season) {
+        next = gameReducer(next, { type: "CHARGE_BUYOUTS_FOR_SEASON", payload: { season: next.season } });
+        next = gameReducer(next, { type: "RECALC_OWNER_FINANCIAL", payload: { season: next.season } });
+      }
+      return next;
+    }
+    case "ADD_NEWS_ITEM":
+      return addNews(state, action.payload);
+    case "HUB_MARK_NEWS_READ": {
+      const ids: Record<string, true> = { ...(state.hub.newsReadIds ?? {}) };
+      for (const item of state.hub.news ?? []) ids[item.id] = true;
+      return { ...state, hub: { ...state.hub, newsReadIds: ids }, unreadNewsCount: 0, lastNewsReadWeek: Number(state.hub.regularSeasonWeek ?? state.week ?? 0) };
+    }
+    case "HUB_MARK_NEWS_ITEM_READ": {
+      const id = String(action.payload.id);
+      if (state.hub.newsReadIds?.[id]) return state;
+      return { ...state, hub: { ...state.hub, newsReadIds: { ...(state.hub.newsReadIds ?? {}), [id]: true } } };
+    }
+    case "HUB_SET_NEWS_FILTER": {
+      const filter = String(action.payload.filter || "ALL").toUpperCase();
+      return { ...state, hub: { ...state.hub, newsFilter: filter } };
+    }
+    case "SET_PLAYER_TRADE_BLOCK": {
+      const { playerId, isOnBlock } = action.payload;
+      return {
+        ...state,
+        tradeBlockByPlayerId: { ...state.tradeBlockByPlayerId, [String(playerId)]: Boolean(isOnBlock) },
+      };
+    }
+    case "EXECUTE_TRADE": {
+      const { teamA, teamB, outgoingPlayerIds, incomingPlayerIds, outgoingPicks = [], incomingPicks = [], valueDelta = 0 } = action.payload;
+      const currentWeek = Number(state.league.week ?? state.week ?? 1);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+      if (!isTradeAllowed(currentWeek, deadlineWeek)) {
+        return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+      }
 
+      const pickSwaps = [
+        ...outgoingPicks.map((pick) => ({
+          round: Number(pick.round),
+          year: Number(pick.year),
+          originalTeamId: String(pick.originalTeamId),
+          fromTeamId: String(teamA),
+          toTeamId: String(teamB),
+        })),
+        ...incomingPicks.map((pick) => ({
+          round: Number(pick.round),
+          year: Number(pick.year),
+          originalTeamId: String(pick.originalTeamId),
+          fromTeamId: String(teamB),
+          toTeamId: String(teamA),
+        })),
+      ];
+
+      let next = applyCanonicalTx(
+        state,
+        Tx.trade(String(teamA), String(teamB), {
+          playerIdsFrom: outgoingPlayerIds.map(String),
+          playerIdsTo: incomingPlayerIds.map(String),
+          pickSwaps,
+          details: {
+            outgoingPicks,
+            incomingPicks,
+            outgoingPlayersCount: outgoingPlayerIds.length,
+            incomingPlayersCount: incomingPlayerIds.length,
+          },
+        }),
+      );
+
+      const capDeltaA = outgoingPlayerIds.reduce((sum, playerId) => sum + tradeCapDelta(state, String(teamA), String(playerId), String(teamB)), 0)
+        - incomingPlayerIds.reduce((sum, playerId) => sum + tradeCapDelta(state, String(teamB), String(playerId), String(teamA)), 0);
+      const teamAName = getTeamById(String(teamA))?.name ?? "Your Team";
+      const teamBName = getTeamById(String(teamB))?.name ?? "Partner Team";
+      const gmRelationship = Math.max(0, Math.min(100, Number(next.coach.gmRelationship ?? 50) + (Number(valueDelta) <= 5 ? 2 : -1)));
+      const tradeFeedbackAlloc = createDeterministicFeedbackEvent(next, "TRADE_COMPLETE", { sentSummary: `${outgoingPlayerIds.length} player(s)`, receivedSummary: `${incomingPlayerIds.length} player(s)` });
+
+      next = {
+        ...tradeFeedbackAlloc.state,
+        coach: { ...tradeFeedbackAlloc.state.coach, gmRelationship },
+        finances: {
+          ...tradeFeedbackAlloc.state.finances,
+          capCommitted: Math.max(0, Number(tradeFeedbackAlloc.state.finances.capCommitted ?? 0) + Math.round(capDeltaA)),
+          capSpace: Math.max(0, Number(tradeFeedbackAlloc.state.finances.capSpace ?? 0) - Math.round(capDeltaA)),
+        },
+        uiToast: `${teamAName} completed a trade with ${teamBName}.`,
+        feedbackQueue: [tradeFeedbackAlloc.event, ...tradeFeedbackAlloc.state.feedbackQueue].slice(0, 50),
+        tradeError: undefined,
+      };
+      return next;
+    }
+    case "EXTEND_PLAYER": {
+      const { playerId, years, apy, guaranteedAtSigning } = action.payload;
+      const offer: ExtensionOffer = {
+        years: Math.max(1, Math.min(4, Number(years))),
+        apy: moneyRound(Number(apy)),
+        guaranteesPct: Number(apy) > 0 ? clamp01(Number(guaranteedAtSigning) / Number(apy * Math.max(1, years))) : 0,
+        discountPct: 0,
+        createdFrom: "AUDIT",
+      };
+      return gameReducer(state, { type: "EXTENSION_SUBMIT_OFFER", payload: { playerId: String(playerId), offer } });
+    }
+    case "EXTENSION_SUBMIT_OFFER": {
+      return resolveDeterministicExtensionSubmission(state, action.payload.playerId, action.payload.offer);
+    }
+    case "EXTENSION_CLEAR_OFFER": {
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      const current = decisions[String(action.payload.playerId)];
+      if (!current?.offer || current?.action !== "EXTEND_EARLY") return state;
+      delete decisions[String(action.payload.playerId)];
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "SET_ORG_ROLE":
+      return { ...state, orgRoles: { ...state.orgRoles, [action.payload.role]: action.payload.coachId } };
+    case "SET_SCHEME":
+      return {
+        ...state,
+        scheme: { ...state.scheme, ...action.payload },
+        playbooks: {
+          ...state.playbooks,
+          offensePlaybookId: action.payload.offense?.schemeId ?? state.playbooks.offensePlaybookId,
+          defensePlaybookId: action.payload.defense?.schemeId ?? state.playbooks.defensePlaybookId,
+        },
+      };
+    case "SET_STRATEGY_PRIORITIES": {
+      const positions = normalizePriorityList(action.payload.positions);
+      return { ...state, strategy: { ...state.strategy, draftFaPriorities: positions } };
+    }
+    case "SET_GM_MODE":
+      return { ...state, strategy: { ...state.strategy, gmMode: action.payload.gmMode } };
     case "COMPLETE_INTERVIEW": {
       const items = state.interviews.items.map((item) =>
-        item.teamId === action.payload.teamId
-          ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result }
-          : item
+        item.teamId === action.payload.teamId ? { ...item, completed: true, answers: action.payload.answers, result: action.payload.result } : item
       );
       return { ...state, interviews: { items, completedCount: items.filter((i) => i.completed).length } };
     }
-
     case "GENERATE_OFFERS":
       return { ...state, offers: generateOffers(state), phase: "OFFERS" };
-
-    case "ACCEPT_OFFER":
-      return {
+    case "ACCEPT_OFFER": {
+      const teamId = action.payload.teamId;
+      const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
+      const next = {
         ...state,
         acceptedOffer: action.payload,
         autonomyRating: action.payload.autonomy,
         ownerPatience: action.payload.patience,
-        memoryLog: addMemoryEvent(state, "HIRED_COACH", {
-          teamId: action.payload.teamId,
-          years: action.payload.years,
-          salary: action.payload.salary,
-          autonomy: action.payload.autonomy,
-          patience: action.payload.patience,
-        }),
+        userTeamId: teamId,
+        teamId,
+        staffRoster: { teamId, coaches: [] },
+        memoryLog: addMemoryEvent(state, "HIRED_COACH", action.payload),
         phase: "COORD_HIRING",
-      };
-
-    case "HIRE_STAFF": {
-      const key = action.payload.role === "OC" ? "ocId" : action.payload.role === "DC" ? "dcId" : "stcId";
-      const staff = { ...state.staff, [key]: action.payload.personId };
-      const allHired = staff.ocId && staff.dcId && staff.stcId;
-      if (!allHired) return { ...state, staff };
-
-      const schedule = createSchedule(state.saveSeed);
-      return {
-        ...state,
-        staff,
-        phase: "HUB",
-        careerStage: "OFFSEASON_HUB",
-        hub: {
-          ...state.hub,
-          schedule,
-          preseasonWeek: 1,
-          regularSeasonWeek: 1,
+        teamFinances: {
+          ...(state.teamFinances ?? { cash: 0, deadMoneyBySeason: {} }),
+          cash: financeRow?.cash ?? state.teamFinances?.cash ?? 0,
         },
       };
+      return applyFinances(next as GameState);
     }
+    case "NEGOTIATE_OFFER": {
+      const { teamId } = action.payload;
+      const offer = state.offers.find((o) => o.teamId === teamId);
+      if (!offer) return state;
 
-    case "HIRE_ASSISTANT": {
-      const assistantStaff = { ...state.assistantStaff, [action.payload.role]: action.payload.personId };
-      return {
-        ...state,
-        assistantStaff,
-        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : state.careerStage,
-      };
-    }
-
-    case "START_GAME":
-      return {
-        ...state,
-        game: {
-          opponentTeamId: action.payload.opponentTeamId,
-          homeScore: 0,
-          awayScore: 0,
-          quarter: 1,
-          down: 1,
-          distance: 10,
-          ballOn: 25,
-          seed: Date.now(),
-          weekType: action.payload.weekType,
-          weekNumber: action.payload.weekNumber,
-        },
+      const base = offer.base ?? { years: offer.years, salary: offer.salary, autonomy: offer.autonomy };
+      const req = {
+        years: clamp(Math.floor(action.payload.years), 1, 6),
+        salary: Math.max(100_000, Math.floor(action.payload.salary)),
+        autonomy: clamp(Math.floor(action.payload.autonomy), 0, 100),
       };
 
-    case "RESOLVE_PLAY": {
-      const g = state.game;
-      const rng = mulberry32(g.seed + g.down * 7 + g.ballOn * 13);
-      const rand = rng();
+      const chance = offerChance({ base, req, patience: offer.patience });
+      const seed = hashStr(`${state.saveSeed}|offer|${teamId}|${req.years}|${req.salary}|${req.autonomy}`);
+      const rng = mulberry32(seed);
+      const roll = rng();
 
-      const baseMean: Record<string, number> = { RUN: 3.8, SHORT_PASS: 6, DEEP_PASS: 10.5, PLAY_ACTION: 7.2 };
-      const baseVol: Record<string, number> = { RUN: 3, SHORT_PASS: 5, DEEP_PASS: 12, PLAY_ACTION: 7 };
+      let status: OfferNegotiationStatus = "DECLINED";
+      let message = "They declined your counter.";
+      let counter: { years: number; salary: number; autonomy: number } | null = null;
 
-      const mean = baseMean[action.payload.playType] ?? 5;
-      const vol = baseVol[action.payload.playType] ?? 5;
-      const yards = Math.round(mean + (rand - 0.5) * 2 * vol);
-      const clampedYards = Math.max(-12, Math.min(60, yards));
-
-      let ballOn = Math.max(1, Math.min(99, g.ballOn + clampedYards));
-      let down = g.down;
-      let distance = g.distance;
-      let homeScore = g.homeScore;
-      let lastResult = `${action.payload.playType.replace("_", " ")} for ${clampedYards} yards`;
-
-      if (ballOn >= 99) {
-        homeScore += 7;
-        lastResult = `TOUCHDOWN! ${action.payload.playType.replace("_", " ")} for ${clampedYards} yards!`;
-        ballOn = 25;
-        down = 1;
-        distance = 10;
-      } else if (clampedYards >= distance) {
-        down = 1;
-        distance = 10;
-        lastResult += " — First down!";
+      if (roll < chance) {
+        status = "ACCEPTED";
+        message = "They accepted your counter.";
       } else {
-        distance = Math.max(1, distance - clampedYards);
-        down += 1;
-        if (down > 4) {
-          lastResult += " — Turnover on downs!";
-          down = 1;
-          distance = 10;
-          ballOn = 25;
+        const margin = roll - chance;
+        const counterProb = clamp(0.55 - margin * 1.5, 0, 0.55);
+        if (rng() < counterProb) {
+          status = "COUNTERED";
+          counter = buildCounter({ base, req, rng });
+          message = "They countered your proposal.";
+        }
+      }
+
+      const prevAttempts = offer.negotiation?.attempts ?? 0;
+      const attempts = prevAttempts + 1;
+      const penalty = patiencePenalty({ base, req, attempts });
+      const nextPatience = clamp(offer.patience - penalty, 0, 100);
+
+      const nextOffers = state.offers.map((o) => {
+        if (o.teamId !== teamId) return o;
+        if (status === "ACCEPTED") {
+          return {
+            ...o,
+            years: req.years,
+            salary: req.salary,
+            autonomy: req.autonomy,
+            base,
+            patience: nextPatience,
+            negotiation: {
+              status,
+              attempts,
+              lastRequest: req,
+              lastChance: chance,
+              message,
+              counter: null,
+            },
+          };
+        }
+        return {
+          ...o,
+          base,
+          patience: nextPatience,
+          negotiation: {
+            status,
+            attempts,
+            lastRequest: req,
+            lastChance: chance,
+            message,
+            counter,
+          },
+        };
+      });
+
+      return { ...state, offers: nextOffers };
+    }
+    case "COORD_ATTEMPT_HIRE": {
+      const person = getPersonnelById(action.payload.personId);
+      if (!person) return state;
+
+      const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
+      if (!teamId) return state;
+
+      const expected = expectedSalary(action.payload.role, Number((person as any).reputation ?? 55));
+      const offered = offerSalary(expected, "FAIR");
+      const traits = getArchetypeTraits(state.coach.archetypeId);
+      const hireMod = Number(traits?.hiringAcceptanceModifiers?.[action.payload.role as "OC" | "DC" | "STC"] ?? 0);
+      const offeredWithArchetype = Math.round(offered * (1 + hireMod / 100));
+      const perkHireMod = getPerkHiringModifier(state.coach, String(action.payload.role));
+      const accepted = isOfferAccepted({
+        season: state.season,
+        teamId: String(teamId),
+        personId: String(action.payload.personId),
+        roleKey: String(action.payload.role),
+        reputation: Number((person as any).reputation ?? 55),
+        expectedSalary: expected,
+        offeredSalary: offeredWithArchetype,
+        isCoordinator: true,
+        hiringModifier: perkHireMod,
+      });
+
+      if (!accepted) {
+        return {
+          ...state,
+          memoryLog: addMemoryEvent(state, "COORD_REJECTED", {
+            ...action.payload,
+            score: 0,
+            tier: "REJECT",
+            threshold: 1,
+          }),
+        };
+      }
+
+      return gameReducer(state, {
+        type: "HIRE_STAFF",
+        payload: { role: action.payload.role, personId: action.payload.personId, salary: offeredWithArchetype },
+      });
+    }
+    case "HIRE_STAFF": {
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
+
+      if (action.payload.role === "OC" && state.staff.ocId) return state;
+      if (action.payload.role === "DC" && state.staff.dcId) return state;
+      if (action.payload.role === "STC" && state.staff.stcId) return state;
+
+      let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
+
+      const staff =
+        action.payload.role === "OC"
+          ? { ...nextState.staff, ocId: action.payload.personId }
+          : action.payload.role === "DC"
+            ? { ...nextState.staff, dcId: action.payload.personId }
+            : { ...nextState.staff, stcId: action.payload.personId };
+
+      const orgRoles =
+        action.payload.role === "OC"
+          ? { ...nextState.orgRoles, ocCoachId: action.payload.personId }
+          : action.payload.role === "DC"
+            ? { ...nextState.orgRoles, dcCoachId: action.payload.personId }
+            : { ...nextState.orgRoles, stcCoachId: action.payload.personId };
+
+      const res = setPersonnelTeamAndContract({
+        personId: action.payload.personId,
+        teamId,
+        startSeason: nextState.season,
+        years: 3,
+        salary: action.payload.salary,
+        notes: `${action.payload.role} hired`,
+      });
+
+      nextState = addStaffSalaryAndCash({ ...nextState, staff, orgRoles }, action.payload.personId, action.payload.salary);
+      const person = getPersonnelById(action.payload.personId) as any;
+      const schemeRaw = String(person?.scheme ?? person?.systemId ?? "").toUpperCase().replace(/\s+/g, "_");
+      const nextPlaybooks = {
+        ...nextState.playbooks,
+        userOverride: {
+          offense: Boolean(nextState.playbooks.userOverride?.offense),
+          defense: Boolean(nextState.playbooks.userOverride?.defense),
+        },
+      };
+      if (action.payload.role === "OC" && !nextPlaybooks.userOverride.offense) {
+        nextPlaybooks.offensePlaybookId = (schemeRaw || DEFAULT_OFFENSE_SCHEME_ID) as OffenseSchemeId;
+      }
+      if (action.payload.role === "DC" && !nextPlaybooks.userOverride.defense) {
+        nextPlaybooks.defensePlaybookId = (schemeRaw || DEFAULT_DEFENSE_SCHEME_ID) as DefenseSchemeId;
+      }
+      nextState = { ...nextState, playbooks: nextPlaybooks };
+
+      const staffComplete = !!(staff.ocId && staff.dcId && staff.stcId);
+
+      if (staffComplete) {
+        const hasActive = Object.keys(nextState.rosterMgmt.active ?? {}).length > 0;
+        if (!hasActive) {
+          const rosterPlayers = getTeamRosterPlayers(teamId);
+          const active = Object.fromEntries(rosterPlayers.map((p: any) => [String(p.playerId), true as const]));
+
+          const withActive: GameState = {
+            ...(nextState as GameState),
+            rosterMgmt: { ...nextState.rosterMgmt, active, cuts: {}, finalized: false },
+          };
+
+          nextState = {
+            ...withActive,
+            depthChart: {
+              ...withActive.depthChart,
+              startersByPos: autoFillDepthChartGaps(withActive, teamId),
+            },
+          };
         }
       }
 
       return {
-        ...state,
-        game: { ...g, ballOn, down, distance, homeScore, lastResult, seed: g.seed + 1 },
+        ...nextState,
+        staff,
+        orgRoles,
+        personnelTeamOverrides: {
+          ...nextState.personnelTeamOverrides,
+          [action.payload.personId]: { teamId, status: "ACTIVE", contractId: res?.contractId },
+        },
+        staffContractsByPersonId: res?._contract
+          ? { ...nextState.staffContractsByPersonId, [action.payload.personId]: res._contract as ContractRow }
+          : nextState.staffContractsByPersonId,
+        phase: staffComplete ? "HUB" : nextState.phase,
+        careerStage: staffComplete ? "OFFSEASON_HUB" : nextState.careerStage,
+        memoryLog: addMemoryEvent(nextState, "COORD_HIRED", { ...action.payload, contractId: res?.contractId }),
       };
     }
 
-    case "FINISH_GAME": {
-      let hub = { ...state.hub };
+    case "SET_PLAYBOOK": {
+      if (action.payload.side === "OFFENSE") {
+        return {
+          ...state,
+          playbooks: {
+            ...state.playbooks,
+            offensePlaybookId: action.payload.playbookId as OffenseSchemeId,
+            userOverride: {
+              offense: true,
+              defense: Boolean(state.playbooks.userOverride?.defense),
+            },
+          },
+          scheme: { ...state.scheme, offense: { ...state.scheme?.offense, schemeId: action.payload.playbookId as OffenseSchemeId } as any },
+        };
+      }
+      return {
+        ...state,
+        playbooks: {
+          ...state.playbooks,
+          defensePlaybookId: action.payload.playbookId as DefenseSchemeId,
+          userOverride: {
+            offense: Boolean(state.playbooks.userOverride?.offense),
+            defense: true,
+          },
+        },
+        scheme: { ...state.scheme, defense: { ...state.scheme?.defense, schemeId: action.payload.playbookId as DefenseSchemeId } as any },
+      };
+    }
+    case "ASSISTANT_ATTEMPT_HIRE": {
+      const person = getPersonnelById(action.payload.personId);
+      if (!person) return state;
 
-      if (state.game.weekType === "PRESEASON") {
-        hub = { ...hub, preseasonWeek: hub.preseasonWeek + 1 };
-      } else if (state.game.weekType === "REGULAR_SEASON") {
-        hub = { ...hub, regularSeasonWeek: hub.regularSeasonWeek + 1 };
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
+
+      const expected = expectedSalary(action.payload.role as any, Number((person as any).reputation ?? 55));
+      const offered = offerSalary(expected, "FAIR");
+      const traits = getArchetypeTraits(state.coach.archetypeId);
+      const roleKey = String(action.payload.role).includes("QB") ? "QB" : undefined;
+      const hireMod = Number((roleKey ? traits?.hiringAcceptanceModifiers?.[roleKey] : 0) ?? 0);
+      const offeredWithArchetype = Math.round(offered * (1 + hireMod / 100));
+      const perkHireMod = getPerkHiringModifier(state.coach, String(action.payload.role));
+      const accepted = isOfferAccepted({
+        season: state.season,
+        teamId: String(teamId),
+        personId: String(action.payload.personId),
+        roleKey: String(action.payload.role),
+        reputation: Number((person as any).reputation ?? 55),
+        expectedSalary: expected,
+        offeredSalary: offeredWithArchetype,
+        isCoordinator: false,
+        hiringModifier: perkHireMod,
+      });
+
+      if (!accepted) {
+        return {
+          ...state,
+          memoryLog: addMemoryEvent(state, "ASSISTANT_REJECTED", {
+            ...action.payload,
+            score: 0,
+            tier: "REJECT",
+            threshold: 1,
+          }),
+        };
+      }
+
+      return gameReducer(state, {
+        type: "HIRE_ASSISTANT",
+        payload: { role: action.payload.role, personId: action.payload.personId, salary: offeredWithArchetype },
+      });
+    }
+    case "HIRE_ASSISTANT": {
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
+
+      if (state.assistantStaff[action.payload.role]) return state;
+
+      let nextState = allowStaffOverageWithPenalty(state, action.payload.salary, "Staff budget exceeded");
+
+      const assistantStaff = { ...nextState.assistantStaff, [action.payload.role]: action.payload.personId };
+
+      const res = setPersonnelTeamAndContract({
+        personId: action.payload.personId,
+        teamId,
+        startSeason: nextState.season,
+        years: 2,
+        salary: action.payload.salary,
+        notes: `${String(action.payload.role)} hired`,
+      });
+
+      nextState = addStaffSalaryAndCash(
+        { ...nextState, assistantStaff },
+        action.payload.personId,
+        action.payload.salary
+      );
+
+      return {
+        ...nextState,
+        personnelTeamOverrides: {
+          ...nextState.personnelTeamOverrides,
+          [action.payload.personId]: { teamId, status: "ACTIVE", contractId: res?.contractId },
+        },
+        staffContractsByPersonId: res?._contract
+          ? { ...nextState.staffContractsByPersonId, [action.payload.personId]: res._contract as ContractRow }
+          : nextState.staffContractsByPersonId,
+        careerStage: areAllAssistantsHired(assistantStaff) ? "ROSTER_REVIEW" : nextState.careerStage,
+        memoryLog: addMemoryEvent(nextState, "ASSISTANT_HIRED", { ...action.payload, contractId: res?.contractId }),
+      };
+    }
+    case "HIRE_COACH": {
+      const { coach } = action.payload;
+      const roleExists = state.staffRoster.coaches.some((existing) => existing.role === coach.role);
+      if (roleExists) return state;
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: [...state.staffRoster.coaches, coach],
+        },
+      };
+    }
+    case "FIRE_COACH": {
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: state.staffRoster.coaches.filter((coach) => coach.coachId !== action.payload.coachId),
+        },
+      };
+    }
+    case "INCREMENT_COACH_TENURE": {
+      return {
+        ...state,
+        staffRoster: {
+          ...state.staffRoster,
+          coaches: state.staffRoster.coaches.map((coach) => ({ ...coach, tenureYears: coach.tenureYears + 1 })),
+        },
+      };
+    }
+    case "CREATE_STAFF_OFFER": {
+      const years = Math.max(1, Math.min(5, Math.round(Number(action.payload.years) || 1)));
+      const salary = Math.max(0, Math.round(Number(action.payload.salary) || 0));
+      if (!salary) return { ...state, uiToast: "Offer salary must be greater than $0." };
+
+      const person = getPersonnelById(action.payload.personId);
+      if (!person) return state;
+
+      const staffAlloc = allocateDeterministic(state, "staff", "STAFF_OFFER");
+      const baseOffer: StaffOffer = {
+        id: `${staffAlloc.id}_${action.payload.personId}`,
+        roleType: action.payload.roleType,
+        role: action.payload.role,
+        personId: action.payload.personId,
+        years,
+        salary,
+        status: "PENDING",
+        submittedSeason: state.season,
+        counterProposal: null,
+        revisionCount: 0,
+      };
+
+      const staffBudgetRemaining = state.staffBudget.total - state.staffBudget.used;
+      if (salary > staffBudgetRemaining) {
+        const budgetReason = `Exceeds coaching budget ($${(staffBudgetRemaining / 1_000_000).toFixed(1)}M remaining).`;
+        const rejectedBudget: StaffOffer = { ...baseOffer, status: "REJECTED", reason: budgetReason };
+        return { ...staffAlloc.state, staffOffers: [rejectedBudget, ...staffAlloc.state.staffOffers].slice(0, 100), uiToast: budgetReason, memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: budgetReason }) };
+      }
+
+      const personRep = Number((person as any)?.reputation ?? 55);
+      const expSalary = expectedSalary(action.payload.role as any, personRep);
+      const perkMod = getPerkHiringModifier(state.coach, action.payload.roleType === "COORDINATOR" ? "COORD" : "ASST");
+      const isCoordinator = action.payload.roleType === "COORDINATOR";
+      const userTeamId = String(state.acceptedOffer?.teamId ?? state.teamId ?? "");
+
+      const staffAccepted = isOfferAccepted({
+        season: state.season,
+        teamId: userTeamId,
+        personId: action.payload.personId,
+        roleKey: String(action.payload.role),
+        reputation: personRep,
+        expectedSalary: expSalary,
+        offeredSalary: salary,
+        isCoordinator,
+        hiringModifier: perkMod,
+      });
+
+      if (!staffAccepted) {
+        if (action.payload.roleType === "COORDINATOR" || action.payload.roleType === "ASSISTANT") {
+          const quality = offerQualityScore(salary, expSalary);
+          const counterYears = quality < 45 ? Math.min(5, years + 1) : years;
+          const counterSalary = Math.max(Math.round(expSalary * 1.02), Math.round(salary * 1.08));
+          const counteredOffer: StaffOffer = {
+            ...baseOffer,
+            status: "COUNTERED",
+            reason: "Candidate requested a counter-offer.",
+            counterProposal: { years: counterYears, salary: counterSalary },
+          };
+          return {
+            ...staffAlloc.state,
+            staffOffers: [counteredOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
+            uiToast: `${String((person as any).fullName ?? "Candidate")} countered your offer.`,
+            memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_COUNTERED", { ...action.payload, years, salary, counterYears, counterSalary }),
+          };
+        }
+
+        let rejectionReason = "Offer not competitive enough.";
+        if (salary < expSalary * 0.85) rejectionReason = "Salary below expectations.";
+        else if (personRep > (state.coach.repBaseline ?? 55) + 20) rejectionReason = "Team reputation insufficient for this candidate.";
+        const rejectedOffer: StaffOffer = { ...baseOffer, status: "REJECTED", reason: rejectionReason };
+        return {
+          ...staffAlloc.state,
+          staffOffers: [rejectedOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
+          uiToast: rejectionReason,
+          memoryLog: addMemoryEvent(staffAlloc.state, "STAFF_OFFER_REJECTED", { ...action.payload, years, salary, reason: rejectionReason }),
+        };
+      }
+
+      const acceptedOffer: StaffOffer = { ...baseOffer, status: "ACCEPTED", reason: "Offer accepted." };
+      const withOfferState: GameState = {
+        ...staffAlloc.state,
+        staffOffers: [acceptedOffer, ...staffAlloc.state.staffOffers].slice(0, 100),
+      };
+
+      const next =
+        action.payload.roleType === "COORDINATOR"
+          ? gameReducer(withOfferState, {
+              type: "HIRE_STAFF",
+              payload: { role: action.payload.role as "OC" | "DC" | "STC", personId: action.payload.personId, salary },
+            })
+          : gameReducer(withOfferState, {
+              type: "HIRE_ASSISTANT",
+              payload: { role: action.payload.role as keyof AssistantStaff, personId: action.payload.personId, salary },
+            });
+
+      return {
+        ...next,
+        uiToast: `${String((person as any).fullName ?? "Candidate")} accepted your offer.`,
+        memoryLog: addMemoryEvent(next, "STAFF_OFFER_ACCEPTED", { ...action.payload, years, salary }),
+      };
+    }
+    case "OFFSEASON_SET_TASK": {
+      const completed = { ...state.offseason.completed, [action.payload.taskId]: action.payload.completed };
+      return { ...state, offseason: { ...state.offseason, completed } };
+    }
+    case "OFFSEASON_APPLY_TASK_EFFECT": {
+      const id = action.payload.taskId;
+      if (!state.offseason.completed[id]) return state;
+
+      if (id === "INSTALL") {
+        return {
+          ...state,
+          scheme: {
+            offense: {
+              style: "BALANCED",
+              tempo: state.coach?.repBaseline && state.coach.repBaseline > 55 ? "FAST" : "NORMAL",
+              schemeId: "PRO_STYLE_BALANCED",
+            },
+            defense: { style: "MIXED", aggression: "NORMAL", schemeId: "MULTIPLE_HYBRID" },
+          },
+        };
+      }
+
+      if (id === "MEDIA") {
+        return {
+          ...state,
+          coach: { ...state.coach, repBaseline: 55, mediaExpectation: 50, autonomy: state.coach.autonomy ?? 60 },
+        };
+      }
+
+      if (id === "SCOUTING") {
+        return {
+          ...state,
+          scouting: { ...(state.scouting ?? { boardSeed: state.saveSeed }), combineRun: true },
+        };
+      }
+
+      if (id === "STAFF") {
+        const ok = !!state.orgRoles.ocCoachId && !!state.orgRoles.dcCoachId && !!state.orgRoles.stcCoachId;
+        if (!ok) return state;
+        return state;
+      }
+
+      return state;
+    }
+    case "OFFSEASON_COMPLETE_STEP": {
+      const stepsComplete = { ...state.offseason.stepsComplete, [action.payload.stepId]: true };
+      let next = { ...state, offseason: { ...state.offseason, stepsComplete } };
+      if (action.payload.stepId === "RESIGNING") {
+        const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+        for (const teamId of getAllTeamIds().filter((id) => id !== userTeamId)) {
+          const teamCtx = buildCpuTeamContext(next, teamId);
+          const expiring = getEffectivePlayersByTeam(next, teamId)
+            .filter((p: any) => {
+              const override = next.playerContractOverrides[String(p.playerId)];
+              const contractId = p.contractId ?? getPlayerById(String(p.playerId))?.contractId;
+              const db = contractId ? getContractById(String(contractId)) : getPlayerContract(String(p.playerId));
+              const endSeason = Number(override?.endSeason ?? db?.endSeason ?? -1);
+              return endSeason === next.season;
+            })
+            .map((p: any) => ({
+              playerId: String(p.playerId),
+              pos: String(p.pos ?? "UNK"),
+              age: Number(p.age ?? 26),
+              overall: Number(p.overall ?? p.ovr ?? 60),
+              devTrait: String((p as any)?.development?.trait ?? "normal"),
+            }));
+          const offers = cpuResignPlayers(teamCtx, expiring);
+          for (const offer of offers) {
+            const ovr = contractOverrideFromOffer(next, { years: offer.years, apy: offer.offerApy, guaranteesPct: 0, discountPct: 0 });
+            next = applyCanonicalTx(next, Tx.resign(teamId, String(offer.playerId), ovr));
+          }
+        }
+      }
+      if (action.payload.stepId === "FREE_AGENCY") {
+        while (next.freeAgency.resolvesUsedThisPhase < next.freeAgency.maxResolvesPerPhase && hasPendingFreeAgencyOffers(next)) {
+          const resolved = gameReducer(next, { type: "FA_RESOLVE" });
+          if (resolved === next) break;
+          next = resolved;
+        }
+        next = expireRemainingFreeAgencyOffers(next, "Expired: offseason free agency step completed");
+      }
+      return next;
+    }
+    case "OFFSEASON_SET_STEP": {
+      const stepId = action.payload.stepId;
+      if (stepId === OffseasonStepEnum.COMBINE) {
+        const next = ensureOffseasonCombineData(state);
+        return { ...next, offseason: { ...next.offseason, stepId } };
+      }
+      if (stepId === OffseasonStepEnum.PRE_DRAFT && !state.offseasonData.preDraft.board.length) {
+        return {
+          ...state,
+          offseason: { ...state.offseason, stepId },
+          offseasonData: { ...state.offseasonData, preDraft: { ...state.offseasonData.preDraft, board: draftBoard() } },
+        };
+      }
+      if (stepId === OffseasonStepEnum.DRAFT && !state.offseasonData.draft.board.length) {
+        return {
+          ...state,
+          offseason: { ...state.offseason, stepId },
+          offseasonData: { ...state.offseasonData, draft: { ...state.offseasonData.draft, board: draftBoard() } },
+        };
+      }
+      return { ...state, offseason: { ...state.offseason, stepId } };
+    }
+    case "OFFSEASON_ADVANCE_STEP": {
+      const cur = state.offseason.stepId;
+      if (!state.offseason.stepsComplete[cur]) return state;
+      let nextStep: OffseasonStepId;
+      try {
+        nextStep = StateMachine.advanceOffseasonStep(cur, { enableTamperingStep: ENABLE_TAMPERING_STEP });
+      } catch {
+        return state;
+      }
+
+      const prevStage = state.careerStage;
+      const stage: CareerStage = StateMachine.careerStageForOffseasonStep(nextStep, state.careerStage);
+
+      logInfo("offseason.step.transition", { phase: state.phase, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: cur, to: nextStep } });
+      let next = { ...state, careerStage: stage, offseason: { ...state.offseason, stepId: nextStep } };
+      if (stage === "FREE_AGENCY") next = advanceToFreeAgency(next);
+      if (stage === "DRAFT") next = advanceToDraft(next);
+      if (cur === OffseasonStepEnum.RESIGNING) {
+        next = gameReducer(next, { type: "EXPIRE_EXPIRING_CONTRACTS_TO_FA", payload: { nextSeason: state.season + 1 } });
+      }
+      if (nextStep === OffseasonStepEnum.COMBINE) next = ensureOffseasonCombineData(next);
+      next = clearDepthLocksIfEnteringPreseason(prevStage, stage, next);
+      if (prevStage !== "PRESEASON" && stage === "PRESEASON") next = seedDepthForTeam(next);
+      if (shouldRecomputeDepthOnTransition(prevStage, stage)) next = recomputeLeagueDepthAndNews(next);
+      if (stage === "FREE_AGENCY") next = resetFaPhase(clearResignOffers(applyOffseasonAgingAndRetirement(next)));
+      if (nextStep === OffseasonStepEnum.TRAINING_CAMP) next = applySeasonDevelopment(next);
+      return next;
+    }
+    case "RESIGN_SET_DECISION":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          resigning: { decisions: { ...state.offseasonData.resigning.decisions, [action.payload.playerId]: action.payload.decision } },
+        },
+      };
+    case "RESIGN_DRAFT_FROM_AUDIT": {
+      const { playerId } = action.payload;
+      const offer = buildResignOffer(state, String(playerId), "AUDIT");
+      if (!offer) return state;
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      decisions[String(playerId)] = { action: "RESIGN", offer };
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "RESIGN_MAKE_OFFER": {
+      const { playerId, createdFrom } = action.payload;
+      const offer = buildResignOffer(state, String(playerId), createdFrom);
+      if (!offer) return state;
+
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      decisions[String(playerId)] = { action: "RESIGN", offer };
+
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } };
+    }
+    case "RESIGN_SUBMIT_OFFER": {
+      const { playerId, offer } = action.payload;
+      const normalizedOffer = sanitizeResignOffer(offer);
+      if (!normalizedOffer) return state;
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+      if (!teamId) return state;
+      const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+      if (!p) return state;
+
+      const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+      const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+      const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+      const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+      const decision = evaluateContractOffer({
+        player: {
+          id: String(playerId),
+          age: Number(p.age ?? 26),
+          overall: Number(p.overall ?? p.ovr ?? 60),
+          position: String(p.pos ?? "UNK"),
+        },
+        offer: {
+          years: Number(normalizedOffer.years),
+          aav: Number(normalizedOffer.apy),
+          guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+        },
+        context: {
+          saveSeed: Number(state.saveSeed ?? 1),
+          season: Number(state.season ?? 2026),
+          week: Number(state.week ?? 1),
+          teamId: String(teamId),
+          phase: "RESIGN",
+          schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+          roleProjection: resolveRoleProjection(state, p),
+          contenderStatus: resolveContenderStatus(state, String(teamId)),
+          locationPreference: resolveLocationPreference(state, String(teamId), p),
+          desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+        },
+        interest: interestBefore,
+        priorOfferAav,
+        rejectionCount,
+      });
+
+      const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+      contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+      const resign = {
+        lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+        rejectionCountByPlayerId: {
+          ...state.resign.rejectionCountByPlayerId,
+          [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+        },
+      };
+
+      const modalAlloc = buildOfferResultModal(state, {
+        title: decision.accepted ? "Offer Accepted" : "Offer Rejected",
+        message: decision.reason,
+        variant: decision.accepted ? "success" : "danger",
+      });
+
+      if (!decision.accepted) {
+        return {
+          ...modalAlloc.state,
+          contracts: { playerTeamInterestById: contractsByPlayer },
+          resign,
+          ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+        };
+      }
+
+      const ovr = contractOverrideFromOffer(state, normalizedOffer);
+      const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      delete decisions[String(playerId)];
+
+      const morale = { ...(state.playerMorale ?? {}) };
+      const curMorale = Number(morale[String(playerId)] ?? 60);
+      morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+      let next = applyFinances({
+        ...modalAlloc.state,
+        playerContractOverrides,
+        playerMorale: morale,
+        offseasonData: { ...state.offseasonData, resigning: { decisions } },
+        contracts: { playerTeamInterestById: contractsByPlayer },
+        resign,
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+      });
+
+      if (isNewsworthyRecommit(p)) {
+        next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+      }
+      return next;
+    }
+    case "RESIGN_REJECT_OFFER": {
+      const { playerId } = action.payload;
+      const cur = state.offseasonData.resigning.decisions?.[String(playerId)];
+      if (!cur?.offer) return state;
+
+      const decisions = { ...state.offseasonData.resigning.decisions };
+      delete decisions[String(playerId)];
+
+      return pushNews({ ...state, offseasonData: { ...state.offseasonData, resigning: { decisions } } }, `Offer declined. Active proposal cleared.`);
+    }
+    case "RESIGN_ACCEPT_OFFER": {
+      const { playerId } = action.payload;
+      const cur: any = state.offseasonData.resigning.decisions?.[String(playerId)];
+      if (!cur?.offer) return state;
+
+      const offer = sanitizeResignOffer(cur.offer as ResignOffer);
+      if (!offer) return state;
+
+      const ovr = contractOverrideFromOffer(state, offer);
+
+      const decisions = { ...state.offseasonData.resigning.decisions } as any;
+      delete decisions[String(playerId)];
+
+      const morale = { ...(state.playerMorale ?? {}) };
+      const curMorale = Number(morale[String(playerId)] ?? 60);
+      morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+      let next = applyCanonicalTx(state, Tx.resign(String(state.acceptedOffer?.teamId ?? ""), String(playerId), ovr));
+      next = applyFinances({
+        ...next,
+        playerMorale: morale,
+        offseasonData: { ...next.offseasonData, resigning: { decisions } },
+      });
+
+      const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+      if (isNewsworthyRecommit(p)) {
+        next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+      }
+
+      return next;
+    }
+    case "RESIGN_CLEAR_DECISION": {
+      const next = { ...state.offseasonData.resigning.decisions };
+      delete next[action.payload.playerId];
+      return { ...state, offseasonData: { ...state.offseasonData, resigning: { decisions: next } } };
+    }
+    case "ROSTERAUDIT_SET_CUT_DESIGNATION": {
+      const { playerId, designation } = action.payload;
+      const cutDesignations = { ...state.offseasonData.rosterAudit.cutDesignations };
+      if (designation === "NONE") delete cutDesignations[playerId];
+      else cutDesignations[playerId] = designation;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          rosterAudit: { cutDesignations },
+        },
+      };
+    }
+    case "EXPIRE_EXPIRING_CONTRACTS_TO_FA": {
+      return expireExpiringContractsToFreeAgency(state, Number(action.payload.nextSeason));
+    }
+    case "TAG_REMOVE": {
+      const applied = state.offseasonData.tagCenter.applied;
+      if (!applied) return state;
+
+      const next = applyCanonicalTx(state, Tx.franchiseTagRemove(String(applied.teamId ?? state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? ""), applied.playerId, applied.priorContract));
+      const franchiseTags = { ...next.franchiseTags };
+      delete franchiseTags[applied.playerId];
+
+      return applyFinances({
+        ...next,
+        offseasonData: { ...next.offseasonData, tagCenter: { applied: undefined } },
+        franchiseTags,
+      });
+    }
+    case "APPLY_FRANCHISE_TAG":
+    case "TAG_APPLY": {
+      const playerId = action.type === "TAG_APPLY" ? action.payload.playerId : action.payload.playerId;
+      try {
+        const tagType = action.type === "TAG_APPLY" ? action.payload.type : "FRANCHISE_NON_EX";
+        return applyFranchiseTag(state, playerId, tagType);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "TAG_FAILED";
+        return pushNews(state, `Franchise tag failed: ${reason}.`);
+      }
+    }
+    case "CONTRACT_RESTRUCTURE_APPLY": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const { playerId } = action.payload;
+      const gate = getRestructureEligibility(state, playerId);
+      if (!gate.eligible) return pushNews(state, `Restructure blocked: ${gate.reasons[0]}`);
+
+      const amount = moneyRound(Math.max(0, action.payload.amount));
+      const o = state.playerContractOverrides[playerId];
+      if (!o) return state;
+
+      const idx = Math.max(0, Math.min(o.salaries.length - 1, state.season - o.startSeason));
+      const curSalary = Number(o.salaries[idx] ?? 0);
+      const x = moneyRound(Math.min(amount, curSalary));
+      if (x <= 0) return state;
+
+      const yearsRemaining = Math.max(1, o.endSeason - state.season + 1);
+      const addedProration = moneyRound(x / yearsRemaining);
+
+      const nextO: PlayerContractOverride = {
+        ...o,
+        salaries: o.salaries.map((s, i) => (i === idx ? moneyRound(Number(s ?? 0) - x) : moneyRound(Number(s ?? 0)))),
+        signingBonus: moneyRound(Number(o.signingBonus ?? 0) + x),
+        prorationBySeason: { ...(o.prorationBySeason ?? {}) },
+      };
+
+      for (let y = state.season; y <= o.endSeason; y++) {
+        nextO.prorationBySeason![y] = moneyRound((nextO.prorationBySeason![y] ?? 0) + addedProration);
+      }
+
+      const next = applyFinances({
+        ...state,
+        playerContractOverrides: { ...state.playerContractOverrides, [playerId]: nextO },
+      });
+
+      return pushNews(next, `Restructure applied: ${Math.round(x / 1_000_000)}M converted to bonus.`);
+    }
+    case "SCOUT_INIT": {
+      const saveSeed = state.saveSeed;
+      const unifiedPhase = getUnifiedPhase(state);
+      const windowId =
+        unifiedPhase === "COMBINE" ? "COMBINE" :
+        unifiedPhase === "PRE_DRAFT" || isInFranchiseActionWindow(unifiedPhase, "draft") ? "PRE_DRAFT" :
+        isInFranchiseActionWindow(unifiedPhase, "free-agency") ? "FREE_AGENCY" :
+        "IN_SEASON";
+      const windowKey = `${state.season}:${state.careerStage}:${windowId}`;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const draftClass = (draftClassJson as any[]).map((row, i) => ({
+        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
+        name: row.name ?? row["Name"] ?? "Unknown",
+        pos: row.pos ?? row["POS"] ?? "UNK",
+        school: row.school ?? row.college ?? "—",
+        age: row.age ?? 21,
+        grade: row.grade ?? row.ovr ?? row["Grade"] ?? row["Overall"] ?? 75,
+      }));
+      const seed = (k: string) => detRand2(saveSeed, `scout:${k}`);
+
+      const trueProfiles: Record<string, ProspectTrueProfile> = {};
+      const scoutProfiles: Record<string, any> = {};
+
+      for (const p of draftClass) {
+        const medR = seed(`true:med:${p.id}`);
+        const charR = seed(`true:char:${p.id}`);
+        const trueCharacterScore = Math.round(40 + seed(`true:charScore:${p.id}`) * 59);
+        const trueIntelligenceScore = Math.round(40 + seed(`true:iqScore:${p.id}`) * 59);
+        const medTier = medR < 0.62 ? "GREEN" : medR < 0.82 ? "YELLOW" : medR < 0.93 ? "ORANGE" : medR < 0.985 ? "RED" : "BLACK";
+        const charTier = charR < 0.08 ? "BLUE" : charR < 0.72 ? "GREEN" : charR < 0.86 ? "YELLOW" : charR < 0.94 ? "ORANGE" : charR < 0.985 ? "RED" : "BLACK";
+
+        const qbLike = String(p.pos ?? "").toUpperCase() === "QB";
+        const qbAttr = qbLike ? {
+          armStrength: Math.round(65 + seed(`true:arm:${p.id}`) * 30),
+          accuracyShort: Math.round(62 + seed(`true:accS:${p.id}`) * 34),
+          accuracyMid: Math.round(60 + seed(`true:accM:${p.id}`) * 34),
+          accuracyDeep: Math.round(56 + seed(`true:accD:${p.id}`) * 36),
+          decisionSpeed: Math.round(58 + seed(`true:dec:${p.id}`) * 35),
+          pocketPresence: Math.round(58 + seed(`true:pocket:${p.id}`) * 35),
+          speed: Math.round(58 + seed(`true:spd:${p.id}`) * 38),
+          acceleration: Math.round(58 + seed(`true:accel:${p.id}`) * 38),
+          elusiveness: Math.round(55 + seed(`true:elu:${p.id}`) * 40),
+          readSpeed: Math.round(55 + seed(`true:read:${p.id}`) * 40),
+          rpoRating: Math.round(50 + seed(`true:rpo:${p.id}`) * 44),
+          scrambleDiscipline: Math.round(50 + seed(`true:scrd:${p.id}`) * 44),
+          armOnRunAccuracy: Math.round(50 + seed(`true:runAcc:${p.id}`) * 44),
+        } : {};
+        trueProfiles[p.id] = {
+          trueOVR: Math.round(p.grade),
+          trueAttributes: { character: trueCharacterScore, intelligence: trueIntelligenceScore, ...qbAttr },
+          trueMedical: { tier: medTier as any, recurrence01: Math.round(seed(`true:rec:${p.id}`) * 100) / 100, degenerative: seed(`true:deg:${p.id}`) < 0.06 },
+          trueCharacter: {
+            tier: charTier as any,
+            volatility01: Math.round(seed(`true:vol:${p.id}`) * 100) / 100,
+            leadershipTag: seed(`true:lead:${p.id}`) < 0.2 ? "HIGH" : seed(`true:lead2:${p.id}`) < 0.55 ? "MED" : "LOW",
+          },
+        };
+
+        scoutProfiles[p.id] = initScoutProfile({
+          prospectId: p.id,
+          trueOVR: trueProfiles[p.id].trueOVR,
+          pos: p.pos,
+          seed: (kk: string) => seed(kk),
+          gm,
+          windowKey,
+          divergenceWidth: String(p.pos ?? "").toUpperCase() === "QB" ? getQbScoutingDivergenceByArchetype(resolveQbArchetypeTag({ ...(trueProfiles[p.id].trueAttributes ?? {}), pos: "QB", playerId: p.id, fullName: p.name } as any)) : undefined,
+        });
+      }
+
+      const tiers = { T1: [] as string[], T2: [] as string[], T3: [] as string[], T4: [] as string[], T5: [] as string[] };
+      const tierBy: Record<string, "T1" | "T2" | "T3" | "T4" | "T5"> = {};
+      const sorted = [...draftClass].sort((a, b) => trueProfiles[b.id].trueOVR - trueProfiles[a.id].trueOVR);
+      sorted.forEach((p, i) => {
+        const t = i < 25 ? "T1" : i < 60 ? "T2" : i < 110 ? "T3" : i < 170 ? "T4" : "T5";
+        tiers[t].push(p.id);
+        tierBy[p.id] = t;
+      });
+
+      const budget = computeBudget({ gm, windowId: windowId as any, carryIn: 0 });
+
+      const unicornBoostByProspectId: Record<string, number> = {};
+      for (const p of draftClass) {
+        const signal = getProspectUnicornSignal(state, String(p.id));
+        if (signal <= 0.5) continue;
+        unicornBoostByProspectId[String(p.id)] = signal;
+        const existing = scoutProfiles[String(p.id)];
+        if (!existing) continue;
+        const bump = Math.round((signal - 0.5) * 20);
+        scoutProfiles[String(p.id)] = {
+          ...existing,
+          estHigh: Math.min(99, Number(existing.estHigh ?? 85) + bump),
+          estLow: Math.min(95, Number(existing.estLow ?? 65) + Math.max(1, Math.floor(bump / 2))),
+          confidence: Math.min(99, Number(existing.confidence ?? 0) + Math.round(signal * 10)),
+          hypeTag: signal >= 0.7 ? "UNICORN" : existing.hypeTag,
+        };
       }
 
       return {
         ...state,
-        hub,
-        game: {
-          opponentTeamId: undefined,
-          homeScore: 0,
-          awayScore: 0,
-          quarter: 1,
-          down: 1,
-          distance: 10,
-          ballOn: 25,
-          seed: state.game.seed + 1,
+        scoutingState: {
+          windowId: windowId as any,
+          windowKey,
+          budget,
+          carryover: budget.remaining,
+          trueProfiles,
+          scoutProfiles,
+          myBoardOrder: draftClass.map((p) => String(p.id)),
+          bigBoard: { tiers, tierByProspectId: tierBy },
+          combine: { generated: false, day: 1, selectedByDay: {}, interviewResultsByProspectId: {}, days: defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
+          visits: { privateWorkoutsRemaining: 15, top30Remaining: 30, applied: {} },
+          interviews: { interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {}, resultsByProspectId: {} },
+          medical: { requests: {}, resultsByProspectId: {} },
+          workouts: { resultsByProspectId: {} },
+          allocation: { poolHours: windowId === "COMBINE" ? COMBINE_DEFAULT_INTERVIEW_TOKENS : 20, byGroup: {} },
+          inSeason: { locked: state.careerStage !== "REGULAR_SEASON", regionFocus: [] },
         },
       };
     }
 
-    case "RESET":
-      return createInitialState();
+    case "SCOUT_HYDRATE_MY_BOARD_ORDER": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const validIds = new Set(Object.keys(s.scoutProfiles));
+      const seen = new Set<string>();
+      const currentOrder = Array.isArray(s.myBoardOrder) ? s.myBoardOrder : [];
+      const provided = action.payload.prospectIds.filter((id) => validIds.has(id) && !seen.has(id) && seen.add(id));
+      const existing = currentOrder.filter((id) => validIds.has(id) && !seen.has(id) && seen.add(id));
+      const myBoardOrder = [...existing, ...provided];
+      if (
+        myBoardOrder.length === currentOrder.length &&
+        myBoardOrder.every((id, i) => id === currentOrder[i])
+      ) {
+        return state;
+      }
+      return { ...state, scoutingState: { ...s, myBoardOrder } };
+    }
 
-    default:
+    case "SCOUT_REORDER_MY_BOARD": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { draggedId, targetId } = action.payload;
+      if (!draggedId || !targetId || draggedId === targetId) return state;
+      const next = [...(Array.isArray(s.myBoardOrder) ? s.myBoardOrder : [])];
+      const from = next.indexOf(draggedId);
+      const to = next.indexOf(targetId);
+      if (from < 0 || to < 0) return state;
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return { ...state, scoutingState: { ...s, myBoardOrder: next } };
+    }
+
+
+    case "SCOUT_BOARD_MOVE": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, dir } = action.payload;
+      const tier = s.bigBoard.tierByProspectId[prospectId];
+      const list = [...(s.bigBoard.tiers[tier] ?? [])];
+      const idx = list.indexOf(prospectId);
+      if (idx < 0) return state;
+      const j = dir === "UP" ? idx - 1 : idx + 1;
+      if (j < 0 || j >= list.length) return state;
+      [list[idx], list[j]] = [list[j], list[idx]];
+      return { ...state, scoutingState: { ...s, bigBoard: { ...s.bigBoard, tiers: { ...s.bigBoard.tiers, [tier]: list } } } };
+    }
+
+    case "SCOUT_BOARD_MOVE_TIER": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, tierId } = action.payload;
+      const from = s.bigBoard.tierByProspectId[prospectId];
+      if (!from || from === tierId) return state;
+      const fromList = (s.bigBoard.tiers[from] ?? []).filter((id) => id !== prospectId);
+      const toList = [...(s.bigBoard.tiers[tierId] ?? []), prospectId];
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          bigBoard: {
+            tiers: { ...s.bigBoard.tiers, [from]: fromList, [tierId]: toList },
+            tierByProspectId: { ...s.bigBoard.tierByProspectId, [prospectId]: tierId },
+          },
+        },
+      };
+    }
+
+    case "SCOUT_PIN": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId } = action.payload;
+      const p = s.scoutProfiles[prospectId];
+      if (!p) return state;
+      return { ...state, scoutingState: { ...s, scoutProfiles: { ...s.scoutProfiles, [prospectId]: { ...p, pinned: !p.pinned } } } };
+    }
+
+    case "SCOUT_SPEND": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { prospectId, action: a } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `scout:${k}`);
+      const cost = a === "FILM_QUICK" ? 2 : a === "FILM_DEEP" ? 5 : 4;
+      if (s.budget.remaining < cost) return state;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      const budget = { ...s.budget, remaining: s.budget.remaining - cost, spent: s.budget.spent + cost };
+
+      if (a === "FILM_QUICK") {
+        addClarity({ profile, track: "TALENT", points: 8, gm });
+        tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: a, hoursOrPoints: 2, minWidth: 6 });
+      } else if (a === "FILM_DEEP") {
+        addClarity({ profile, track: "TALENT", points: 22, gm });
+        addClarity({ profile, track: "FIT", points: 6, gm });
+        tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: a, hoursOrPoints: 5, minWidth: 5 });
+      } else if (a === "BACKGROUND") {
+        addClarity({ profile, track: "CHAR", points: 20, gm });
+        revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      } else {
+        addClarity({ profile, track: "MED", points: 20, gm });
+        revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      }
+
+      return { ...state, scoutingState: { ...s, budget, carryover: budget.remaining, scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile } } };
+    }
+
+    case "SCOUT_COMBINE_GENERATE": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const seed = (k: string) => detRand2(state.saveSeed, `combine:${k}`);
+      const results: Record<string, any> = {};
+      const feed: { id: string; day: number; text: string; prospectId?: string }[] = [];
+      const recapByDay = { ...s.combine.recapByDay };
+
+      for (let day = 1; day <= COMBINE_DAY_COUNT; day++) {
+        recapByDay[day] = recapByDay[day] ?? defaultCombineRecap();
+      }
+
+      for (const id of Object.keys(s.scoutProfiles)) {
+        const draftProspect = (draftClassJson as any[])
+          .map((row, idx) => ({
+            id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
+            name: row.name ?? row["Name"] ?? "Unknown",
+            pos: String(row.pos ?? row["POS"] ?? "UNK").toUpperCase(),
+          }))
+          .find((x) => x.id === id);
+        if (!draftProspect) continue;
+
+        const r1 = seed(`${id}:r1`);
+        const r2 = seed(`${id}:r2`);
+        const r3 = seed(`${id}:r3`);
+        const r4 = seed(`${id}:r4`);
+        const forty = Math.round((4.3 + r1 * 1.0) * 100) / 100;
+        const shuttle = Math.round((3.9 + r2 * 1.2) * 100) / 100;
+        const vert = Math.round((26 + r3 * 14) * 10) / 10;
+        const bench = Math.round(8 + r4 * 32);
+        const ras = Math.round(clamp01(1 - (forty - 4.3) / 1.0) * 100) / 10;
+        results[id] = { forty, shuttle, vert, bench, ras };
+
+        const day = combineDayForPosition(draftProspect.pos);
+        const entry = buildCombineFeedEntry({
+          saveSeed: state.saveSeed,
+          day,
+          prospectId: id,
+          name: draftProspect.name,
+          pos: draftProspect.pos,
+          ras,
+          forty,
+          medicalTier: s.trueProfiles[id]?.trueMedical?.tier,
+        });
+        feed.push({ id: entry.id, day: entry.day, text: entry.text, prospectId: id });
+
+        const recap = recapByDay[day] ?? defaultCombineRecap();
+        if (entry.category === "STANDOUT" || entry.category === "SOLID") recap.risers = [...recap.risers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        if (entry.category === "POOR") recap.fallers = [...recap.fallers, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        if (entry.category === "INJURY" || entry.category === "BUZZ_CORRECTION") recap.flags = [...recap.flags, draftProspect.name].slice(0, COMBINE_FEED_MAX_PER_DAY);
+        recapByDay[day] = recap;
+      }
+
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            generated: true,
+            resultsByProspectId: results,
+            feed,
+            recapByDay,
+            days: defaultCombineDays(),
+            prospects: s.combine.prospects ?? {},
+          },
+        },
+      };
+    }
+
+    case "SCOUT_COMBINE_SET_DAY": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const nextDay = clamp(action.payload.day, 1, COMBINE_DAY_COUNT) as 1 | 2 | 3 | 4;
+      const baseDays = s.combine.days ?? defaultCombineDays();
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            day: nextDay,
+            days: {
+              ...baseDays,
+              [nextDay]: { ...(baseDays[nextDay] ?? defaultCombineDays()[nextDay]), dayIndex: nextDay, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
+            },
+          },
+        },
+      };
+    }
+
+    case "SCOUT_COMBINE_FOCUS": {
+      const s = state.scoutingState;
+      if (!s || s.windowId !== "COMBINE") return state;
+
+      const day = s.combine?.day ?? 1;
+      if (day !== 2 && day !== 3) {
+        return { ...state, uiToast: "Focus Drill is only available on Combine Day 2 and Day 3." };
+      }
+
+
+      const { prospectId } = action.payload;
+      const p = (draftClassJson as any[])
+        .map((row, idx) => ({
+          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
+          pos: row.pos ?? row["POS"] ?? "UNK",
+        }))
+        .find((x) => x.id === prospectId);
+      if (!p) return state;
+
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      if (recap.focusedProspectIds.includes(String(prospectId))) {
+        return { ...state, uiToast: "Focus already completed for this prospect today." };
+      }
+
+      const group = posToGroup(p.pos);
+      const costHours = COMBINE_FOCUS_HOURS_COST;
+      const cur = s.allocation.byGroup[group] ?? 0;
+      const usedTotal = Object.values(s.allocation.byGroup).reduce((a: number, b: number) => a + b, 0);
+      const availableHours = Math.max(0, s.allocation.poolHours - usedTotal);
+      const spend = Math.min(costHours, availableHours);
+      if (spend <= 0) return { ...state, uiToast: "No focus tokens remaining." };
+      if (usedTotal + spend > s.allocation.poolHours) {
+        return { ...state, uiToast: "Not enough Combine Hours. Allocate more in Allocation screen." };
+      }
+
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `combinefocus:${k}`);
+
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      if (!profile || !truth) return state;
+
+      const allocation = {
+        ...s.allocation,
+        byGroup: { ...s.allocation.byGroup, [group]: cur + spend },
+      };
+
+      addClarity({ profile, track: "TALENT", points: 10, gm });
+      addClarity({ profile, track: "FIT", points: 8, gm });
+      profile.confidence = clamp100(profile.confidence + 4);
+
+      tightenBand({
+        profile,
+        gm,
+        seed,
+        windowKey: s.windowKey,
+        actionKey: `COMBINE_FOCUS:${group}:D${day}`,
+        hoursOrPoints: spend,
+        minWidth: 4,
+      });
+
+      revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+
+      const dayRecap = {
+        ...recap,
+        focusedProspectIds: [...recap.focusedProspectIds, String(prospectId)],
+        focusHoursSpent: recap.focusHoursSpent + spend,
+      };
+
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          allocation,
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+          combine: {
+            ...s.combine,
+            recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
+          },
+        },
+      };
+    }
+
+
+    case "SCOUT_COMBINE_SELECT": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const day = s.combine.day;
+      const category = action.payload.category;
+      const selectedByDay = { ...(s.combine.selectedByDay ?? {}) };
+      const daySelections = { ...(selectedByDay[day] ?? {}) };
+      const current = [...(daySelections[category] ?? [])];
+      const has = current.includes(action.payload.prospectId);
+      const next = has ? current.filter((id) => id !== action.payload.prospectId) : current.length >= 10 ? current : [...current, action.payload.prospectId];
+      daySelections[category] = next;
+      selectedByDay[day] = daySelections;
+      return { ...state, scoutingState: { ...s, combine: { ...s.combine, selectedByDay } } };
+    }
+
+    case "SCOUT_COMBINE_RUN_INTERVIEWS": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const day = s.combine.day;
+      const category = action.payload.category;
+      const selected = s.combine.selectedByDay?.[day]?.[category] ?? [];
+      if (!selected.length) return state;
+      const interviewResultsByProspectId = { ...(s.combine.interviewResultsByProspectId ?? {}) };
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      for (const prospectId of selected) {
+        const current = interviewResultsByProspectId[prospectId] ?? {};
+        const pct = Math.round(15 + detRand2(state.saveSeed, `combine:interview:${day}:${category}:${prospectId}`) * 75);
+        interviewResultsByProspectId[prospectId] = category === "IQ"
+          ? { ...current, intelligencePct: pct, notes: `${category}: ${pct}%` }
+          : { ...current, characterPct: pct, notes: `${category}: ${pct}%` };
+      }
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          combine: {
+            ...s.combine,
+            interviewResultsByProspectId,
+            recapByDay: {
+              ...s.combine.recapByDay,
+              [day]: {
+                ...recap,
+                interviewedProspectIds: Array.from(new Set([...(recap.interviewedProspectIds ?? []), ...selected])),
+                interviewsUsed: (recap.interviewsUsed ?? 0) + selected.length,
+              },
+            },
+          },
+        },
+      };
+    }
+
+    case "SCOUT_COMBINE_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || !s.combine.generated) return state;
+
+      const day = s.combine?.day ?? 1;
+      if (day !== 4) return { ...state, uiToast: "Interviews are only available on Combine Day 4." };
+      const combineDays = s.combine.days ?? defaultCombineDays();
+      const interviewsRemaining = combineDays[day]?.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS;
+      if (interviewsRemaining <= 0) return { ...state, uiToast: "0 interviews left." };
+
+      const { prospectId, category } = action.payload;
+      const recap = s.combine.recapByDay[day] ?? defaultCombineRecap();
+      if (recap.interviewedProspectIds.includes(String(prospectId))) {
+        return { ...state, uiToast: "Interview already completed for this prospect today." };
+      }
+
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `combine:int:${k}`);
+
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      const combineProspect = { ...(s.combine.prospects?.[prospectId] ?? defaultCombineProspectState()) };
+      if (!profile || !truth) return state;
+
+      if (category === "IQ") {
+        addClarity({ profile, track: "FIT", points: 16, gm });
+        addClarity({ profile, track: "CHAR", points: 8, gm });
+      } else if (category === "LEADERSHIP") {
+        addClarity({ profile, track: "CHAR", points: 18, gm });
+        addClarity({ profile, track: "FIT", points: 6, gm });
+      } else if (category === "STRESS") {
+        addClarity({ profile, track: "CHAR", points: 14, gm });
+        addClarity({ profile, track: "FIT", points: 10, gm });
+      } else {
+        addClarity({ profile, track: "FIT", points: 18, gm });
+        addClarity({ profile, track: "CHAR", points: 8, gm });
+      }
+
+      if (!profile.revealed.leadershipTag && profile.clarity.CHAR >= 60) {
+        let p = 0.2 + (gm.intel_network - 50) * 0.003;
+        if (category === "LEADERSHIP") p += 0.12;
+        if (category === "STRESS") p += 0.04;
+        p = Math.max(0.05, Math.min(0.55, p));
+        if (seed(`lead:${s.windowKey}:${prospectId}:${category}`) < p) {
+          profile.revealed.leadershipTag = truth.trueCharacter.leadershipTag;
+        }
+      }
+
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+
+      const currentReveal = s.interviews.modelARevealByProspectId[prospectId] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const charGain = 10 + Math.floor(seed(`modelA:char:${s.windowKey}:${prospectId}:${category}`) * 9);
+      const iqGain = 8 + Math.floor(seed(`modelA:iq:${s.windowKey}:${prospectId}:${category}`) * 8);
+      const modelARevealByProspectId = {
+        ...s.interviews.modelARevealByProspectId,
+        [prospectId]: {
+          characterRevealPct: clamp100(currentReveal.characterRevealPct + charGain),
+          intelligenceRevealPct: clamp100(currentReveal.intelligenceRevealPct + iqGain),
+        },
+      };
+
+      const hist = s.interviews.history[prospectId] ?? [];
+      const outcomeRoll = seed(`out:${s.windowKey}:${prospectId}:${category}`);
+      const outcome = outcomeRoll < 0.15 ? "Concerning" : outcomeRoll < 0.6 ? "Mixed" : "Positive";
+      const revealedAttr = COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY[category];
+      profile.notes.character = `${revealedAttr}: ${outcome}`;
+      combineProspect.interviewCount += 1;
+      combineProspect.characterRevealPct = Math.min(100, combineProspect.characterRevealPct + (category === "LEADERSHIP" ? 28 : 20));
+      combineProspect.intelligenceRevealPct = Math.min(100, combineProspect.intelligenceRevealPct + (category === "IQ" ? 32 : 14));
+      combineProspect.notes = [...combineProspect.notes, `${category}: ${outcome}`].slice(-6);
+
+      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome: `${revealedAttr} - ${outcome}`, windowKey: s.windowKey }] };
+
+      const p = (draftClassJson as any[])
+        .map((row, idx) => ({
+          id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${idx + 1}`,
+          name: row.name ?? row["Name"] ?? "Unknown",
+        }))
+        .find((x) => x.id === prospectId);
+
+      const feed = [
+        ...s.combine.feed,
+        {
+          id: `int:${day}:${prospectId}:${category}`,
+          day,
+          prospectId,
+          text: `${p?.name ?? prospectId} interview (${category}) revealed ${revealedAttr}: ${outcome}.`,
+        },
+      ];
+
+      const dayRecap = {
+        ...recap,
+        interviewedProspectIds: [...recap.interviewedProspectIds, String(prospectId)],
+        interviewsUsed: recap.interviewsUsed + 1,
+      };
+
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          interviews: { ...s.interviews, interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1), history, modelARevealByProspectId },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+          combine: {
+            ...s.combine,
+            feed,
+            days: {
+              ...combineDays,
+              [day]: { ...(combineDays[day] ?? defaultCombineDays()[day]), dayIndex: day as 1 | 2 | 3 | 4, interviewsRemaining: Math.max(0, interviewsRemaining - 1) },
+            },
+            prospects: { ...(s.combine.prospects ?? {}), [prospectId]: combineProspect },
+            recapByDay: { ...s.combine.recapByDay, [day]: dayRecap },
+          },
+        },
+      };
+    }
+
+    case "SCOUT_PRIVATE_WORKOUT": {
+      const s = state.scoutingState;
+      if (!s || s.visits.privateWorkoutsRemaining <= 0) return state;
+      const { prospectId, focus } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `pw:${k}`);
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      addClarity({ profile, track: focus, points: 18, gm });
+      tightenBand({ profile, gm, seed, windowKey: s.windowKey, actionKey: `PW:${focus}`, hoursOrPoints: 5, minWidth: 5 });
+      if (focus === "MED") revealMedicalIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      if (focus === "CHAR") revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          visits: { ...s.visits, privateWorkoutsRemaining: s.visits.privateWorkoutsRemaining - 1 },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || s.interviews.interviewsRemaining <= 0) return state;
+      const { prospectId, category } = action.payload;
+      const gm = getGmTraits(state.userTeamId) as unknown as GMScoutingTraits;
+      const seed = (k: string) => detRand2(state.saveSeed, `int:${k}`);
+      const profile = { ...s.scoutProfiles[prospectId] };
+      const truth = s.trueProfiles[prospectId];
+      addClarity({ profile, track: "CHAR", points: 16, gm });
+      addClarity({ profile, track: "FIT", points: category === "IQ" ? 10 : 4, gm });
+      revealCharacterIfUnlocked({ profile, truth, gm, seed, windowKey: s.windowKey });
+      const outcome = seed(`${prospectId}:${category}`) < 0.15 ? "Concerning answers" : seed(`${prospectId}:${category}:2`) < 0.45 ? "Mixed" : "Positive";
+      const hist = s.interviews.history[prospectId] ?? [];
+      const history = { ...s.interviews.history, [prospectId]: [...hist, { category, outcome, windowKey: s.windowKey }] };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          interviews: { ...s.interviews, interviewsRemaining: s.interviews.interviewsRemaining - 1, history },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_RUN_INTERVIEW": {
+      const s = state.scoutingState;
+      if (!s || s.interviews.interviewsRemaining <= 0 || s.budget.remaining < 2) return state;
+      const { prospectId, category } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = runInterview(state, prospectId, category);
+      const confidenceBoost = result.score >= 75 ? 4 : result.score >= 60 ? 2 : 1;
+      profile.confidence = Math.min(99, (profile.confidence ?? 0) + confidenceBoost);
+      profile.clarity.CHAR = Math.min(100, profile.clarity.CHAR + (category === "CHARACTER" ? 12 : 8));
+      profile.clarity.FIT = Math.min(100, profile.clarity.FIT + (category === "INTELLIGENCE" ? 8 : 4));
+      if (result.reveal) {
+        profile.notes.character = [profile.notes.character, `${category}: ${result.reveal}`].filter(Boolean).join(" · ");
+      }
+      const budget = { ...s.budget, remaining: s.budget.remaining - 2, spent: s.budget.spent + 2 };
+      const hist = s.interviews.history[prospectId] ?? [];
+      const history = {
+        ...s.interviews.history,
+        [prospectId]: [...hist, { category: "LEADERSHIP" as const, outcome: `${category}: ${result.score}${result.reveal ? ` (${result.reveal})` : ""}`, windowKey: s.windowKey }],
+      };
+      const existing = s.interviews.resultsByProspectId?.[prospectId] ?? [];
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          interviews: {
+            ...s.interviews,
+            interviewsRemaining: Math.max(0, s.interviews.interviewsRemaining - 1),
+            history,
+            resultsByProspectId: { ...s.interviews.resultsByProspectId, [prospectId]: [...existing, result] },
+          },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_REQUEST_MEDICAL": {
+      const s = state.scoutingState;
+      if (!s || s.budget.remaining < 3) return state;
+      const { prospectId } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = requestMedical(state, prospectId);
+      profile.revealed.medicalTier = result.riskTier;
+      profile.notes.medical = result.notes;
+      if (result.riskTier === "RED") profile.estHigh = Math.max(profile.estLow, profile.estHigh - 4);
+      if (result.riskTier === "BLACK") profile.estHigh = Math.max(profile.estLow, profile.estHigh - 8);
+      const budget = { ...s.budget, remaining: s.budget.remaining - 3, spent: s.budget.spent + 3 };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          medical: {
+            ...s.medical,
+            requests: { ...s.medical.requests, [prospectId]: { requested: true, windowKey: s.windowKey } },
+            resultsByProspectId: { ...s.medical.resultsByProspectId, [prospectId]: result },
+          },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_CONDUCT_WORKOUT": {
+      const s = state.scoutingState;
+      if (!s || s.visits.privateWorkoutsRemaining <= 0 || s.budget.remaining < 4) return state;
+      const { prospectId } = action.payload;
+      const profile = { ...s.scoutProfiles[prospectId] };
+      if (!profile) return state;
+      const result = conductPrivateWorkout(state, prospectId);
+      const avg = Object.values(result.drills).reduce((sum, value) => sum + value, 0) / Math.max(1, Object.keys(result.drills).length);
+      if (avg >= 70) {
+        profile.estLow = Math.min(99, profile.estLow + 1);
+        profile.estHigh = Math.min(99, profile.estHigh + 2);
+        profile.notes.athletic = result.notes[0];
+      }
+      const budget = { ...s.budget, remaining: s.budget.remaining - 4, spent: s.budget.spent + 4 };
+      return {
+        ...state,
+        scoutingState: {
+          ...s,
+          budget,
+          carryover: budget.remaining,
+          visits: { ...s.visits, privateWorkoutsRemaining: Math.max(0, s.visits.privateWorkoutsRemaining - 1) },
+          workouts: {
+            ...s.workouts,
+            resultsByProspectId: { ...s.workouts.resultsByProspectId, [prospectId]: result },
+          },
+          scoutProfiles: { ...s.scoutProfiles, [prospectId]: profile },
+        },
+      };
+    }
+
+    case "SCOUT_ALLOC_ADJ": {
+      const s = state.scoutingState;
+      if (!s) return state;
+      const { group, delta } = action.payload;
+      const cur = s.allocation.byGroup[group] ?? 0;
+      const next = Math.max(0, cur + delta);
+      const used = Object.values({ ...s.allocation.byGroup, [group]: next }).reduce((a, b) => a + b, 0);
+      if (used > s.allocation.poolHours) return state;
+      return { ...state, scoutingState: { ...s, allocation: { ...s.allocation, byGroup: { ...s.allocation.byGroup, [group]: next } } } };
+    }
+
+    case "SCOUT_DEV_SIM_WEEK": {
+      const schedule = state.hub.schedule ?? createSchedule(state.saveSeed);
+      return {
+        ...state,
+        hub: { ...state.hub, schedule, regularSeasonWeek: 1 },
+        careerStage: "REGULAR_SEASON",
+        week: 1,
+        uiToast: "Advanced to Week 1 (dev). In-season scouting unlocked.",
+      };
+    }
+
+    case "SCOUTING_WINDOW_INIT": {
+      const teamId = resolveCurrentUserTeamId(state) ?? "";
+      const gm = getGmTraits(state.league.gmByTeamId[teamId]);
+      const budget = computeWindowBudget(gm, action.payload.windowId, state.offseasonData.scouting.carryover);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          scouting: {
+            ...state.offseasonData.scouting,
+            windowId: action.payload.windowId,
+            budget: { total: budget.total, spent: 0, remaining: budget.total, carryIn: budget.carryIn },
+          },
+        },
+      };
+    }
+
+    case "SCOUTING_SPEND": {
+      const scouting = state.offseasonData.scouting;
+      const budget = { ...scouting.budget };
+      const teamId = resolveCurrentUserTeamId(state) ?? "";
+      const gm = getGmTraits(state.league.gmByTeamId[teamId]);
+      const windowKey = `${state.season}:${state.offseason.stepId}:${scouting.windowId}`;
+      if (action.payload.targetType === "PROSPECT") {
+        const intel = scouting.intelByProspectId[action.payload.targetId] ? { ...scouting.intelByProspectId[action.payload.targetId] } : freshIntel();
+        const res = applyScoutAction((k) => detRand(state.saveSeed, k), budget as any, intel, action.payload.actionType, gm, windowKey);
+        if (!res.ok) return state;
+        if (action.payload.prospect) updateRevealedTiers((k) => detRand(state.saveSeed, k), intel, action.payload.prospect);
+        return {
+          ...state,
+          offseasonData: {
+            ...state.offseasonData,
+            scouting: {
+              ...scouting,
+              budget,
+              carryover: budget.remaining,
+              intelByProspectId: { ...scouting.intelByProspectId, [action.payload.targetId]: intel },
+            },
+          },
+        };
+      }
+      const intel = scouting.intelByFAId[action.payload.targetId] ? { ...scouting.intelByFAId[action.payload.targetId] } : freshIntel();
+      const res = applyScoutAction((k) => detRand(state.saveSeed, k), budget as any, intel, action.payload.actionType, gm, windowKey);
+      if (!res.ok) return state;
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          scouting: {
+            ...scouting,
+            budget,
+            carryover: budget.remaining,
+            intelByFAId: { ...scouting.intelByFAId, [action.payload.targetId]: intel },
+          },
+        },
+      };
+    }
+
+    case "COMBINE_TOGGLE_SHORTLIST": {
+      const id = String(action.payload.prospectId);
+      const cur = !!(state.offseasonData.combine.shortlist?.[id]);
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          combine: {
+            ...state.offseasonData.combine,
+            shortlist: { ...(state.offseasonData.combine.shortlist ?? {}), [id]: !cur },
+          },
+        },
+      };
+    }
+
+    case "COMBINE_GENERATE": {
+      return ensureOffseasonCombineData(state);
+    }
+
+    case "COMBINE_RUN_EVENTS": {
+      const next = ensureOffseasonCombineData(state);
+      const seed = Number(action.payload?.seed ?? (next.careerSeed ?? next.saveSeed ?? 1));
+      const prospects = next.offseasonData.combine.prospects.length ? next.offseasonData.combine.prospects : buildActiveDraftClassProspects(next);
+      const resultsByProspectId: Record<string, any> = {};
+
+      for (const prospect of prospects) {
+        const pid = String(prospect.id);
+        const talent = clamp(Number(prospect.grade ?? 60), 40, 99);
+        const athleticBase = clamp(Number(prospect.ras ?? talent), 30, 99);
+        const roll = (tag: string) => detRand(seed, `combine-run:${next.season}:${pid}:${tag}`);
+        const forty = Math.round((5.1 - athleticBase * 0.008 + (roll("40") - 0.5) * 0.14) * 100) / 100;
+        const shuttle = Math.round((4.8 - athleticBase * 0.01 + (roll("SH") - 0.5) * 0.12) * 100) / 100;
+        const threeCone = Math.round((7.7 - athleticBase * 0.012 + (roll("3C") - 0.5) * 0.16) * 100) / 100;
+        const vert = Math.round((25 + athleticBase * 0.2 + (roll("VT") - 0.5) * 4) * 10) / 10;
+        const bench = clamp(Math.round(8 + talent * 0.24 + (roll("BN") - 0.5) * 8), 5, 45);
+        const athleticismGrade = clamp(Math.round(athleticBase + (roll("AG") - 0.5) * 8), 35, 99);
+        resultsByProspectId[pid] = { forty, shuttle, threeCone, vert, bench, athleticismGrade };
+      }
+
+      return {
+        ...next,
+        offseasonData: {
+          ...next.offseasonData,
+          scouting: {
+            ...next.offseasonData.scouting,
+            intelByProspectId: {
+              ...next.offseasonData.scouting.intelByProspectId,
+              ...Object.fromEntries(Object.keys(resultsByProspectId).map((pid) => {
+                const current = next.offseasonData.scouting.intelByProspectId[pid] ?? freshIntel();
+                return [pid, { ...current, confidence: clamp01((current.confidence ?? 0.2) + 0.18) }];
+              })),
+            },
+          },
+          combine: {
+            ...next.offseasonData.combine,
+            generated: true,
+            lastRunSeed: seed,
+            results: resultsByProspectId,
+            resultsByProspectId,
+            prospects,
+          },
+        },
+      };
+    }
+
+    case "COMBINE_GENERATE_INTERVIEW_POOL": {
+      const next = ensureOffseasonCombineData(state);
+      const seed = Number(action.payload?.seed ?? next.offseasonData.combine.lastRunSeed ?? (next.careerSeed ?? next.saveSeed ?? 1));
+      const resultsByProspectId = next.offseasonData.combine.resultsByProspectId ?? next.offseasonData.combine.results ?? {};
+      const prospects = next.offseasonData.combine.prospects;
+      const teamNeeds = new Set((next.strategy?.draftFaPriorities ?? DEFAULT_STRATEGY.draftFaPriorities).map((p) => String(p).toUpperCase()));
+      const sorted = prospects
+        .map((p) => ({
+          id: p.id,
+          pos: p.pos,
+          score: Number(resultsByProspectId[p.id]?.athleticismGrade ?? 0),
+          needBonus: teamNeeds.has(String(p.pos).toUpperCase()) ? 8 : 0,
+          sleeper: detRand(seed, `combine-intv:${p.id}`),
+        }))
+        .sort((a, b) => (b.score + b.needBonus) - (a.score + a.needBonus));
+
+      const top = sorted.slice(0, 6).map((x) => x.id);
+      const needFits = sorted.filter((x) => x.needBonus > 0).slice(0, 4).map((x) => x.id);
+      const sleepers = sorted.slice().sort((a, b) => b.sleeper - a.sleeper).slice(0, 4).map((x) => x.id);
+      const interviewPoolIds = Array.from(new Set([...top, ...needFits, ...sleepers])).slice(0, 12);
+
+      return {
+        ...next,
+        offseasonData: {
+          ...next.offseasonData,
+          combine: {
+            ...next.offseasonData.combine,
+            interviewPoolIds,
+          },
+        },
+      };
+    }
+    case "TAMPERING_ADD_OFFER":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          tampering: { offers: [action.payload.offer, ...state.offseasonData.tampering.offers].slice(0, 30) },
+        },
+      };
+
+    case "TAMPERING_INIT": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      if (Object.keys(state.tampering.interestByPlayerId).length) return state;
+
+      const fas = getEffectiveFreeAgents(state)
+        .map((p: any) => ({ p, interest: computeFaInterest(state, p) }))
+        .sort((a, b) => b.interest - a.interest)
+        .slice(0, 220);
+
+      const interestByPlayerId: Record<string, number> = {};
+      const nameByPlayerId: Record<string, string> = {};
+      for (const x of fas) {
+        const id = String(x.p.playerId);
+        interestByPlayerId[id] = x.interest;
+        nameByPlayerId[id] = String(x.p.fullName ?? `Player ${id}`);
+      }
+
+      return { ...state, tampering: { ...state.tampering, interestByPlayerId, nameByPlayerId } };
+    }
+
+    case "TAMPERING_OPEN_PLAYER":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
+
+    case "TAMPERING_OPEN_SHORTLIST":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "SHORTLIST" } } };
+
+    case "TAMPERING_CLOSE_MODAL":
+      return { ...state, tampering: { ...state.tampering, ui: { mode: "NONE" } } };
+
+    case "TAMPERING_ADD_SHORTLIST": {
+      const id = String(action.payload.playerId);
+      if (state.tampering.shortlistPlayerIds.includes(id)) return state;
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: [id, ...state.tampering.shortlistPlayerIds].slice(0, 25) } };
+    }
+
+    case "TAMPERING_REMOVE_SHORTLIST": {
+      const id = String(action.payload.playerId);
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: state.tampering.shortlistPlayerIds.filter((x) => x !== id) } };
+    }
+
+    case "TAMPERING_AUTO_SHORTLIST": {
+      const tab = String(action.payload.tab ?? "ALL");
+      const ids = Object.entries(state.tampering.interestByPlayerId)
+        .map(([id, v]) => ({ id, v }))
+        .filter((x) => x.v >= 0.6)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 10)
+        .map((x) => x.id);
+
+      return { ...state, tampering: { ...state.tampering, shortlistPlayerIds: tab === "ALL" ? ids : state.tampering.shortlistPlayerIds } };
+    }
+
+    case "TAMPERING_SET_SOFT_OFFER": {
+      const playerId = String(action.payload.playerId);
+      const softOffersByPlayerId = { ...state.tampering.softOffersByPlayerId, [playerId]: { years: action.payload.years, aav: action.payload.aav } };
+      return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
+    }
+
+    case "TAMPERING_CLEAR_SOFT_OFFER": {
+      const playerId = String(action.payload.playerId);
+      const softOffersByPlayerId = { ...state.tampering.softOffersByPlayerId };
+      delete softOffersByPlayerId[playerId];
+      return { ...state, tampering: { ...state.tampering, softOffersByPlayerId } };
+    }
+
+    case "INIT_FREE_AGENCY_MARKET": {
+      let next = gameReducer(state, { type: "FA_INIT_START" });
+      next = gameReducer(next, { type: "SCOUTING_WINDOW_INIT", payload: { windowId: "FREE_AGENCY" } });
+      next = gameReducer(next, { type: "FA_BOOTSTRAP_FROM_TAMPERING" });
+      next = gameReducer(next, { type: "FA_CPU_TICK" });
+      next = gameReducer(next, { type: "FA_INIT_READY" });
+      return next;
+    }
+
+    case "RESOLVE_FREE_AGENCY_WEEK": {
+      if (state.freeAgency.isResolving) return state;
+      const begin = gameReducer(state, { type: "FA_SET_RESOLVING", payload: { value: true } });
+      const resolved = gameReducer(begin, { type: "FA_RESOLVE" });
+      return gameReducer(resolved, { type: "FA_SET_RESOLVING", payload: { value: false } });
+    }
+
+    case "FA_SET_RESOLVING": {
+      return { ...state, freeAgency: { ...state.freeAgency, isResolving: !!action.payload.value } };
+    }
+
+    case "FA_INIT_START":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "loading", isResolving: false } };
+
+    case "FA_INIT_READY":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "ready", isResolving: false } };
+
+    case "FA_INIT_ERROR":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "error", isResolving: false } };
+
+    case "FA_INIT_RESET":
+      return { ...state, freeAgency: { ...state.freeAgency, initStatus: "idle", isResolving: false } };
+    case "FA_INIT_OFFERS": {
+      const existing = state.offseasonData.freeAgency.offers;
+      if (existing.length) return state;
+      const offers: FreeAgentOffer[] = getEffectiveFreeAgents(state)
+        .slice(0, 80)
+        .map((p: any, idx: number) => {
+          const apy = Math.round(Math.max(800_000, projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 60), Number(p.age ?? 26))));
+          const years = Math.max(1, Math.min(4, Number(p.age ?? 26) <= 26 ? 3 : 2));
+          return {
+            id: `OFF_FA_${state.season}_${idx}_${String(p.playerId)}`,
+            playerId: String(p.playerId),
+            name: String(p.fullName ?? `Player ${p.playerId}`),
+            pos: String(p.pos ?? "UNK"),
+            years,
+            apy,
+            interest: clamp01(computeFaInterest(state, p)),
+            schemeFitScore: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+          } as FreeAgentOffer;
+        });
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          freeAgency: { ...state.offseasonData.freeAgency, offers, decisionReasonByPlayerId: {} },
+        },
+      };
+    }
+
+    case "FA_REJECT": {
+      const playerId = String(action.payload.playerId);
+      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.playerId) === playerId);
+      const reason = offer ? (offer.interest >= 0.65 ? "Role projection" : "AAV vs market") : "Offer declined";
+      const modalAlloc = buildOfferResultModal(state, { title: "Offer Rejected", message: reason, variant: "danger" });
+      return {
+        ...modalAlloc.state,
+        offseasonData: {
+          ...modalAlloc.state.offseasonData,
+          freeAgency: {
+            ...modalAlloc.state.offseasonData.freeAgency,
+            rejected: { ...modalAlloc.state.offseasonData.freeAgency.rejected, [playerId]: true },
+            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+          },
+        },
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+      };
+    }
+
+    case "FA_SIGN": {
+      const offerId = String(action.payload.offerId);
+      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.id) === offerId);
+      if (!offer) return state;
+      const teamId = String(state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
+      const playerId = String(offer.playerId);
+      const years = Math.max(1, Math.min(5, Number(action.payload.years ?? offer.years ?? 2)));
+      const apy = Math.max(500_000, Number(action.payload.apy ?? offer.apy ?? 0));
+      const reason = offer.interest >= 0.55 ? "AAV vs market" : "Contender status";
+      const capUsed = state.offseasonData.freeAgency.capUsed + apy;
+
+      // Create a real contract override and apply via canonical transaction
+      const contractOverride = createContractOverride({
+        startSeason: state.season,
+        years,
+        salary: apy,
+        guarantees: 0,
+        type: "STANDARD",
+      });
+      let next: GameState;
+      try {
+        next = applyCanonicalTx(state, Tx.signFA(teamId, playerId, contractOverride));
+      } catch {
+        next = state;
+      }
+
+      const modalAlloc = buildOfferResultModal(next, { title: "Offer Accepted", message: reason, variant: "success" });
+      return {
+        ...modalAlloc.state,
+        offseasonData: {
+          ...modalAlloc.state.offseasonData,
+          freeAgency: {
+            ...modalAlloc.state.offseasonData.freeAgency,
+            signings: Array.from(new Set([playerId, ...modalAlloc.state.offseasonData.freeAgency.signings])),
+            capUsed,
+            capHitsByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
+            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
+          },
+        },
+        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+      };
+    }
+
+    case "FA_OPEN_PLAYER":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
+
+    case "FA_OPEN_MY_OFFERS":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "MY_OFFERS" } } };
+
+    case "FA_CLOSE_MODAL":
+      return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "NONE" } } };
+
+    case "FA_SET_DRAFT": {
+      const { playerId, years, aav } = action.payload;
+      return {
+        ...state,
+        freeAgency: {
+          ...state.freeAgency,
+          draftByPlayerId: {
+            ...state.freeAgency.draftByPlayerId,
+            [String(playerId)]: { years: Math.max(1, Math.min(5, Math.round(years))), aav: Math.max(750_000, Math.round(aav / 50_000) * 50_000) },
+          },
+        },
+      };
+    }
+
+    case "FA_BOOTSTRAP_FROM_TAMPERING": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.bootstrappedFromTampering) return state;
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      let next: GameState = { ...state, freeAgency: { ...state.freeAgency, bootstrappedFromTampering: true } };
+
+      for (const [playerId, o] of Object.entries(state.tampering.softOffersByPlayerId)) {
+        const offers = next.freeAgency.offersByPlayerId[playerId] ?? [];
+        if (offers.some((x) => x.isUser && x.status === "PENDING")) continue;
+
+        const offerId = makeOfferId(next);
+        const userOffer: FreeAgencyOffer = {
+          offerId,
+          playerId,
+          teamId,
+          isUser: true,
+          years: Math.max(1, Math.min(5, Math.round(o.years))),
+          aav: Math.max(750_000, Math.round(o.aav / 50_000) * 50_000),
+          createdWeek: next.hub.regularSeasonWeek ?? 1,
+          status: "PENDING",
+          fromTampering: true,
+        };
+
+        next = {
+          ...next,
+          freeAgency: {
+            ...upsertOffers({ ...next, freeAgency: { ...next.freeAgency, nextOfferSeq: next.freeAgency.nextOfferSeq + 1 } }, playerId, [...offers, userOffer]),
+          },
+        };
+      }
+      return next;
+    }
+
+    case "FA_SUBMIT_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const { playerId } = action.payload as { playerId: string };
+      const pid = String(playerId);
+      if (state.freeAgency.signingsByPlayerId[pid]) return state;
+      const teamId = String(state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
+      const draft = state.freeAgency.draftByPlayerId[pid];
+      if (!draft) return state;
+
+      const existing = state.freeAgency.offersByPlayerId[pid] ?? [];
+      if (existing.some((o) => o.isUser && o.status === "PENDING")) return state;
+
+      const isLastResolve = state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase - 1;
+      if (!isLastResolve && countPendingUserOffers(state) >= 5) {
+        return faPush(state, "Pending-offer limit reached (5). Resolve a batch to free slots.");
+      }
+
+      const userOffer: FreeAgencyOffer = {
+        offerId: makeOfferId(state),
+        playerId: pid,
+        teamId,
+        isUser: true,
+        years: draft.years,
+        aav: draft.aav,
+        createdWeek: state.hub.regularSeasonWeek ?? 1,
+        status: "PENDING",
+      };
+
+      const next = upsertStateOffers(state, pid, [...existing, userOffer]);
+      return faPush(next, `Offer submitted: ${draft.years} yrs @ $${Math.round(draft.aav / 1_000_000)}M/yr.`, pid);
+    }
+
+    case "FA_UPDATE_USER_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const { playerId, years, aav } = action.payload as { playerId: string; years: number; aav: number };
+      const pid = String(playerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const idx = offers.findIndex((o) => o.isUser && o.status === "PENDING");
+      if (idx < 0) return state;
+
+      const isLastResolve = state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase - 1;
+      if (!isLastResolve && countPendingUserOffers(state) >= 5) {
+        return faPush(state, "Pending-offer limit reached (5). Resolve a batch to free slots.");
+      }
+
+      const nextOffers = [...offers];
+      nextOffers[idx] = { ...nextOffers[idx], years: Math.max(1, Math.min(5, Math.round(years))), aav: Math.max(750_000, Math.round(aav / 50_000) * 50_000) };
+      const next = upsertStateOffers(state, pid, nextOffers);
+      return faPush(next, `Offer updated: ${nextOffers[idx].years} yrs @ $${Math.round(nextOffers[idx].aav / 1_000_000)}M/yr.`, pid);
+    }
+
+    case "FA_CLEAR_USER_OFFER": {
+      const pid = String(action.payload.playerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      return { ...state, freeAgency: upsertOffers(state, pid, offers.filter((o) => !(o.isUser && o.status === "PENDING"))) };
+    }
+
+    case "FA_RESPOND_COUNTER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const { playerId, accept } = action.payload as { playerId: string; accept: boolean };
+      const pid = String(playerId);
+      const teamId = String(state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
+
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const counter = offers.find((o) => o.status === "COUNTERED" && o.teamId === teamId);
+      if (!counter) return state;
+
+      if (!accept) {
+        const next = { ...state, freeAgency: upsertOffers(state, pid, offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "REJECTED" as const, decisionReason: "Counter offer declined" } : o))) };
+        const declined = faPush(next, "Counter declined.", pid);
+        const modalAlloc = buildOfferResultModal(declined, { title: "Offer Rejected", message: "Counter offer declined", variant: "danger" });
+        return { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } };
+      }
+
+      let next = { ...state, freeAgency: upsertOffers(state, pid, closeAllOffers(offers.map((o) => (o.offerId === counter.offerId ? { ...o, status: "ACCEPTED" as const } : o)), counter.offerId)) };
+      next = {
+        ...next,
+        freeAgency: {
+          ...next.freeAgency,
+          signingsByPlayerId: { ...next.freeAgency.signingsByPlayerId, [pid]: { teamId, years: counter.years, aav: counter.aav, signingBonus: 0 } },
+          pendingCounterTeamByPlayerId: { ...next.freeAgency.pendingCounterTeamByPlayerId, [pid]: null },
+        },
+      };
+      return signFromOffer(next, pid, counter, teamId, counter.decisionReason ?? "Counter accepted")
+    }
+
+    case "FA_CPU_TICK": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.cpuTickedOnOpen) return state;
+      const next = cpuOfferTick(state, 70);
+      const out = { ...next, freeAgency: { ...next.freeAgency, cpuTickedOnOpen: true } };
+      reportFaInvariantViolations(out, "FA_CPU_TICK");
+      return out;
+    }
+
+    case "FA_RESOLVE_BATCH":
+    case "FA_RESOLVE": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      if (state.freeAgency.resolvesUsedThisPhase >= state.freeAgency.maxResolvesPerPhase) {
+        return expireRemainingFreeAgencyOffers(state, "Expired: resolve cap reached");
+      }
+
+      const next0 = expireUserCounters(state);
+      const offersByPlayerId = { ...next0.freeAgency.offersByPlayerId };
+      const signingsByPlayerId = { ...next0.freeAgency.signingsByPlayerId };
+      const resolveRoundByPlayerId = { ...next0.freeAgency.resolveRoundByPlayerId };
+      const pendingCounterTeamByPlayerId = { ...next0.freeAgency.pendingCounterTeamByPlayerId };
+
+      const playerIndex: Record<string, any> = {};
+      for (const p of getPlayers() as any[]) playerIndex[String(p.playerId)] = p;
+
+      const eligible = Object.entries(offersByPlayerId)
+        .filter(([pid]) => !signingsByPlayerId[pid])
+        .map(([pid, offers]) => {
+          const active = offers.filter((o) => o.status === "PENDING" || o.status === "COUNTERED");
+          if (!active.length) return null;
+          const p = playerIndex[pid];
+          return {
+            pid,
+            ovr: Number(p?.overall ?? 0),
+            pendingCount: active.filter((o) => o.status === "PENDING").length,
+            maxAav: active.reduce((m, o) => Math.max(m, Number(o.aav ?? 0)), 0),
+          };
+        })
+        .filter(Boolean) as Array<{ pid: string; ovr: number; pendingCount: number; maxAav: number }>;
+
+      eligible.sort((a, b) => b.ovr - a.ovr || b.pendingCount - a.pendingCount || b.maxAav - a.maxAav || a.pid.localeCompare(b.pid));
+
+      let next: GameState = {
+        ...next0,
+        freeAgency: {
+          ...next0.freeAgency,
+          offersByPlayerId,
+          signingsByPlayerId,
+          resolvesUsedThisPhase: next0.freeAgency.resolvesUsedThisPhase + 1,
+          resolveRoundByPlayerId,
+          pendingCounterTeamByPlayerId,
+        },
+      };
+
+      const maxIterations = 5000;
+      let iterations = 0;
+      let guardTripped = false;
+      for (const e of eligible) {
+        iterations += 1;
+        if (iterations > maxIterations) {
+          guardTripped = true;
+          logError("fa.resolve.iteration_guard", { season: next.season, week: next.week, saveId: getActiveSaveId(), meta: { maxIterations, eligible: eligible.length } });
+          break;
+        }
+        const pid = e.pid;
+        if (next.freeAgency.signingsByPlayerId[pid]) continue;
+        const p = playerIndex[pid];
+        const market = projectedMarketApy(String(p?.pos ?? "UNK"), Number(p?.overall ?? 0), Number(p?.age ?? 26));
+        const round = Number(next.freeAgency.resolveRoundByPlayerId[pid] ?? 0);
+
+        const allOffers0 = next.freeAgency.offersByPlayerId[pid] ?? [];
+        const counters = allOffers0.filter((o) => o.status === "COUNTERED");
+        if (counters.length) {
+          const acceptedCounters: FreeAgencyOffer[] = [];
+          const decidedOffers = [...allOffers0];
+          for (const c of counters) {
+            if (c.isUser) continue;
+            if (cpuWillAcceptCounter(next, c.teamId, p, c.years, c.aav)) acceptedCounters.push(c);
+            else {
+              const idx = decidedOffers.findIndex((o) => o.offerId === c.offerId);
+              if (idx >= 0) decidedOffers[idx] = { ...decidedOffers[idx], status: "REJECTED" as const };
+            }
+          }
+          if (acceptedCounters.length) {
+            acceptedCounters.sort((a, b) => b.aav - a.aav || b.years - a.years || a.teamId.localeCompare(b.teamId));
+            const winner = acceptedCounters[0];
+            next.freeAgency.offersByPlayerId[pid] = decidedOffers.map((o) => {
+              if (o.offerId === winner.offerId) return { ...o, status: "ACCEPTED" as const };
+              if (o.status === "PENDING" || o.status === "COUNTERED") return { ...o, status: "REJECTED" as const };
+              return o;
+            });
+            next.freeAgency.signingsByPlayerId[pid] = { teamId: winner.teamId, years: winner.years, aav: winner.aav, signingBonus: 0 };
+            next.freeAgency.pendingCounterTeamByPlayerId[pid] = null;
+            next = signFromOffer(next, pid, winner, winner.teamId, winner.decisionReason ?? "Counter accepted");
+            next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
+            continue;
+          }
+          next.freeAgency.offersByPlayerId[pid] = decidedOffers;
+          next.freeAgency.pendingCounterTeamByPlayerId[pid] = null;
+        }
+
+        const allOffers = next.freeAgency.offersByPlayerId[pid] ?? [];
+        const pending = allOffers.filter((o) => o.status === "PENDING");
+        if (!pending.length) {
+          const stillCountered = allOffers.some((o) => o.status === "COUNTERED");
+          if (stillCountered) {
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+            next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
+          }
+          next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
+          continue;
+        }
+
+        const userPending = pending.find((o) => o.isUser);
+        const userDecision = userPending ? evaluateFaOffer(next, p, userPending) : null;
+        const scored = pending.map((o) => ({ o, s: offerScore(next, pid, o, market) })).sort((a, b) => b.s - a.s || b.o.aav - a.o.aav || b.o.years - a.o.years);
+        const best = scored[0].o;
+        const bestS = scored[0].s;
+        const roll = detRand(next.saveSeed, `FA_RES|S${next.season}|P${pid}|R${round}|U${next.freeAgency.resolvesUsedThisPhase}`);
+
+        if (round >= 1) {
+          if (roll < clamp01(0.55 + bestS * 0.35)) {
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => {
+              if (o.offerId === best.offerId) return { ...o, status: "ACCEPTED" as const, decisionReason: o.isUser ? userDecision?.reason : o.decisionReason };
+              if (o.status === "PENDING" || o.status === "COUNTERED") {
+                const isUserRejected = o.isUser && !best.isUser;
+                return { ...o, status: "REJECTED" as const, decisionReason: isUserRejected ? userDecision?.reason ?? "Offer not selected" : o.decisionReason };
+              }
+              return o;
+            });
+            if (userPending && !best.isUser) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
+            next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
+            next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
+          } else {
+            next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const, decisionReason: o.isUser ? userDecision?.reason ?? "Offer not selected" : o.decisionReason } : o));
+            if (userPending) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
+            next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
+          }
+          next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
+          continue;
+        }
+
+        const acceptProb = clamp01(0.28 + bestS * 0.55);
+        const counterProb = clamp01(0.2 + (1 - acceptProb) * 0.35);
+
+        if (roll < acceptProb) {
+          next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => {
+              if (o.offerId === best.offerId) return { ...o, status: "ACCEPTED" as const, decisionReason: o.isUser ? userDecision?.reason : o.decisionReason };
+              if (o.status === "PENDING" || o.status === "COUNTERED") {
+                const isUserRejected = o.isUser && !best.isUser;
+                return { ...o, status: "REJECTED" as const, decisionReason: isUserRejected ? userDecision?.reason ?? "Offer not selected" : o.decisionReason };
+              }
+              return o;
+            });
+            if (userPending && !best.isUser) { const modalAlloc = buildOfferResultModal(next, { title: "Offer Rejected", message: userDecision?.reason ?? "Offer not selected", variant: "danger" }); next = { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } }; }
+          next.freeAgency.signingsByPlayerId[pid] = { teamId: best.teamId, years: best.years, aav: best.aav, signingBonus: 0 };
+          next = signFromOffer(next, pid, best, best.teamId, userDecision?.reason ?? "Best offer");
+        } else if (roll < acceptProb + counterProb) {
+          const finalistTeams = Array.from(new Set(pending.filter((o) => Number(o.aav) >= Number(best.aav) * 0.9).sort((a, b) => b.aav - a.aav || b.years - a.years).slice(0, 3).map((o) => o.teamId)));
+          const updatedBase = allOffers.map((o) => (o.status !== "PENDING" ? o : finalistTeams.includes(o.teamId) ? o : { ...o, status: "REJECTED" as const }));
+          const counterOffers: FreeAgencyOffer[] = finalistTeams.map((teamId, i) => {
+            const ref = pending.find((o) => o.teamId === teamId) ?? best;
+            const counterAav = asMoney(Math.max(ref.aav * 1.05, market * 1.02));
+            const counterYears = Math.min(5, Math.max(ref.years, detRand(next.saveSeed, `FA_CNTY|S${next.season}|P${pid}|T${teamId}`) > 0.82 ? ref.years + 1 : ref.years));
+            return {
+              offerId: `FA_OFFER_${next.season}_${next.freeAgency.nextOfferSeq + i + 1}`,
+              playerId: pid,
+              teamId,
+              isUser: ref.isUser,
+              years: counterYears,
+              aav: counterAav,
+              createdWeek: next.hub.regularSeasonWeek ?? 1,
+              status: "COUNTERED",
+              isCounter: true,
+              counterCreatedAtResolve: next.freeAgency.resolvesUsedThisPhase,
+              decisionReason: ref.isUser ? userDecision?.reason ?? "Counter offer requested" : undefined,
+            };
+          });
+          const cleaned = updatedBase.filter((o) => !(o.status === "PENDING" && finalistTeams.includes(o.teamId)));
+          next = { ...next, freeAgency: { ...next.freeAgency, nextOfferSeq: next.freeAgency.nextOfferSeq + counterOffers.length } };
+          next.freeAgency.offersByPlayerId[pid] = [...cleaned, ...counterOffers];
+          next.freeAgency.pendingCounterTeamByPlayerId[pid] = finalistTeams[0] ?? best.teamId;
+          next = faPush(next, `${String(p?.fullName ?? "Player")} issued counters to finalists.`, pid);
+        } else {
+          next.freeAgency.offersByPlayerId[pid] = allOffers.map((o) => (o.status === "PENDING" || o.status === "COUNTERED" ? { ...o, status: "REJECTED" as const } : o));
+          next = faPush(next, `${String(p?.fullName ?? "Player")} rejected all offers.`, pid);
+        }
+        next.freeAgency.resolveRoundByPlayerId[pid] = round + 1;
+      }
+
+      let out = cpuOfferTick(next, 70);
+      if (guardTripped) {
+        out = { ...out, uiToast: "Free Agency resolve stopped early to protect stability." };
+      }
+      if (out.freeAgency.resolvesUsedThisPhase >= out.freeAgency.maxResolvesPerPhase) {
+        out = expireRemainingFreeAgencyOffers(out, "Expired: resolve cap reached");
+      }
+      reportFaInvariantViolations(out, "FA_RESOLVE");
+      return out;
+    }
+
+    case "FA_RESOLVE_WEEK": {
+      const offersByPlayerId = { ...state.freeAgency.offersByPlayerId };
+      const signingsByPlayerId = { ...state.freeAgency.signingsByPlayerId };
+      let next: GameState = state;
+
+      for (const [playerId, offers] of Object.entries(offersByPlayerId)) {
+        if (signingsByPlayerId[playerId]) continue;
+        const pending = offers.filter((o) => o.status === "PENDING");
+        if (!pending.length) continue;
+
+        const interest = state.tampering.interestByPlayerId[playerId] ?? 0;
+        const userSoft = state.tampering.softOffersByPlayerId[playerId];
+        const score = (o: FreeAgencyOffer) => {
+          let sc = Number(o.aav ?? 0);
+          if (o.isUser) sc *= userSoft ? 1.05 + clamp01(interest) * 0.03 : 1 + clamp01(interest) * 0.02;
+          return sc;
+        };
+
+        const best = pending.reduce((a, b) => (score(b) > score(a) ? b : a));
+        offersByPlayerId[playerId] = offers.map((o) => (o.offerId === best.offerId ? { ...o, status: "ACCEPTED" as const } : o.status === "PENDING" ? { ...o, status: "REJECTED" as const } : o));
+
+        const years = Math.max(1, best.years);
+        const totalCash = best.aav * years;
+        const signingBonus = Math.round((totalCash * 0.22) / 50_000) * 50_000;
+        signingsByPlayerId[playerId] = { teamId: best.teamId, years, aav: best.aav, signingBonus };
+
+        if (best.isUser) {
+          next = signFromOffer(
+            {
+              ...next,
+              freeAgency: { ...next.freeAgency, offersByPlayerId, signingsByPlayerId },
+            },
+            playerId,
+            best,
+            best.teamId,
+            "Weekly resolve acceptance",
+          );
+          return next;
+        }
+      }
+      return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
+    }
+
+    case "TRADE_ACCEPT": {
+      const currentWeek = Number(state.league.week ?? state.week ?? 1);
+      const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
+      if (!isTradeAllowed(currentWeek, deadlineWeek)) {
+        return { ...state, tradeError: { code: "TRADE_DEADLINE_PASSED", deadlineWeek, currentWeek } };
+      }
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const playerId = String(action.payload.playerId);
+      const toTeamId = String(action.payload.toTeamId);
+
+      if (state.offseasonData.tagCenter.applied?.playerId === playerId) return pushNews(state, "Trade blocked: tagged player. Remove tag first.");
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
+        return pushNews(state, "Trade blocked: extension offer pending. Clear offer first.");
+      }
+
+      const delta = tradeCapDelta(state, String(teamId), playerId, toTeamId);
+      if (state.finances.capSpace + delta < 0) return pushNews(state, "Trade blocked: cap would be illegal.");
+
+      const txState = applyCanonicalTx(state, Tx.trade(String(teamId), toTeamId, { playerIdsFrom: [playerId], playerIdsTo: [], details: { valueTier: String(action.payload.valueTier) } }));
+      const depthForUserTeam = autoFillDepthChartGaps(txState, String(teamId));
+      const depthForDestination = autoFillDepthChartGaps(txState, toTeamId);
+      const nextState = {
+        ...txState,
+        depthChart: {
+          ...txState.depthChart,
+          startersByPos: depthForUserTeam,
+          lockedBySlot: Object.fromEntries(
+            Object.entries(txState.depthChart.lockedBySlot ?? {}).filter(([slot, pid]) => String(depthForUserTeam[slot] ?? "") === String(pid)),
+          ),
+        },
+        leagueDepthCharts: {
+          ...(txState.leagueDepthCharts ?? {}),
+          [String(teamId)]: { ...(txState.leagueDepthCharts?.[String(teamId)] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForUserTeam },
+          [toTeamId]: { ...(txState.leagueDepthCharts?.[toTeamId] ?? { startersByPos: {}, lockedBySlot: {} }), startersByPos: depthForDestination },
+        },
+        tradeError: undefined,
+      };
+      const next = applyFinances(nextState);
+      const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
+      const tag = currentWeek <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)";
+      const tx = {
+        id: `TRADE_${state.season}_${currentWeek}_${playerId}`,
+        type: "TRADE" as const,
+        playerId,
+        playerName: name,
+        playerPos: String(getPlayers().find((p: any) => String(p.playerId) === playerId)?.pos ?? "UNK"),
+        fromTeamId: String(teamId),
+        toTeamId,
+        season: state.season,
+        week: currentWeek,
+        june1Designation: "NONE" as const,
+        notes: `${tag} Deadline W${deadlineWeek}`,
+        deadCapThisYear: 0,
+        deadCapNextYear: 0,
+        remainingProration: 0,
+      };
+      return pushNews({ ...next, transactions: [...(next.transactions ?? []), tx] }, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value. ${tag}`);
+    }
+
+    case "CUT_APPLY": {
+      const teamId = String(action.payload.teamId ?? state.acceptedOffer?.teamId ?? "");
+      if (!teamId) return state;
+
+      const playerId = String(action.payload.playerId);
+
+      if (state.offseasonData.tagCenter.applied?.playerId === playerId) {
+        return pushNews(state, "Cut blocked: tagged player. Remove tag first.");
+      }
+      if (["RESIGN", "EXTEND_EARLY"].includes(String(state.offseasonData.resigning.decisions[playerId]?.action ?? ""))) {
+        return pushNews(state, "Cut blocked: extension offer pending. Clear offer first.");
+      }
+
+      const designation = action.payload.designation ?? state.offseasonData.rosterAudit.cutDesignations[playerId] ?? "NONE";
+      const summary = getContractSummaryForPlayer(state, playerId);
+      const deadTotal = Math.round((summary?.deadCapIfCutNow ?? 0) / 50_000) * 50_000;
+
+      const deadThisYear = designation === "POST_JUNE_1" ? Math.round((deadTotal * 0.5) / 50_000) * 50_000 : deadTotal;
+      const deadNextYear = designation === "POST_JUNE_1" ? Math.max(0, deadTotal - deadThisYear) : 0;
+
+      const cutPlayer = getEffectivePlayersByTeam(state, teamId).find((p: any) => String(p.playerId) === String(playerId));
+      const cutOverride = state.playerContractOverrides[playerId];
+      const cutTransaction: Transaction = {
+        id: `${state.season}_${playerId}_CUT`,
+        type: "CUT",
+        playerId,
+        playerName: String(cutPlayer?.fullName ?? cutPlayer?.name ?? "Unknown"),
+        playerPos: String(cutPlayer?.pos ?? "UNK"),
+        fromTeamId: teamId,
+        season: state.season,
+        week: state.week,
+        june1Designation: designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1",
+        notes: designation === "POST_JUNE_1"
+          ? `Post–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M accelerated this year, $${Math.round(deadNextYear / 1_000_000)}M next year.`
+          : deadThisYear > 0 ? `Pre–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M dead cap.` : "Cut with no dead cap.",
+        deadCapThisYear: deadThisYear,
+        deadCapNextYear: deadNextYear,
+        remainingProration: summary?.deadCapIfCutNow ?? 0,
+        contractSnapshot: cutOverride ? {
+          startSeason: cutOverride.startSeason,
+          endSeason: cutOverride.endSeason,
+          signingBonus: cutOverride.signingBonus,
+          salaries: [...cutOverride.salaries],
+        } : undefined,
+      };
+
+      const txState = applyCanonicalTx(state, Tx.cut(String(teamId), String(playerId), designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1"));
+
+      const cutDesignations = { ...txState.offseasonData.rosterAudit.cutDesignations };
+      delete cutDesignations[playerId];
+
+      const patched = applyFinances({
+        ...txState,
+        offseasonData: {
+          ...txState.offseasonData,
+          rosterAudit: { cutDesignations },
+        },
+        finances: {
+          ...txState.finances,
+          deadCapThisYear: (txState.finances.deadCapThisYear ?? 0) + deadThisYear,
+          deadCapNextYear: (txState.finances.deadCapNextYear ?? 0) + deadNextYear,
+        },
+        transactions: [...(txState.transactions ?? []), cutTransaction],
+      });
+
+      const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
+      const nextStarters = autoFillDepthChartGaps(patched, teamId);
+      for (const [slot, starterId] of Object.entries(nextStarters)) {
+        if (String(starterId) !== playerId) continue;
+        delete nextLockedBySlot[slot];
+      }
+
+      const filled = {
+        ...patched,
+        depthChart: { ...patched.depthChart, startersByPos: nextStarters, lockedBySlot: nextLockedBySlot },
+      };
+      const next = applyFinances(filled);
+
+      return pushNews(
+        next,
+        designation === "POST_JUNE_1"
+          ? `Cut applied (Post–June 1): Dead ${Math.round(deadThisYear / 1_000_000)}M now, ${Math.round(deadNextYear / 1_000_000)}M next year. Depth chart auto-filled.`
+          : `Cut applied: Dead ${Math.round(deadThisYear / 1_000_000)}M. Depth chart auto-filled.`,
+      );
+    }
+
+    case "CUT_PLAYER": {
+      if (import.meta.env.DEV) {
+        throw new Error("CUT_PLAYER is deprecated. Dispatch CUT_APPLY from contract workflows instead.");
+      }
       return state;
+    }
+
+    case "TRADE_PLAYER":
+      // Deprecated ambiguous alias: intentionally no-op to avoid accidental mutations.
+      return state;
+
+    case "PREGENERATE_FUTURE_CLASS": {
+      const classYear = action.payload.classYear;
+      const generated = generateParameterizedDraftClass(classYear, state.saveSeed ^ classYear);
+      return {
+        ...state,
+        futureClasses: {
+          ...(state.futureClasses ?? {}),
+          [classYear]: generated,
+        },
+      };
+    }
+
+    case "ADVANCE_SEASON":
+      return seasonRollover(state);
+
+    case "DISMISS_SEASON_AWARDS":
+      return state.seasonAwards
+        ? { ...state, careerStage: "ASSISTANT_HIRING", seasonAwards: { ...state.seasonAwards, shown: true } }
+        : { ...state, careerStage: "ASSISTANT_HIRING" };
+
+    case "PREDRAFT_TOGGLE_VISIT": {
+      const id = String(action.payload.prospectId);
+      const cur = !!state.offseasonData.preDraft.visits[id];
+      const nextOn = !cur;
+      const workouts = state.offseasonData.preDraft.workouts;
+      const visits = state.offseasonData.preDraft.visits;
+      const slotsUsed = Object.values(visits).filter(Boolean).length + Object.values(workouts).filter(Boolean).length;
+
+      if (nextOn && workouts[id]) return { ...state, uiToast: "Prospect already scheduled for workout." };
+      if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
+
+      const nextReveals = { ...state.offseasonData.preDraft.reveals };
+      if (nextOn) nextReveals[id] = genVisitReveal(state, id);
+      else delete nextReveals[id];
+
+      const nextIntelVisit = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelVisit[id] = Math.min(2, (nextIntelVisit[id] ?? 0) + 1);
+
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: {
+            ...state.offseasonData.preDraft,
+            visits: { ...state.offseasonData.preDraft.visits, [id]: nextOn },
+            reveals: nextReveals,
+            intelByProspectId: nextIntelVisit,
+          },
+        },
+      };
+    }
+    case "PREDRAFT_TOGGLE_WORKOUT": {
+      const id = String(action.payload.prospectId);
+      const cur = !!state.offseasonData.preDraft.workouts[id];
+      const nextOn = !cur;
+      const workouts = state.offseasonData.preDraft.workouts;
+      const visits = state.offseasonData.preDraft.visits;
+      const slotsUsed = Object.values(visits).filter(Boolean).length + Object.values(workouts).filter(Boolean).length;
+
+      if (nextOn && visits[id]) return { ...state, uiToast: "Prospect already scheduled for visit." };
+      if (nextOn && slotsUsed >= PREDRAFT_MAX_SLOTS) return { ...state, uiToast: `All ${PREDRAFT_MAX_SLOTS} slots used.` };
+
+      const nextIntelWorkout = { ...(state.offseasonData.preDraft.intelByProspectId ?? {}) };
+      if (nextOn) nextIntelWorkout[id] = Math.min(2, (nextIntelWorkout[id] ?? 0) + 1);
+
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: {
+            ...state.offseasonData.preDraft,
+            workouts: { ...state.offseasonData.preDraft.workouts, [id]: nextOn },
+            intelByProspectId: nextIntelWorkout,
+          },
+        },
+      };
+    }
+    case "PREDRAFT_SET_VIEWMODE": {
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          preDraft: { ...state.offseasonData.preDraft, viewMode: action.payload.mode },
+        },
+      };
+    }
+
+    case "DRAFT_INIT": {
+      const userTeamId = String(state.acceptedOffer?.teamId ?? "MILWAUKEE_NORTHSHORE");
+      const season = state.season;
+      const sim = initDraftSim({ saveSeed: state.saveSeed, season, userTeamId });
+      const pool = state.upcomingDraftClass?.length ? state.upcomingDraftClass : generateDraftClass({ year: season, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...sim,
+          prospectPool: pool,
+          leaguePicks: [],
+          withdrawnBoardIds: {},
+          appliedSelectionCount: 0,
+          rosterCountsByTeamBucket: initDraftRosterCounts(state),
+          draftedCountsByTeamBucket: {},
+        },
+      };
+    }
+
+    case "DRAFT_CPU_ADVANCE": {
+      if (!state.draft || state.draft.complete) return state;
+      const res = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: state.draft,
+        prospects: state.draft.prospectPool,
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket ?? {},
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket ?? {},
+      });
+      let next: GameState = {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...res.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: res.draftedCountsByTeamBucket,
+        },
+      };
+      const newSelections = next.draft.selections.slice(state.draft.appliedSelectionCount);
+      for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
+      return finalizeDraftIfComplete(next);
+    }
+
+    case "DRAFT_SHOP": {
+      const offers = generateTradeOffers({ saveSeed: state.saveSeed, sim: state.draft, count: 3 });
+      return { ...state, draft: { ...state.draft, tradeOffers: offers, tradeOffersForOverall: state.draft.slots[state.draft.cursor]?.overall ?? null } };
+    }
+
+    case "DRAFT_ACCEPT_TRADE": {
+      const offer = state.draft.tradeOffers.find((o) => o.offerId === action.payload.offerId);
+      if (!offer) return state;
+      const sim = applyTrade(state.draft, offer);
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: sim,
+        prospects: state.draft.prospectPool,
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+      });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+        },
+      };
+    }
+
+    case "DRAFT_DECLINE_OFFER": {
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          tradeOffers: state.draft.tradeOffers.filter((o) => o.offerId !== action.payload.offerId),
+        },
+      };
+    }
+
+    case "DRAFT_SEND_TRADE_UP_OFFER": {
+      const slot = state.draft.slots[state.draft.cursor];
+      if (!slot || slot.teamId === state.draft.userTeamId) return state;
+
+      const offer = buildUserTradeUpOffer({
+        saveSeed: state.saveSeed,
+        sim: state.draft,
+        giveOveralls: action.payload.giveOveralls,
+        askBackOverall: action.payload.askBackOverall ?? null,
+      });
+      if (!offer) return { ...state, uiToast: "Invalid offer." };
+
+      const outcome = submitUserTradeUpOffer({ saveSeed: state.saveSeed, sim: state.draft, offer });
+      if (outcome.status === "DECLINED") {
+        return {
+          ...state,
+          draft: { ...state.draft, tradeOffers: [offer, ...state.draft.tradeOffers], tradeOffersForOverall: slot.overall },
+          uiToast: outcome.message,
+        };
+      }
+      if (outcome.status === "COUNTERED") {
+        return {
+          ...state,
+          draft: { ...state.draft, tradeOffers: [outcome.counter, offer, ...state.draft.tradeOffers], tradeOffersForOverall: slot.overall },
+          uiToast: outcome.message,
+        };
+      }
+
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: state.saveSeed,
+        state: outcome.appliedSim,
+        prospects: state.draft.prospectPool,
+        rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+      });
+      return {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+          tradeOffers: [offer, ...state.draft.tradeOffers],
+        },
+        uiToast: outcome.message,
+      };
+    }
+
+    case "DRAFT_CLEAR_TRADE_OFFERS": {
+      return { ...state, draft: { ...state.draft, tradeOffers: [] } };
+    }
+
+    case "DRAFT_USER_PICK": {
+      if (state.draft.complete) return state;
+      const slot = state.draft.slots[state.draft.cursor];
+      if (!slot || slot.teamId !== state.draft.userTeamId) return state;
+
+      const p = state.draft.prospectPool.find((x) => x.prospectId === String(action.payload.prospectId));
+      if (!p || state.draft.takenProspectIds[p.prospectId]) return { ...state, uiToast: "Prospect not found" };
+
+      const sim = applySelection(state.draft, slot, p);
+      let withPick: GameState = {
+        ...state,
+        draft: {
+          ...state.draft,
+          ...sim,
+          rosterCountsByTeamBucket: state.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: state.draft.draftedCountsByTeamBucket,
+        },
+      };
+      const userSel = withPick.draft.selections[withPick.draft.selections.length - 1];
+      if (userSel) withPick = applyDraftSelectionToState(withPick, userSel);
+
+      const adv = cpuAdvanceUntilUser({
+        saveSeed: withPick.saveSeed,
+        state: withPick.draft,
+        prospects: withPick.draft.prospectPool,
+        rosterCountsByTeamBucket: withPick.draft.rosterCountsByTeamBucket,
+        draftedCountsByTeamBucket: withPick.draft.draftedCountsByTeamBucket,
+      });
+      let next: GameState = {
+        ...withPick,
+        draft: {
+          ...withPick.draft,
+          ...adv.sim,
+          rosterCountsByTeamBucket: withPick.draft.rosterCountsByTeamBucket,
+          draftedCountsByTeamBucket: adv.draftedCountsByTeamBucket,
+        },
+      };
+      const newSelections = next.draft.selections.slice(next.draft.appliedSelectionCount);
+      for (const sel of newSelections) next = applyDraftSelectionToState(next, sel);
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
+    }
+
+    case "DRAFT_COMPLETE": {
+      let next = finalizeDraftIfComplete(state);
+      next = advanceToRegularSeason(next);
+      return next;
+    }
+
+    case "DRAFT_FINALIZE": {
+      const finalized = finalizeDraftIfComplete(state);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
+    }
+
+    case "DRAFT_PICK": {
+      if (state.offseasonData.draft.picks.length >= 7) return state;
+      const already = state.offseasonData.draft.picks.some((p) => p.id === action.payload.prospectId);
+      if (already) return state;
+
+      const p = (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : draftBoard()).find(
+        (x) => x.id === action.payload.prospectId,
+      );
+      if (!p || !doesProspectExist(p.id)) return { ...state, uiToast: "Prospect not found" };
+
+      const nextState = {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          draft: {
+            ...state.offseasonData.draft,
+            board: state.offseasonData.draft.board.length ? state.offseasonData.draft.board : draftBoard(),
+            picks: [...state.offseasonData.draft.picks, p],
+          },
+        },
+      };
+
+      const row = getProspectRow(p.id);
+      const rank = row ? Number(row["Rank"] ?? 200) : 200;
+      const reveal = state.scoutingState?.interviews.modelARevealByProspectId?.[p.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+      const draftProjection = resolveDraftUncertainty({
+        saveSeed: state.saveSeed,
+        season: state.season,
+        prospectId: p.id,
+        baseOvr: rookieOvrFromRank(rank),
+        baseDev: rookieDevFromTier(row ?? {}),
+        characterRevealPct: reveal.characterRevealPct,
+        intelligenceRevealPct: reveal.intelligenceRevealPct,
+      });
+      const idx = nextState.rookies.length + 1;
+      const playerId = `ROOK_${String(idx).padStart(4, "0")}`;
+      const rookie: RookiePlayer = {
+        playerId,
+        prospectId: p.id,
+        name: row ? String(row["Name"] ?? "Rookie") : "Rookie",
+        pos: row ? String(row["POS"] ?? "UNK").toUpperCase() : String(p.pos ?? "UNK").toUpperCase(),
+        age: row ? Number(row["Age"] ?? 22) : 22,
+        ovr: draftProjection.ovr,
+        dev: draftProjection.dev,
+        apy: rookieApyFromRank(rank),
+        teamId: String(state.acceptedOffer?.teamId ?? ""),
+        scoutOvr: draftProjection.ovr,
+        scoutDev: draftProjection.dev,
+        scoutConf: 50,
+      };
+      const contract = rookieContractFromApy(nextState.season + 1, rookie.apy);
+
+      const feedbackAlloc = createDeterministicFeedbackEvent(nextState, "DRAFT_SELECTION", {
+        pickNumber: nextState.offseasonData.draft.picks.length + 1,
+        playerName: rookie.name,
+        position: rookie.pos,
+        college: "Unknown",
+        scoutingGrade: String(rookie.scoutOvr),
+        tierLabel: `Dev ${rookie.scoutDev}`,
+      });
+      const next = {
+        ...feedbackAlloc.state,
+        rookies: [...nextState.rookies, rookie],
+        rookieContracts: { ...nextState.rookieContracts, [rookie.playerId]: contract },
+        feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
+      };
+      const finalized = finalizeDraftIfComplete(next);
+      if (finalized.draft.completed && !state.draft.completed) {
+        return gameReducer(finalized, { type: "DRAFT_COMPLETE" });
+      }
+      return finalized;
+    }
+
+    case "CAMP_SET":
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          camp: { settings: { ...state.offseasonData.camp.settings, ...action.payload.settings } },
+        },
+      };
+    case "SET_TRAINING_FOCUS":
+      return { ...state, trainingFocus: { posGroupFocus: action.payload.posGroupFocus } };
+    case "CUT_TOGGLE": {
+      const cur = state.offseasonData.cutDowns.decisions[action.payload.playerId];
+      const next = cur?.keep === false ? { keep: true } : { keep: false };
+      return {
+        ...state,
+        offseasonData: {
+          ...state.offseasonData,
+          cutDowns: { decisions: { ...state.offseasonData.cutDowns.decisions, [action.payload.playerId]: next } },
+        },
+      };
+    }
+    case "INIT_TRAINING_CAMP_ROSTER": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const m = top53Active(teamId);
+      return { ...state, rosterMgmt: { ...m, finalized: false } };
+    }
+    case "AUTO_CUT_TO_53": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+      const m = top53Active(teamId);
+      return { ...state, rosterMgmt: { ...m, finalized: false } };
+    }
+    case "TOGGLE_ACTIVE": {
+      if (state.rosterMgmt.finalized) return state;
+
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const allIds = new Set(getUserTeamRosterIds(teamId));
+      const pid = action.payload.playerId;
+      if (!allIds.has(pid)) return state;
+
+      const active = { ...state.rosterMgmt.active };
+      const cuts = { ...state.rosterMgmt.cuts };
+      const activeCount = Object.keys(active).length;
+
+      if (active[pid]) {
+        delete active[pid];
+        cuts[pid] = true;
+        const feedbackAlloc = createDeterministicFeedbackEvent(state, "ROSTER_CHANGE", {
+          // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+          playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+          position: String(getPlayerById(pid)?.pos ?? "UNK"),
+          action: "waived",
+        });
+        return {
+          ...feedbackAlloc.state,
+          rosterMgmt: { active, cuts, finalized: false },
+          feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
+        };
+      }
+
+      if (activeCount >= 53) return state;
+
+      delete cuts[pid];
+      active[pid] = true;
+      const feedbackAlloc = createDeterministicFeedbackEvent(state, "ROSTER_CHANGE", {
+        // M1 FIX: getPersonnelById → getPlayerById (players are in Players table, not Personnel)
+        playerName: String(getPlayerById(pid)?.fullName ?? "Player"),
+        position: String(getPlayerById(pid)?.pos ?? "UNK"),
+        action: "added to roster",
+      });
+      return {
+        ...feedbackAlloc.state,
+        rosterMgmt: { active, cuts, finalized: false },
+        feedbackQueue: [feedbackAlloc.event, ...feedbackAlloc.state.feedbackQueue].slice(0, 50),
+      };
+    }
+    case "FINALIZE_CUTS": {
+      const teamId = state.acceptedOffer?.teamId;
+      if (!teamId) return state;
+
+      const activeCount = Object.keys(state.rosterMgmt.active).length;
+      if (activeCount !== 53) return state;
+
+      const cuts = Object.keys(state.rosterMgmt.cuts);
+      const playerTeamOverrides = { ...state.playerTeamOverrides };
+      const playerContractOverrides = { ...state.playerContractOverrides };
+      for (const pid of cuts) {
+        // playerTeamOverrides is the authoritative channel for effective player team reads.
+        playerTeamOverrides[pid] = "FREE_AGENT";
+        delete playerContractOverrides[pid];
+      }
+
+      return {
+        ...state,
+        playerTeamOverrides,
+        playerContractOverrides,
+        rosterMgmt: { ...state.rosterMgmt, finalized: true },
+        memoryLog: addMemoryEvent(state, "FINAL_CUTS", { cutCount: cuts.length }),
+      };
+    }
+    case "FIRE_STAFF": {
+      const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? (state as any).teamId;
+      if (!teamId) return state;
+
+      const salary = state.staffBudget.byPersonId[action.payload.personId] ?? 0;
+      const c = getPersonnelContract(action.payload.personId);
+      const endSeason = state.season;
+      const remainingYears = c?.endSeason != null ? Math.max(0, Number(c.endSeason) - endSeason) + 1 : 1;
+
+      const total = buyoutTotal(salary, remainingYears, 0.6);
+      const chunks = splitBuyout(total, action.payload.spreadSeasons);
+      const seasons = [state.season, state.season + 1];
+
+      expireContract(String(c?.contractId ?? ""), endSeason);
+      clearPersonnelTeam(action.payload.personId);
+
+      let next: GameState = refundStaffBudget(state, action.payload.personId);
+      next = {
+        ...next,
+        personnelTeamOverrides: {
+          ...next.personnelTeamOverrides,
+          [action.payload.personId]: { teamId: "FREE_AGENT", status: "FREE_AGENT" },
+        },
+        staffContractsByPersonId: c
+          ? { ...next.staffContractsByPersonId, [action.payload.personId]: { ...c, isExpired: true } as ContractRow }
+          : next.staffContractsByPersonId,
+        owner: { ...next.owner, approval: clamp100(next.owner.approval - 8) },
+        memoryLog: addMemoryEvent(state, "STAFF_FIRED", {
+          ...action.payload,
+          salary,
+          remainingYears,
+          buyoutTotal: total,
+          spread: chunks,
+        }),
+      };
+
+      for (let i = 0; i < chunks.length; i++) {
+        const season = seasons[i] ?? state.season;
+        next = addBuyoutToSeason(next, season, chunks[i] ?? 0);
+        next = addDeadMoney(next, season, chunks[i] ?? 0);
+      }
+
+      next = chargeBuyouts(next, state.season);
+      return next;
+    }
+    case "CHARGE_BUYOUTS_FOR_SEASON": {
+      return chargeBuyouts(state, action.payload.season);
+    }
+    case "DEPTH_BULK_SET": {
+      return {
+        ...state,
+        depthChart: {
+          ...state.depthChart,
+          startersByPos: { ...state.depthChart.startersByPos, ...action.payload.startersByPos },
+        },
+      };
+    }
+    case "SET_STARTER": {
+      const { slot, playerId } = action.payload;
+      const starters = { ...state.depthChart.startersByPos };
+      const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
+
+      if (playerId === "AUTO") {
+        const prevSlots = state.depthChart.startersByPos;
+        delete starters[slot];
+        delete lockedBySlot[slot];
+        const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+        return teamId ? pushMajorDepthNews(next0, teamId, prevSlots, starters) : next0;
+      }
+
+      if (lockedBySlot[slot]) return state;
+
+      const currentHere = starters[slot];
+      const otherSlot = Object.entries(starters).find(([s, pid]) => s !== slot && String(pid) === String(playerId))?.[0];
+      if (otherSlot) {
+        if (lockedBySlot[otherSlot]) return state;
+
+        if (currentHere) starters[otherSlot] = String(currentHere);
+        else delete starters[otherSlot];
+
+        starters[slot] = String(playerId);
+
+        const a = !!lockedBySlot[slot];
+        const b = !!lockedBySlot[otherSlot];
+        if (a) lockedBySlot[otherSlot] = true;
+        else delete lockedBySlot[otherSlot];
+        if (b) lockedBySlot[slot] = true;
+        else delete lockedBySlot[slot];
+
+        const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters, lockedBySlot } };
+        const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+        return teamId ? pushMajorDepthNews(next0, teamId, state.depthChart.startersByPos, starters) : next0;
+      }
+
+      const prevSlots = state.depthChart.startersByPos;
+      starters[slot] = String(playerId);
+      const next0 = { ...state, depthChart: { ...state.depthChart, startersByPos: starters } };
+      const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : null;
+      return teamId ? pushMajorDepthNews(next0, teamId, prevSlots, starters) : next0;
+    }
+    case "TOGGLE_DEPTH_SLOT_LOCK": {
+      const slot = action.payload.slot;
+      const starters = state.depthChart.startersByPos;
+      if (!starters[slot]) return state;
+
+      const lockedBySlot = { ...(state.depthChart.lockedBySlot ?? {}) };
+      if (lockedBySlot[slot]) delete lockedBySlot[slot];
+      else lockedBySlot[slot] = true;
+
+      return { ...state, depthChart: { ...state.depthChart, lockedBySlot } };
+    }
+    case "RESET_DEPTH_CHART_BEST": {
+      return fillDepthChart(state, "RESET");
+    }
+    case "DEPTHCHART_RESET_TO_BEST":
+    case "DEPTH_RESET_TO_BEST": {
+      const teamId = state.acceptedOffer?.teamId ? String(state.acceptedOffer.teamId) : "";
+      if (!teamId) return state;
+      const prev = state.depthChart.startersByPos;
+
+      let next: GameState = state;
+      const startersByPos = autoFillDepthChartGaps(next, teamId);
+      next = { ...next, depthChart: { ...next.depthChart, startersByPos } };
+
+      next = pushMajorDepthNews(next, teamId, prev, startersByPos);
+      next = recomputeLeagueDepthAndNews(next);
+      return next;
+    }
+    case "AUTOFILL_DEPTH_CHART": {
+      return fillDepthChart(state, "AUTOFILL");
+    }
+    case "RECALC_FIRING_METER": {
+      return computeAndStoreFiringMeter(state, action.payload.week, action.payload.winPct, action.payload.goalsDelta);
+    }
+    case "CHECK_FIRING": {
+      if (state.firing.fired) return state;
+      const week = action.payload.week ?? state.firing.lastWeekComputed ?? 1;
+      const next = computeAndStoreFiringMeter(state, week, action.payload.winPct, action.payload.goalsDelta);
+      if (next.coach.tenureYear === 1 && action.payload.checkpoint === "WEEKLY") return next;
+
+      const p = action.payload.checkpoint === "WEEKLY" ? next.firing.pWeekly : next.firing.pSeasonEnd;
+      const key = `FIRE|S${next.season}|Y${next.coach.tenureYear}|W${week}|${action.payload.checkpoint}`;
+      const fire = shouldFireDeterministic({ saveSeed: next.saveSeed, key, p });
+      if (!fire) return next;
+
+      const firedTeamId = String(next.acceptedOffer?.teamId ?? next.teamId ?? "");
+      const firedStanding = next.currentStandings.find((s) => s.teamId === firedTeamId);
+      const firingRecap: FiringRecap = {
+        season: next.season,
+        week,
+        teamId: firedTeamId,
+        record: { wins: Number(firedStanding?.wins ?? 0), losses: Number(firedStanding?.losses ?? 0) },
+        topDrivers: next.firing.drivers.slice(0, 3).map((d) => d.label),
+        ownerApproval: Number(next.owner?.approval ?? 60),
+        tenureWeeks: Number(next.hub?.regularSeasonWeek ?? week),
+        autonomyAtFiring: Number(next.coach?.autonomy ?? 60),
+      };
+
+      return {
+        ...next,
+        careerStage: "FIRED" as const,
+        firing: {
+          ...next.firing,
+          fired: true,
+          firedAt: { season: next.season, week, checkpoint: action.payload.checkpoint },
+        },
+        careerHistory: {
+          ...next.careerHistory,
+          firings: [...(next.careerHistory?.firings ?? []), firingRecap],
+        },
+        memoryLog: addMemoryEvent(next, "FIRED", { season: next.season, week, checkpoint: action.payload.checkpoint, p }),
+      };
+    }
+    case "RECALC_OWNER_FINANCIAL": {
+      const season = action.payload?.season ?? state.season;
+      const financialRating = computeFinancialRating(state, season);
+      return {
+        ...state,
+        owner: { ...state.owner, financialRating, jobSecurity: computeJobSecurity(state.owner.approval, financialRating) },
+      };
+    }
+    case "INIT_PRESEASON_ROTATION": {
+      if (!isActive53(state)) return state;
+      if (Object.keys(state.preseason.rotation.byPlayerId).length) return state;
+      return initRotationFromDepthChart(state);
+    }
+    case "SET_PLAYER_SNAP": {
+      if (!isActive53(state)) return state;
+      const pid = action.payload.playerId;
+      if (!state.rosterMgmt.active[pid]) return state;
+      return {
+        ...state,
+        preseason: {
+          ...state.preseason,
+          rotation: { byPlayerId: { ...state.preseason.rotation.byPlayerId, [pid]: clamp100(action.payload.pct) } },
+        },
+      };
+    }
+    case "APPLY_PRESEASON_DEV": {
+      if (state.preseason.appliedWeeks[action.payload.week]) return state;
+      if (!isActive53(state)) return state;
+
+      const { devById, riskById } = preseasonDevFromRotation(state);
+      let next = applyPreseasonDevToRookies(state, devById);
+
+      const highRisk = Object.values(riskById).filter((r) => r >= 10).length;
+      if (highRisk) next = { ...next, owner: { ...next.owner, approval: clamp100(next.owner.approval - 1) } };
+
+      return {
+        ...next,
+        preseason: { ...next.preseason, appliedWeeks: { ...next.preseason.appliedWeeks, [action.payload.week]: true } },
+        memoryLog: addMemoryEvent(next, "PRESEASON_DEV", { week: action.payload.week, devCount: Object.keys(devById).length, highRisk }),
+      };
+    }
+    case "OWNER_PENALTY": {
+      return applyOwnerPenalty(state, action.payload.amount, action.payload.reason);
+    }
+    case "FINANCES_PATCH": {
+      return applyFinances({ ...state, finances: { ...state.finances, ...action.payload } });
+    }
+    case "AUTO_ADVANCE_STAGE_IF_READY": {
+      const step = state.offseason.stepId;
+      if (step === "TRAINING_CAMP") return { ...state, careerStage: "TRAINING_CAMP" };
+      if (step === "PRESEASON") {
+        const next = { ...state, careerStage: "PRESEASON" as CareerStage };
+        return clearDepthLocksIfEnteringPreseason(state.careerStage, "PRESEASON", next);
+      }
+      if (step === "CUT_DOWNS") return getUnifiedPhase(state) === "REGULAR_SEASON" ? state : advanceToRegularSeason(state);
+      return state;
+    }
+    case "SET_PRACTICE_PLAN": {
+      const plan = migratePracticePlan(action.payload);
+      const preview = getEffectPreview({ ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks });
+      return {
+        ...state,
+        practicePlan: { ...plan, neglectWeeks: state.practiceNeglectCounters ?? plan.neglectWeeks },
+        practicePlanConfirmed: true,
+        uiToast: `Practice plan set — Fatigue ${preview.fatigueRange[0]} | Scheme +${preview.schemeConceptBonus.toFixed(1)} | Dev XP ${preview.devXP}`,
+      };
+    }
+    case "INJURY_UPSERT": {
+      const existing = state.injuries ?? [];
+      const idx = existing.findIndex((i) => i.id === action.payload.id);
+      const updated = idx >= 0 ? existing.map((i) => (i.id === action.payload.id ? action.payload : i)) : [...existing, action.payload];
+      const weeks = Number((action.payload as any).estWeeks ?? (action.payload as any).weeksOut ?? 0);
+      const severity = weeks >= 4 || String((action.payload as any).status ?? "").toUpperCase() === "OUT" ? "CRITICAL" : weeks >= 1 ? "WARNING" : "INFO";
+      const p = getPersonnelById(String(action.payload.playerId));
+      const injuryAlloc = allocateDeterministic(state, "injury", "INJURY");
+      const event = createFeedbackEvent("INJURY_ALERT", {
+        playerName: String(p?.fullName ?? "Player"),
+        injuryType: String((action.payload as any).type ?? "Injury"),
+        estimatedWeeks: weeks,
+        severity,
+        playerIds: [String(action.payload.playerId)],
+      }, { id: injuryAlloc.id, timestamp: injuryAlloc.ts });
+      return {
+        ...injuryAlloc.state,
+        injuries: updated,
+        pendingInjuryAlert: severity === "CRITICAL" ? action.payload : injuryAlloc.state.pendingInjuryAlert,
+        feedbackQueue: severity === "CRITICAL" ? injuryAlloc.state.feedbackQueue : [event, ...injuryAlloc.state.feedbackQueue].slice(0, 50),
+      };
+    }
+    case "INJURY_MOVE_TO_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "IR" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_ACTIVATE_FROM_IR": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, status: "QUESTIONABLE" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "INJURY_START_PRACTICE_WINDOW": {
+      const injuries = (state.injuries ?? []).map((i) =>
+        i.id === action.payload.injuryId ? { ...i, practiceStatus: "LIMITED" as const, rehabStage: "RETURN_TO_PLAY" as const } : i
+      );
+      return { ...state, injuries };
+    }
+    case "PUSH_FEEDBACK": {
+      const ev = action.payload.event;
+      return { ...state, feedbackQueue: [ev, ...state.feedbackQueue].slice(0, 50) };
+    }
+    case "DISMISS_FEEDBACK": {
+      const id = action.payload.id;
+      const ev = state.feedbackQueue.find((item) => item.id === id);
+      return {
+        ...state,
+        feedbackQueue: state.feedbackQueue.filter((item) => item.id !== id),
+        feedbackHistory: ev ? [ev, ...state.feedbackHistory].slice(0, 200) : state.feedbackHistory,
+      };
+    }
+    case "CLEAR_FEEDBACK_QUEUE": {
+      return {
+        ...state,
+        feedbackHistory: [...state.feedbackQueue, ...state.feedbackHistory].slice(0, 200),
+        feedbackQueue: [],
+      };
+    }
+    case "CLEAR_PENDING_INJURY_ALERT": {
+      return { ...state, pendingInjuryAlert: undefined };
+    }
+    case "DEV_APPLY_GATE": {
+      if (!DEV_TOOLS_ENABLED) return state;
+      return applyDevGate(state, action.payload.gate);
+    }
+    case "DEV_RUN_ACTION": {
+      if (!DEV_TOOLS_ENABLED) return state;
+      if (action.payload.action === "ADVANCE_PHASE") {
+        if (state.phase === "HUB" && getUnifiedPhase(state) === "REGULAR_SEASON") {
+          return gameReducer(state, { type: "ADVANCE_WEEK" });
+        }
+        return gameReducer(state, { type: "OFFSEASON_ADVANCE_STEP" });
+      }
+      return runDevAction(state, action.payload.action, action.payload.payload);
+    }
+    case "PLAYOFFS_INIT_BRACKET": {
+      const playoffs = buildPlayoffBracket({ league: state.league, season: Number(state.season ?? 2026) });
+      return { ...state, playoffs, careerStage: "PLAYOFFS" };
+    }
+    case "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND": {
+      if (!state.playoffs) return state;
+      const userTeamId = state.acceptedOffer?.teamId;
+      const simmed = simulateCpuPlayoffGamesForRound({ playoffs: state.playoffs, userTeamId, seed: Number(state.careerSeed ?? state.saveSeed ?? 1) ^ hashStr(`playoffs:${state.playoffs.round}`) });
+      return { ...state, playoffs: { ...state.playoffs, completedGames: simmed.completedGames, pendingUserGame: simmed.pendingUserGame } };
+    }
+    case "PLAYOFFS_TICK": {
+      if (!state.playoffs) return state;
+      let out = gameReducer(state, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+      if (!out.playoffs) return out;
+      if (out.playoffs.pendingUserGame) return out;
+
+      const currentRoundGames = getPlayoffRoundGames(out.playoffs);
+      const isCurrentRoundDone = currentRoundGames.length > 0 && currentRoundGames.every((g) => Boolean(out.playoffs?.completedGames[g.gameId]));
+      if (!isCurrentRoundDone) return out;
+
+      if (out.playoffs.round === "SUPER_BOWL") return gameReducer(out, { type: "PLAYOFFS_COMPLETE_SEASON" });
+
+      out = gameReducer(out, { type: "PLAYOFFS_ADVANCE_ROUND" });
+      if (!out.playoffs || out.playoffs.pendingUserGame) return out;
+
+      return gameReducer(out, { type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
+    }
+    case "PLAYOFFS_MARK_GAME_FINAL": {
+      if (!state.playoffs) return state;
+      return {
+        ...state,
+        playoffs: {
+          ...state.playoffs,
+          pendingUserGame: undefined,
+          completedGames: {
+            ...state.playoffs.completedGames,
+            [action.payload.gameId]: {
+              homeScore: action.payload.homeScore,
+              awayScore: action.payload.awayScore,
+              winnerTeamId: action.payload.winnerTeamId,
+            },
+          },
+        },
+      };
+    }
+    case "PLAYOFFS_ADVANCE_ROUND": {
+      if (!state.playoffs) return state;
+      const advanced = advancePlayoffRound(state.playoffs);
+      const phaseMap: Record<string, LeaguePhase> = { WILD_CARD: "WILD_CARD", DIVISIONAL: "DIVISIONAL", CONF_FINALS: "CONFERENCE", SUPER_BOWL: "CHAMPIONSHIP" };
+      return { ...state, playoffs: advanced, league: { ...state.league, phase: phaseMap[advanced.round] ?? state.league.phase } };
+    }
+    case "PLAYOFFS_COMPLETE_SEASON": {
+      if (!state.playoffs) return state;
+      const superBowl = state.playoffs.bracket.superBowl;
+      if (!superBowl || !state.playoffs.completedGames[superBowl.gameId]) return state;
+      const { postseason, championTeamId } = buildPostseasonResults({ league: state.league, playoffs: state.playoffs });
+      let out: GameState = { ...state, playoffs: null, league: { ...state.league, postseason, phase: "SEASON_COMPLETE" }, careerStage: "SEASON_AWARDS" };
+      out = migrateExpiredContractsToFreeAgency(out, out.season);
+      out = applySeasonMilestoneAwards(out);
+      const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
+      const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
+      const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
+      for (const ps of seasonStats) {
+        const pid = String((ps as any).playerId ?? "");
+        if (!pid) continue;
+        nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
+      }
+      const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
+      const careerById = { ...(out.playerCareerStatsById ?? {}) };
+      for (const ps of seasonStats) {
+        const pid = String((ps as any).playerId ?? "");
+        if (!pid) continue;
+        const cur = { playerId: pid, careerStats: careerById[pid] };
+        const updated = finalizeCareerStats(cur, ps);
+        careerById[pid] = updated.careerStats;
+      }
+      const nextSeason = Number(out.season ?? 2026) + 1;
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const nextSchedule = generateLeagueSchedule(teams, Number(out.saveSeed ?? 1) + nextSeason * 1337);
+      const progressionSeasonStatsById = { ...(out.playerProgressionSeasonStatsById ?? {}) };
+      const snapCountsById = { ...(out.playerSnapCountsById ?? {}) };
+      for (const p of getEffectivePlayers(out)) {
+        const pid = String((p as any).playerId ?? "");
+        if (!pid) continue;
+        const last3 = out.playerFatigueById?.[pid]?.last3SnapLoads ?? [];
+        const avgLoad = last3.length ? last3.reduce((a, b) => a + Number(b ?? 0), 0) / last3.length : 0;
+        const pos = String((p as any).pos ?? "").toUpperCase();
+        snapCountsById[pid] = ["QB", "RB", "WR", "TE", "OL"].includes(pos)
+          ? { offense: Math.round(avgLoad * 17), defense: 0, specialTeams: Math.round(avgLoad * 2) }
+          : ["DL", "EDGE", "LB", "CB", "S", "DB", "DE", "DT"].includes(pos)
+            ? { offense: 0, defense: Math.round(avgLoad * 17), specialTeams: Math.round(avgLoad * 2) }
+            : { offense: 0, defense: 0, specialTeams: Math.round(avgLoad * 17) };
+        progressionSeasonStatsById[pid] = progressionSeasonStatsById[pid] ?? {
+          gamesPlayed: Math.min(17, Math.max(0, last3.length ? 17 : 0)),
+          starts: avgLoad > 45 ? 17 : avgLoad > 20 ? 8 : 0,
+          performanceScore: clamp01((Number((p as any).overall ?? 60) - 55) / 45),
+          injuryGamesMissed: (out.injuries ?? []).filter((inj) => String(inj.playerId) === pid).reduce((sum, inj) => sum + Number(inj.gamesMissed ?? 0), 0),
+        };
+      }
+      const championNewsAlloc = allocateDeterministic(out, "news", "NEWS");
+      const percentileTables = buildPercentiles({
+        season: Number(out.season ?? 2026),
+        players: getEffectivePlayers(out).map((p) => ({ playerId: String((p as any).playerId ?? ""), pos: String((p as any).pos ?? "") })),
+        playerSeasonStatsById: nextSeasonStatsById,
+      });
+      const nextPercentiles = upsertSeasonPercentiles({
+        existing: out.telemetry?.percentiles,
+        season: Number(out.season ?? 2026),
+        tables: percentileTables,
+        activeSeason: Number(out.season ?? 2026),
+      });
+      out = applySeasonUnicorns(applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById }));
+      let completed: GameState = {
+        ...championNewsAlloc.state,
+        coach: coachWithCareer,
+        playerSeasonStatsById: nextSeasonStatsById,
+        playerProgressionSeasonStatsById: progressionSeasonStatsById,
+        playerSnapCountsById: snapCountsById,
+        playerCareerStatsById: careerById,
+        leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
+        season: nextSeason,
+        week: 0,
+        // P3 FIX: compact per-season ephemeral data on rollover.
+        // accumulateSeasonStats() already consumed gameHistory above (line ~7835).
+        // weeklyResults, gameHistory, and league.results are only needed during
+        // the current season; resetting saves ~100-300KB per season on the save.
+        weeklyResults: [],
+        gameHistory: [],
+        league: {
+          ...out.league,
+          results: [],
+        },
+        telemetry: {
+          playLogsByGameKey: {},
+          percentiles: nextPercentiles,
+          gameAggsByGameKey: {},
+          seasonAgg: { version: 1 as const, byTeamId: {}, appliedGameKeys: {} },
+        },
+        historicalTelemetry: out.historicalTelemetry,
+        hub: {
+          ...championNewsAlloc.state.hub,
+          schedule: nextSchedule,
+          preseasonWeek: 1,
+          regularSeasonWeek: 1,
+          news: [{ id: championNewsAlloc.id, title: `${championTeamId} crowned champion`, body: "The season is complete. Offseason begins now.", createdAt: championNewsAlloc.ts, category: "LEAGUE" }, ...(championNewsAlloc.state.hub.news ?? [])],
+        },
+        contextFlags: applyFlagsToContext(coachWithCareer),
+      };
+      const teamId = completed.acceptedOffer?.teamId ?? "";
+      const row = completed.currentStandings.find((r) => String(r.teamId) === String(teamId));
+      const wins = Number(row?.wins ?? 0);
+      const ownerOutcome: DynastySeasonLog["ownerOutcome"] = completed.ownerState.approval < 25 ? "FIRED" : completed.ownerState.approval < 45 ? "ULTIMATUM" : "STABLE";
+      completed = gameReducer(completed, { type: "OWNER_ENDSEASON_EVALUATE", payload: { year: completed.season - 1, teamId, result: { goalScore: wins, ownerOutcome, delta: wins >= 9 ? 4 : -4, summary: wins >= 9 ? "Met seasonal baseline" : "Missed seasonal baseline", trigger: wins < 6 ? "Sub-6-win season" : undefined } } });
+      completed = gameReducer(completed, { type: "DYNASTY_ENDSEASON_SCORE", payload: { year: completed.season - 1, teamId, inputs: { wins, playoffResult: ownerOutcome === "FIRED" ? "MISS" : "WILD_CARD", awards: [], powerRanks: { off: completed.lastSeasonSummary?.offenseRank, def: completed.lastSeasonSummary?.defenseRank, st: completed.lastSeasonSummary?.specialTeamsRank }, ownerOutcome, mediaTags: ["season_complete"] } } });
+      completed = gameReducer(completed, { type: "COACHING_POACHING_GENERATE", payload: { weekKey: toWeekKey(completed.season, 0) } });
+      completed = gameReducer(completed, { type: "COACHING_POACHING_RESOLVE", payload: { weekKey: toWeekKey(completed.season, 0) } });
+      return completed;
+    }
+    case "ENSURE_GAME_WEATHER": {
+      const persisted = resolvePersistedWeather(state, action.payload);
+      if (persisted.weatherByGameKey === state.weatherByGameKey) return state;
+      return { ...state, weatherByGameKey: persisted.weatherByGameKey };
+    }
+    case "START_GAME": {
+      const gameType = action.payload.gameType ?? action.payload.weekType;
+      logInfo("game.sim.start", { phase: state.phase, season: state.season, week: state.week, driveIndex: state.game.driveNumber, playIndex: state.game.playNumberInDrive, saveId: getActiveSaveId(), meta: { gameType, opponentTeamId: action.payload.opponentTeamId } });
+      let base = state;
+      if (gameType === "PRESEASON") {
+        if (!isActive53(state)) return applyOwnerPenalty(state, 1, "Attempted to start preseason without finalizing cutdowns");
+        const seeded = gameReducer(state, { type: "INIT_PRESEASON_ROTATION" });
+        base = gameReducer(seeded, { type: "APPLY_PRESEASON_DEV", payload: { week: action.payload.week ?? state.hub.preseasonWeek } });
+      }
+      const teamId = base.acceptedOffer?.teamId;
+      if (!teamId) return base;
+      if ((gameType === "REGULAR_SEASON" || gameType === "PLAYOFFS") && base.league.phase !== "REGULAR_SEASON_GAME" && base.league.phase !== "WILD_CARD" && base.league.phase !== "DIVISIONAL" && base.league.phase !== "CONFERENCE" && base.league.phase !== "CHAMPIONSHIP") {
+        return base;
+      }
+      if ((gameType === "REGULAR_SEASON" || gameType === "PLAYOFFS") && base.teamGameplans?.[teamId]?.locked !== true) {
+        return base;
+      }
+      const trackedPlayers = { HOME: buildTrackedPlayers(base, teamId), AWAY: buildTrackedPlayers(base, action.payload.opponentTeamId) };
+      const weekType = (gameType ?? "REGULAR_SEASON") as "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
+      const weekNumber = Number(action.payload.weekNumber ?? action.payload.week ?? 0);
+      const persistedWeather = resolvePersistedWeather(base, { weekType, weekNumber, homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId });
+      let started: GameState = {
+        ...base,
+        league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
+        weatherByGameKey: persistedWeather.weatherByGameKey,
+        contextFlags: applyFlagsToContext(base.coach),
+        game: initGameSim({
+          homeTeamId: teamId,
+          awayTeamId: action.payload.opponentTeamId,
+          seed: (base.careerSeed ?? base.saveSeed) ^ hashStr(`game:${gameType}:${action.payload.weekNumber ?? action.payload.week ?? 0}:${teamId}:${action.payload.opponentTeamId}`),
+          weekType: gameType,
+          weekNumber: action.payload.weekNumber ?? action.payload.week,
+          weather: persistedWeather.weather,
+          playoffGameId: action.payload.playoffGameId,
+          homeRatings: computeTeamGameRatings(base, teamId),
+          awayRatings: computeTeamGameRatings(base, action.payload.opponentTeamId),
+          trackedPlayers,
+          playerFatigue: hydrateGameFatigue(base, trackedPlayers),
+          practiceExecutionBonus: base.weeklyFamiliarityBonus,
+          lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
+          coachArchetypeId: base.coach?.archetypeId,
+          coachTenureYear: base.coach?.tenureYear,
+          coachUnlockedPerkIds: base.coach?.unlockedPerkIds,
+          homeGameplan: base.teamGameplans?.[teamId],
+          awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
+          playerUnicorns: base.playerUnicorns,
+        }),
+      };
+      started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
+      return started;
+    }
+    case "SET_DEFENSE_USER_MODE": {
+      return { ...state, game: { ...state.game, defenseUserMode: action.payload.mode } };
+    }
+    case "SET_DEFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingDefensiveCall: action.payload.call, needsDefensiveCall: false, forceAutoDefenseCall: false } };
+    }
+    case "CLEAR_DEFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingDefensiveCall: undefined, needsDefensiveCall: false, forceAutoDefenseCall: true } };
+    }
+    case "RESOLVE_PLAY": {
+      if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
+      const gameWithToggles = {
+        ...state.game,
+        aggression: action.payload.aggression ?? state.game.aggression,
+        tempo: action.payload.tempo ?? state.game.tempo,
+      };
+      const personnelPackage = action.payload.personnelPackage ?? "11";
+      if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
+      const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage, {
+        userControlsDefense: gameWithToggles.possession !== "HOME",
+      });
+      if ((stepped.sim.driveNumber ?? 0) !== (state.game.driveNumber ?? 0) || (stepped.sim.playNumberInDrive ?? 0) <= 1) {
+        logInfo("game.sim.snap.resolved", { phase: state.phase, season: state.season, week: state.week, driveIndex: stepped.sim.driveNumber, playIndex: stepped.sim.playNumberInDrive, saveId: getActiveSaveId(), meta: { ended: stepped.ended, playType: action.payload.playType } });
+      }
+      const next = upsertGameFatigueState({ ...state, game: stepped.sim }, stepped.sim);
+      if (!stepped.ended) return next;
+      const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}), qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(stepped.sim.qbRunContactsByPlayerId ?? {}) } };
+      let nextWithPractice = nextWithRecovery;
+      const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
+      if (!appliedPlayWeek.applied) return state;
+      nextWithPractice = appliedPlayWeek.state;
+
+      if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
+        const winnerTeamId = state.game.homeScore >= state.game.awayScore ? state.game.homeTeamId : state.game.awayTeamId;
+        const finalizedBox = buildGameBoxScore(stepped.sim, state.season);
+        const out = gameReducer({
+          ...nextWithPractice,
+          gameHistory: [...(state.gameHistory ?? []), finalizedBox],
+          game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        }, { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: state.game.homeScore, awayScore: state.game.awayScore, winnerTeamId } });
+        return gameReducer(out, { type: "PLAYOFFS_TICK" });
+      }
+
+      const schedule = state.hub.schedule;
+      if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
+
+      const weekResult = simulateWeek({
+        schedule,
+        gameType: state.game.weekType,
+        week: state.game.weekNumber,
+        userHomeTeamId: state.game.homeTeamId,
+        userAwayTeamId: state.game.awayTeamId,
+        userScore: { homeScore: state.game.homeScore, awayScore: state.game.awayScore },
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, state.game.weekType, state.game.weekNumber),
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
+      });
+      const league = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType: state.game.weekType as GameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: Number(state.game.weekNumber) + 1,
+      };
+
+      const hub =
+        state.game.weekType === "PRESEASON"
+          ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
+          : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+
+      if (state.game.weekType === "PRESEASON") {
+        const nextPre = Math.min(PRESEASON_WEEKS, hub.preseasonWeek);
+        const finishedPreseason = nextPre >= PRESEASON_WEEKS;
+        if (finishedPreseason) {
+          // FIX H2: Land on CUTDOWNS, not REGULAR_SEASON.
+          // - careerStage: "CUTDOWNS" so the hub routes to /hub/cutdowns.
+          // - PRESEASON: true  — preseason IS done.
+          // - CUT_DOWNS removed from stepsComplete — user must trim roster to 53.
+          return {
+            ...nextWithPractice,
+            league,
+            currentStandings: weekResult.updatedStandings,
+            weeklyResults: [...state.weeklyResults, weekResult],
+            leagueStatLeaders: weekResult.statLeaders,
+            newsHistory: appendWeeklyNews(
+              state,
+              weekResult,
+              Number(state.game.weekNumber ?? state.hub.regularSeasonWeek),
+            ),
+            hub: { ...hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+            offseason: {
+              ...nextWithPractice.offseason,
+              stepId: "CUT_DOWNS",
+              stepsComplete: { ...nextWithPractice.offseason.stepsComplete, PRESEASON: true },
+            },
+            contextFlags: applyFlagsToContext(nextWithPractice.coach),
+            careerStage: "CUTDOWNS",
+            game: initGameSim({
+              homeTeamId: state.game.homeTeamId,
+              awayTeamId: state.game.awayTeamId,
+              seed:
+                (state.careerSeed ?? state.saveSeed) ^
+                hashStr(
+                  `postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`,
+                ),
+              coachArchetypeId: state.coach.archetypeId,
+              coachTenureYear: state.coach.tenureYear,
+              coachUnlockedPerkIds: state.coach.unlockedPerkIds,
+            }),
+          };
+        }
+      }
+
+      const finalizedBox = buildGameBoxScore(stepped.sim, state.season);
+      let nextState = {
+        ...nextWithPractice,
+        teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
+        league: { ...league, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : league.phase) as LeaguePhase },
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
+        gameHistory: [...(state.gameHistory ?? []), finalizedBox],
+        hub,
+        contextFlags: applyFlagsToContext(nextWithPractice.coach),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+      };
+      nextState = persistUserGamePlayLog(nextState, stepped.sim);
+      nextState = applyTelemetryAggregatesForGame(nextState, stepped.sim);
+      if (state.game.weekType === "REGULAR_SEASON") {
+        const weekKey = toWeekKey(nextState.season, Number(state.game.weekNumber));
+        nextState = finalizeWeekController(nextState, {
+          season: nextState.season,
+          week: Number(state.game.weekNumber),
+          gameType: "REGULAR_SEASON",
+          weekKey,
+          seed: nextState.saveSeed,
+        }, gameReducer);
+        // Narrative pulse (N3): wire orphaned modules into live game path
+        try { nextState = updateMorale(nextState); } catch (e) { logError("narrative.morale", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateChemistry(nextState); } catch (e) { logError("narrative.chemistry", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateStaffTrust(nextState); } catch (e) { logError("narrative.staffTrust", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateMedia(nextState); } catch (e) { logError("narrative.media", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateOwner(nextState); } catch (e) { logError("narrative.owner", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        try { nextState = updateAutonomy(nextState); } catch (e) { logError("narrative.autonomy", { phase: nextState.phase, season: nextState.season, week: state.game.weekNumber, meta: { message: String(e) } }); }
+        nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
+        if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
+          nextState = gameReducer(nextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
+        }
+      }
+      return nextState;
+    }
+    case "EXIT_GAME":
+      return {
+        ...state,
+        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`exit:${state.hub.regularSeasonWeek}:${state.hub.preseasonWeek}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+      };
+    case "SIMULATE_REST_OF_GAME": {
+      if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
+      let sim = state.game;
+      let safety = 0;
+      while (!(sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0)) {
+        const stepped = stepPlay(sim, autoPickPlay(sim));
+        sim = stepped.sim;
+        safety++;
+        if (safety > 6000) break;
+      }
+      const next = upsertGameFatigueState({ ...state, game: sim }, sim);
+      const nextWithRecovery = {
+        ...next,
+        playerFatigueById: applyWeeklyFatigueRecovery(next, sim.snapLoadThisGame ?? {}),
+        qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(sim.qbRunContactsByPlayerId ?? {}) },
+      };
+      const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
+      if (!appliedPlayWeek.applied) return state;
+      const nextWithPractice = appliedPlayWeek.state;
+
+      if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
+        const winnerTeamId = sim.homeScore >= sim.awayScore ? sim.homeTeamId : sim.awayTeamId;
+        const finalizedBox = buildGameBoxScore(sim, state.season);
+        const out = gameReducer(
+          { ...nextWithPractice, gameHistory: [...(state.gameHistory ?? []), finalizedBox], game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }) },
+          { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: sim.homeScore, awayScore: sim.awayScore, winnerTeamId } },
+        );
+        return gameReducer(out, { type: "PLAYOFFS_TICK" });
+      }
+
+      const schedule = state.hub.schedule;
+      if (!schedule || !state.game.weekType || !state.game.weekNumber) return nextWithPractice;
+
+      const weekResult = simulateWeek({
+        schedule,
+        gameType: state.game.weekType,
+        week: state.game.weekNumber,
+        userHomeTeamId: state.game.homeTeamId,
+        userAwayTeamId: state.game.awayTeamId,
+        userScore: { homeScore: sim.homeScore, awayScore: sim.awayScore },
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, state.game.weekType, state.game.weekNumber),
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
+      });
+      const simLeague = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType: state.game.weekType as GameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: Number(state.game.weekNumber) + 1,
+      };
+      const simHub = { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+      const simFinalizedBox = buildGameBoxScore(sim, state.season);
+      let simNextState = {
+        ...nextWithPractice,
+        teamGameplans: { ...(nextWithPractice.teamGameplans ?? {}), [String(state.acceptedOffer?.teamId ?? "")]: undefined },
+        league: { ...simLeague, phase: (state.game.weekType === "REGULAR_SEASON" ? "REGULAR_SEASON" : simLeague.phase) as LeaguePhase },
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, Number(state.game.weekNumber ?? state.hub.regularSeasonWeek)),
+        gameHistory: [...(state.gameHistory ?? []), simFinalizedBox],
+        hub: simHub,
+        contextFlags: applyFlagsToContext(nextWithPractice.coach),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+      };
+      simNextState = persistUserGamePlayLog(simNextState, sim);
+      simNextState = applyTelemetryAggregatesForGame(simNextState, sim);
+      if (state.game.weekType === "REGULAR_SEASON") {
+        const weekKey = toWeekKey(simNextState.season, Number(state.game.weekNumber));
+        simNextState = finalizeWeekController(simNextState, { season: simNextState.season, week: Number(state.game.weekNumber), gameType: "REGULAR_SEASON", weekKey, seed: simNextState.saveSeed }, gameReducer);
+        simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week: state.game.weekNumber } });
+        if ((state.game.weekNumber ?? 0) >= REGULAR_SEASON_WEEKS) {
+          simNextState = gameReducer(simNextState, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week: state.game.weekNumber } });
+        }
+      }
+      return simNextState;
+    }
+    case "ADVANCE_WEEK": {
+      const schedule = state.hub.schedule;
+      logInfo("sim.week.start", { phase: state.phase, season: state.season, week: state.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { careerStage: state.careerStage } });
+      const teamId = state.acceptedOffer?.teamId;
+      if (!schedule || !teamId) return state;
+
+      const gameType: GameType = state.careerStage === "PRESEASON" ? "PRESEASON" : "REGULAR_SEASON";
+      const week = gameType === "PRESEASON" ? state.hub.preseasonWeek : state.hub.regularSeasonWeek;
+      const weeks = gameType === "PRESEASON" ? schedule.preseasonWeeks : schedule.regularSeasonWeeks;
+      const weekSchedule = weeks.find((w) => w.week === week);
+      if (!weekSchedule) return state;
+
+      const matchup = getTeamMatchup(weekSchedule, teamId);
+      if (!matchup) return state;
+
+      if (gameType === "REGULAR_SEASON" && state.league.phase === "REGULAR_SEASON") {
+        const cpuPlans = Object.fromEntries(
+          getTeams()
+            .filter((t) => t.isActive)
+            .map((t) => [t.teamId, t.teamId === teamId ? (state.teamGameplans?.[teamId] ?? DEFAULT_WEEKLY_GAMEPLAN) : buildCpuGameplan({ seed: state.saveSeed, teamId: t.teamId, weekIndex: week, strengthDelta: 0 })]),
+        );
+        return { ...state, teamGameplans: cpuPlans, league: { ...state.league, phase: "REGULAR_SEASON_GAMEPLAN" } };
+      }
+      if (gameType === "REGULAR_SEASON" && state.league.phase === "REGULAR_SEASON_GAMEPLAN") {
+        return { ...state, league: { ...state.league, phase: "REGULAR_SEASON_GAME" } };
+      }
+
+      const weekResult = simulateWeek({
+        schedule,
+        gameType,
+        week,
+        userHomeTeamId: matchup.homeTeamId,
+        userAwayTeamId: matchup.awayTeamId,
+        seed: getWeekSeed(state.careerSeed ?? state.saveSeed, state.season, gameType, week),
+        previousStandings: state.currentStandings,
+        priorWeekResults: state.weeklyResults,
+      });
+      const league = {
+        ...state.league,
+        standings: standingsToRecord(weekResult.updatedStandings),
+        results: [
+          ...state.league.results,
+          ...weekResult.allGameResults.map((r) => ({ gameType, week: r.week, homeTeamId: r.homeTeamId, awayTeamId: r.awayTeamId, homeScore: r.homeScore, awayScore: r.awayScore })),
+        ],
+        week: week + 1,
+      };
+
+      const hub =
+        gameType === "PRESEASON"
+          ? { ...state.hub, preseasonWeek: Math.min(PRESEASON_WEEKS, state.hub.preseasonWeek + 1) }
+          : { ...state.hub, regularSeasonWeek: Math.min(REGULAR_SEASON_WEEKS, state.hub.regularSeasonWeek + 1) };
+
+      let out = {
+        ...state,
+        league,
+        currentStandings: weekResult.updatedStandings,
+        weeklyResults: [...state.weeklyResults, weekResult],
+        leagueStatLeaders: weekResult.statLeaders,
+        newsHistory: appendWeeklyNews(state, weekResult, week),
+        hub,
+        contextFlags: state.contextFlags,
+        playerFatigueById: applyWeeklyFatigueRecovery(state, state.game.snapLoadThisGame ?? {}),
+        qbRunContactExposureByPlayerId: { ...(state.qbRunContactExposureByPlayerId ?? {}), ...(state.game.qbRunContactsByPlayerId ?? {}) },
+      };
+      out = persistUserGamePlayLog(out, state.game);
+      out = applyTelemetryAggregatesForGame(out, state.game);
+      const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
+      if (!appliedAdvance.applied) return state;
+      out = appliedAdvance.state;
+      const weekKey = toWeekKey(out.season, week);
+      out = finalizeWeekController(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed }, gameReducer);
+      // Narrative pulse (N3): orphaned modules wired back into active sim path
+      if (gameType === "REGULAR_SEASON") {
+        try { out = updateMorale(out); } catch (e) { logError("narrative.morale", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateChemistry(out); } catch (e) { logError("narrative.chemistry", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateStaffTrust(out); } catch (e) { logError("narrative.staffTrust", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+        try { out = updateMedia(out); } catch (e) { logError("narrative.media", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+      }
+      const didWin = Boolean((weekResult as any).userResult?.didWin);
+      const ownerDeltas = { approval: didWin ? 1 : -2, pressure: didWin ? -1 : 2, trust: didWin ? 1 : -1 };
+      out = gameReducer(out, { type: "OWNER_WEEKLY_EVALUATE", payload: { weekKey, teamId, deltas: ownerDeltas, reasons: [didWin ? "Won game" : "Lost game"] } });
+      // Sync ownerState → owner.approval and update autonomy pressure (N3+N4)
+      try { out = updateOwner(out); } catch (e) { logError("narrative.owner", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+      try { out = updateAutonomy(out); } catch (e) { logError("narrative.autonomy", { phase: out.phase, season: out.season, week, meta: { message: String(e) } }); }
+      if (week % 4 === 0) out = gameReducer(out, { type: "WIRE_PRUNE", payload: { keepLastN: 250 } });
+      if (Number(out.league.week ?? week + 1) > resolveTradeDeadlineWeek(out.league.tradeDeadlineWeek)) {
+        // Policy: cancel all pending trade offers once deadline is passed to avoid stale post-deadline acceptances.
+        const cancelled = cancelPendingTradesAtDeadline(out.pendingTradeOffers ?? []);
+        if (cancelled.cancelledOffers > 0) {
+          console.warn(JSON.stringify({ event: "trade.deadline_passed", cancelledOffers: cancelled.cancelledOffers, week: Number(out.league.week ?? week + 1) }));
+        }
+        out = {
+          ...out,
+          pendingTradeOffers: cancelled.offers,
+        };
+      }
+      if (gameType === "REGULAR_SEASON") {
+        out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "WEEKLY", week } });
+        if (week >= REGULAR_SEASON_WEEKS) {
+          out = gameReducer(out, { type: "CHECK_FIRING", payload: { checkpoint: "SEASON_END", week } });
+          out = gameReducer(out, { type: "PLAYOFFS_INIT_BRACKET" });
+          out = gameReducer(out, { type: "PLAYOFFS_TICK" });
+          out = { ...out, league: { ...out.league, phase: "WILD_CARD" } };
+        }
+      }
+
+      // FIX H2: When simming the final preseason week, transition to CUTDOWNS.
+      // Previously this path left careerStage as "PRESEASON" indefinitely — the
+      // hub had no forward route because preseasonWeek was maxed but the stage
+      // never changed. Now mirrors the RESOLVE_PLAY path: land on CUTDOWNS so
+      // the user must trim to 53 before entering regular season week 1.
+      if (gameType === "PRESEASON" && out.hub.preseasonWeek >= PRESEASON_WEEKS) {
+        out = {
+          ...out,
+          careerStage: "CUTDOWNS",
+          offseason: {
+            ...out.offseason,
+            stepId: "CUT_DOWNS",
+            stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
+          },
+          hub: { ...out.hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+        };
+      }
+
+      if (gameType === "REGULAR_SEASON" && shouldRecomputeDepthOnWeekly(out)) out = recomputeLeagueDepthAndNews(out);
+      const nextHotSeat = computeHotSeatScore(out.coach, out);
+      if (nextHotSeat.level !== out.hotSeatStatus.level && (nextHotSeat.level === "HOT" || nextHotSeat.level === "CRITICAL")) {
+        const hotSeatAlloc = createDeterministicFeedbackEvent(out, "HOT_SEAT", {
+          message: `${nextHotSeat.level}: ${nextHotSeat.primaryDriver}`,
+          severity: nextHotSeat.level === "CRITICAL" ? "CRITICAL" : "WARNING",
+        });
+        out = gameReducer(hotSeatAlloc.state, {
+          type: "PUSH_FEEDBACK",
+          payload: {
+            event: hotSeatAlloc.event,
+          },
+        });
+      }
+      out = { ...out, hotSeatStatus: nextHotSeat };
+      logInfo("sim.week.end", { phase: out.phase, season: out.season, week: out.hub.regularSeasonWeek, saveId: getActiveSaveId(), meta: { standings: out.currentStandings.length, careerStage: out.careerStage } });
+      return out;
+    }
+    case "OWNER_INIT_SEASON_GOALS": {
+      const { year, teamId } = action.payload;
+      const cfg = state.teamOwnerExpectationsByTeamId?.[teamId];
+      const goals = cfg?.goalsBySeason?.[String(year)] ?? defaultOwnerGoals();
+      return { ...state, ownerState: { ...state.ownerState, currentGoals: goals } };
+    }
+    case "OWNER_WEEKLY_EVALUATE": {
+      const { deltas } = action.payload;
+      return {
+        ...state,
+        ownerState: {
+          ...state.ownerState,
+          approval: clampRange((state.ownerState?.approval ?? 60) + deltas.approval),
+          pressure: clampRange((state.ownerState?.pressure ?? 40) + deltas.pressure),
+          trust: clampRange((state.ownerState?.trust ?? 55) + deltas.trust),
+        },
+      };
+    }
+    case "OWNER_ENDSEASON_EVALUATE": {
+      const { year, result } = action.payload;
+      let next: GameState = {
+        ...state,
+        ownerState: {
+          ...state.ownerState,
+          approval: clampRange((state.ownerState?.approval ?? 60) + result.delta),
+          pressure: clampRange((state.ownerState?.pressure ?? 40) + (result.ownerOutcome === "FIRED" ? 25 : -10)),
+          trust: clampRange((state.ownerState?.trust ?? 55) + result.delta),
+          lastEvaluation: { year, summary: result.summary, delta: result.delta },
+          ultimatums:
+            result.ownerOutcome === "ULTIMATUM"
+              ? [...(state.ownerState?.ultimatums ?? []), { year, trigger: result.trigger ?? "Performance target missed", resolved: false }]
+              : state.ownerState?.ultimatums ?? [],
+        },
+      };
+      if (result.ownerOutcome === "FIRED") {
+        const weekKey = toWeekKey(year, 99);
+        next = gameReducer(next, {
+          type: "WIRE_APPEND",
+          payload: {
+            item: {
+              id: `wire-owner-fired-${year}`,
+              weekKey,
+              ts: deriveWeeklySeed(next.saveSeed, year, 99, 999),
+              category: "OWNER",
+              headline: `${next.coach.name || "Head coach"} fired by ownership`,
+              tone: "NEGATIVE",
+              teamIds: [action.payload.teamId],
+            },
+          },
+        });
+        next = gameReducer(next, { type: "COACHING_GENERATE_MARKET", payload: { weekKey, teamId: action.payload.teamId, roles: ["HC"] } });
+      }
+      return next;
+    }
+    case "COACHING_BOOTSTRAP": {
+      if (Object.keys(state.coaching.coachesById ?? {}).length > 0 && Object.keys(state.coaching.staffByTeamId ?? {}).length > 0) return state;
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const coachesById: Record<CoachId, Coach> = {};
+      const staffByTeamId: Record<TeamId, TeamStaff> = {};
+      for (const teamId of teams) {
+        const mk = (role: "HC" | "OC" | "DC" | "ST") => {
+          const coachId = `${teamId}_${role}`;
+          coachesById[coachId] = {
+            coachId,
+            name: `${teamId.replace(/_/g, " ")} ${role}`,
+            role,
+            side: role === "OC" ? "OFFENSE" : role === "DC" ? "DEFENSE" : "ST",
+            traits: ["steady"],
+            ratings: { teaching: 60, strategy: 60, discipline: 60, recruiting: 55 },
+            reputation: 50,
+            career: { yearsExp: 3, history: [] },
+            contract: { years: 2, salary: 2_000_000 },
+          };
+          return coachId;
+        };
+        staffByTeamId[teamId] = { hc: mk("HC"), oc: mk("OC"), dc: mk("DC"), st: mk("ST"), assistants: [] };
+      }
+      return {
+        ...state,
+        coaching: {
+          ...state.coaching,
+          coachesById: { ...coachesById, ...(state.coaching.coachesById ?? {}) },
+          staffByTeamId: { ...staffByTeamId, ...(state.coaching.staffByTeamId ?? {}) },
+        },
+        medical: { ...state.medical, staffByTeamId: { ...defaultMedicalStaffByTeamId(teams), ...(state.medical?.staffByTeamId ?? {}) } },
+      };
+    }
+    case "COACHING_GENERATE_MARKET": {
+      const { weekKey, roles } = action.payload;
+      const pool = Object.values(state.coaching.coachesById ?? {}).filter((c) => roles.includes(c.role as any));
+      const candidates: CoachMarketItem[] = pool.slice(0, 12).map((coach, idx) => ({
+        coachId: coach.coachId,
+        askingRole: coach.role === "POSITION" ? "OC" : (coach.role as "HC" | "OC" | "DC" | "ST"),
+        interest: clampRange(45 + idx * 3),
+        expectedYears: 2 + (idx % 3),
+        expectedSalary: 1_500_000 + idx * 200_000,
+        reasons: ["Scheme fit", "Career growth"],
+      }));
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey, candidates } } };
+    }
+    case "COACHING_MAKE_OFFER": {
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, pendingOffers: [...state.coaching.market.pendingOffers, { ...action.payload, status: "PENDING" }] } } };
+    }
+    case "COACHING_RESOLVE_OFFERS": {
+      const pendingOffers = state.coaching.market.pendingOffers.map((offer) => {
+        if (offer.status !== "PENDING") return offer;
+        const roll = deterministicRand(deriveWeeklySeed(state.saveSeed, state.season, offer.salary, offer.years));
+        return { ...offer, status: (roll > 0.45 ? "ACCEPTED" : "DECLINED") as "ACCEPTED" | "DECLINED" };
+      });
+      let next = { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, pendingOffers } } };
+      for (const offer of pendingOffers.filter((o) => o.status === "ACCEPTED")) {
+        next = gameReducer(next, { type: "COACHING_ASSIGN_STAFF_ROLE", payload: { teamId: offer.teamId, role: offer.role, coachId: offer.coachId } });
+      }
+      return next;
+    }
+    case "COACHING_ASSIGN_STAFF_ROLE": {
+      const cur = state.coaching.staffByTeamId[action.payload.teamId] ?? { hc: "", oc: "", dc: "", st: "", assistants: [] };
+      const nextTeamStaff = { ...cur };
+      if (action.payload.role === "HC") nextTeamStaff.hc = action.payload.coachId;
+      if (action.payload.role === "OC") nextTeamStaff.oc = action.payload.coachId;
+      if (action.payload.role === "DC") nextTeamStaff.dc = action.payload.coachId;
+      if (action.payload.role === "ST") nextTeamStaff.st = action.payload.coachId;
+      return { ...state, coaching: { ...state.coaching, staffByTeamId: { ...state.coaching.staffByTeamId, [action.payload.teamId]: nextTeamStaff } } };
+    }
+    case "COACHING_POACHING_GENERATE": {
+      const staff = Object.entries(state.coaching.staffByTeamId ?? {}).flatMap(([teamId, set]) => [
+        { coachId: set.oc, fromTeamId: teamId, role: "OC" as const },
+        { coachId: set.dc, fromTeamId: teamId, role: "DC" as const },
+        { coachId: set.st, fromTeamId: teamId, role: "ST" as const },
+      ]).filter((x) => x.coachId);
+      const poaching = staff.slice(0, 6).map((x, idx) => ({ eventId: `poach-${action.payload.weekKey}-${idx}`, coachId: x.coachId, fromTeamId: x.fromTeamId, role: x.role, status: "RUMOR" as const }));
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
+    }
+    case "COACHING_POACHING_RESOLVE": {
+      const poaching = state.coaching.market.poaching.map((event, idx) => {
+        const leaves = deterministicRand(deriveWeeklySeed(state.saveSeed, state.season, idx, 404)) > 0.5;
+        return { ...event, status: (leaves ? "LEFT" : "STAYED") as "LEFT" | "STAYED", toTeamId: leaves ? state.acceptedOffer?.teamId : undefined };
+      });
+      return { ...state, coaching: { ...state.coaching, market: { ...state.coaching.market, weekKey: action.payload.weekKey, poaching } } };
+    }
+    case "COACH_CAREER_APPEND_HISTORY": {
+      const coach = state.coaching.coachesById[action.payload.coachId];
+      if (!coach) return state;
+      return {
+        ...state,
+        coaching: {
+          ...state.coaching,
+          coachesById: {
+            ...state.coaching.coachesById,
+            [action.payload.coachId]: {
+              ...coach,
+              career: { ...coach.career, history: [...coach.career.history, action.payload.entry] },
+            },
+          },
+        },
+      };
+    }
+    case "WIRE_APPEND":
+      return { ...state, wire: { ...state.wire, items: [...state.wire.items, action.payload.item] } };
+    case "WIRE_BULK_APPEND":
+      return { ...state, wire: { ...state.wire, items: [...state.wire.items, ...action.payload.items] } };
+    case "WIRE_PRUNE": {
+      const keepLastN = Math.max(1, action.payload.keepLastN);
+      return { ...state, wire: { items: state.wire.items.slice(-keepLastN), lastPruneWeekKey: toWeekKey(state.season, state.hub.regularSeasonWeek) } };
+    }
+    case "MEDIA_GENERATE_WEEKLY_STORIES": {
+      const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
+      const stories: MediaStory[] = teams.slice(0, 4).map((teamId, idx) => ({
+        storyId: `story-${action.payload.weekKey}-${idx}`,
+        weekKey: action.payload.weekKey,
+        headline: `${teamId.replace(/_/g, " ")} trending ${idx % 2 ? "up" : "down"}`,
+        body: "Weekly narrative generated from team momentum and injury context.",
+        tags: ["weekly", idx % 2 ? "momentum" : "concern"],
+        teams: [teamId],
+        tone: idx % 2 ? "POSITIVE" : "NEGATIVE",
+        heatDelta: idx % 2 ? 3 : -2,
+      }));
+      const wireItems: WireItem[] = stories.map((story, idx) => ({ id: `wire-media-${story.storyId}`, weekKey: story.weekKey, ts: action.payload.seed + idx, category: "MEDIA", headline: story.headline, body: story.body, tags: story.tags, teamIds: story.teams, tone: story.tone }));
+      return {
+        ...state,
+        media: { ...state.media, storiesByWeek: { ...state.media.storiesByWeek, [action.payload.weekKey]: stories } },
+        wire: { ...state.wire, items: [...state.wire.items, ...wireItems] },
+      };
+    }
+
+    case "MEDICAL_TICK_RECOVERY": {
+      const nextById: Record<PlayerId, PlayerMedical> = { ...(state.medical.playerMedicalById ?? {}) };
+      for (const [playerId, med] of Object.entries(nextById)) {
+        if (!med.current || med.current.cleared) continue;
+        const teamId = String((getPlayers().find((p: any) => String((p as any).playerId) === playerId) as any)?.teamId ?? "");
+        const rehab = state.medical.staffByTeamId[teamId]?.rehab ?? 50;
+        const tick = rehab >= 65 ? 2 : 1;
+        med.current = { ...med.current, remainingWeeks: Math.max(0, med.current.remainingWeeks - tick), cleared: med.current.remainingWeeks - tick <= 0 };
+      }
+      return { ...state, medical: { ...state.medical, playerMedicalById: nextById } };
+    }
+    case "MEDICAL_GENERATE_WEEKLY_INJURIES": {
+      const activePlayers = getPlayers().filter((p: any) => String((p as any).teamId ?? "") !== "FREE_AGENT");
+      const nextPlayerMedicalById: Record<PlayerId, PlayerMedical> = { ...(state.medical.playerMedicalById ?? {}) };
+      const reports: InjuryReport[] = [];
+      for (let i = 0; i < Math.min(8, activePlayers.length); i++) {
+        const player = activePlayers[(action.payload.seed + i * 37) % activePlayers.length] as any;
+        const playerId = String(player.playerId);
+        const teamId = String(player.teamId);
+        const severity = 1 + ((action.payload.seed + i) % 10);
+        const expectedWeeks = Math.max(1, Math.ceil(severity / 2));
+        const truth: PlayerInjury = { injuryType: "Soft tissue", severity, expectedWeeks, remainingWeeks: expectedWeeks, riskOfReinjury: clampRange(15 + severity * 6), cleared: false };
+        const min = Math.max(1, expectedWeeks - 1);
+        const max = expectedWeeks + 1;
+        nextPlayerMedicalById[playerId] = {
+          ...(nextPlayerMedicalById[playerId] ?? { durability: clampRange(50 + ((action.payload.seed + i * 13) % 40)), injuryHistory: [] }),
+          current: truth,
+          injuryHistory: [...(nextPlayerMedicalById[playerId]?.injuryHistory ?? []), { type: truth.injuryType, weekKey: action.payload.weekKey, severity, gamesMissed: expectedWeeks }],
+        };
+        reports.push({ playerId, teamId, weekKey: action.payload.weekKey, status: severity >= 8 ? "OUT" : severity >= 6 ? "DOUBTFUL" : "QUESTIONABLE", displayedWeeksRange: [min, max], recommendation: severity >= 8 ? "HOLD" : "LIMITED" });
+      }
+      const wire = reports.slice(0, 5).map((r, idx) => ({ id: `wire-injury-${r.playerId}-${action.payload.weekKey}-${idx}`, weekKey: action.payload.weekKey, ts: action.payload.seed + idx, category: "INJURY" as const, headline: `Injury update: ${r.playerId} ${r.status.toLowerCase()}`, playerIds: [r.playerId], teamIds: [r.teamId], tone: "NEGATIVE" as const }));
+      return { ...state, medical: { ...state.medical, playerMedicalById: nextPlayerMedicalById, injuryReportsByWeek: { ...state.medical.injuryReportsByWeek, [action.payload.weekKey]: reports } }, wire: { ...state.wire, items: [...state.wire.items, ...wire] } };
+    }
+    case "MEDICAL_SET_RETURN_DECISION": {
+      const med = state.medical.playerMedicalById[action.payload.playerId];
+      if (!med?.current) return state;
+      const bump = action.payload.decision === "RUSH_BACK" ? 20 : action.payload.decision === "LIMITED" ? 5 : -10;
+      const clearNow = action.payload.decision === "RUSH_BACK" && med.current.remainingWeeks <= 1;
+      return {
+        ...state,
+        medical: {
+          ...state.medical,
+          playerMedicalById: {
+            ...state.medical.playerMedicalById,
+            [action.payload.playerId]: { ...med, current: { ...med.current, riskOfReinjury: clampRange(med.current.riskOfReinjury + bump), cleared: clearNow ? true : med.current.cleared } },
+          },
+        },
+      };
+    }
+    case "MEDICAL_CLEAR_PLAYER": {
+      const med = state.medical.playerMedicalById[action.payload.playerId];
+      if (!med?.current) return state;
+      return { ...state, medical: { ...state.medical, playerMedicalById: { ...state.medical.playerMedicalById, [action.payload.playerId]: { ...med, current: { ...med.current, cleared: true, remainingWeeks: 0 } } } } };
+    }
+    case "LIVEGAME_INIT": {
+      const sideline = mergeSideline(DEFAULT_SIDELINE, action.payload.initialSideline);
+      const live: LiveGameState = { ...action.payload, sideline, gameplanSideline: sideline };
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: live } };
+    }
+    case "SIDELINE_SET": {
+      const live = state.liveGames[action.payload.gameId];
+      if (!live) return state;
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: { ...live, sideline: mergeSideline(live.sideline, action.payload.patch) } } };
+    }
+    case "SIDELINE_RESET_TO_GAMEPLAN": {
+      const live = state.liveGames[action.payload.gameId];
+      if (!live) return state;
+      return { ...state, liveGames: { ...state.liveGames, [action.payload.gameId]: { ...live, sideline: { ...live.gameplanSideline } } } };
+    }
+    case "DYNASTY_INIT":
+      return state.dynasty ? state : { ...state, dynasty: defaultDynastyProfile() };
+    case "DYNASTY_ENDSEASON_SCORE": {
+      const { year, inputs } = action.payload;
+      const playoffBonus = inputs.playoffResult === "CHAMPION" ? 25 : inputs.playoffResult === "CONF_TITLE" ? 14 : inputs.playoffResult === "DIVISIONAL" ? 8 : 0;
+      const rankBonus = Math.max(0, 12 - Number(inputs.powerRanks?.off ?? 20)) + Math.max(0, 12 - Number(inputs.powerRanks?.def ?? 20));
+      const ownerPenalty = inputs.ownerOutcome === "FIRED" ? -20 : inputs.ownerOutcome === "ULTIMATUM" ? -10 : 0;
+      const mediaBonus = (inputs.mediaTags ?? []).length;
+      const legacyDelta = Math.round(inputs.wins * 0.9 + playoffBonus + rankBonus + mediaBonus + ownerPenalty + (inputs.capDisaster ? -12 : 0));
+      const log: DynastySeasonLog = { year, wins: inputs.wins, playoffResult: inputs.playoffResult, awards: inputs.awards, rankOff: inputs.powerRanks?.off, rankDef: inputs.powerRanks?.def, rankST: inputs.powerRanks?.st, ownerOutcome: inputs.ownerOutcome, legacyDelta };
+      return applySeasonUnicorns(applySeasonBadges({
+        ...state,
+        dynasty: { ...state.dynasty, legacyScore: (state.dynasty?.legacyScore ?? 0) + legacyDelta, seasonLog: [...(state.dynasty?.seasonLog ?? []), log] },
+        wire: {
+          ...state.wire,
+          items: [
+            ...state.wire.items,
+            { id: `wire-dynasty-${year}`, weekKey: toWeekKey(year, 99), ts: deriveWeeklySeed(state.saveSeed, year, 99, 717), category: "DYNASTY", headline: `Dynasty legacy ${legacyDelta >= 0 ? "+" : ""}${legacyDelta}`, tone: legacyDelta >= 0 ? "POSITIVE" : "NEGATIVE" },
+          ],
+        },
+      }));
+    }
+    case "DYNASTY_ADD_MILESTONE": {
+      if ((state.dynasty?.milestones ?? []).some((m) => m.key === action.payload.key)) return state;
+      return { ...state, dynasty: { ...state.dynasty, milestones: [...(state.dynasty?.milestones ?? []), action.payload] } };
+    }
+
+    case "SHOW_OFFER_RESULT_MODAL": {
+      const { title, message, variant } = action.payload;
+      const modalAlloc = buildOfferResultModal(state, { title, message, variant });
+      return { ...modalAlloc.state, ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal } };
+    }
+    case "HIDE_OFFER_RESULT_MODAL": {
+      return { ...state, ui: { ...state.ui, offerResultModal: undefined } };
+    }
+    case "SET_PLAYER_ATTR_OVERRIDE": {
+      const { playerId, patch } = action.payload;
+      return {
+        ...state,
+        playerAttrOverrides: {
+          ...state.playerAttrOverrides,
+          [playerId]: { ...(state.playerAttrOverrides?.[playerId] ?? {}), ...patch },
+        },
+      };
+    }
+    case "RESET": {
+      // RESET starts a fresh career in a new slot to avoid overwriting the prior save.
+      const newSaveId = allocateFreshCareerSaveId();
+      const fresh = createInitialState(newSaveId);
+      if (isPersistableCareerSaveId(newSaveId)) {
+        try {
+          setActiveSaveId(newSaveId);
+        } catch (error) {
+          logError("save.active.update.failure", { saveId: newSaveId, phase: "CREATE", season: fresh.season, week: fresh.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+        }
+      }
+      return fresh;
+    }
+    case "FA_WITHDRAW":
+    case "FA_WITHDRAW_OFFER":
+    case "FA_ACCEPT_OFFER":
+    case "FA_REJECT_OFFER":
+    case "DRAFT_SIM_NEXT":
+    case "DRAFT_SIM_TO_USER":
+    case "DRAFT_SIM_ALL":
+    case "NAV_TO_DRAFT_RESULTS":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
+    case "STAFF_COUNTER_OFFER":
+    case "STAFF_COUNTER_OFFER_RESPONSE":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
+    case "RECOVERY_RETURN_TO_HUB":
+    case "RECOVERY_REBUILD_INDICES":
+    case "RECOVERY_SKIP_STEP":
+    case "RECOVERY_RESTORE_BACKUP":
+    case "RECOVERY_HYDRATE_STATE":
+    case "RECOVERY_SET_ERRORS":
+      throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
+    default:
+      return assertNever(action);
   }
 }
 
-const STORAGE_KEY = "hc_career_save";
+export function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
+  return migrateSaveBoot(oldState, {
+    createSchedule,
+    ensureNewsItems,
+    ensureOffseasonCombineData,
+    ensureAccolades,
+    bootstrapAccolades,
+    COMBINE_DEFAULT_INTERVIEW_TOKENS,
+    DEFAULT_OFFENSE_SCHEME_ID,
+    DEFAULT_DEFENSE_SCHEME_ID,
+    DEFAULT_STRATEGY,
+    normalizePriorityList,
+    LEAGUE_SALARY_CAP,
+    getPlayers,
+    clampFatigue,
+    FATIGUE_DEFAULT,
+    migratePracticePlan,
+    DEFAULT_PRACTICE_PLAN,
+    generateDraftClass,
+    getActiveSaveId,
+    maxExistingPlayerNumericId,
+    OffseasonStepEnum,
+    clamp,
+    COMBINE_DAY_COUNT,
+    defaultCombineDays,
+  });
+}
 
-function migrateSave(oldState: Partial<GameState>): Partial<GameState> {
-  if (!oldState.hub?.schedule) {
-    return {
-      ...oldState,
-      hub: {
-        ...(oldState.hub ?? { news: [] }),
-        schedule: createSchedule(oldState.saveSeed ?? Date.now()),
-        preseasonWeek: oldState.hub?.preseasonWeek ?? 1,
-        regularSeasonWeek: oldState.hub?.regularSeasonWeek ?? 1,
-      },
-      careerStage: oldState.careerStage ?? "OFFSEASON_HUB",
-      assistantStaff: oldState.assistantStaff ?? {},
-    };
-  }
-  return oldState;
+
+function readCapModeFromUrl(): boolean | null {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("capMode");
+  if (!v) return null;
+  if (v.toLowerCase() === "postjune1") return true;
+  if (v.toLowerCase() === "standard") return false;
+  return null;
+}
+
+
+export function createInitialStateForTests(): GameState {
+  const base = createInitialState();
+  // Provide a valid acceptedOffer so ADVANCE_WEEK, RESOLVE_PLAY, and FIRE_STAFF
+  // handlers that read state.acceptedOffer?.teamId don't return early in tests.
+  const firstActiveTeam = getTeams().find((t) => t.isActive);
+  if (!firstActiveTeam) return base;
+  const defaultOffer: OfferItem = {
+    teamId: firstActiveTeam.teamId,
+    years: 4,
+    salary: 4_000_000,
+    autonomy: 65,
+    patience: 55,
+    mediaNarrativeKey: "story_start",
+    base: { years: 4, salary: 4_000_000, autonomy: 65 },
+  };
+  return { ...base, acceptedOffer: defaultOffer, userTeamId: firstActiveTeam.teamId, teamId: firstActiveTeam.teamId };
+}
+
+function applyCapModeQuery(state: GameState): GameState {
+  const fromUrl = readCapModeFromUrl();
+  if (fromUrl == null) return state;
+  if (state.finances.postJune1Sim === fromUrl) return state;
+  return { ...state, finances: { ...state.finances, postJune1Sim: fromUrl } };
 }
 
 function loadState(): GameState {
-  const initial = createInitialState();
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return initial;
+  return loadStateFromStorage({
+    createInitialState,
+    applyCapModeQuery,
+    loadConfigRegistry,
+    currentSaveVersion: CURRENT_SAVE_VERSION,
+    migrateSave,
+    defaultDeterministicCounters: DEFAULT_DETERMINISTIC_COUNTERS,
+    normalizePriorityList,
+    defaultLeagueRecords,
+    clampFatigue,
+    fatigueDefault: FATIGUE_DEFAULT,
+    migratePracticePlan,
+    defaultPracticePlan: DEFAULT_PRACTICE_PLAN,
+    buildMigrationEvents,
+    replayPersonnelOverrides,
+    getUserTeamId,
+    ensureAccolades,
+    bootstrapAccolades,
+  });
+}
 
-    const parsed = JSON.parse(saved) as Partial<GameState>;
-    const migrated = (parsed.saveVersion ?? 0) < CURRENT_SAVE_VERSION ? migrateSave(parsed) : parsed;
 
-    return {
-      ...initial,
-      ...migrated,
-      coach: { ...initial.coach, ...migrated.coach },
-      interviews: { ...initial.interviews, ...migrated.interviews },
-      hub: { ...initial.hub, ...migrated.hub },
-      staff: { ...initial.staff, ...migrated.staff },
-      assistantStaff: { ...initial.assistantStaff, ...migrated.assistantStaff },
-      game: { ...initial.game, ...migrated.game },
-      saveVersion: CURRENT_SAVE_VERSION,
-      memoryLog: migrated.memoryLog ?? initial.memoryLog,
-    };
-  } catch {
-    return initial;
-  }
+export function loadStateForTests(): GameState {
+  return loadState();
 }
 
 type GameContextType = {
@@ -460,24 +9632,39 @@ const GameContext = createContext<GameContextType | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(gameReducer, undefined, loadState);
 
+  useGamePersistence(state);
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!import.meta.env.DEV || typeof window === "undefined") return;
+    const w = window as typeof window & { simulateNResolves?: (n: number) => void };
+    w.simulateNResolves = (n: number) => {
+      const count = Math.max(0, Math.floor(Number.isFinite(n) ? n : 0));
+      let sim = state;
+      let total = 0;
+      for (let i = 0; i < count; i++) {
+        sim = gameReducer(sim, { type: "FA_RESOLVE" });
+        const v = collectFaInvariantViolations(sim);
+        total += v.length;
+        if (v.length) console.error(`[simulateNResolves] resolve ${i + 1}:`, v);
+      }
+      console.log(`[simulateNResolves] completed ${count} resolves with ${total} invariant violation(s).`);
+    };
+    return () => {
+      if (w.simulateNResolves) delete w.simulateNResolves;
+    };
   }, [state]);
 
   const getCurrentTeamMatchup: GameContextType["getCurrentTeamMatchup"] = (gameType) => {
-    const teamId = state.acceptedOffer?.teamId;
+    const teamId = getUserTeamId(state);
     const schedule = state.hub.schedule;
     if (!teamId || !schedule) return null;
 
     const week = gameType === "PRESEASON" ? state.hub.preseasonWeek : state.hub.regularSeasonWeek;
     const weeks = gameType === "PRESEASON" ? schedule.preseasonWeeks : schedule.regularSeasonWeeks;
-    const currentWeek = weeks.find((item) => item.week === week);
-    if (!currentWeek) return null;
+    const weekSchedule = weeks.find((item) => item.week === week);
+    if (!weekSchedule) return null;
 
-    return {
-      week,
-      matchup: getTeamMatchup(currentWeek, teamId),
-    };
+    return { week, matchup: getTeamMatchup(weekSchedule, teamId) };
   };
 
   return <GameContext.Provider value={{ state, dispatch, getCurrentTeamMatchup }}>{children}</GameContext.Provider>;
@@ -488,5 +9675,7 @@ export function useGame() {
   if (!ctx) throw new Error("useGame must be used within GameProvider");
   return ctx;
 }
+
+export const getDraftClass = () => draftClassJson as Record<string, unknown>[];
 
 export { PRESEASON_WEEKS, REGULAR_SEASON_WEEKS };

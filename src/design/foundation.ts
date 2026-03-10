@@ -1,0 +1,30 @@
+export const foundation = {
+  color: {
+    neutral: {
+      0: "#FFFFFF",
+      50: "#F5F7FA",
+      100: "#E4E9F2",
+      200: "#CBD5E1",
+      300: "#94A3B8",
+      400: "#64748B",
+      500: "#475569",
+      600: "#334155",
+      700: "#1E293B",
+      800: "#0F172A",
+      900: "#0B1220",
+    },
+    blue: { 400: "#60A5FA", 500: "#3B82F6", 600: "#2563EB" },
+    green: { 400: "#4ADE80", 500: "#22C55E", 600: "#16A34A" },
+    amber: { 400: "#FBBF24", 500: "#F59E0B" },
+    red: { 500: "#EF4444" },
+  },
+  spacing: { 0: 0, xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, section: 40 },
+  radius: { sm: 8, md: 12, lg: 16, xl: 20, pill: 999 },
+  elevation: {
+    flat: "none",
+    low: "0 2px 6px rgba(0,0,0,0.25)",
+    mid: "0 4px 14px rgba(0,0,0,0.35)",
+    high: "0 10px 30px rgba(0,0,0,0.45)",
+  },
+  motion: { fast: "120ms ease", normal: "180ms ease", slow: "280ms ease" },
+} as const;

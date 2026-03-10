@@ -1,8 +1,12 @@
-import type { InterviewResult } from "@/context/GameContext";
-
 type AxisKey = "ALIGN" | "AUTO" | "ADAPT" | "ANLT" | "AGGR" | "DISC" | "DEV" | "MEDIA" | "PROC" | "PEOP";
 
-export type InterviewScoreKey = keyof Omit<InterviewResult, "axisTotals">;
+export type InterviewScoreKey =
+  | "ownerAlignScore"
+  | "gmTrustScore"
+  | "schemeFitScore"
+  | "mediaScore"
+  | "autonomyDelta"
+  | "leashDelta";
 
 export type TeamInterviewProfile = {
   ownerPersonalityTags: string[];

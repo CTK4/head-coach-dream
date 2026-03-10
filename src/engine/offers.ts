@@ -1,7 +1,12 @@
-import type { GameState, InterviewResult, OfferItem } from "@/context/GameContext";
+import type { GameState, InterviewResult, OfferItem, OfferTier } from "@/context/GameContext";
 import { interviewProfiles, type TeamInterviewProfile } from "@/data/interviewProfiles";
+import { getPerkHiringModifier } from "@/engine/perkWiring";
 
 const BASE_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
+
+function withBase(offer: Omit<OfferItem, "base">): OfferItem {
+  return { ...offer, base: { years: offer.years, salary: offer.salary, autonomy: offer.autonomy } };
+}
 
 function average(values: number[]): number {
   if (values.length === 0) return 0;
@@ -17,10 +22,17 @@ function computeOfferThreshold(profile: TeamInterviewProfile): number {
   ]);
 }
 
+function isPerfectBirmingham(result: InterviewResult) {
+  const axes = [result.ownerAlignScore, result.gmTrustScore, result.schemeFitScore, result.mediaScore];
+  const minAxis = Math.min(...axes);
+  return result.premiumGatesPassed && result.offerTier === "PREMIUM" && minAxis >= 95 && result.interviewScore >= 99;
+}
+
 export function computeTeamScore(
   _teamId: string,
   interviewResult: InterviewResult | undefined,
-  profile: TeamInterviewProfile
+  profile: TeamInterviewProfile,
+  perkModifier = 0
 ): number {
   if (!interviewResult) return 0;
 
@@ -34,54 +46,44 @@ export function computeTeamScore(
   const modifier = interviewResult.autonomyDelta * 0.2 + interviewResult.leashDelta * 0.1;
   const floor = computeOfferThreshold(profile) * 0.5;
 
-  return Math.max(floor, baseScore + modifier);
+  return Math.max(floor, baseScore + modifier + perkModifier * 10);
 }
 
-export function generateOffer(teamId: string, score: number, profile: TeamInterviewProfile): OfferItem {
+function tierAllowsNormalized(tier: OfferTier, normalized: number): number {
+  if (tier === "CONDITIONAL") return Math.min(normalized, 1.04);
+  if (tier === "STANDARD") return Math.min(normalized, 1.24);
+  return normalized;
+}
+
+export function generateOffer(teamId: string, score: number, profile: TeamInterviewProfile, tier: OfferTier): OfferItem {
   const threshold = computeOfferThreshold(profile);
-  const normalized = threshold > 0 ? score / threshold : 0;
+  const baseNormalized = threshold > 0 ? score / threshold : 0;
+  const normalized = tierAllowsNormalized(tier, baseNormalized);
+
+  if (tier === "CONDITIONAL") {
+    return withBase({ teamId, years: 2, salary: 4_000_000, autonomy: 55, patience: 58, mediaNarrativeKey: "offer.conditional" });
+  }
 
   if (normalized >= 1.45) {
-    return {
-      teamId,
-      years: 6,
-      salary: 10_000_000,
-      autonomy: 88,
-      patience: 84,
-      mediaNarrativeKey: "offer.elite_hire",
-    };
+    return withBase({ teamId, years: 6, salary: 10_000_000, autonomy: 88, patience: 84, mediaNarrativeKey: "offer.elite_hire" });
   }
 
   if (normalized >= 1.25) {
-    return {
+    return withBase({
       teamId,
       years: 5,
       salary: 8_000_000,
       autonomy: 78,
       patience: 74,
       mediaNarrativeKey: "offer.strong_vote_of_confidence",
-    };
+    });
   }
 
   if (normalized >= 1.05) {
-    return {
-      teamId,
-      years: 4,
-      salary: 6_000_000,
-      autonomy: 68,
-      patience: 64,
-      mediaNarrativeKey: "offer.steady_build",
-    };
+    return withBase({ teamId, years: 4, salary: 6_000_000, autonomy: 68, patience: 64, mediaNarrativeKey: "offer.steady_build" });
   }
 
-  return {
-    teamId,
-    years: 3,
-    salary: 4_000_000,
-    autonomy: 58,
-    patience: 56,
-    mediaNarrativeKey: "offer.prove_it",
-  };
+  return withBase({ teamId, years: 3, salary: 4_000_000, autonomy: 58, patience: 56, mediaNarrativeKey: "offer.prove_it" });
 }
 
 export function generateOffers(state: GameState): OfferItem[] {
@@ -90,13 +92,18 @@ export function generateOffers(state: GameState): OfferItem[] {
   return BASE_TEAMS.flatMap((teamId) => {
     const profile = interviewProfiles[teamId] ?? interviewProfiles.MILWAUKEE_NORTHSHORE;
     const result = interviewByTeam.get(teamId);
-    const score = computeTeamScore(teamId, result, profile);
+    if (!result) return [];
+
+    if (result.offerTier === "REJECT") return [];
+
+    if (teamId === "BIRMINGHAM_VULCANS" && !isPerfectBirmingham(result)) return [];
+
+    const perkMod = getPerkHiringModifier(state.coach, "HC");
+    const score = computeTeamScore(teamId, result, profile, perkMod);
     const threshold = computeOfferThreshold(profile);
 
-    if (teamId !== "MILWAUKEE_NORTHSHORE" && score < threshold) {
-      return [];
-    }
+    if (teamId !== "MILWAUKEE_NORTHSHORE" && score < threshold) return [];
 
-    return [generateOffer(teamId, score, profile)];
+    return [generateOffer(teamId, score, profile, result.offerTier)];
   });
 }
