@@ -2,6 +2,7 @@ import type { GameState } from "@/context/GameContext";
 
 export function createInitialFreeAgencyState(): GameState["freeAgency"] {
   return {
+    status: "idle",
     initStatus: "idle",
     isResolving: false,
     progress: undefined,
@@ -15,6 +16,11 @@ export function createInitialFreeAgencyState(): GameState["freeAgency"] {
     maxResolvesPerPhase: 5,
     activity: [],
     draftByPlayerId: {},
+    boardPlayerIds: [],
+    marketApyByPlayerId: {},
+    initializedForSeason: undefined,
+    lastResolvedTick: undefined,
+    error: undefined,
     resolveRoundByPlayerId: {},
     pendingCounterTeamByPlayerId: {},
     cpuTickedOnOpen: false,

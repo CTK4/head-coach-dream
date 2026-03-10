@@ -1,89 +1,98 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
-import { IntelMeters } from "@/components/IntelMeters";
-import { PlayerNameLink } from "@/components/players/PlayerNameLink";
-
-const TABS = ["Top", "Offense", "Defense", "Special"];
-const groupTab = (pos: string) => (["QB", "RB", "WR", "TE", "OL"].includes(pos) ? "Offense" : ["DL", "EDGE", "LB", "CB", "S"].includes(pos) ? "Defense" : ["K", "P"].includes(pos) ? "Special" : "Top");
 
 export function selectFreeAgencyPool(state: any) {
-  return getEffectiveFreeAgents(state).map((p: any) => ({
-    id: String(p.playerId),
-    name: String(p.fullName),
-    pos: String(p.pos ?? "UNK").toUpperCase(),
-    age: Number(p.age ?? 0),
-    ovr: Number(p.overall ?? 0),
-  }));
+  const ids = new Set((state.freeAgency.boardPlayerIds ?? []).map((id: string) => String(id)));
+  const players = getEffectiveFreeAgents(state).filter((p: any) => ids.size === 0 || ids.has(String(p.playerId)));
+  return players.map((p: any) => {
+    const market = state.freeAgency.marketApyByPlayerId?.[String(p.playerId)] ?? { years: 2, apy: 1_000_000 };
+    return {
+      id: String(p.playerId),
+      name: String(p.fullName),
+      pos: String(p.pos ?? "UNK").toUpperCase(),
+      age: Number(p.age ?? 0),
+      ovr: Number(p.overall ?? 0),
+      market,
+    };
+  });
 }
 
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
-  const [tab, setTab] = useState("Top");
-  const [hideSigned, setHideSigned] = useState(true);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
-  const pool = useMemo(() => selectFreeAgencyPool(state), [state]);
+  const pool = useMemo(() => selectFreeAgencyPool(state).sort((a, b) => b.ovr - a.ovr), [state]);
+  const pendingUserOffers = Object.values(state.freeAgency.offersByPlayerId ?? {}).flat().filter((offer: any) => offer.isUser && offer.status === "PENDING").length;
 
-  const filteredPlayers = useMemo(
-    () =>
-      pool
-        .filter((p) => tab === "Top" || groupTab(p.pos) === tab)
-        .filter((p) => !hideSigned || !state.freeAgency.signingsByPlayerId[p.id]),
-    [pool, tab, hideSigned, state.freeAgency.signingsByPlayerId]
-  );
+  const selectedPlayer = pool.find((p) => p.id === selectedPlayerId) ?? null;
+  const selectedOffers = selectedPlayerId ? state.freeAgency.offersByPlayerId[selectedPlayerId] ?? [] : [];
+  const selectedDraft = selectedPlayerId ? state.freeAgency.draftByPlayerId[selectedPlayerId] : undefined;
 
-  const sortedPlayers = useMemo(() => filteredPlayers.slice().sort((a, b) => b.ovr - a.ovr), [filteredPlayers]);
-  const visiblePlayers = sortedPlayers.slice(0, 120);
+  const openDraft = (playerId: string) => {
+    dispatch({ type: "FA_CREATE_DRAFT", payload: { playerId } });
+    setSelectedPlayerId(playerId);
+  };
 
-  const resolveLabel = state.freeAgency.isResolving ? "Resolving..." : "Resolve Week";
+  const updateDraft = (field: "years" | "apy", value: number) => {
+    if (!selectedPlayerId) return;
+    dispatch({ type: "FA_UPDATE_DRAFT", payload: { playerId: selectedPlayerId, patch: { [field]: value } } });
+  };
 
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">FREE AGENCY</h1>
-        <div className="flex gap-2">
-          <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_OPEN_MY_OFFERS" })} disabled={state.freeAgency.isResolving}>My Offers</button>
-          <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "INIT_FREE_AGENCY_MARKET" })} disabled={state.freeAgency.initStatus === "ready" || state.freeAgency.isResolving}>Initialize Market</button>
-          <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "RESOLVE_FREE_AGENCY_WEEK" })} disabled={state.freeAgency.initStatus !== "ready" || state.freeAgency.isResolving}>{resolveLabel}</button>
+        <div className="flex items-center gap-2 text-sm">
+          <span>Cap Space: ${Math.round(Number(state.finances.capSpace ?? 0) / 1_000_000)}M</span>
+          <span>Pending Offers: {pendingUserOffers}</span>
+          <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_ADVANCE_MARKET" })} disabled={state.freeAgency.initStatus !== "ready"}>Advance Market</button>
+          <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_COMPLETE_PHASE" })}>Complete Free Agency</button>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        {TABS.map((t) => <button key={t} className="px-2 py-1 border rounded" onClick={() => setTab(t)}>{t}</button>)}
-        <label className="ml-2 text-sm"><input type="checkbox" checked={hideSigned} onChange={(e) => setHideSigned(e.target.checked)} /> Hide signed</label>
-      </div>
+      {state.freeAgency.error ? <div className="rounded border border-rose-700/70 bg-rose-950/40 p-2 text-xs text-rose-200">{state.freeAgency.error}</div> : null}
+      {state.freeAgency.initStatus !== "ready" ? <div className="rounded border border-slate-700/70 bg-slate-900/50 p-3 text-sm text-slate-300">Market status: {state.freeAgency.status ?? state.freeAgency.initStatus ?? "idle"}</div> : null}
 
-      {state.freeAgency.initStatus === "idle" ? <div className="rounded border border-slate-700/70 bg-slate-900/50 p-3 text-sm text-slate-300">Initialize the market to load free-agency offers.</div> : null}
-      {state.freeAgency.initStatus === "loading" ? <div className="rounded border border-slate-700/70 bg-slate-900/50 p-3 text-sm text-slate-300">Loading free-agency board...</div> : null}
-      {state.freeAgency.initStatus === "error" ? <div className="rounded border border-rose-700/70 bg-rose-950/40 p-3 text-sm text-rose-200">Unable to initialize free agency. Retry initialization.</div> : null}
-
-      {state.freeAgency.initStatus === "ready" && visiblePlayers.length === 0 ? (
-        <div className="rounded border border-slate-700/70 bg-slate-900/50 p-3 text-sm text-slate-300">No matching free agents for this filter yet.</div>
-      ) : null}
-
-      {state.freeAgency.initStatus === "ready"
-        ? visiblePlayers.map((p) => {
-            const offers = state.freeAgency.offersByPlayerId[p.id] ?? [];
-            const latestUserDecision = offers.filter((o) => o.isUser && (o.status === "ACCEPTED" || o.status === "REJECTED")).slice().sort((a, b) => b.createdWeek - a.createdWeek)[0];
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
+        <div className="space-y-2">
+          {pool.length === 0 ? <div className="rounded border border-slate-700/70 bg-slate-900/50 p-3 text-sm text-slate-300">No free agents available.</div> : null}
+          {pool.map((p) => {
+            const signing = state.freeAgency.signingsByPlayerId[p.id];
             return (
               <div key={p.id} className="border rounded p-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="font-semibold">
-                    <PlayerNameLink playerId={p.id} name={p.name} pos={p.pos} namespace="free-agency" /> {state.freeAgency.signingsByPlayerId[p.id] ? "(SIGNED)" : ""}
-                  </div>
-                  <div className="text-xs opacity-70">OVR {p.ovr} · Age {p.age}</div>
-                  <IntelMeters intel={state.offseasonData.scouting.intelByFAId[p.id]} />
-                  <div className="flex gap-2 mt-2">
-                    <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_TAPE_SCAN" } })} disabled={state.freeAgency.isResolving}>Tape (-2)</button>
-                    <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "SCOUTING_SPEND", payload: { targetType: "FA", targetId: p.id, actionType: "FA_FULL_DD" } })} disabled={state.freeAgency.isResolving}>Full DD (-10)</button>
-                  </div>
-                  {latestUserDecision?.decisionReason ? <div className="text-xs opacity-70 mt-2">Reason: {latestUserDecision.decisionReason}</div> : null}
+                  <div className="font-semibold">{p.name} {signing ? "(SIGNED)" : ""}</div>
+                  <div className="text-xs opacity-70">{p.pos} · Age {p.age} · OVR {p.ovr}</div>
+                  <div className="text-xs opacity-70">Projected: {p.market.years}y / ${Math.round(p.market.apy / 1_000_000)}M APY</div>
                 </div>
-                <button className="px-3 py-2 border rounded" onClick={() => dispatch({ type: "FA_OPEN_PLAYER", payload: { playerId: p.id } })} disabled={state.freeAgency.isResolving}>Offer Contract</button>
+                <button className="px-2 py-1 border rounded" onClick={() => openDraft(p.id)} disabled={!!signing}>Offer</button>
               </div>
             );
-          })
-        : null}
+          })}
+        </div>
+
+        <div className="border rounded p-3 space-y-2 h-fit">
+          <h2 className="font-semibold">Offer Drawer</h2>
+          {!selectedPlayer ? <div className="text-sm opacity-70">Select a player to create/edit an offer.</div> : (
+            <>
+              <div className="text-sm">{selectedPlayer.name} ({selectedPlayer.pos})</div>
+              <label className="text-xs block">Years
+                <input className="w-full border rounded px-2 py-1" type="number" value={Number(selectedDraft?.years ?? selectedPlayer.market.years)} onChange={(e) => updateDraft("years", Number(e.target.value))} />
+              </label>
+              <label className="text-xs block">APY
+                <input className="w-full border rounded px-2 py-1" type="number" value={Number(selectedDraft?.aav ?? selectedPlayer.market.apy)} onChange={(e) => updateDraft("apy", Number(e.target.value))} />
+              </label>
+              <div className="flex gap-2">
+                <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_SUBMIT_USER_OFFER", payload: { playerId: selectedPlayer.id } })}>Submit</button>
+                {selectedOffers.filter((o: any) => o.isUser && o.status === "PENDING").map((o: any) => (
+                  <button key={o.offerId} className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_WITHDRAW_USER_OFFER", payload: { playerId: selectedPlayer.id, offerId: o.offerId } })}>Withdraw</button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

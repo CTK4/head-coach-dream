@@ -827,6 +827,7 @@ export type FreeAgencyUI =
   | { mode: "MY_OFFERS" };
 
 export type FreeAgencyState = {
+  status?: "idle" | "initializing" | "ready" | "resolving" | "complete" | "error";
   initStatus: "idle" | "loading" | "ready" | "error";
   isResolving: boolean;
   progress?: { done: number; total: number };
@@ -840,6 +841,11 @@ export type FreeAgencyState = {
   maxResolvesPerPhase: number;
   activity: Array<{ ts: number; text: string; playerId?: string }>;
   draftByPlayerId: Record<string, { years: number; aav: number }>;
+  boardPlayerIds?: string[];
+  marketApyByPlayerId?: Record<string, { years: number; apy: number }>;
+  initializedForSeason?: number;
+  lastResolvedTick?: number;
+  error?: string;
   resolveRoundByPlayerId: Record<string, number>;
   pendingCounterTeamByPlayerId: Record<string, string | null>;
   cpuTickedOnOpen: boolean;
@@ -1303,6 +1309,13 @@ export type GameAction =
   | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
   | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
   | { type: "FA_INIT_OFFERS" }
+  | { type: "FA_ENTER_MARKET" }
+  | { type: "FA_CREATE_DRAFT"; payload: { playerId: string } }
+  | { type: "FA_UPDATE_DRAFT"; payload: { playerId: string; patch: Partial<{ years: number; apy: number }> } }
+  | { type: "FA_SUBMIT_USER_OFFER"; payload: { playerId: string } }
+  | { type: "FA_WITHDRAW_USER_OFFER"; payload: { playerId: string; offerId: string } }
+  | { type: "FA_ADVANCE_MARKET" }
+  | { type: "FA_COMPLETE_PHASE" }
   | { type: "FA_INIT_START" }
   | { type: "FA_INIT_READY" }
   | { type: "FA_INIT_ERROR" }
