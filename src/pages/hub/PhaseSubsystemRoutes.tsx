@@ -186,12 +186,12 @@ export function ProspectProfileScreen() {
 export function HubPhaseQuickLinks() {
   const { state } = useGame();
   const phase = getUnifiedPhase(state);
-  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency");
+  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
   const isTradeWindow = isInFranchiseActionWindow(phase, "trade");
   return (
     <div className="grid grid-cols-3 gap-2 text-xs">
       {isFreeAgency ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
-      {state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
+      {state.offseason?.stepId === "RESIGNING" || state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
       {isTradeWindow ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
     </div>
   );
