@@ -83,14 +83,6 @@ export default function Draft() {
   };
 
   return (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between"><h1 className="text-xl font-bold">DRAFT</h1><div>{onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div></div>
-      <div className="overflow-x-auto pb-1"><div className="flex min-w-max gap-2">{["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => <button key={x} className="min-h-11 rounded-full border px-3 py-1" onClick={() => setPos(x)}>{getPositionLabel(x)}</button>)}</div></div>
-      {available.slice(0, 80).map((p) => (
-        <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="font-semibold">{p.name} ({getPositionLabel(p.pos)})</div>
-            <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
     <div className="p-4 space-y-4">
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-3">
@@ -114,7 +106,7 @@ export default function Draft() {
                 min={0}
                 max={5000}
                 value={cpuDelayMinMs}
-                onChange={(e) => setCpuDelayMinMs(clampDelay(Number(e.target.value)))}
+                onChange={(event) => setCpuDelayMinMs(clampDelay(Number(event.target.value)))}
                 className="w-full rounded border px-2 py-1"
               />
             </label>
@@ -125,19 +117,18 @@ export default function Draft() {
                 min={0}
                 max={5000}
                 value={cpuDelayMaxMs}
-                onChange={(e) => setCpuDelayMaxMs(clampDelay(Number(e.target.value)))}
+                onChange={(event) => setCpuDelayMaxMs(clampDelay(Number(event.target.value)))}
                 className="w-full rounded border px-2 py-1"
               />
             </label>
           </div>
-          <div className="text-xs text-slate-500">CPU picks wait a random delay between min and max before dispatching advance.</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 rounded border bg-slate-50 p-1">
+      <div className="grid grid-cols-3 gap-2 rounded border p-1">
         {[
+          { key: "POOL", label: "Prospect Pool" },
           { key: "RESULTS", label: "Draft Results" },
-          { key: "POOL", label: "Player Pool" },
           { key: "MY_PICKS", label: "My Picks" },
         ].map((entry) => {
           const active = tab === entry.key;
@@ -159,7 +150,7 @@ export default function Draft() {
             <div className="flex min-w-max gap-2">
               {["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"].map((x) => (
                 <button key={x} className="min-h-11 rounded-full border px-3 py-1" onClick={() => setPos(x)}>
-                  {x}
+                  {getPositionLabel(x)}
                 </button>
               ))}
             </div>
@@ -170,7 +161,7 @@ export default function Draft() {
               <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">
-                    {p.name} ({p.pos})
+                    {p.name} ({getPositionLabel(p.pos)})
                   </div>
                   <IntelMeters intel={scouting.intelByProspectId[p.prospectId]} />
                 </div>
