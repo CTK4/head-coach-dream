@@ -3,12 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
-import type { InterviewQuestion, OfferItem, QuestionOption } from "@/engine/interviewHiring/types";
 import { useGame } from "@/context/GameContext";
+import { ROUTES } from "@/routes/appRoutes";
+import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
+import { scoreInterview, deriveInterviewOutcome } from "@/engine/interviewHiring/engine";
+import type { InterviewOutcome as EngineInterviewOutcome } from "@/engine/interviewHiring/types";
+import { getFlavorLine } from "@/engine/interviewFlavor";
+import { interviewProfiles } from "@/data/interviewProfiles";
+import { selectInterviewQuestions, type InterviewQuestion } from "@/engine/interviews/interviewSelector";
+import type { SelectedQuestion as EngineSelectedQuestion } from "@/engine/interviewHiring/types";
 
 const STORY_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
-
 type StoryTeamId = (typeof STORY_TEAM_IDS)[number];
 
 type StoryOffer = {
@@ -23,100 +28,47 @@ type StoryOffer = {
   patience: number;
 };
 
-type SelectedQuestion = InterviewQuestion & { source: "team_pool" | "contextual" };
-
 type OfferDecision = "ACCEPTED" | "DECLINED";
 
-const OFFER_TEMPLATE: Record<StoryTeamId, StoryOffer> = {
-  MILWAUKEE_NORTHSHORE: {
-    teamId: "MILWAUKEE_NORTHSHORE",
-    teamName: "Milwaukee Northshore",
-    city: "Milwaukee, WI",
-    gmName: "Owen Hartley",
-    strategyTag: "steady_build",
-    years: 4,
-    salary: 6_000_000,
-    autonomy: 68,
-    patience: 64,
-  },
-  ATLANTA_APEX: {
-    teamId: "ATLANTA_APEX",
-    teamName: "Atlanta",
-    city: "Atlanta, GA",
-    gmName: "Tyler Redhut",
-    strategyTag: "win_now",
-    years: 3,
-    salary: 8_000_000,
-    autonomy: 58,
-    patience: 45,
-  },
-  BIRMINGHAM_VULCANS: {
-    teamId: "BIRMINGHAM_VULCANS",
-    teamName: "Birmingham",
-    city: "Birmingham, AL",
-    gmName: "Devin Porter",
-    strategyTag: "youth_movement",
-    years: 5,
-    salary: 5_000_000,
-    autonomy: 80,
-    patience: 78,
-  },
+type OfferItem = {
+  teamId: StoryTeamId;
+  years: number;
+  salary: number;
+  autonomy: number;
+  patience: number;
+  mediaNarrativeKey: string;
+  base: { years: number; salary: number; autonomy: number };
 };
 
-function hashString(input: string) {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i += 1) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
+type LocalInterviewOutcome = {
+  band: "HIRED" | "BORDERLINE" | "REJECTED";
+  hireScore: number;
+  gatePass: boolean;
+  gateReasons: string[];
+  full?: EngineInterviewOutcome;
+};
 
-function chooseThreeDeterministic(teamId: StoryTeamId): SelectedQuestion[] {
-  const cfg = getTeamConfig(teamId);
-  const teamQuestions = (cfg.team_pool.questions ?? []).map((q) => ({ ...q, source: "team_pool" as const }));
-  const contextualQuestions = (cfg.contextual_pool.questions ?? []).map((q) => ({ ...q, source: "contextual" as const }));
-  const combined = [...teamQuestions, ...contextualQuestions];
+const TEAM_META: Record<StoryTeamId, { teamName: string; city: string; gmName: string; strategyTag: string; theme: string }> = {
+  MILWAUKEE_NORTHSHORE: { teamName: "Milwaukee Northshore", city: "Milwaukee, WI", gmName: "Owen Hartley", strategyTag: "steady_build", theme: "CULTURE" },
+  ATLANTA_APEX: { teamName: "Atlanta Apex", city: "Atlanta, GA", gmName: "Tyler Redhut", strategyTag: "win_now", theme: "MEDIA" },
+  BIRMINGHAM_VULCANS: { teamName: "Birmingham Vulcans", city: "Birmingham, AL", gmName: "Devin Porter", strategyTag: "youth_movement", theme: "ROSTER" },
+};
 
-  const uniqueById = new Map<string, SelectedQuestion>();
-  for (const q of combined) {
-    uniqueById.set(q.question_id, q);
-  }
-
-  return [...uniqueById.values()]
-    .sort((a, b) => hashString(`${teamId}|STORY_MODE|${a.question_id}`) - hashString(`${teamId}|STORY_MODE|${b.question_id}`))
-    .slice(0, 3);
-}
-
-function loadQuestionPack(): Record<StoryTeamId, SelectedQuestion[]> {
-  if (typeof window === "undefined") {
-    return {
-      MILWAUKEE_NORTHSHORE: chooseThreeDeterministic("MILWAUKEE_NORTHSHORE"),
-      ATLANTA_APEX: chooseThreeDeterministic("ATLANTA_APEX"),
-      BIRMINGHAM_VULCANS: chooseThreeDeterministic("BIRMINGHAM_VULCANS"),
-    };
-  }
-
-  const key = "story_mode_question_pack_v1";
-  const cached = sessionStorage.getItem(key);
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached) as Record<StoryTeamId, SelectedQuestion[]>;
-      if (parsed.MILWAUKEE_NORTHSHORE?.length === 3 && parsed.ATLANTA_APEX?.length === 3 && parsed.BIRMINGHAM_VULCANS?.length === 3) {
-        return parsed;
-      }
-    } catch {
-      // ignore and regenerate
-    }
-  }
-
-  const next: Record<StoryTeamId, SelectedQuestion[]> = {
-    MILWAUKEE_NORTHSHORE: chooseThreeDeterministic("MILWAUKEE_NORTHSHORE"),
-    ATLANTA_APEX: chooseThreeDeterministic("ATLANTA_APEX"),
-    BIRMINGHAM_VULCANS: chooseThreeDeterministic("BIRMINGHAM_VULCANS"),
+function offerFromOutcome(teamId: StoryTeamId, outcome: EngineInterviewOutcome): StoryOffer {
+  const meta = TEAM_META[teamId];
+  const salaryByBand: Record<string, number> = { PREMIUM: 10_000_000, HIGH: 8_000_000, MID: 6_000_000, LOW: 4_000_000 };
+  const yearsByBand: Record<string, number> = { PREMIUM: 6, HIGH: 5, MID: 4, LOW: 3 };
+  return {
+    teamId,
+    teamName: meta.teamName,
+    city: meta.city,
+    gmName: meta.gmName,
+    strategyTag: meta.strategyTag,
+    years: yearsByBand[outcome.salaryBand] ?? 3,
+    salary: salaryByBand[outcome.salaryBand] ?? 4_000_000,
+    autonomy: outcome.autonomyGrant,
+    patience: Math.min(100, 50 + outcome.leashLength * 8),
   };
-  sessionStorage.setItem(key, JSON.stringify(next));
-  return next;
 }
 
 function toOfferItem(offer: StoryOffer): OfferItem {
@@ -127,126 +79,225 @@ function toOfferItem(offer: StoryOffer): OfferItem {
     autonomy: offer.autonomy,
     patience: offer.patience,
     mediaNarrativeKey: `offer.${offer.strategyTag}`,
-    base: {
-      years: offer.years,
-      salary: offer.salary,
-      autonomy: offer.autonomy,
-    },
+    base: { years: offer.years, salary: offer.salary, autonomy: offer.autonomy },
   };
 }
 
-const devLog = (...args: unknown[]) => {
-  if (import.meta.env.DEV) console.log("[story-mode]", ...args);
-};
+function asEngineQuestionSource(questions: InterviewQuestion[]): EngineSelectedQuestion[] {
+  return questions.map((question) => ({
+    source: question.sourceBucket === "contextual" ? "contextual" : "team_pool",
+    question,
+  }));
+}
+
+function ownerTagsForTeam(teamId: StoryTeamId): string[] {
+  return interviewProfiles[teamId]?.ownerPersonalityTags ?? [];
+}
 
 export default function StoryInterview() {
-  const { dispatch } = useGame();
+  const { dispatch, state } = useGame();
   const navigate = useNavigate();
 
-  const questionPack = useMemo(loadQuestionPack, []);
-  const [interviewIndex, setInterviewIndex] = useState(0);
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [stage, setStage] = useState<"INTRO" | "QUESTION" | "OFFER" | "SELECT">("INTRO");
-  const [answersByTeam, setAnswersByTeam] = useState<Record<StoryTeamId, Array<{ questionId: string; choiceId: string }>>>({
-    MILWAUKEE_NORTHSHORE: [],
-    ATLANTA_APEX: [],
-    BIRMINGHAM_VULCANS: [],
-  });
-  const [offersByTeam, setOffersByTeam] = useState<Partial<Record<StoryTeamId, StoryOffer>>>({});
+  const isRehiring = state.careerStage === "REHIRING";
+  const firingCount = state.careerHistory?.firings?.length ?? 0;
+
+  const [stage, setStage] = useState<"INTRO" | "QUESTION" | "RESULT" | "SELECT">("INTRO");
+  const [currentInterviewIndex, setCurrentInterviewIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answersByTeam, setAnswersByTeam] = useState<Partial<Record<StoryTeamId, Record<string, string>>>>({});
+  const [receivedOffers, setReceivedOffers] = useState<Partial<Record<StoryTeamId, StoryOffer>>>({});
   const [decisionsByTeam, setDecisionsByTeam] = useState<Partial<Record<StoryTeamId, OfferDecision>>>({});
-  const [selectedTeamId, setSelectedTeamId] = useState<StoryTeamId | null>(null);
-  const [workingOffer, setWorkingOffer] = useState<StoryOffer>(OFFER_TEMPLATE.MILWAUKEE_NORTHSHORE);
+  const [outcomesByTeam, setOutcomesByTeam] = useState<Partial<Record<StoryTeamId, LocalInterviewOutcome>>>({});
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState<StoryTeamId | null>(null);
+  const [flavorText, setFlavorText] = useState<string>("");
 
-  const teamId = STORY_TEAM_IDS[Math.min(interviewIndex, STORY_TEAM_IDS.length - 1)];
-  const teamOfferTemplate = OFFER_TEMPLATE[teamId];
-  const teamQuestions = questionPack[teamId] ?? [];
-  const currentQuestion = teamQuestions[questionIndex];
+  // Suppress unused variable warnings from state tracking
+  void answersByTeam;
+  void decisionsByTeam;
 
-  const teamConfig = getTeamConfig(teamId);
-  const gmName = teamConfig.team.gm && typeof teamConfig.team.gm === "object" ? String((teamConfig.team.gm as any).name ?? teamOfferTemplate.gmName) : teamOfferTemplate.gmName;
+  const activeTeamId = STORY_TEAM_IDS[Math.min(currentInterviewIndex, STORY_TEAM_IDS.length - 1)];
+  const activeMeta = TEAM_META[activeTeamId];
 
-  const advanceToNextInterview = () => {
-    const nextInterview = interviewIndex + 1;
+  const interviewPackResult = useMemo(() => {
+    try {
+      const selected = selectInterviewQuestions({
+        leagueSeed: Number(state.saveSeed ?? 1),
+        teamId: activeTeamId,
+        saveSlotId: 1,
+        weekIndex: Number(state.week ?? 1),
+        interviewIndex: currentInterviewIndex,
+      });
+      if (selected.questions.length !== 6) {
+        return {
+          questions: [] as InterviewQuestion[],
+          error: `Story interview question selection returned ${selected.questions.length} questions for ${activeMeta.teamName}.`,
+        };
+      }
+      return { questions: selected.questions, error: null as string | null };
+    } catch (error) {
+      return {
+        questions: [] as InterviewQuestion[],
+        error: error instanceof Error ? error.message : "Story interview setup failed.",
+      };
+    }
+  }, [activeTeamId, activeMeta.teamName, currentInterviewIndex, state.saveSeed, state.week]);
+
+  const currentQuestion = interviewPackResult.questions[currentQuestionIndex];
+  const gmName = useMemo(() => {
+    try {
+      const cfg = getTeamConfig(activeTeamId);
+      if (cfg.team.gm && typeof cfg.team.gm === "object") {
+        return String((cfg.team.gm as { name?: string }).name ?? activeMeta.gmName);
+      }
+      return activeMeta.gmName;
+    } catch {
+      return activeMeta.gmName;
+    }
+  }, [activeMeta.gmName, activeTeamId]);
+
+  if (interviewPackResult.error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Card className="max-w-xl w-full">
+          <CardHeader>
+            <CardTitle>Story Mode failed to load</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">Required interview data is missing or invalid for this franchise.</p>
+            <p className="text-xs text-muted-foreground">{interviewPackResult.error}</p>
+            <Button onClick={() => navigate(ROUTES.saveMode)}>Back</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const goToNextInterview = () => {
+    const nextInterview = currentInterviewIndex + 1;
     if (nextInterview >= STORY_TEAM_IDS.length) {
       setStage("SELECT");
       return;
     }
-    setInterviewIndex(nextInterview);
-    setQuestionIndex(0);
-    const nextTeamId = STORY_TEAM_IDS[nextInterview];
-    setWorkingOffer(OFFER_TEMPLATE[nextTeamId]);
+    setCurrentInterviewIndex(nextInterview);
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+    setFlavorText("");
     setStage("INTRO");
   };
 
-  const onAnswer = (option: QuestionOption) => {
-    if (!currentQuestion) return;
-    setAnswersByTeam((prev) => ({
-      ...prev,
-      [teamId]: [...prev[teamId], { questionId: currentQuestion.question_id, choiceId: option.choice_id }],
-    }));
+  const finalizeInterview = (finalAnswers: Record<string, string>) => {
+    try {
+      const config = getTeamConfig(activeTeamId);
+      const engineQuestions = asEngineQuestionSource(interviewPackResult.questions);
+      const score = scoreInterview(config, engineQuestions, finalAnswers, Number(state.saveSeed ?? 1) ^ currentInterviewIndex);
+      const fullOutcome = deriveInterviewOutcome(score, config);
 
-    if (questionIndex >= 2) {
-      setStage("OFFER");
-      return;
+      // Apply firing history penalty during rehiring
+      if (isRehiring && firingCount > 0) {
+        fullOutcome.autonomyGrant = Math.max(40, fullOutcome.autonomyGrant - firingCount * 10);
+        fullOutcome.leashLength = Math.max(1, fullOutcome.leashLength - firingCount);
+      }
+
+      const outcome: LocalInterviewOutcome = {
+        band: score.band,
+        hireScore: score.hireScore,
+        gatePass: score.gatePass,
+        gateReasons: score.gateReasons,
+        full: fullOutcome,
+      };
+      setOutcomesByTeam((prev) => ({ ...prev, [activeTeamId]: outcome }));
+      setAnswersByTeam((prev) => ({ ...prev, [activeTeamId]: finalAnswers }));
+
+      if (score.band === "HIRED") {
+        const offer = offerFromOutcome(activeTeamId, fullOutcome);
+        setReceivedOffers((prev) => ({ ...prev, [activeTeamId]: offer }));
+      }
+
+      // Show owner-personality-aware end flavor text
+      const ownerTags = ownerTagsForTeam(activeTeamId);
+      const tier = score.band === "HIRED" ? (fullOutcome.salaryBand === "PREMIUM" ? "PREMIUM" : "STANDARD") : "REJECT";
+      const flavor = getFlavorLine({ ownerTags, theme: activeMeta.theme, phase: "END", tier: tier as any });
+      setFlavorText(flavor);
+      setStage("RESULT");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to score interview.";
+      setOutcomesByTeam((prev) => ({
+        ...prev,
+        [activeTeamId]: { band: "REJECTED", hireScore: 0, gatePass: false, gateReasons: [message] },
+      }));
+      setStage("RESULT");
     }
-    setQuestionIndex((prev) => prev + 1);
   };
 
-  const onAccept = () => {
-    setOffersByTeam((prev) => ({ ...prev, [teamId]: workingOffer }));
-    setDecisionsByTeam((prev) => ({ ...prev, [teamId]: "ACCEPTED" }));
-    advanceToNextInterview();
-  };
+  const onAnswer = (choiceId: string) => {
+    if (!currentQuestion) return;
+    const nextAnswers = { ...answers, [currentQuestion.question_id]: choiceId };
+    setAnswers(nextAnswers);
 
-  const onDecline = () => {
-    setDecisionsByTeam((prev) => ({ ...prev, [teamId]: "DECLINED" }));
-    advanceToNextInterview();
+    if (currentQuestionIndex < 5) {
+      // Show owner voice flavor text after each answer during the interview
+      const ownerTags = ownerTagsForTeam(activeTeamId);
+      const flavor = getFlavorLine({ ownerTags, theme: activeMeta.theme, phase: "DURING" });
+      setFlavorText(flavor);
+      setCurrentQuestionIndex((index) => index + 1);
+    } else {
+      setTimeout(() => { finalizeInterview(nextAnswers); }, 0);
+    }
   };
-
-  const selectableOffers = STORY_TEAM_IDS.map((id) => offersByTeam[id]).filter((offer): offer is StoryOffer => Boolean(offer));
 
   const onConfirmSelection = () => {
-    if (!selectedTeamId) return;
-    const selected = offersByTeam[selectedTeamId];
-    if (!selected) return;
-
-    devLog("selected question ids", Object.fromEntries(STORY_TEAM_IDS.map((id) => [id, questionPack[id].map((q) => q.question_id)])));
-    devLog("story route reached", "/story/interview");
+    if (!selectedFranchiseId) return;
+    const selectedOffer = receivedOffers[selectedFranchiseId];
+    if (!selectedOffer) return;
+    const selectedOutcome = outcomesByTeam[selectedFranchiseId];
 
     dispatch({
       type: "INIT_NEW_GAME_FROM_STORY",
       payload: {
-        offer: toOfferItem(selected),
-        teamName: selected.teamName,
-        gmName: selected.gmName,
+        offer: toOfferItem(selectedOffer),
+        teamName: selectedOffer.teamName,
+        gmName: selectedOffer.gmName,
+        interviewOutcome: selectedOutcome?.full,
+        isRehire: isRehiring,
       },
     });
-    navigate("/onboarding");
+    navigate(ROUTES.onboarding);
   };
 
   if (stage === "SELECT") {
     return (
       <div className="mx-auto max-w-4xl space-y-4 p-6">
-        <h2 className="text-2xl font-black">Offers Received</h2>
-        {STORY_TEAM_IDS.map((id) => {
-          const offer = offersByTeam[id];
-          const declined = decisionsByTeam[id] === "DECLINED";
+        <h2 className="text-2xl font-black">{isRehiring ? "Choose Your Next Franchise" : "Choose Your Franchise"}</h2>
+        {isRehiring && firingCount > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Your firing history has been factored into the offers. Each previous firing reduces starting autonomy by 10 and leash by 1 season.
+          </p>
+        )}
+        {STORY_TEAM_IDS.map((teamId) => {
+          const offer = receivedOffers[teamId];
+          const outcome = outcomesByTeam[teamId];
           return (
-            <Card key={id} className={declined ? "opacity-50" : selectedTeamId === id ? "border-primary" : ""}>
-              <CardContent className="flex items-center justify-between p-4">
-                {offer ? (
-                  <div>
-                    <div className="font-bold">{offer.teamName}</div>
-                    <div className="text-sm text-muted-foreground">{offer.city} · {offer.years}yr / ${(offer.salary / 1_000_000).toFixed(1)}M · Autonomy {offer.autonomy} · Patience {offer.patience}</div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="font-bold">{OFFER_TEMPLATE[id].teamName}</div>
-                    <div className="text-sm text-muted-foreground">Unavailable (declined or not offered)</div>
-                  </div>
-                )}
-                <Button variant={selectedTeamId === id ? "default" : "outline"} disabled={!offer} onClick={() => setSelectedTeamId(id)}>
-                  {selectedTeamId === id ? "Selected" : "Select"}
+            <Card key={teamId} className={selectedFranchiseId === teamId ? "border-primary" : ""}>
+              <CardContent className="flex items-center justify-between gap-4 p-4">
+                <div>
+                  <div className="font-bold">{TEAM_META[teamId].teamName}</div>
+                  {offer ? (
+                    <div className="text-sm text-muted-foreground">
+                      {TEAM_META[teamId].city} · {offer.years} years · ${(offer.salary / 1_000_000).toFixed(1)}M/yr · Autonomy {offer.autonomy} · Patience {offer.patience}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      No offer received{outcome?.gateReasons?.length ? ` (${outcome.gateReasons[0]})` : ""}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant={selectedFranchiseId === teamId ? "default" : "outline"}
+                  disabled={!offer}
+                  onClick={() => setSelectedFranchiseId(teamId)}
+                >
+                  {selectedFranchiseId === teamId ? "Selected" : "Select"}
                 </Button>
               </CardContent>
             </Card>
@@ -254,8 +305,52 @@ export default function StoryInterview() {
         })}
 
         <div className="flex justify-end">
-          <Button disabled={!selectedTeamId || !selectableOffers.length} onClick={onConfirmSelection}>Confirm Selection</Button>
+          <Button disabled={!selectedFranchiseId} onClick={onConfirmSelection}>Confirm Selection</Button>
         </div>
+      </div>
+    );
+  }
+
+  if (stage === "RESULT") {
+    const result = outcomesByTeam[activeTeamId];
+    const offer = receivedOffers[activeTeamId];
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>{activeMeta.teamName} Interview Result</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Band: {result?.band ?? "REJECTED"} · Hire Score: {result?.hireScore?.toFixed(1) ?? "0.0"}
+            </p>
+            {flavorText && (
+              <p className="text-sm italic text-muted-foreground border-l-2 pl-3">{flavorText}</p>
+            )}
+            {offer ? (
+              <div className="space-y-1">
+                <p>{offer.years} years · ${(offer.salary / 1_000_000).toFixed(1)}M/year · Autonomy {offer.autonomy} · Patience {offer.patience}</p>
+                {result?.full && (
+                  <p className="text-xs text-muted-foreground">
+                    Owner alignment: {result.full.ownerApproval} · GM confidence: {result.full.gmApproval}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p>No offer from {activeMeta.teamName}.</p>
+            )}
+            {result?.gateReasons?.length ? (
+              <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                {result.gateReasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
+            ) : null}
+            <div className="flex gap-2">
+              <Button onClick={() => { setDecisionsByTeam((prev) => ({ ...prev, [activeTeamId]: offer ? "ACCEPTED" : "DECLINED" })); goToNextInterview(); }}>
+                {currentInterviewIndex === STORY_TEAM_IDS.length - 1 ? "Review Offers" : "Continue"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -264,13 +359,19 @@ export default function StoryInterview() {
     <div className="mx-auto max-w-3xl space-y-4 p-6">
       <Card>
         <CardHeader>
-          <CardTitle>{teamOfferTemplate.teamName} · {teamOfferTemplate.city}</CardTitle>
+          <CardTitle>{activeMeta.teamName} · {activeMeta.city}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {stage === "INTRO" ? (
             <>
               <p className="text-sm text-muted-foreground">GM: {gmName}</p>
-              <p>Interview {interviewIndex + 1} of 3. You are meeting with leadership to discuss vision, roster priorities, and organizational fit.</p>
+              {isRehiring && firingCount > 0 ? (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  Rehiring interview {currentInterviewIndex + 1} of 3. Your coaching history will shape the conversation.
+                </p>
+              ) : (
+                <p>Interview {currentInterviewIndex + 1} of 3. You will answer 6 questions.</p>
+              )}
               <Button onClick={() => setStage("QUESTION")}>Begin Interview</Button>
             </>
           ) : null}
@@ -278,40 +379,25 @@ export default function StoryInterview() {
           {stage === "QUESTION" && currentQuestion ? (
             <>
               <div className="flex items-center justify-between">
-                <Badge variant="outline">Question {questionIndex + 1} / 3</Badge>
-                <Badge variant="secondary">{currentQuestion.source === "team_pool" ? "Team Pool" : "Contextual"}</Badge>
+                <Badge variant="outline">Question {currentQuestionIndex + 1} / 6</Badge>
+                <Badge variant="secondary">{currentQuestionIndex < 3 ? "Contextual" : "Team"}</Badge>
               </div>
+              {flavorText && (
+                <p className="text-xs italic text-muted-foreground border-l-2 pl-2">{flavorText}</p>
+              )}
               <div className="text-lg font-semibold">{currentQuestion.prompt}</div>
               <div className="space-y-2">
                 {currentQuestion.options.map((option) => (
-                  <Button key={option.choice_id} variant="outline" className="h-auto w-full justify-start whitespace-normal text-left" onClick={() => onAnswer(option)}>
+                  <Button
+                    key={option.choice_id}
+                    variant="outline"
+                    className="h-auto w-full justify-start whitespace-normal text-left"
+                    onClick={() => onAnswer(option.choice_id)}
+                  >
                     <span className="mr-2 font-bold">{option.choice_id}.</span>
                     <span>{option.text}</span>
                   </Button>
                 ))}
-              </div>
-            </>
-          ) : null}
-
-          {stage === "OFFER" ? (
-            <>
-              <div className="text-sm text-muted-foreground">Offer after interview completion</div>
-              <Card className="bg-muted/20">
-                <CardContent className="space-y-2 p-4">
-                  <div className="font-bold">{workingOffer.teamName} Offer</div>
-                  <div className="text-sm">{workingOffer.years} years · ${(workingOffer.salary / 1_000_000).toFixed(1)}M / year · Autonomy {workingOffer.autonomy} · Patience {workingOffer.patience}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setWorkingOffer((o) => ({ ...o, years: Math.max(2, o.years - 1) }))}>-1 Year</Button>
-                    <Button size="sm" variant="outline" onClick={() => setWorkingOffer((o) => ({ ...o, years: Math.min(6, o.years + 1) }))}>+1 Year</Button>
-                    <Button size="sm" variant="outline" onClick={() => setWorkingOffer((o) => ({ ...o, salary: Math.max(3_000_000, o.salary - 500_000) }))}>-$0.5M</Button>
-                    <Button size="sm" variant="outline" onClick={() => setWorkingOffer((o) => ({ ...o, salary: o.salary + 500_000 }))}>+$0.5M</Button>
-                  </div>
-                </CardContent>
-              </Card>
-              <div className="flex gap-2">
-                <Button onClick={onAccept}>Accept</Button>
-                <Button variant="outline" onClick={() => setWorkingOffer(teamOfferTemplate)}>Negotiate Reset</Button>
-                <Button variant="destructive" onClick={onDecline}>Decline</Button>
               </div>
             </>
           ) : null}

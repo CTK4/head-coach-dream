@@ -3,6 +3,8 @@ import { useGame } from "@/context/GameContext";
 import { getPersonnel, getTeamById } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useTeamRatings } from "@/hooks/useTeamRatings";
+import { formatOverallRecordWLT } from "@/lib/teamRatings";
 
 const ownerBadgeClasses: Record<string, string> = {
   PATIENT: "bg-emerald-500/20 text-emerald-100",
@@ -21,19 +23,46 @@ export default function FrontOffice() {
   const { state } = useGame();
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
   const team = getTeamById(String(teamId));
+  const { index: teamRatingsIndex } = useTeamRatings();
   const ownerConfidence = Number(state.owner.approval ?? 50);
   const gmRelationship = Number(state.coach.gmRelationship ?? 50);
-  const prestige = Math.round(Number(state.reputationComposite ?? 55));
+  const prestige = Math.round(Number(state.coach.reputation?.leaguePrestige ?? state.owner.approval ?? 55));
   const personnel = getPersonnel().filter((p) => String(p.teamId) === String(teamId));
   const gm = personnel.find((p) => String(p.role ?? "").toUpperCase() === "GM");
   const owner = personnel.find((p) => String(p.role ?? "").toUpperCase() === "OWNER");
 
   const record = useMemo(() => {
-    const row = state.currentStandings.find((s) => String((s as any).teamId) === String(teamId));
-    const wins = Number((row as any)?.wins ?? 0);
-    const losses = Number((row as any)?.losses ?? 0);
+    const row = state.currentStandings.find((standing) => String(standing.teamId) === String(teamId));
+    const wins = Number((row as { wins?: number; w?: number } | undefined)?.wins ?? (row as { wins?: number; w?: number } | undefined)?.w ?? 0);
+    const losses = Number((row as { losses?: number; l?: number } | undefined)?.losses ?? (row as { losses?: number; l?: number } | undefined)?.l ?? 0);
     return `${wins}-${losses}`;
   }, [state.currentStandings, teamId]);
+
+
+
+  const streakText = useMemo(() => {
+    const teamGames = (state.weeklyResults ?? [])
+      .flatMap((w) => (w as { allGameResults?: Array<{ homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number }> }).allGameResults ?? [])
+      .filter((g) => g.homeTeamId === String(teamId) || g.awayTeamId === String(teamId));
+    let streak = 0;
+    for (let i = teamGames.length - 1; i >= 0; i -= 1) {
+      const g = teamGames[i];
+      const win = (g.homeTeamId === String(teamId) && g.homeScore > g.awayScore) || (g.awayTeamId === String(teamId) && g.awayScore > g.homeScore);
+      const loss = (g.homeTeamId === String(teamId) && g.homeScore < g.awayScore) || (g.awayTeamId === String(teamId) && g.awayScore < g.homeScore);
+      if (!win && !loss) break;
+      if (streak === 0) { streak = win ? 1 : -1; continue; }
+      if (streak > 0 && win) streak += 1;
+      else if (streak < 0 && loss) streak -= 1;
+      else break;
+    }
+    if (streak === 0) return "W0";
+    return streak > 0 ? `W${streak}` : `L${Math.abs(streak)}`;
+  }, [state.weeklyResults, teamId]);
+
+  const teamRating = teamRatingsIndex[String(teamId)];
+  const foundedText = teamRating?.yearFounded ?? "—";
+  const allTimeRecordText = teamRating ? formatOverallRecordWLT(teamRating) : "—";
+  const teamOvrText = teamRating?.rosterRating ?? "—";
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20">
@@ -45,16 +74,16 @@ export default function FrontOffice() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold">{team?.name ?? "Franchise"}</div>
-                <div className="text-xs text-muted-foreground">{team?.region ?? "Unknown city"} • Founded 1960</div>
+                <div className="text-xs text-muted-foreground">{team?.region ?? "Unknown city"} • Founded {foundedText}</div>
               </div>
-              <Badge>{team?.market ?? "MEDIUM"} MARKET</Badge>
+              <Badge>{String((team as { market?: string } | undefined)?.market ?? (team?.region ? "REGIONAL" : "UNKNOWN")).toUpperCase()} MARKET</Badge>
             </div>
-            <div className="text-xs text-muted-foreground">All-Time 0-0 • Championships 0</div>
+            <div className="text-xs text-muted-foreground">All-Time {allTimeRecordText} • OVR {teamOvrText} • Championships 0</div>
             <div>
               <div className="mb-1 text-xs">Franchise Prestige</div>
               <div className="h-2 rounded bg-[#252535]"><div className="h-2 rounded bg-blue-500" style={{ width: `${prestige}%` }} /></div>
             </div>
-            <div className="text-xs text-muted-foreground">Current season: {record} • Streak: —</div>
+            <div className="text-xs text-muted-foreground">Current season: {record} • Streak: {streakText}</div>
           </CardContent>
         </Card>
 

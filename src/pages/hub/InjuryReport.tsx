@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getPlayersByTeam, getTeams } from "@/data/leagueDb";
+import { getTeams } from "@/data/leagueDb";
+import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { mulberry32, hashSeed } from "@/engine/rng";
 import type { Injury, InjuryStatus, InjuryBodyArea, InjurySeverity } from "@/engine/injuryTypes";
 import { getRecurrenceRiskLevel } from "@/engine/injuryTypes";
@@ -56,9 +57,9 @@ const BODY_AREA_MAP: Record<string, InjuryBodyArea> = {
   "Rib Fracture": "RIBS", Thumb: "HAND", "Back Strain": "BACK", "Hip Flexor": "HIP",
 };
 
-function generateMockInjuries(teamId: string, saveSeed: number, week: number): Injury[] {
+function generateMockInjuries(state: ReturnType<typeof useGame>["state"], teamId: string, saveSeed: number, week: number): Injury[] {
   const rng = mulberry32(hashSeed(saveSeed, teamId, "injuries", week));
-  const players = getPlayersByTeam(teamId).slice(0, 22);
+  const players = getEffectivePlayersByTeam(state, teamId).slice(0, 22);
   const count = 3 + Math.floor(rng() * 4);
   const injuries: Injury[] = [];
   const statuses: InjuryStatus[] = ["OUT", "OUT", "DOUBTFUL", "QUESTIONABLE", "IR", "PUP", "DAY_TO_DAY"];
@@ -139,6 +140,25 @@ function formatRehabStage(r: string): string {
 // ─── InjuryRow component ───────────────────────────────────────────────────────
 
 type PlayerInfo = { name: string; pos?: string; overall?: number };
+
+export function getInjuryPlayersForTeam(state: ReturnType<typeof useGame>["state"], teamId: string): any[] {
+  return getEffectivePlayersByTeam(state, teamId);
+}
+
+export function buildInjuryPlayerMap(state: ReturnType<typeof useGame>["state"]): Map<string, PlayerInfo> {
+  const map = new Map<string, PlayerInfo>();
+  const all = getTeams()
+    .filter((t) => t.isActive !== false)
+    .flatMap((t) => getEffectivePlayersByTeam(state, t.teamId));
+  for (const p of all) {
+    map.set(p.playerId, {
+      name: p.fullName ?? "Unknown Player",
+      pos: p.pos,
+      overall: p.overall,
+    });
+  }
+  return map;
+}
 
 function InjuryRow({
   injury,
@@ -437,15 +457,6 @@ function InjuryDrawer({
                 >
                   Start Practice Window
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled
-                  className="border-slate-300/20 text-slate-400 opacity-40 cursor-not-allowed"
-                  title="Not yet implemented"
-                >
-                  Release / Injury Settlement (TODO)
-                </Button>
               </div>
             </div>
           ) : null}
@@ -476,37 +487,25 @@ export default function InjuryReport() {
   // Drawer state
   const [drawerInjuryId, setDrawerInjuryId] = useState<string | null>(null);
 
+  const mockInjuries = useMemo(() => {
+    if (!import.meta.env.DEV) return [] as Injury[];
+    const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
+    const mocked: Injury[] = [];
+    for (const team of teams) {
+      mocked.push(...generateMockInjuries(state, team.teamId, state.saveSeed, currentWeek));
+    }
+    return mocked;
+  }, [state.playerTeamOverrides, state.playerContractOverrides, state.saveSeed, currentWeek]);
+
   // Build the injury list: prefer real data, fall back to mock data in dev mode
   const allInjuries = useMemo(() => {
     const real = state.injuries ?? [];
     if (real.length > 0) return real;
-
-    // Dev-only mock data
-    if (!import.meta.env.DEV) return real;
-
-    const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
-    const mocked: Injury[] = [];
-    for (const team of teams) {
-      mocked.push(...generateMockInjuries(team.teamId, state.saveSeed, currentWeek));
-    }
-    return mocked;
-  }, [state.injuries, state.saveSeed, currentWeek]);
+    return mockInjuries;
+  }, [state.injuries, mockInjuries]);
 
   // Build player lookup map (stable)
-  const playerMap = useMemo(() => {
-    const map = new Map<string, PlayerInfo>();
-    const all = getTeams()
-      .filter((t) => t.isActive !== false)
-      .flatMap((t) => getPlayersByTeam(t.teamId));
-    for (const p of all) {
-      map.set(p.playerId, {
-        name: p.fullName ?? "Unknown Player",
-        pos: p.pos,
-        overall: p.overall,
-      });
-    }
-    return map;
-  }, []);
+  const playerMap = useMemo(() => buildInjuryPlayerMap(state), [state]);
 
   // Filtered injuries
   const filteredInjuries = useMemo(() => {

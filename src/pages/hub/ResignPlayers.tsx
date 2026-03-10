@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getPlayers } from "@/data/leagueDb";
 import { getDepthSlotLabel, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,13 +51,16 @@ export default function ResignPlayers() {
   const [draftOffer, setDraftOffer] = useState<ResignOffer | null>(null);
 
   const expiring = useMemo(() => {
-    const players = getPlayers().filter((p) => String(state.playerTeamOverrides[String(p.playerId)] ?? p.teamId) === String(teamId));
+    const rosterIndex = buildRosterIndex(state);
+    const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
+    const players = getPlayers().filter((p) => onTeam.has(String(p.playerId)));
     return players
       .map((p) => {
         const summary = getContractSummaryForPlayer(state, String(p.playerId));
         return { p, end: Number(summary?.endSeason ?? -1) };
       })
       .filter((r) => r.end === Number(state.season))
+      .filter((r) => state.franchiseTags[String(r.p.playerId)]?.season !== Number(state.season) + 1)
       .sort((a, b) => Number(b.p.overall ?? 0) - Number(a.p.overall ?? 0));
   }, [state, teamId]);
 
@@ -186,7 +190,7 @@ export default function ResignPlayers() {
                     </div>
                     <Slider
                       value={[draftOffer.years]}
-                      min={2}
+                      min={1}
                       max={5}
                       step={1}
                       onValueChange={(v) => setDraftOffer((cur) => (cur ? { ...cur, years: v[0] ?? cur.years } : cur))}

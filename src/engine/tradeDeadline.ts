@@ -1,4 +1,6 @@
-export const TRADE_DEADLINE_DEFAULT_WEEK = 0;
+import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
+
+export const TRADE_DEADLINE_DEFAULT_WEEK = Math.max(1, REGULAR_SEASON_WEEKS - 1);
 
 export type TradeDeadlineError = {
   code: "TRADE_DEADLINE_PASSED";
@@ -6,13 +8,28 @@ export type TradeDeadlineError = {
   currentWeek: number;
 };
 
+/**
+ * Safe resolver for trade deadline week values loaded from league state.
+ * If saves are missing or carrying invalid values, we fall back to the
+ * canonical in-season deadline (last valid regular-season trade week) so legacy files stay playable while
+ * remaining deterministic and conservative.
+ */
+export function resolveTradeDeadlineWeek(deadlineWeek: number | null | undefined): number {
+  const normalized = Number(deadlineWeek);
+  if (!Number.isInteger(normalized) || normalized < 1 || normalized >= REGULAR_SEASON_WEEKS) {
+    return TRADE_DEADLINE_DEFAULT_WEEK;
+  }
+  return normalized;
+}
+
 export function isTradeAllowed(currentWeek: number, deadlineWeek: number): boolean {
-  return Number(currentWeek) <= Number(deadlineWeek);
+  return Number(currentWeek) <= Number(resolveTradeDeadlineWeek(deadlineWeek));
 }
 
 export function getDeadlineStatus(currentWeek: number, deadlineWeek: number): "open" | "approaching" | "passed" {
-  if (currentWeek > deadlineWeek) return "passed";
-  if (deadlineWeek - currentWeek <= 2) return "approaching";
+  const resolvedDeadlineWeek = resolveTradeDeadlineWeek(deadlineWeek);
+  if (currentWeek > resolvedDeadlineWeek) return "passed";
+  if (resolvedDeadlineWeek - currentWeek <= 2) return "approaching";
   return "open";
 }
 

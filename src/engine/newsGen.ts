@@ -1,6 +1,7 @@
 import { getPlayers, getTeamById } from "@/data/leagueDb";
 import type { Injury } from "@/engine/injuryTypes";
 import type { AIGameResult, LeagueStatLeaders } from "@/engine/leagueSim";
+import { hashSeed, mulberry32 } from "@/engine/rng";
 import type { NewsCategory, NewsItem } from "@/types/news";
 
 type NewsContext = { week: number; season: number; userTeamId?: string };
@@ -54,14 +55,16 @@ export function generateGameResultNews(results: AIGameResult[], context: NewsCon
   });
 }
 
-export function generateInjuryNews(injuries: Injury[], context: NewsContext): NewsItem[] {
+export function generateInjuryNews(injuries: Injury[], context: NewsContext, seed?: number): NewsItem[] {
   const source = injuries.length ? injuries : [];
   if (!source.length) {
+    const fallbackSeed = seed ?? hashSeed(context.season, context.week, context.userTeamId ?? "", "injury_fallback");
+    const rng = mulberry32(fallbackSeed);
     const players = getPlayers().slice(0, 4);
-    return players.slice(0, 2 + Math.floor(Math.random() * 3)).map((p, idx) => {
+    return players.slice(0, 2 + Math.floor(rng() * 3)).map((p, idx) => {
       const teamId = String((p as any).teamId ?? "FA");
       const teamName = getTeamById(teamId)?.name ?? teamId;
-      const duration = 1 + Math.floor(Math.random() * 3);
+      const duration = 1 + Math.floor(rng() * 3);
       return makeNews(context, "INJURY", `${String((p as any).fullName ?? "Player")}, ${String((p as any).pos ?? "UNK")}, ${teamName} — ${duration} week(s) with a minor strain`, [teamId], {
         playerIds: [String((p as any).playerId)],
         isUserTeam: teamId === context.userTeamId,

@@ -1,4 +1,5 @@
 import type { GameState } from "@/context/GameContext";
+import { hashSeed, mulberry32 } from "@/engine/rng";
 import type { CoachReputation } from "@/engine/reputation";
 import { clamp100 } from "@/engine/reputation";
 
@@ -18,6 +19,7 @@ export type EventContext = {
   coach: GameState["coach"];
   week: number;
   tenureYear: number;
+  seed: number;
   record: { wins: number; losses: number };
   leagueStandings?: number;
 };
@@ -55,7 +57,9 @@ export function pickEventForContext(events: GameEvent[], ctx: EventContext): Res
     return event.triggerCondition(ctx);
   });
   if (!candidates.length) return null;
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+
+  const rng = mulberry32(hashSeed(ctx.seed, "event_pick", ctx.week, ctx.tenureYear));
+  const pick = candidates[Math.floor(rng() * candidates.length)];
   return { ...pick, body: renderEventTemplate(pick.body, ctx) };
 }
 

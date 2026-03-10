@@ -7,6 +7,7 @@ export type IntelTrack = "TALENT" | "MED" | "CHAR" | "FIT";
 export type IntelState = Record<IntelTrack, number>;
 export type PlayerIntel = {
   clarity: IntelState;
+  confidence?: number;
   meta: { lastWindowId?: string; windowGainUsed?: number; hiddenTraitRevealed?: boolean };
   revealed?: { medicalTier?: MedicalTier; characterTier?: CharacterTier };
 };
@@ -45,7 +46,7 @@ export const ACTION_COST: Record<ScoutAction, number> = {
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
 export function freshIntel(): PlayerIntel {
-  return { clarity: { TALENT: 0, MED: 0, CHAR: 0, FIT: 0 }, meta: {} };
+  return { clarity: { TALENT: 0, MED: 0, CHAR: 0, FIT: 0 }, confidence: 0, meta: {} };
 }
 
 export function computeWindowBudget(traits: GMScoutTraits, windowId: ScoutingWindowId, prevCarryover: number): ScoutingBudget {

@@ -18,7 +18,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { readSettings } from "@/lib/settings";
-import { R2Image } from "@/components/media/R2Image";
 
 function pillClass(
   kind: "unread" | "task" | "cap" | "scouting" | "info",
@@ -99,13 +98,12 @@ export function ContextBar({ state }: { state: GameState }) {
       <HubPanel title="TEAM">
         <div className="flex items-center gap-3">
           {team?.logoKey ? (
-            <R2Image
-              kind="icons"
-              filename={`${team.logoKey}.png`}
-              fallbackSrc={`/icons/${team.logoKey}.png`}
+            <img
+              src={`/icons/${team.logoKey}.png`}
               alt={`${team.name} logo`}
               className="h-9 w-9"
-              imgProps={{ loading: "lazy", decoding: "async" }}
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
           <div className="min-w-0">
@@ -159,13 +157,12 @@ export function ContextBar({ state }: { state: GameState }) {
               Streak: {streak ? `${streak.kind}${streak.count}` : "—"}
             </div>
             {next && opp?.logoKey ? (
-              <R2Image
-                kind="icons"
-                filename={`${opp.logoKey}.png`}
-                fallbackSrc={`/icons/${opp.logoKey}.png`}
+              <img
+                src={`/icons/${opp.logoKey}.png`}
                 alt={`${formatTeam(next.opponentId)} logo`}
                 className="h-4 w-4"
-                imgProps={{ loading: "lazy", decoding: "async" }}
+                loading="lazy"
+                decoding="async"
               />
             ) : null}
           </div>

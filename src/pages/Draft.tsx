@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getDraftClass, labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
+import { labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +21,7 @@ export default function Draft() {
     dispatch({ type: "DRAFT_INIT" });
   }, [dispatch]);
 
-  const board = useMemo(() => getDraftClass(), []);
-  const available = useMemo(() => board.filter((p) => !state.draft.takenProspectIds[p.prospectId]), [board, state.draft.takenProspectIds]);
+  const available = useMemo(() => state.draft.prospectPool.filter((p) => !state.draft.takenProspectIds[p.prospectId]), [state.draft.prospectPool, state.draft.takenProspectIds]);
 
   const slot = state.draft.slots[state.draft.cursor];
   const isUserOnClock = !!slot && slot.teamId === state.draft.userTeamId;
@@ -29,6 +29,12 @@ export default function Draft() {
   useEffect(() => {
     if (!state.draft.complete && slot && !isUserOnClock) dispatch({ type: "DRAFT_CPU_ADVANCE" });
   }, [dispatch, isUserOnClock, slot, state.draft.complete]);
+
+  useEffect(() => {
+    if (state.draft.completed) {
+      dispatch({ type: "DRAFT_COMPLETE" });
+    }
+  }, [dispatch, state.draft.completed]);
 
   const upcoming = useMemo(() => upcomingUserPickSlots(state.draft, 8), [state.draft]);
   const recent = useMemo(() => (state.draft.selections ?? []).slice(-10).reverse(), [state.draft.selections]);

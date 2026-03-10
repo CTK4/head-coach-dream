@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
+import { getPersonnelFreeAgents } from "@/data/leagueDb";
+
+describe("playbooks + combine wiring", () => {
+  it("updates offense/defense playbook ids via state action", () => {
+    let state = migrateSave({}) as GameState;
+    state = gameReducer(state, { type: "SET_PLAYBOOK", payload: { side: "OFFENSE", playbookId: "AIR_RAID" } });
+    state = gameReducer(state, { type: "SET_PLAYBOOK", payload: { side: "DEFENSE", playbookId: "TAMPA_2" } });
+
+    expect(state.playbooks.offensePlaybookId).toBe("AIR_RAID");
+    expect(state.playbooks.defensePlaybookId).toBe("TAMPA_2");
+  });
+
+
+  it("auto-switches OC playbook on hire when user has not overridden", () => {
+    const airRaidOc = getPersonnelFreeAgents().find(
+      (p) => String(p.role ?? "").toUpperCase() === "OFF_COORDINATOR" &&
+             String(p.scheme ?? "").toUpperCase().replace(/\s+/g, "_") === "AIR_RAID"
+    );
+    expect(airRaidOc).toBeTruthy();
+
+    let state = migrateSave({ userTeamId: "CHI" }) as GameState;
+    state = {
+      ...state,
+      userTeamId: "CHI",
+      staff: { ...state.staff, ocId: undefined },
+      playbooks: {
+        ...state.playbooks,
+        offensePlaybookId: "PRO_STYLE_BALANCED",
+        userOverride: { offense: false, defense: false },
+      },
+    };
+
+    state = gameReducer(state, {
+      type: "HIRE_STAFF",
+      payload: { role: "OC", personId: String(airRaidOc!.personId), salary: 1_000_000 },
+    });
+
+    expect(state.playbooks.offensePlaybookId).toBe("AIR_RAID");
+  });
+
+  it("does not auto-switch OC playbook on hire when user override is set", () => {
+    // Use any OC free agent — the scheme doesn't matter here since userOverride.offense=true blocks the switch
+    const anyOc = getPersonnelFreeAgents().find(
+      (p) => String(p.role ?? "").toUpperCase() === "OFF_COORDINATOR"
+    );
+    expect(anyOc).toBeTruthy();
+
+    let state = migrateSave({ userTeamId: "CHI" }) as GameState;
+    state = {
+      ...state,
+      userTeamId: "CHI",
+      staff: { ...state.staff, ocId: undefined },
+      playbooks: {
+        ...state.playbooks,
+        offensePlaybookId: "WEST_COAST",
+        userOverride: { offense: true, defense: false },
+      },
+    };
+
+    state = gameReducer(state, {
+      type: "HIRE_STAFF",
+      payload: { role: "OC", personId: String(anyOc!.personId), salary: 1_000_000 },
+    });
+
+    expect(state.playbooks.offensePlaybookId).toBe("WEST_COAST");
+  });
+
+  it("selects and runs combine interviews deterministically", () => {
+    let state = migrateSave({ saveSeed: 12345, teamId: "CHI", userTeamId: "CHI" }) as GameState;
+    state = gameReducer(state, { type: "SCOUT_INIT" });
+
+    const ids = Object.keys(state.scoutingState?.scoutProfiles ?? {}).slice(0, 10);
+    for (const id of ids) {
+      state = gameReducer(state, { type: "SCOUT_COMBINE_SELECT", payload: { prospectId: id, category: "IQ" } });
+    }
+    state = gameReducer(state, { type: "SCOUT_COMBINE_RUN_INTERVIEWS", payload: { category: "IQ" } });
+
+    const day = state.scoutingState?.combine.day ?? 1;
+    expect(state.scoutingState?.combine.selectedByDay[day].IQ).toHaveLength(10);
+
+    const firstRun = ids.map((id) => state.scoutingState?.combine.interviewResultsByProspectId[id]?.intelligencePct);
+
+    let state2 = migrateSave({ saveSeed: 12345, teamId: "CHI", userTeamId: "CHI" }) as GameState;
+    state2 = gameReducer(state2, { type: "SCOUT_INIT" });
+    for (const id of ids) {
+      state2 = gameReducer(state2, { type: "SCOUT_COMBINE_SELECT", payload: { prospectId: id, category: "IQ" } });
+    }
+    state2 = gameReducer(state2, { type: "SCOUT_COMBINE_RUN_INTERVIEWS", payload: { category: "IQ" } });
+    const secondRun = ids.map((id) => state2.scoutingState?.combine.interviewResultsByProspectId[id]?.intelligencePct);
+
+    expect(firstRun).toEqual(secondRun);
+  });
+});

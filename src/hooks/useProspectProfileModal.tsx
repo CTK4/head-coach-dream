@@ -60,6 +60,8 @@ export function useProspectProfileModal(state: GameState) {
       intel={playerIntel}
       scoutingProfile={scoutingProfile}
       combine={{ ...(combineStateResult ?? {}), ...(offseasonCombineResult ?? {}), ...(modalProspect ?? {}) }}
+      scoutingState={state.scoutingState}
+      prospectId={activeProspectId ?? undefined}
     />
   );
 

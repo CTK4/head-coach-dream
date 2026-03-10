@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
+import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { getTeams } from "@/data/leagueDb";
-import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
-import { decideTrade, type TradePlayer } from "@/engine/tradeEngine";
+import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { computeCapLedger } from "@/engine/capLedger";
+import { decideTrade, deriveTeamContext, type TradePlayer } from "@/engine/tradeEngine";
 import { getPhaseKey, isTradesAllowed } from "@/engine/phase";
 import { LockedPhaseCard } from "@/components/hub/LockedPhaseCard";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,11 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
-function resolveUserTeamId(state: any): string | undefined {
-  return state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
-}
-
-function toTradePlayer(p: any): TradePlayer {
+function toTradePlayer(p: { playerId?: unknown; fullName?: unknown; name?: unknown; teamId?: unknown; pos?: unknown; age?: unknown; overall?: unknown; ovr?: unknown }): TradePlayer {
   return {
     playerId: String(p.playerId),
     name: String(p.fullName ?? p.name ?? "Player"),
@@ -29,7 +27,7 @@ function toTradePlayer(p: any): TradePlayer {
 
 export default function TradesPage() {
   const { state, dispatch } = useGame();
-  const userTeamId = resolveUserTeamId(state);
+  const userTeamId = resolveCurrentUserTeamId(state);
   const phaseOk = isTradesAllowed(state);
 
   const [partnerTeamId, setPartnerTeamId] = useState("");
@@ -56,6 +54,18 @@ export default function TradesPage() {
   const decision = useMemo(() => {
     if (!userTeamId || !partnerTeamId) return null;
     const gmMode = state.strategy?.gmMode ?? "CONTEND";
+    const postseasonResult = state.league?.postseason?.resultsByTeamId?.[String(partnerTeamId)];
+    const playoffResult: "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion" = postseasonResult?.isChampion
+      ? "champion"
+      : postseasonResult?.eliminatedIn === "WILD_CARD"
+        ? "wildCard"
+        : postseasonResult?.eliminatedIn === "DIVISIONAL"
+          ? "divisional"
+          : postseasonResult?.eliminatedIn === "CONF_FINALS"
+            ? "conference"
+            : postseasonResult?.eliminatedIn === "SUPER_BOWL"
+              ? "superbowlLoss"
+              : "missed";
     // CONTEND: slightly more lenient CPU accept (lower surplus needed), REBUILD: stricter (trading veterans away)
     const hardRejectDeficitPct = gmMode === "REBUILD" ? 0.22 : gmMode === "CONTEND" ? 0.14 : 0.18;
     const autoAcceptSurplusPct = gmMode === "REBUILD" ? 0.08 : gmMode === "CONTEND" ? 0.16 : 0.12;
@@ -66,8 +76,35 @@ export default function TradesPage() {
       pkg: { outgoing, incoming },
       hardRejectDeficitPct,
       autoAcceptSurplusPct,
+      teamContext: (() => {
+        const roster = getEffectivePlayersByTeam(state, String(partnerTeamId));
+        const rosterByPos = roster.reduce<Record<string, number>>((acc, player) => {
+          const normalized = normalizePos(String((player as { pos?: unknown }).pos ?? "UNK"));
+          if (normalized in acc) {
+            acc[normalized] += 1;
+          }
+          return acc;
+        }, { QB: 0, RB: 0, WR: 0, TE: 0, OL: 0, DL: 0, EDGE: 0, LB: 0, CB: 0, S: 0 });
+        const cap = computeCapLedger(state, String(partnerTeamId));
+        const standing = state.currentStandings.find((row) => String(row.teamId) === String(partnerTeamId));
+        const wins = Number((standing as { wins?: number; w?: number } | undefined)?.wins ?? (standing as { wins?: number; w?: number } | undefined)?.w ?? 0);
+        const losses = Number((standing as { losses?: number; l?: number } | undefined)?.losses ?? (standing as { losses?: number; l?: number } | undefined)?.l ?? 0);
+        const winPct = wins + losses > 0 ? wins / (wins + losses) : 0.5;
+        const avgRosterAge = roster.length
+          ? roster.reduce((sum, player) => sum + Number((player as { age?: unknown }).age ?? 26), 0) / roster.length
+          : 26;
+        return deriveTeamContext({
+          gmMode,
+          playoffResult,
+          rosterByPos,
+          capTotal: Number((cap as { cap?: unknown }).cap ?? 0),
+          capUsed: Number((cap as { committed?: unknown }).committed ?? 0),
+          winPct,
+          avgRosterAge,
+        });
+      })(),
     });
-  }, [state.season, state.strategy?.gmMode, userTeamId, partnerTeamId, outgoing, incoming]);
+  }, [state, state.season, state.strategy?.gmMode, state.league?.postseason?.resultsByTeamId, userTeamId, partnerTeamId, outgoing, incoming]);
 
   if (!userTeamId) {
     return <LockedPhaseCard title="TRADES" message="No team selected yet." nextAvailable="After accepting an offer." />;
@@ -107,7 +144,7 @@ export default function TradesPage() {
         outgoingPlayerIds: outgoing.map((p) => p.playerId),
         incomingPlayerIds: incoming.map((p) => p.playerId),
       },
-    } as any);
+    });
 
     setOutgoingIds(new Set());
     setIncomingIds(new Set());

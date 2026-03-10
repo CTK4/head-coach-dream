@@ -43,6 +43,26 @@ export type CombineResult = {
   ras?: number;
 };
 
+export type InterviewResult = {
+  prospectId: string;
+  category: "CHARACTER" | "INTELLIGENCE" | "WORK_ETHIC";
+  score: number;
+  reveal?: string;
+};
+
+export type MedicalResult = {
+  prospectId: string;
+  category: "DURABILITY" | "INJURY_HISTORY" | "STRUCTURAL";
+  riskTier: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+  notes?: string;
+};
+
+export type PrivateWorkoutResult = {
+  prospectId: string;
+  drills: Record<string, number>;
+  notes: string[];
+};
+
 export type CombineDayRecap = {
   risers: string[];
   fallers: string[];
@@ -55,11 +75,27 @@ export type CombineDayRecap = {
 
 export type CombineState = {
   generated: boolean;
-  day: 1 | 2 | 3 | 4 | 5;
-  hoursRemaining: number;
+  day: 1 | 2 | 3 | 4;
+  selectedByDay: Record<number, Record<string, string[]>>;
+  interviewResultsByProspectId: Record<string, { characterPct?: number; intelligencePct?: number; notes?: string }>;
+  days: Record<1 | 2 | 3 | 4, CombineDay>;
+  prospects: Record<string, CombineProspectState>;
   resultsByProspectId: Record<string, CombineResult>;
   feed: { id: string; day: number; text: string; prospectId?: string }[];
   recapByDay: Record<number, CombineDayRecap>;
+};
+
+export type CombineDay = {
+  dayIndex: 1 | 2 | 3 | 4;
+  categoryKey: string;
+  interviewsRemaining: number;
+};
+
+export type CombineProspectState = {
+  characterRevealPct: number;
+  intelligenceRevealPct: number;
+  interviewCount: number;
+  notes: string[];
 };
 
 export type VisitState = {
@@ -71,10 +107,17 @@ export type VisitState = {
 export type InterviewState = {
   interviewsRemaining: number;
   history: Record<string, { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string }[]>;
+  modelARevealByProspectId: Record<string, { characterRevealPct: number; intelligenceRevealPct: number }>;
+  resultsByProspectId: Record<string, InterviewResult[]>;
 };
 
 export type MedicalBoardState = {
   requests: Record<string, { requested: boolean; windowKey: string }>;
+  resultsByProspectId: Record<string, MedicalResult>;
+};
+
+export type WorkoutState = {
+  resultsByProspectId: Record<string, PrivateWorkoutResult>;
 };
 
 export type ScoutAllocationState = {
@@ -110,6 +153,7 @@ export type ScoutingState = {
   visits: VisitState;
   interviews: InterviewState;
   medical: MedicalBoardState;
+  workouts: WorkoutState;
   allocation: ScoutAllocationState;
   inSeason: InSeasonScoutingState;
 };

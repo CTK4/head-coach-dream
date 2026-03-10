@@ -1,7 +1,13 @@
-export const COMBINE_DAY_COUNT = 5;
-export const COMBINE_DEFAULT_HOURS = 60;
-export const COMBINE_DEFAULT_INTERVIEW_SLOTS = 15;
+export const COMBINE_DAY_COUNT = 4;
+export const COMBINE_DEFAULT_INTERVIEW_TOKENS = 10;
 export const COMBINE_FOCUS_HOURS_COST = 4;
+
+export const COMBINE_DAY_POSITION_BUCKETS = {
+  1: { categoryKey: "SPECIALISTS_FRONT7", positions: ["K", "P", "EDGE", "DT", "LB"] },
+  2: { categoryKey: "SECONDARY_TE", positions: ["S", "TE", "CB"] },
+  3: { categoryKey: "SKILL_QB", positions: ["RB", "QB", "WR"] },
+  4: { categoryKey: "OFFENSIVE_LINE", positions: ["OT", "OG", "C"] },
+} as const;
 
 export const COMBINE_FEED_MAX_PER_DAY = 48;
 

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { OFFER_STRATEGY_LABELS, safeLabel } from "@/lib/displayLabels";
+import { ROUTES } from "@/routes/appRoutes";
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -75,7 +76,7 @@ const Offers = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-6 text-center">
             <p className="text-lg">No offers yet. Complete all interviews first.</p>
-            <Button onClick={() => navigate("/onboarding/interviews")} className="mt-4">Back to Interviews</Button>
+            <Button onClick={() => navigate(ROUTES.storyInterview)} className="mt-4">Back to Story Interviews</Button>
           </CardContent>
         </Card>
       </div>
@@ -96,7 +97,7 @@ const Offers = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-xl font-semibold">{team?.name ?? offer.teamId}</h2>
-                      <p className="text-sm text-muted-foreground">{team?.city ?? team?.region ?? ""}</p>
+                      <p className="text-sm text-muted-foreground">{team?.region ?? ""}</p>
                     </div>
                     <Badge variant="secondary">{OFFER_STRATEGY_LABELS[offer.mediaNarrativeKey] ?? safeLabel(offer.mediaNarrativeKey)}</Badge>
                   </div>
@@ -124,7 +125,7 @@ const Offers = () => {
                     <Button variant="secondary" onClick={() => openNegotiate(offer)}>
                       Negotiate
                     </Button>
-                    <Button className="flex-1" onClick={() => handleAccept(offer)}>
+                    <Button data-test="accept-offer" className="flex-1" onClick={() => handleAccept(offer)}>
                       Accept Offer
                     </Button>
                   </div>

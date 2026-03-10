@@ -66,19 +66,29 @@ const CreateCoach = () => {
           </div>
           <div className="space-y-2">
             <Label htmlFor="hometown">Hometown</Label>
-            <Select value={lockedTeam ? String(lockedTeam.region ?? "") : hometown} onValueChange={setHometown} disabled={Boolean(lockedTeam)}>
-              <SelectTrigger id="hometown" className="bg-secondary">
+            <Select
+              value={lockedTeam ? String(lockedTeam.region ?? "") : hometown}
+              onValueChange={setHometown}
+              disabled={Boolean(lockedTeam)}
+            >
+              <SelectTrigger
+                data-test="hometown-select"
+                id="hometown"
+                className="bg-secondary"
+              >
                 <SelectValue placeholder={lockedTeam ? `Locked: ${lockedTeam.name}` : "Select hometown"} />
               </SelectTrigger>
               <SelectContent>
                 {LEAGUE_CITIES.map((city) => (
-                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                  <SelectItem data-test={`hometown-option-${city}`} key={city} value={city}>
+                    {city}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {lockedTeam ? <p className="text-xs text-muted-foreground">Story Mode locked team: {lockedTeam.region} {lockedTeam.name}</p> : null}
           </div>
-          <Button onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
+          <Button data-test="create-coach-continue" onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
             Continue
           </Button>
         </CardContent>

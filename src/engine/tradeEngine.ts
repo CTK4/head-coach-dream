@@ -1,4 +1,6 @@
 import type { TradeProposal, TradeResponse } from "@/types/trades";
+import { calculateTradeValue } from "@/systems/tradeValuation";
+import { inferRebuildStage } from "@/models/teamProfile";
 
 /**
  * Trade engine audit summary:
@@ -40,6 +42,12 @@ const MIN_STARTERS: Record<string, number> = {
   QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, EDGE: 2, LB: 3, CB: 3, S: 2,
 };
 
+function mapRebuildStageToGmMode(stage: "contender" | "competitive" | "retool" | "rebuild"): "REBUILD" | "RELOAD" | "CONTEND" {
+  if (stage === "rebuild") return "REBUILD";
+  if (stage === "contender") return "CONTEND";
+  return "RELOAD";
+}
+
 export type TradeDecision = {
   outgoingValue: number;
   incomingValue: number;
@@ -69,11 +77,13 @@ function rand01(key: string): number {
 }
 
 export function playerTradeValue(p: TradePlayer): number {
-  if (p.isPick) return Number(p.overall ?? 300);
-  const ovr = Number(p.overall ?? 60);
-  const age = Number(p.age ?? 26);
-  const ageAdj = clamp(1.08 - (age - 24) * 0.02, 0.78, 1.12);
-  return Math.round(ovr * 10 * ageAdj);
+  // Draft pick assets carry their trade value directly in `overall` (no age adjustment).
+  if (p.isPick) return Number(p.overall ?? 140);
+  return calculateTradeValue({
+    overall: Number(p.overall ?? 60),
+    age: Number(p.age ?? 26),
+    isPick: false,
+  }, { teamStage: "competitive", positionalNeed: 0.5 });
 }
 
 export function packageValue(players: TradePlayer[]): number {
@@ -93,6 +103,9 @@ export function deriveTeamContext(opts: {
   capTotal?: number;
   capUsed?: number;
   winPct?: number;
+  avgRosterAge?: number;
+  priorWinPct?: number;
+  playoffResult?: "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion";
   gmMode?: "REBUILD" | "RELOAD" | "CONTEND";
   gmRelationship?: number;
   leaguePrestige?: number;
@@ -114,8 +127,14 @@ export function deriveTeamContext(opts: {
     redundancyFlags[pos] = have >= min * 2;
   }
 
-  const gmMode = opts.gmMode ?? "CONTEND";
   const winPct = opts.winPct ?? 0.5;
+  const derivedStage = inferRebuildStage({
+    winPct,
+    capSpaceRatio: clamp(1 - capStress, 0, 1),
+    avgRosterAge: opts.avgRosterAge ?? 26,
+    playoffResult: opts.playoffResult ?? "missed",
+  });
+  const gmMode = opts.gmMode ?? mapRebuildStageToGmMode(derivedStage);
   const windowScore = gmMode === "REBUILD" ? 0.2 : gmMode === "CONTEND" ? clamp(winPct + 0.2, 0, 1) : 0.5;
   const futurePickWeight = gmMode === "REBUILD" ? 1.4 : gmMode === "CONTEND" ? 0.7 : 1.0;
 

@@ -1,6 +1,6 @@
 import { evaluateFormula } from "./formula";
 import { XorShift32 } from "./rng";
-import type { InterviewQuestion, InterviewScoreResult, InterviewSession, QuestionOption, SelectedQuestion, TeamConfig } from "./types";
+import type { InterviewOutcome, InterviewQuestion, InterviewScoreResult, InterviewSession, QuestionOption, SelectedQuestion, TeamConfig } from "./types";
 import { weightedNoReplacement } from "./weightedSampler";
 
 const DELTA_TO_METRIC_CANDIDATES: Record<string, string[]> = {
@@ -18,7 +18,11 @@ const DELTA_TO_METRIC_CANDIDATES: Record<string, string[]> = {
   qbPlan: ["qb_plan_clarity"],
   assetDiscipline: ["asset_discipline_score"],
   authority: ["authority_score"],
+  rebuildClarity: ["rebuild_clarity"],
   continuity: ["continuity_score"],
+  continuity_score: ["continuity_score", "continuity"],
+  discipline: ["discipline_score"],
+  discipline_score: ["discipline_score", "discipline"],
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -41,9 +45,13 @@ function getTeamPoolQuestions(teamConfig: TeamConfig): InterviewQuestion[] {
   return teamConfig.team_pool.questions;
 }
 
+function normalizeAsker(asker?: string): string {
+  return asker?.trim().toLowerCase() ?? "";
+}
+
 function hasRequiredAskers(questions: InterviewQuestion[], constraints: { min_owner_questions?: number; min_gm_questions?: number } = {}) {
-  const ownerCount = questions.filter((q) => q.asker?.toLowerCase() === "owner").length;
-  const gmCount = questions.filter((q) => q.asker?.toLowerCase() === "gm").length;
+  const ownerCount = questions.filter((q) => normalizeAsker(q.asker) === "owner").length;
+  const gmCount = questions.filter((q) => normalizeAsker(q.asker) === "gm").length;
   return ownerCount >= (constraints.min_owner_questions ?? 0) && gmCount >= (constraints.min_gm_questions ?? 0);
 }
 
@@ -70,22 +78,58 @@ export function generateInterview(teamConfig: TeamConfig, seed: number): Intervi
   );
 
   const pool = getTeamPoolQuestions(teamConfig);
-  let teamSelected: InterviewQuestion[] = [];
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = weightedNoReplacement(
-      pool,
-      (question) => teamRules.selection.asker_weighting?.[question.asker?.toLowerCase() ?? ""] ?? 1,
-      teamRules.count,
-      rng,
+  const minOwner = teamRules.constraints?.min_owner_questions ?? 0;
+  const minGm = teamRules.constraints?.min_gm_questions ?? 0;
+
+  const ownerPool = pool.filter((question) => normalizeAsker(question.asker) === "owner");
+  const gmPool = pool.filter((question) => normalizeAsker(question.asker) === "gm");
+
+  if (ownerPool.length < minOwner || gmPool.length < minGm) {
+    throw new Error(
+      `Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}': requires OWNER>=${minOwner}, GM>=${minGm}, available OWNER=${ownerPool.length}, GM=${gmPool.length}.`,
     );
-    if (hasRequiredAskers(candidate, teamRules.constraints)) {
-      teamSelected = candidate;
-      break;
-    }
   }
 
-  if (!teamSelected.length) {
-    throw new Error(`Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}' after deterministic retries.`);
+  const teamSelected: InterviewQuestion[] = [
+    ...weightedNoReplacement(
+      ownerPool,
+      (question) => teamRules.selection.asker_weighting?.[question.asker ?? ""] ?? teamRules.selection.asker_weighting?.OWNER ?? 1,
+      minOwner,
+      rng,
+    ),
+    ...weightedNoReplacement(
+      gmPool,
+      (question) => teamRules.selection.asker_weighting?.[question.asker ?? ""] ?? teamRules.selection.asker_weighting?.GM ?? 1,
+      minGm,
+      rng,
+    ),
+  ];
+
+  const selectedIds = new Set(teamSelected.map((question) => question.question_id));
+  const remainingPool = pool.filter((question) => !selectedIds.has(question.question_id));
+  const remainingCount = teamRules.count - teamSelected.length;
+  if (remainingCount > 0) {
+    teamSelected.push(
+      ...weightedNoReplacement(
+        remainingPool,
+        (question) => {
+          const rawAsker = question.asker ?? "";
+          const normalized = normalizeAsker(rawAsker);
+          return (
+            teamRules.selection.asker_weighting?.[rawAsker] ??
+            teamRules.selection.asker_weighting?.[normalized] ??
+            teamRules.selection.asker_weighting?.[rawAsker.toUpperCase()] ??
+            1
+          );
+        },
+        remainingCount,
+        rng,
+      ),
+    );
+  }
+
+  if (!teamSelected.length || !hasRequiredAskers(teamSelected, teamRules.constraints)) {
+    throw new Error(`Unable to satisfy team pool asker constraints for '${teamConfig.team.team_id}' with stratified selection.`);
   }
 
   return {
@@ -184,12 +228,24 @@ export function scoreInterview(
       }
     };
 
-    if (source === "contextual" && selected.delta) {
-      applyDelta(selected.delta);
+    const explicitDelta = (selected.delta ?? (selected as QuestionOption & { deltas?: Record<string, number | string> }).deltas) as
+      | Record<string, number | string>
+      | undefined;
+    if (explicitDelta) {
+      applyDelta(explicitDelta);
     }
 
     const appliedTags: string[] = [];
-    if (source === "team_pool") {
+    if (!explicitDelta && source === "team_pool") {
+      for (const tag of selected.tags ?? []) {
+        const tagDelta = teamConfig.tag_deltas[tag];
+        if (!tagDelta) continue;
+        applyDelta(tagDelta);
+        appliedTags.push(tag);
+      }
+    }
+
+    if (!explicitDelta && source === "contextual") {
       for (const tag of selected.tags ?? []) {
         const tagDelta = teamConfig.tag_deltas[tag];
         if (!tagDelta) continue;
@@ -265,6 +321,70 @@ export function scoreInterview(
     band,
     borderlineCoinflip,
     details,
+  };
+}
+
+/**
+ * Derives a unified InterviewOutcome from raw scoring results.
+ * Maps metrics → the contract that StoryInterview, generateOffers, and the
+ * INIT_NEW_GAME_FROM_STORY reducer all consume.
+ */
+export function deriveInterviewOutcome(
+  result: InterviewScoreResult,
+  _teamConfig: TeamConfig,
+): InterviewOutcome {
+  const m = result.metrics;
+  const ownerApproval = clamp(Math.round(m.owner_approval ?? 50), 0, 100);
+  const gmApproval = clamp(Math.round(m.gm_approval ?? 50), 0, 100);
+  const schemeScore = clamp(Math.round(m.stability_score ?? m.authority_score ?? 50), 0, 100);
+  const mediaScore = clamp(Math.round(m.media_score ?? 50), 0, 100);
+
+  // Derive autonomy grant: high combined score unlocks more operational freedom
+  const avgScore = (ownerApproval + gmApproval + schemeScore) / 3;
+  let autonomyGrant = 60;
+  let salaryBand: InterviewOutcome["salaryBand"] = "MID";
+  if (result.band === "HIRED") {
+    if (avgScore >= 80) { autonomyGrant = 85; salaryBand = "PREMIUM"; }
+    else if (avgScore >= 70) { autonomyGrant = 75; salaryBand = "HIGH"; }
+    else if (avgScore >= 60) { autonomyGrant = 65; salaryBand = "MID"; }
+    else { autonomyGrant = 58; salaryBand = "LOW"; }
+  } else {
+    autonomyGrant = 55;
+    salaryBand = "LOW";
+  }
+
+  // Leash length derived from owner approval and stability
+  const stabilityBonus = clamp(Math.round((m.stability_score ?? 50) - 50) / 10, -1, 2);
+  const leashLength = clamp(Math.round(2 + stabilityBonus + (ownerApproval >= 70 ? 1 : 0) + (result.band === "HIRED" ? 1 : 0)), 1, 5);
+
+  // Profile scores from available metrics
+  const profileScores: InterviewOutcome["profileScores"] = {
+    authority: clamp(Math.round(m.authority_score ?? 50), 0, 100),
+    continuity: clamp(Math.round(m.continuity_score ?? m.continuity ?? 50), 0, 100),
+    riskTolerance: clamp(Math.round(m.aggression_score ?? 50), 0, 100),
+    rebuildClarity: clamp(Math.round(m.rebuild_clarity ?? 50), 0, 100),
+    discipline: clamp(Math.round(m.discipline_score ?? m.discipline ?? 50), 0, 100),
+  };
+
+  const reasons: string[] = [];
+  if (ownerApproval >= 70) reasons.push(`Strong owner alignment (${ownerApproval})`);
+  if (gmApproval >= 70) reasons.push(`GM confidence high (${gmApproval})`);
+  if (ownerApproval < 50) reasons.push(`Owner alignment below threshold (${ownerApproval})`);
+  if (gmApproval < 50) reasons.push(`GM trust insufficient (${gmApproval})`);
+  if (result.chemistryDelta > 0) reasons.push('Chemistry bonus applied');
+
+  return {
+    band: result.band,
+    ownerApproval,
+    gmApproval,
+    schemeScore,
+    mediaScore,
+    autonomyGrant,
+    leashLength,
+    salaryBand,
+    gates: result.gateReasons,
+    reasons,
+    profileScores,
   };
 }
 

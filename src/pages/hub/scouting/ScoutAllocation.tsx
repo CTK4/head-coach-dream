@@ -40,14 +40,16 @@ export default function ScoutAllocation() {
                 <div className="font-semibold">{g}</div>
                 <div className="flex items-center gap-2">
                   <button
-                    className="rounded border border-white/10 px-3 py-1"
+                    className="rounded border border-white/10 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={v <= 0}
                     onClick={() => dispatch({ type: "SCOUT_ALLOC_ADJ", payload: { group: g, delta: -2 } })}
                   >
                     -
                   </button>
                   <div className="w-10 text-center">{v}</div>
                   <button
-                    className="rounded border border-white/10 px-3 py-1"
+                    className="rounded border border-white/10 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={remaining < 2}
                     onClick={() => dispatch({ type: "SCOUT_ALLOC_ADJ", payload: { group: g, delta: 2 } })}
                   >
                     +

@@ -26,7 +26,7 @@ export function updateMedia(state: GameState): GameState {
     id: `MEDIA_${state.season}_${state.week ?? 0}`,
     title,
     body,
-    createdAt: Date.now(),
+    createdAt: state.season * 10_000 + (state.week ?? 0) * 100,
     category: 'MEDIA',
   };
   return {

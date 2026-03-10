@@ -31,4 +31,5 @@ export type SeasonSummary = {
   lockerRoomCred: number;
   volatilityEvents: number;
   archetypeId: string;
+  leagueAwards?: Partial<Record<"MVP"|"OPOY"|"DPOY"|"ROY"|"COY", string>>;
 };

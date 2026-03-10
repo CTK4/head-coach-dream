@@ -2,14 +2,16 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, Users, Search, Briefcase, Lightbulb, Handshake, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGame } from "@/context/GameContext";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 
 export function BottomNav() {
   const { state } = useGame();
   const location = useLocation();
   const path = location.pathname;
-  const isFreeAgency = state.careerStage === "FREE_AGENCY";
+  const phase = getUnifiedPhase(state);
+  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency");
   const isResign = state.careerStage === "RESIGN";
-  const isRegularSeason = state.careerStage === "REGULAR_SEASON";
+  const isRegularSeason = phase === "REGULAR_SEASON";
 
   const isActive = (route: string) => {
     if (route === "/hub" && path === "/hub") return true;

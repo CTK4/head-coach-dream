@@ -68,6 +68,7 @@ export default function AssistantHiring() {
   const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
   const [offerYears, setOfferYears] = useState(2);
   const [offerSalaryValue, setOfferSalaryValue] = useState(0);
+  const [negotiatingOfferId, setNegotiatingOfferId] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.assistantStaff[activeRole]) setActiveRole(firstUnfilled);
@@ -181,8 +182,16 @@ export default function AssistantHiring() {
 
   const openOfferEditor = (candidate: Cand) => {
     setEditingCandidateId(candidate.p.personId);
+    setNegotiatingOfferId(null);
     setOfferYears(2);
     setOfferSalaryValue(candidate.salary);
+  };
+
+  const openCounterRevision = (candidate: Cand, offerId: string, years: number, salary: number) => {
+    setEditingCandidateId(candidate.p.personId);
+    setNegotiatingOfferId(offerId);
+    setOfferYears(years);
+    setOfferSalaryValue(salary);
   };
 
   const submitOffer = (personId: string) => {
@@ -195,11 +204,16 @@ export default function AssistantHiring() {
       return;
     }
 
-    dispatch({
-      type: "CREATE_STAFF_OFFER",
-      payload: { roleType: "ASSISTANT", role: activeRole, personId, years: offerYears, salary: offerSalaryValue },
-    });
+    if (negotiatingOfferId) {
+      dispatch({ type: "STAFF_COUNTER_OFFER", payload: { offerId: negotiatingOfferId, years: offerYears, salary: offerSalaryValue } });
+    } else {
+      dispatch({
+        type: "CREATE_STAFF_OFFER",
+        payload: { roleType: "ASSISTANT", role: activeRole, personId, years: offerYears, salary: offerSalaryValue },
+      });
+    }
     setEditingCandidateId(null);
+    setNegotiatingOfferId(null);
   };
 
   const handleContinue = () => {
@@ -285,7 +299,7 @@ export default function AssistantHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="mt-1 text-xs text-muted-foreground">Offer Level: {LEVEL_LABEL[level]}</div>
-            <div className="text-xs text-muted-foreground">Counter-offers are not interactive yet (stubbed for a future update).</div>
+            <div className="text-xs text-muted-foreground">Counter-offers require your decision (accept, reject, or revise once).</div>
           </div>
         </div>
 
@@ -313,11 +327,44 @@ export default function AssistantHiring() {
                           Rep {repNumber(c.p)} · Suggested {money(c.salary)} · Expected {money(c.exp)} {c.safety ? "· Safety" : ""} {c.emergency ? "· Emergency" : ""}
                         </div>
                         {latest?.status === "REJECTED" ? <div className="text-xs text-amber-300">{latest.reason}</div> : null}
+                        {latest?.status === "COUNTERED" && latest.counterProposal ? (
+                          <div className="text-xs text-sky-300">
+                            Counter: {latest.counterProposal.years}y @ {money(latest.counterProposal.salary)} {latest.revisionCount ? `(revised ${latest.revisionCount}x)` : ""}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                    <Button onClick={() => openOfferEditor(c)} disabled={roleAlreadyFilled}>
-                      Create Offer
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => openOfferEditor(c)} disabled={roleAlreadyFilled || latest?.status === "COUNTERED"}>
+                        Create Offer
+                      </Button>
+                      {latest?.status === "COUNTERED" && latest.counterProposal ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => dispatch({ type: "STAFF_COUNTER_OFFER_RESPONSE", payload: { offerId: latest.id, accepted: true } })}
+                            disabled={roleAlreadyFilled}
+                          >
+                            Accept Counter
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => dispatch({ type: "STAFF_COUNTER_OFFER_RESPONSE", payload: { offerId: latest.id, accepted: false } })}
+                          >
+                            Reject Counter
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openCounterRevision(c, latest.id, latest.counterProposal.years, latest.counterProposal.salary)}
+                            disabled={(latest.revisionCount ?? 0) >= 1 || roleAlreadyFilled}
+                          >
+                            Revise & Resubmit
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
 
                   {isEditing ? (
@@ -345,9 +392,9 @@ export default function AssistantHiring() {
                         />
                       </label>
                       <Button size="sm" onClick={() => submitOffer(c.p.personId)} disabled={offerSalaryValue <= 0}>
-                        Submit Offer
+                        {negotiatingOfferId === latest?.id ? "Submit Revision" : "Submit Offer"}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingCandidateId(null)}>
+                      <Button size="sm" variant="ghost" onClick={() => { setEditingCandidateId(null); setNegotiatingOfferId(null); }}>
                         Cancel
                       </Button>
                     </div>

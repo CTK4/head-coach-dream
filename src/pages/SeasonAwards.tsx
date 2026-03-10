@@ -21,6 +21,30 @@ function playoffBadge(result: string): { label: string; className: string } {
   return { label: "MISSED PLAYOFFS", className: "bg-slate-500/20 text-slate-300 border-slate-500/40" };
 }
 
+
+function LeagueAwardsCard({ awards }: { awards: Partial<Record<"MVP"|"OPOY"|"DPOY"|"ROY"|"COY", string>> }) {
+  const meta: Array<[keyof typeof awards, string, string]> = [
+    ["MVP", "🏆", "MVP"],
+    ["OPOY", "⚡", "OPOY"],
+    ["DPOY", "🛡️", "DPOY"],
+    ["ROY", "⭐", "ROY"],
+    ["COY", "🎯", "COY"],
+  ];
+  return (
+    <Card className="border-slate-700 bg-slate-900/70">
+      <CardHeader><CardTitle className="text-base">League Awards</CardTitle></CardHeader>
+      <CardContent className="space-y-2">
+        {meta.filter(([k]) => !!awards[k]).map(([k, icon, label]) => (
+          <div key={String(k)} className="flex items-center justify-between rounded border border-slate-700 bg-slate-800/60 px-3 py-2">
+            <span className="text-sm text-slate-200">{icon} {label}</span>
+            <span className="text-sm font-semibold text-indigo-200">{awards[k]}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SeasonAwards() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
@@ -107,6 +131,8 @@ export default function SeasonAwards() {
             </CardContent>
           </Card>
         </div>
+
+        {summary.leagueAwards && Object.keys(summary.leagueAwards).length > 0 ? <LeagueAwardsCard awards={summary.leagueAwards} /> : null}
 
         <Card className={`border-slate-700 bg-slate-900/70 transition-all duration-500 ${showBottom ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`}>
           <CardHeader><CardTitle className="text-base">Reputation Movement</CardTitle></CardHeader>

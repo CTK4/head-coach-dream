@@ -16,6 +16,7 @@ export const CAREER_STAGE_ORDER: CareerStage[] = [
   "PRESEASON",
   "CUTDOWNS",
   "REGULAR_SEASON",
+  "PLAYOFFS",
 ];
 
 export function nextCareerStage(stage: CareerStage): CareerStage {
@@ -54,6 +55,8 @@ export function stageToRoute(stage: CareerStage): string {
       return "/hub/cutdowns";
     case "REGULAR_SEASON":
       return "/hub/regular-season";
+    case "PLAYOFFS":
+      return "/hub/playoffs";
     default:
       return "/hub";
   }
@@ -96,6 +99,8 @@ export function stageLabel(stage: CareerStage): string {
       return "Cutdowns";
     case "REGULAR_SEASON":
       return "Regular Season";
+    case "PLAYOFFS":
+      return "Playoffs";
     default:
       return stage.replace(/_/g, " ");
   }
