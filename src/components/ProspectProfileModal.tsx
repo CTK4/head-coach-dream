@@ -61,9 +61,9 @@ export function ProspectProfileModal({
       : null;
 
 
-  const interviewResults = prospectId ? scoutingState?.interviews.resultsByProspectId?.[prospectId] ?? [] : [];
-  const medicalResult = prospectId ? scoutingState?.medical.resultsByProspectId?.[prospectId] : undefined;
-  const workoutResult = prospectId ? scoutingState?.workouts.resultsByProspectId?.[prospectId] : undefined;
+  const interviewResults = prospectId ? scoutingState?.interviews?.resultsByProspectId?.[prospectId] ?? [] : [];
+  const medicalResult = prospectId ? scoutingState?.medical?.resultsByProspectId?.[prospectId] : undefined;
+  const workoutResult = prospectId ? scoutingState?.workouts?.resultsByProspectId?.[prospectId] : undefined;
 
   const blurbs = [
     fmt(firstValue(source, ["blurb", "summary", "description"])),
