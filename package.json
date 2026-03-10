@@ -23,7 +23,9 @@
     "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:build:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:build:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
-    "check:determinism": "node scripts/checkDeterminismTripwire.mjs"
+    "check:determinism": "node scripts/checkDeterminismTripwire.mjs",
+    "lint:changed": "node scripts/lintChangedFiles.mjs",
+    "test:lint:changed": "node --test scripts/lintChangedFilesLib.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
