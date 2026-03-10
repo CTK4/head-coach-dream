@@ -164,7 +164,6 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
     return { ok: false, code: "INVALID_WEEK", message: "Week value is invalid." };
   }
 
-  const teamId = getUserTeamId(state as GameState);
   const teamId = getUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };
