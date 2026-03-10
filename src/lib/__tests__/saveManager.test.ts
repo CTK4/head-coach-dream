@@ -328,4 +328,119 @@ describe("saveManager", () => {
     expect((migrated.playerAttrOverrides as any)["player-1"].jerseyNumber).toBe(22);
   });
 
+  it("allocateSaveId skips existing ids when counter is missing or stale", () => {
+    const rows = [
+      {
+        saveId: "career-1",
+        storageKey: "hc_career_save__career-1",
+        coachName: "Coach 1",
+        teamName: "Team",
+        season: 2026,
+        week: 1,
+        record: { wins: 0, losses: 0 },
+        lastPlayed: 1,
+        careerStage: "OFFSEASON_HUB",
+      },
+      {
+        saveId: "career-2",
+        storageKey: "hc_career_save__career-2",
+        coachName: "Coach 2",
+        teamName: "Team",
+        season: 2026,
+        week: 1,
+        record: { wins: 0, losses: 0 },
+        lastPlayed: 2,
+        careerStage: "OFFSEASON_HUB",
+      },
+      {
+        saveId: "career-3",
+        storageKey: "hc_career_save__career-3",
+        coachName: "Coach 3",
+        teamName: "Team",
+        season: 2026,
+        week: 1,
+        record: { wins: 0, losses: 0 },
+        lastPlayed: 3,
+        careerStage: "OFFSEASON_HUB",
+      },
+    ];
+    storage.setItem("hc_career_saves_index", JSON.stringify(rows));
+    storage.setItem("hc_career_save_id_counter", "1");
+
+    const next = saveManager.allocateSaveId("career");
+    expect(next).toBe("career-4");
+  });
+
+
+
+
+  it("syncCurrentSave allocates a real slot when state has transient save id", () => {
+    storage.setItem("hc_career_active_save_id", "career-9");
+    storage.setItem("hc_career_save__career-9", JSON.stringify({ saveId: "career-9", season: 2029 }));
+    const state = { ...baseState, schemaVersion: 1, saveId: "transient-career-1", season: 2033 } as any;
+
+    saveManager.syncCurrentSave(state);
+
+    expect(storage.getItem("hc_career_save__transient-career-1")).toBeNull();
+    expect(storage.getItem("hc_career_save__career-9")).toBe(JSON.stringify({ saveId: "career-9", season: 2029 }));
+    const activeId = storage.getItem("hc_career_active_save_id");
+    expect(activeId).toMatch(/^career-\d+$/);
+    expect(activeId).not.toBe("career-9");
+    const persisted = JSON.parse(storage.getItem(`hc_career_save__${activeId}`) ?? "null");
+    expect(persisted?.saveId).toBe(activeId);
+    expect(persisted?.season).toBe(2033);
+
+    const index = JSON.parse(storage.getItem("hc_career_saves_index") ?? "[]");
+    expect(index.some((row: any) => row.saveId === "transient-career-1")).toBe(false);
+  });
+
+  it("syncCurrentSave ignores placeholder active save id and allocates a real slot", () => {
+    storage.setItem("hc_career_active_save_id", "unslotted-initial-state");
+    const state = { ...baseState, schemaVersion: 1, saveId: "unslotted-initial-state", season: 2032 } as any;
+
+    saveManager.syncCurrentSave(state);
+
+    expect(storage.getItem("hc_career_save__unslotted-initial-state")).toBeNull();
+    const nextActive = storage.getItem("hc_career_active_save_id");
+    expect(nextActive).toMatch(/^career-\d+$/);
+
+    const persisted = JSON.parse(storage.getItem(`hc_career_save__${nextActive}`) ?? "null");
+    expect(persisted?.saveId).toBe(nextActive);
+    expect(persisted?.season).toBe(2032);
+
+    const index = JSON.parse(storage.getItem("hc_career_saves_index") ?? "[]");
+    expect(index.some((row: any) => row.saveId === "unslotted-initial-state")).toBe(false);
+  });
+
+  it("syncCurrentSave never persists unslotted placeholder id", () => {
+    storage.setItem("hc_career_active_save_id", "career-7");
+    storage.setItem("hc_career_save__career-7", JSON.stringify({ saveId: "career-7", season: 2027 }));
+    const state = { ...baseState, schemaVersion: 1, saveId: "unslotted-initial-state", season: 2031 } as any;
+
+    saveManager.syncCurrentSave(state);
+
+    expect(storage.getItem("hc_career_save__unslotted-initial-state")).toBeNull();
+    expect(storage.getItem("hc_career_save__career-7")).toBe(JSON.stringify({ saveId: "career-7", season: 2027 }));
+    const activeId = storage.getItem("hc_career_active_save_id");
+    expect(activeId).toMatch(/^career-\d+$/);
+    expect(activeId).not.toBe("career-7");
+    const persisted = JSON.parse(storage.getItem(`hc_career_save__${activeId}`) ?? "null");
+    expect(persisted?.saveId).toBe(activeId);
+    expect(persisted?.season).toBe(2031);
+  });
+
+  it("syncCurrentSave prefers state.saveId over active save id", () => {
+    storage.setItem("hc_career_active_save_id", "career-1");
+    const state = { ...baseState, schemaVersion: 1, saveId: "career-2", season: 2030 } as any;
+
+    saveManager.syncCurrentSave(state);
+
+    const savedNew = JSON.parse(storage.getItem("hc_career_save__career-2") ?? "null");
+    const savedOld = storage.getItem("hc_career_save__career-1");
+    expect(savedNew?.saveId).toBe("career-2");
+    expect(savedNew?.season).toBe(2030);
+    expect(savedOld).toBeNull();
+    expect(storage.getItem("hc_career_active_save_id")).toBe("career-2");
+  });
+
 });

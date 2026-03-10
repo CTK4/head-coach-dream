@@ -7,6 +7,7 @@ import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/
 import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassIds";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import type { DraftState, GameState, OffseasonData, OffseasonState } from "@/context/GameContext";
+import { deriveSaveSeedFromState } from "@/context/state/seedPolicy";
 import type { CareerStage } from "@/types/careerStage";
 
 interface MigrateSaveDependencies {
@@ -46,8 +47,8 @@ export function ensureLeagueGmMap(state: GameState): GameState {
 export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDependencies): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   // Preserve the existing saveSeed to ensure deterministic simulation replay.
-  // If missing, generate a new one using a deterministic method.
-  const saveSeed = oldState.saveSeed ?? (Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647);
+  // If missing, derive one from persisted legacy fields.
+  const saveSeed = deriveSaveSeedFromState(oldState);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? deps.createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
