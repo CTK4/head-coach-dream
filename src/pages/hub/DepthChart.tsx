@@ -763,8 +763,8 @@ export default function DepthChart() {
                               </Badge>
                             </div>
                           </div>
-                        );
-                      })}
+                      );
+                    })}
                     </CardContent>
                   </Card>
                 ))}
