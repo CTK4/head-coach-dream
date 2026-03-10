@@ -159,7 +159,7 @@ import { applyDevGate, type DevGate } from "@/dev/applyDevGate";
 import { runDevAction, type DevAction } from "@/dev/runDevAction";
 import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
-import { getActiveSaveId } from "@/lib/saveManager";
+import { allocateSaveId, getActiveSaveId, setActiveSaveId } from "@/lib/saveManager";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
@@ -182,6 +182,7 @@ import { useGamePersistence } from "@/context/persistence/useGamePersistence";
 import { reduceRecoveryCases } from "@/context/recovery/recoveryReducerCases";
 import { loadStateFromStorage } from "@/context/boot/loadState";
 import { DEFAULT_DETERMINISTIC_COUNTERS } from "@/context/state/defaults/deterministicCounters";
+import { deriveSaveSeedFromIdentity } from "@/context/state/seedPolicy";
 import { createInitialCoachingState } from "@/context/state/defaults/coaching";
 import { createInitialDraftState } from "@/context/state/defaults/draft";
 import { defaultDynastyProfile } from "@/context/state/defaults/dynasty";
@@ -1753,12 +1754,28 @@ function seedFor(leagueSeed: number, a: number, b: number, c: number): number {
   return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
 }
 
-function createInitialState(): GameState {
+
+
+let transientCareerIdCounter = 0;
+
+function isPersistableCareerSaveId(saveId: string): boolean {
+  return saveId !== "unslotted-initial-state" && !saveId.startsWith("transient-career-");
+}
+
+function allocateFreshCareerSaveId(): string {
+  try {
+    return allocateSaveId("career");
+  } catch {
+    transientCareerIdCounter += 1;
+    return `transient-career-${transientCareerIdCounter}`;
+  }
+}
+
+function createInitialState(saveIdInput?: string): GameState {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
-  // Use a deterministic seed derived from current time and a random component.
-  // This ensures reproducibility while avoiding collisions across multiple saves.
-  const saveSeed = Math.floor(Date.now() * 1000 + Math.random() * 1000000) % 2147483647;
   const season = 2026;
+  const saveId = saveIdInput ?? "unslotted-initial-state";
+  const saveSeed = deriveSaveSeedFromIdentity({ saveId });
   const coachingMarketWeekKey = toWeekKey(season, 0);
   const offseasonStepId = OFFSEASON_STEPS[0].id;
   const news = defaultNews(season);
@@ -1788,6 +1805,7 @@ function createInitialState(): GameState {
     week: 1,
     schemaVersion: 1,
     saveVersion: CURRENT_SAVE_VERSION,
+    saveId,
     configVersion: DEFAULT_CONFIG_VERSION,
     calibrationPackId: DEFAULT_CALIBRATION_PACK_ID,
     memoryLog: [],
@@ -5017,7 +5035,15 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "INIT_NEW_GAME_FROM_STORY": {
       const isRehire = action.payload.isRehire === true;
       // For rehires, preserve career history and archetype; for new starts, use fresh state
-      const fresh = createInitialState();
+      const newSaveId = allocateFreshCareerSaveId();
+      const fresh = createInitialState(newSaveId);
+      if (isPersistableCareerSaveId(newSaveId)) {
+        try {
+          setActiveSaveId(newSaveId);
+        } catch (error) {
+          logError("save.active.update.failure", { saveId: newSaveId, phase: "CREATE", season: fresh.season, week: fresh.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+        }
+      }
       const base = isRehire ? { ...fresh, coach: state.coach, careerHistory: state.careerHistory } : fresh;
       const outcome = action.payload.interviewOutcome;
       // Persist autonomyGrant from interview outcome so downstream systems can read the hire contract
@@ -9459,8 +9485,19 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         },
       };
     }
-    case "RESET":
-      return createInitialState();
+    case "RESET": {
+      // RESET starts a fresh career in a new slot to avoid overwriting the prior save.
+      const newSaveId = allocateFreshCareerSaveId();
+      const fresh = createInitialState(newSaveId);
+      if (isPersistableCareerSaveId(newSaveId)) {
+        try {
+          setActiveSaveId(newSaveId);
+        } catch (error) {
+          logError("save.active.update.failure", { saveId: newSaveId, phase: "CREATE", season: fresh.season, week: fresh.week, meta: { message: error instanceof Error ? error.message : String(error) } });
+        }
+      }
+      return fresh;
+    }
     case "FA_WITHDRAW":
     case "FA_WITHDRAW_OFFER":
     case "FA_ACCEPT_OFFER":
