@@ -1,13 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { transformSync } from 'esbuild';
 
-const sourcePath = new URL('../src/engine/gameSim.ts', import.meta.url);
-const source = readFileSync(sourcePath, 'utf8');
+const filesToValidate = [
+  '../src/engine/gameSim.ts',
+  '../src/lib/migrations/saveSchema.ts',
+];
 
-try {
-  transformSync(source, { loader: 'ts', format: 'esm', sourcemap: false });
-  console.log('[validateGameSimSyntax] OK');
-} catch (error) {
-  console.error('[validateGameSimSyntax] FAILED');
-  throw error;
+for (const relativePath of filesToValidate) {
+  const sourcePath = new URL(relativePath, import.meta.url);
+  const source = readFileSync(sourcePath, 'utf8');
+
+  try {
+    transformSync(source, { loader: 'ts', format: 'esm', sourcemap: false });
+  } catch (error) {
+    console.error(`[validateGameSimSyntax] FAILED (${relativePath})`);
+    throw error;
+  }
 }
+
+console.log('[validateGameSimSyntax] OK');
