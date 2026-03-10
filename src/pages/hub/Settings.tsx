@@ -9,9 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { readSettings, writeSettings } from "@/lib/settings";
+import { exportDebugBundle } from "@/lib/debugBundle";
+import { getActiveSaveMetadata } from "@/lib/saveManager";
+import { logInfo } from "@/lib/logger";
 
 type SimSpeed = "SLOW" | "NORMAL" | "FAST";
-type Theme = "DARK" | "OLED";
+type Theme = "DARK" | "OLED" | "SYSTEM" | "LIGHT";
 
 type UserSettings = {
   simSpeed: SimSpeed;
@@ -21,9 +25,8 @@ type UserSettings = {
   reduceMotion: boolean;
   theme: Theme;
   useTop51CapRule: boolean;
+  showTooltips: boolean;
 };
-
-const SETTINGS_KEY = "hcd:settings";
 
 const DEFAULT_SETTINGS: UserSettings = {
   simSpeed: "NORMAL",
@@ -33,35 +36,44 @@ const DEFAULT_SETTINGS: UserSettings = {
   reduceMotion: false,
   theme: "DARK",
   useTop51CapRule: false,
+  showTooltips: true,
 };
 
-function readSettings(): UserSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<UserSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
-  } catch {
-    return DEFAULT_SETTINGS;
+const APP_STORAGE_PREFIXES = [
+  "hc_",
+  "hcd:",
+];
+
+const APP_STORAGE_LEGACY_KEYS = [
+  // Legacy keys that do not follow our current namespace prefixes but are still
+  // read during migration/back-compat flows.
+  "hapticsEnabled",
+  "show_main_menu",
+  "DEV_PANEL",
+];
+
+function clearStorageNamespace(storage: Storage, prefixes: string[], includeKeys: string[]) {
+  const keysToDelete: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (!key) continue;
+    if (prefixes.some((prefix) => key.startsWith(prefix)) || includeKeys.includes(key)) {
+      keysToDelete.push(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    storage.removeItem(key);
   }
 }
 
-function writeSettings(settings: UserSettings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    // ignore
-  }
+export function clearAppOwnedStorage(local: Storage, session: Storage) {
+  clearStorageNamespace(local, APP_STORAGE_PREFIXES, APP_STORAGE_LEGACY_KEYS);
+  clearStorageNamespace(session, APP_STORAGE_PREFIXES, APP_STORAGE_LEGACY_KEYS);
 }
 
 function hardResetApp() {
   try {
-    localStorage.clear();
-  } catch {
-    // ignore
-  }
-  try {
-    sessionStorage.clear();
+    clearAppOwnedStorage(localStorage, sessionStorage);
   } catch {
     // ignore
   }
@@ -97,8 +109,9 @@ export default function SettingsPage() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
 
-  const [settings, setSettings] = useState<UserSettings>(() => readSettings());
+  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettings() }));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [quitOpen, setQuitOpen] = useState(false);
 
   const seasonLabel = useMemo(() => `${state.season}`, [state.season]);
 
@@ -148,8 +161,20 @@ export default function SettingsPage() {
                   <Button variant="secondary" onClick={() => navigate("/hub")}>
                     Back to Hub
                   </Button>
+                  <Button variant="outline" onClick={() => setQuitOpen(true)}>
+                    Main Menu
+                  </Button>
                   <Button variant="outline" onClick={resetToDefaults}>
                     Reset Preferences
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
+                      logInfo("debug.bundle.export", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week });
+                    }}
+                  >
+                    Export Debug Bundle
                   </Button>
                 </div>
               </div>
@@ -208,6 +233,14 @@ export default function SettingsPage() {
                 title="Message Popups"
                 description="Show popups for news and messages."
                 right={<Switch checked={settings.messagePopups} onCheckedChange={(checked) => update({ messagePopups: checked })} />}
+              />
+
+
+              <SettingRow
+                icon={<UtilityIcon name="Messages" className="h-5 w-5" />}
+                title="Badge Tooltips"
+                description="Show hint legends when hovering badge bubbles in Hub views."
+                right={<Switch checked={settings.showTooltips} onCheckedChange={(checked) => update({ showTooltips: checked })} />}
               />
 
               <SettingRow
@@ -286,6 +319,19 @@ export default function SettingsPage() {
               <Button variant="destructive" onClick={onResetConfirmed}>
                 Yes, Reset
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={quitOpen} onOpenChange={setQuitOpen}>
+          <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+            <DialogHeader>
+              <DialogTitle>Save and quit?</DialogTitle>
+              <DialogDescription className="text-slate-200/70">Return to main menu and keep this save available in Continue.</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setQuitOpen(false)}>Cancel</Button>
+              <Button onClick={() => { sessionStorage.setItem("show_main_menu", "1"); navigate("/"); }}>Save & Quit</Button>
             </div>
           </DialogContent>
         </Dialog>

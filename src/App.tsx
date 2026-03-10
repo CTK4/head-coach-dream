@@ -1,12 +1,17 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import HallOfFame from "@/pages/hub/HallOfFame";
+import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { GameProvider, useGame } from "@/context/GameContext";
+import { Suspense, lazy, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
+import { GameProvider, useGame, type GameState } from "@/context/GameContext";
+import { exportDebugBundle } from "@/lib/debugBundle";
+import { getActiveSaveMetadata } from "@/lib/saveManager";
+import { logError } from "@/lib/logger";
 import CreateCoach from "./pages/CreateCoach";
 import ChooseBackground from "./pages/ChooseBackground";
-import Interviews from "./pages/Interviews";
 import Offers from "./pages/Offers";
 import CoordinatorHiring from "./pages/CoordinatorHiring";
 import Hub from "./pages/Hub";
@@ -29,37 +34,67 @@ import MedicalBoard from "@/pages/hub/scouting/MedicalBoard";
 import ScoutAllocation from "@/pages/hub/scouting/ScoutAllocation";
 import InSeasonScouting from "@/pages/hub/scouting/InSeasonScouting";
 import { FreeAgencyRoutes, ProspectProfileScreen, ReSignRoutes, TradesRoutes } from "@/pages/hub/PhaseSubsystemRoutes";
-
-// Import other pages that might be needed or were present
-import Draft from "@/pages/hub/offseason/Draft";
 import DraftResults from "@/pages/hub/DraftResults";
-import TrainingCamp from "./pages/hub/TrainingCamp";
-import Cutdowns from "./pages/hub/Cutdowns";
+import FreeAgencyRecap from "@/pages/hub/FreeAgencyRecap";
 import PreseasonWeek from "./pages/hub/PreseasonWeek";
 import RegularSeason from "./pages/hub/RegularSeason";
 import Playcall from "./pages/Playcall";
-import PlayerProfile from "./pages/hub/PlayerProfile";
 import TradesPage from "./pages/hub/Trades";
 import ReSignPage from "./pages/hub/ReSign";
-import CapProjection from "@/pages/hub/CapProjection";
-import TagCenter from "./pages/hub/TagCenter";
-import DeadMoney from "./pages/hub/DeadMoney";
-import Development from "./pages/hub/Development";
-import InjuryReport from "./pages/hub/InjuryReport";
+import CapBaseline from "./pages/hub/CapBaseline";
+import SkillTree from "@/pages/SkillTree";
+import StatsPage from "./pages/hub/Stats";
+import TeamStrategy from "./pages/hub/TeamStrategy";
+import OwnerRelations from "./pages/hub/OwnerRelations";
+import ActivityLog from "./pages/hub/ActivityLog";
+import PressFeedbackDemo from "./pages/PressFeedbackDemo";
+import FrontOffice from "@/pages/hub/FrontOffice";
+import CoachOfficeRoutes from "@/pages/hub/CoachOfficeRoutes";
+import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
+import Landing from "@/pages/Landing";
+import LoadSave from "@/pages/LoadSave";
+import SaveModeSelect from "@/pages/SaveModeSelect";
+import StoryInterview from "@/pages/story/StoryInterview";
+import FiredScreen from "@/pages/FiredScreen";
+import FreePlaySetup from "@/pages/FreePlaySetup";
+import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ROUTES } from "@/routes/appRoutes";
+import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
+import { getUserTeamId } from "@/lib/userTeam";
+import PlayoffsPage from "@/pages/hub/Playoffs";
+import GameplanPage from "@/pages/hub/Gameplan";
+import PlayoffBracketPage from "@/pages/hub/PlayoffBracket";
+import PlayoffGamePage from "@/pages/hub/PlayoffGame";
+import GameDetails from "@/pages/hub/schedule/GameDetails";
+import TeamSchedule from "@/pages/hub/schedule/TeamSchedule";
+import WeekSlate from "@/pages/hub/schedule/WeekSlate";
+import ScheduleHome from "@/pages/hub/schedule/ScheduleHome";
+import AnalyticsPage from "@/pages/hub/Analytics";
+import RecoveryModePage from "@/pages/RecoveryModePage";
 
 const queryClient = new QueryClient();
+const shouldEnableDevPanel = DEV_TOOLS_ENABLED;
+const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : null;
+
+export const isDevPanelEnabled = (env: DevToolsEnv) => isDevToolsEnabled(env);
+
+export function DevPanelMount({
+  env,
+  PanelComponent,
+}: {
+  env: DevToolsEnv;
+  PanelComponent: React.ComponentType;
+}) {
+  if (!isDevPanelEnabled(env)) return null;
+  const Panel = PanelComponent;
+  return <Panel />;
+}
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
   if (!requiredPhase.includes(state.phase)) {
-    const phaseRoutes: Record<string, string> = {
-      CREATE: "/",
-      BACKGROUND: "/background",
-      INTERVIEWS: "/interviews",
-      OFFERS: "/offers",
-      COORD_HIRING: "/coordinators",
-      HUB: "/hub",
-    };
+    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators", HUB: "/hub" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
   return <>{children}</>;
@@ -68,96 +103,120 @@ function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; req
 function HubGate({ children }: { children: React.ReactNode }) {
   const { state } = useGame();
   if (state.phase !== "HUB") {
-    const phaseRoutes: Record<string, string> = {
-      CREATE: "/",
-      BACKGROUND: "/background",
-      INTERVIEWS: "/interviews",
-      OFFERS: "/offers",
-      COORD_HIRING: "/coordinators",
-    };
+    const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
+  }
+  // Redirect fired coaches away from hub to the fired/rehiring flow
+  if (state.careerStage === "FIRED") return <Navigate to="/fired" replace />;
+  if (state.careerStage === "REHIRING") return <Navigate to={ROUTES.storyInterview} replace />;
+  return <>{children}</>;
+}
+
+function LegacyHubScoutingRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/scouting/${wildcard}` : "/scouting"} replace />;
+}
+
+function LegacyHubOffseasonRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/offseason/${wildcard}` : "/offseason"} replace />;
+}
+
+function LegacyHubPlayerRedirect() {
+  const { playerId } = useParams();
+  return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />;
+}
+
+function OnboardingRouteGuard({ children }: { children: React.ReactNode }) {
+  const { state } = useGame();
+  const hasStoryLock = state.storySetup?.teamLocked === true;
+  if (!hasStoryLock && !state.acceptedOffer) {
+    return <Navigate to={ROUTES.saveMode} replace />;
   }
   return <>{children}</>;
 }
 
-// Scouting Routes Wrapper
-function ScoutingRoutes() {
-    return (
-        <Routes>
-             <Route element={<ScoutingLayout />}>
-                <Route index element={<ScoutingHome />} />
-                <Route path="big-board" element={<BigBoard />} />
-                <Route path="combine" element={<ScoutingCombine />} />
-                <Route path="prospect/:prospectId" element={<ProspectProfileScreen />} />
-                <Route path="private-workouts" element={<PrivateWorkouts />} />
-                <Route path="workouts" element={<PrivateWorkouts />} />
-                <Route path="interviews" element={<ScoutingInterviews />} />
-                <Route path="medical" element={<MedicalBoard />} />
-                <Route path="allocation" element={<ScoutAllocation />} />
-                <Route path="in-season" element={<InSeasonScouting />} />
-             </Route>
-        </Routes>
-    )
+function RootEntry() {
+  const { state } = useGame();
+  const showMenu = typeof window !== "undefined" && sessionStorage.getItem("show_main_menu") === "1";
+  if (showMenu) {
+    sessionStorage.removeItem("show_main_menu");
+    return <Landing />;
+  }
+  if (shouldRouteRootToHub(state)) return <Navigate to="/hub" replace />;
+  return <Landing />;
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <GameProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate>} />
-            <Route path="/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
-            <Route path="/interviews" element={<PhaseGate requiredPhase={["INTERVIEWS"]}><Interviews /></PhaseGate>} />
-            <Route path="/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
-            <Route path="/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
+export function shouldRouteRootToHub(state: Parameters<typeof getUserTeamId>[0]) {
+  return state.phase === "HUB" && !!state.coach?.name && !!state.careerStage && !!getUserTeamId(state);
+}
 
-            {/* Hub Routes wrapped in AppShell and HubGate */}
-            <Route element={<HubGate><AppShell /></HubGate>}>
-              <Route path="/hub" element={<Hub />} />
-              <Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} />
-              <Route path="/staff/*" element={<StaffRoutes />} />
-              <Route path="/roster/*" element={<RosterRoutes />} />
-              <Route path="/contracts/*" element={<ContractsRoutes />} />
-              <Route path="/strategy/*" element={<StrategyRoutes />} />
-              <Route path="/hub/scouting/*" element={<ScoutingRoutes />} />
-              <Route path="/scouting/*" element={<Navigate to="/hub/scouting" replace />} />
-              <Route path="/hub/offseason/*" element={<OffseasonRoutes />} />
-              <Route path="/news" element={<LeagueNews />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/free-agency/*" element={<FreeAgencyRoutes />} />
-              <Route path="/re-sign/*" element={<ReSignRoutes />} />
-              <Route path="/trades/*" element={<TradesRoutes />} />
+export function shouldRenderRecoveryMode(state: Pick<GameState, "recoveryNeeded">) {
+  return state.recoveryNeeded === true;
+}
 
-              <Route path="/hub/trades" element={<TradesPage />} />
-              <Route path="/hub/re-sign" element={<ReSignPage />} />
+function StoryRouteShell() {
+  const [storyError, setStoryError] = useState<Error | null>(null);
+  return <ErrorBoundary fallback={<StoryErrorScreen error={storyError} />} onError={(error) => setStoryError(error)}><StoryInterview /></ErrorBoundary>;
+}
 
-              <Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
-              
-              {/* Other legacy/specific routes that might not fit the main buckets yet but need to be accessible */}
-               <Route path="/hub/draft" element={<Draft />} />
-               <Route path="/hub/draft-results" element={<DraftResults />} />
-               <Route path="/hub/training-camp" element={<TrainingCamp />} />
-               <Route path="/hub/cutdowns" element={<Cutdowns />} />
-               <Route path="/hub/preseason" element={<PreseasonWeek />} />
-               <Route path="/hub/regular-season" element={<RegularSeason />} />
-               <Route path="/hub/playcall" element={<Playcall />} />
-               <Route path="/hub/player/:playerId" element={<PlayerProfile />} />
-               <Route path="/hub/cap-projection" element={<CapProjection />} />
-               <Route path="/hub/tag-center" element={<TagCenter />} />
-               <Route path="/hub/dead-money" element={<DeadMoney />} />
-               <Route path="/hub/development" element={<Development />} />
-               <Route path="/hub/injury-report" element={<InjuryReport />} />
-            </Route>
+function ScoutingRoutes() {
+  return <Routes><Route element={<ScoutingLayout />}><Route index element={<ScoutingHome />} /><Route path="big-board" element={<BigBoard />} /><Route path="combine" element={<ScoutingCombine />} /><Route path="prospect/:prospectId" element={<ProspectProfileScreen />} /><Route path="private-workouts" element={<PrivateWorkouts />} /><Route path="workouts" element={<Navigate to="/scouting/private-workouts" replace />} /><Route path="interviews" element={<ScoutingInterviews />} /><Route path="medical" element={<MedicalBoard />} /><Route path="allocation" element={<ScoutAllocation />} /><Route path="in-season" element={<InSeasonScouting />} /></Route></Routes>;
+}
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </GameProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+function AppRoutes() {
+  const { state, dispatch } = useGame();
+  const handleExportDebugBundle = () => exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
+  const handleResetToMainMenu = () => {
+    try { dispatch({ type: "RESET" }); } catch { /* no-op */ }
+    sessionStorage.setItem("show_main_menu", "1");
+    window.location.href = "/";
+  };
+
+  return <ErrorBoundary onExportDebugBundle={handleExportDebugBundle} onResetToMainMenu={handleResetToMainMenu} onError={(error, errorInfo) => logError("ui.app_routes.crash", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week, meta: { message: error.message, stack: errorInfo.componentStack?.slice(0, 1000) } })}>
+    <BrowserRouter>
+      {DevPanel ? <Suspense fallback={null}><DevPanel /></Suspense> : null}
+      <Routes>
+        <Route path="/onboarding" element={<OnboardingRouteGuard><PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate></OnboardingRouteGuard>} />
+        <Route path="/onboarding/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
+                <Route path="/onboarding/offers" element={<PhaseGate requiredPhase={["OFFERS"]}><Offers /></PhaseGate>} />
+        <Route path="/onboarding/coordinators" element={<PhaseGate requiredPhase={["COORD_HIRING"]}><CoordinatorHiring /></PhaseGate>} />
+        <Route path={ROUTES.root} element={<RootEntry />} />
+        <Route path={ROUTES.loadSave} element={<LoadSave />} />
+        <Route path={ROUTES.saveMode} element={<SaveModeSelect />} />
+        <Route path={ROUTES.storyInterview} element={<StoryRouteShell />} />
+        <Route path={ROUTES.freePlaySetup} element={<FreePlaySetup />} />
+        <Route path="/background" element={<Navigate to="/onboarding/background" replace />} />
+                <Route path="/offers" element={<Navigate to="/onboarding/offers" replace />} />
+        <Route path="/coordinators" element={<Navigate to="/onboarding/coordinators" replace />} />
+        <Route element={<HubGate><AppShell /></HubGate>}>
+          <Route path="/hub" element={<Hub />} /><Route path="/staff/*" element={<StaffRoutes />} /><Route path="/roster/*" element={<RosterRoutes />} /><Route path="/contracts/*" element={<ContractsRoutes />} /><Route path="/strategy/*" element={<StrategyRoutes />} /><Route path="/scouting/*" element={<ScoutingRoutes />} />
+          <Route path="/hub/scouting/*" element={<LegacyHubScoutingRedirect />} /><Route path="/offseason/*" element={<OffseasonRoutes />} /><Route path="/hub/offseason/*" element={<LegacyHubOffseasonRedirect />} /><Route path="/news" element={<LeagueNews />} /><Route path="/hub/stats" element={<StatsPage />} /><Route path="/hub/activity" element={<ActivityLog />} /><Route path="/hub/owner-relations" element={<OwnerRelations />} /><Route path="/hub/team-strategy" element={<TeamStrategy />} /><Route path="/hub/front-office" element={<FrontOffice />} /><Route path="/coachs-office/*" element={<CoachOfficeRoutes />} /><Route path="/settings" element={<SettingsPage />} />
+          <Route path="/free-agency/*" element={<FreeAgencyRoutes />} /><Route path="/re-sign/*" element={<ReSignRoutes />} /><Route path="/trades/*" element={<TradesRoutes />} /><Route path="/hub/trades" element={<TradesPage />} /><Route path="/hub/re-sign" element={<ReSignPage />} /><Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
+          <Route path="/hub/draft" element={<Navigate to="/offseason/draft" replace />} /><Route path="/hub/draft-results" element={<DraftResults />} /><Route path="/hub/free-agency-recap" element={<FreeAgencyRecap />} /><Route path="/hub/training-camp" element={<Navigate to="/offseason/training-camp" replace />} /><Route path="/hub/cutdowns" element={<Navigate to="/offseason/cutdowns" replace />} />
+          <Route path="/hub/preseason" element={<PreseasonWeek />} /><Route path="/hub/regular-season" element={<RegularSeason />} /><Route path="/hub/gameplan" element={<GameplanPage />} /><Route path="/hub/playoffs" element={<PlayoffsPage />} /><Route path="/hub/playoffs/bracket" element={<PlayoffBracketPage />} /><Route path="/hub/playoffs/game/:id" element={<PlayoffGamePage />} /><Route path="/hub/schedule" element={<ScheduleHome />} /><Route path="/hub/schedule/week/:weekNumber" element={<WeekSlate />} /><Route path="/hub/schedule/team/:teamId" element={<TeamSchedule />} /><Route path="/hub/schedule/game/:gameKey" element={<GameDetails />} /><Route path="/hub/playcall" element={<Playcall />} /><Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} /><Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} /><Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} /><Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} /><Route path="/hub/development" element={<Navigate to="/roster/development" replace />} /><Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} /><Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} /><Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} /><Route path="/hub/coordinator-hiring" element={<CoordinatorHiring />} /><Route path="/hub/hall-of-fame" element={<HallOfFame />} /><Route path="/hub/league-history" element={<LeagueHistory />} /><Route path="/hub/analytics" element={<AnalyticsPage />} /><Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} /><Route path="/hub/tampering" element={<Navigate to="/free-agency" replace />} /><Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} /><Route path="/skill-tree" element={<SkillTree />} /><Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} /><Route path="/contracts/cap-baseline" element={<CapBaseline />} /><Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
+        </Route>
+        <Route path="/fired" element={<FiredScreen />} />
+        <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  </ErrorBoundary>;
+}
+
+function AppContent() {
+  const { state } = useGame();
+  if (shouldRenderRecoveryMode(state)) {
+    return <RecoveryModePage />;
+  }
+  return <>
+    <OfferResultModalHost />
+    <AppRoutes />
+  </>;
+}
+
+const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><GameProvider><AppContent /></GameProvider></TooltipProvider></QueryClientProvider>;
 
 export default App;

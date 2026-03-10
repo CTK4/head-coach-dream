@@ -16,6 +16,7 @@ export type CoachOfferContext = {
   expectedSalary: number;
   offeredSalary: number;
   isCoordinator: boolean;
+  hiringModifier?: number;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -54,8 +55,9 @@ export function computeAcceptanceProbability(ctx: CoachOfferContext): number {
   const req = requiredRatio(ctx.reputation, ctx.isCoordinator, ctx.season);
   const k = ctx.isCoordinator ? 10 : 7;
   const raw = sigmoid((ratio - req) * k);
+  const perkBoost = Number(ctx.hiringModifier ?? 0);
   const repCold = ctx.isCoordinator ? clamp((ctx.reputation - 60) / 80, 0, 0.35) : 0;
-  return clamp(raw - repCold, 0, 1);
+  return clamp(raw - repCold + perkBoost, 0, 1);
 }
 
 export function isOfferAccepted(ctx: CoachOfferContext): boolean {

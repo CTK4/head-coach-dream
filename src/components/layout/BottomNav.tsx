@@ -2,14 +2,16 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, Users, Search, Briefcase, Lightbulb, Handshake, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGame } from "@/context/GameContext";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 
 export function BottomNav() {
   const { state } = useGame();
   const location = useLocation();
   const path = location.pathname;
-  const isFreeAgency = state.careerStage === "FREE_AGENCY";
+  const phase = getUnifiedPhase(state);
+  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency");
   const isResign = state.careerStage === "RESIGN";
-  const isRegularSeason = state.careerStage === "REGULAR_SEASON";
+  const isRegularSeason = phase === "REGULAR_SEASON";
 
   const isActive = (route: string) => {
     if (route === "/hub" && path === "/hub") return true;
@@ -21,7 +23,7 @@ export function BottomNav() {
     { label: "Home", route: "/hub", icon: Home },
     { label: "Team", route: "/roster", icon: Users },
     { label: "Staff", route: "/staff", icon: Briefcase },
-    { label: "Scouting", route: "/hub/scouting", icon: Search },
+    { label: "Scouting", route: "/scouting", icon: Search },
     {
       label: isFreeAgency ? "Agency" : isRegularSeason ? "Trades" : isResign ? "Re-Sign" : "Strategy",
       route: isFreeAgency ? "/free-agency" : isRegularSeason ? "/trades" : isResign ? "/re-sign" : "/strategy",
@@ -39,7 +41,7 @@ export function BottomNav() {
             to={item.route}
             className={cn(
               "flex flex-col items-center gap-1 min-w-[64px]",
-              isActive(item.route) ? "text-emerald-400" : "text-slate-400 hover:text-slate-200"
+              isActive(item.route) ? "text-blue-400" : "text-slate-400 hover:text-slate-200"
             )}
           >
             <item.icon className="h-6 w-6" />

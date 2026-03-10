@@ -1,21 +1,22 @@
-/**
- * Stub calculators for the Player Development screen.
- * These will be refined once snap-based growth simulation is wired in.
- */
+import { getPerkDevelopmentMultiplier, type CoachPerkCarrier } from "@/engine/perkWiring";
+import { computeSnapBasedDevelopmentDelta, type SnapCounts } from "@/systems/snapProgression";
+import { fromNumericDev, fromSnapDevTrait, getDevTraitProgressionMultiplier, type DevTrait } from "@/lib/devTrait";
 
-/** Returns a dev-arrow character based on age curve and potential gap. */
+export type PracticeFocusLevel = "LOW" | "NORMAL" | "HIGH";
+
 export function computeDevArrow(player: {
   age?: unknown;
   overall?: unknown;
   potential?: unknown;
   dev?: unknown;
-}): "↑" | "→" | "↓" {
+}, coach?: CoachPerkCarrier): "↑" | "→" | "↓" {
   const age = Number(player.age ?? 0);
   const ovr = Number(player.overall ?? 0);
   const p = player as Record<string, unknown>;
   const rawPotential = p.potential ?? p.dev;
   const potential = Number(rawPotential ?? 0);
-  const gap = potential > 0 ? potential - ovr : 0;
+  const perkDevMult = getPerkDevelopmentMultiplier(coach, player);
+  const gap = (potential > 0 ? potential - ovr : 0) * perkDevMult;
 
   if (age >= 33) return "↓";
   if (age >= 30 && ovr >= 85) return "↓";
@@ -24,10 +25,71 @@ export function computeDevArrow(player: {
   return "→";
 }
 
-/** Returns a regression risk level based on age. */
 export function computeDevRisk(player: { age?: unknown }): "LOW" | "MED" | "HIGH" {
   const age = Number(player.age ?? 0);
   if (age >= 34) return "HIGH";
   if (age >= 30) return "MED";
   return "LOW";
+}
+
+export function computeDevelopmentRate(baseRate: number, coach: CoachPerkCarrier | undefined, player: { draftRound?: unknown; age?: unknown }): number {
+  return Number((baseRate * getPerkDevelopmentMultiplier(coach, player)).toFixed(4));
+}
+
+function devTraitMultiplier(devTrait: string | number): number {
+  if (typeof devTrait === "number") return fromNumericDev(devTrait);
+  const raw = String(devTrait || "");
+  const snap = raw.toLowerCase();
+  if (snap === "normal" || snap === "impact" || snap === "elite" || snap === "generational") {
+    return fromSnapDevTrait(snap as DevTrait);
+  }
+  const asNum = Number(raw);
+  if (!Number.isNaN(asNum) && raw.trim() !== "") return fromNumericDev(asNum);
+  return getDevTraitProgressionMultiplier(raw);
+}
+
+function focusMultiplier(level: PracticeFocusLevel): number {
+  return level === "HIGH" ? 1.2 : level === "LOW" ? 0.85 : 1;
+}
+
+export function computeSeasonDevelopmentDelta(player: {
+  age?: unknown;
+  overall?: unknown;
+  dev?: unknown;
+  practiceFocus?: PracticeFocusLevel;
+  offensiveSnaps?: unknown;
+  defensiveSnaps?: unknown;
+  specialTeamsSnaps?: unknown;
+  efficiencyScore?: unknown;
+  teamSuccess?: unknown;
+  injurySetback?: unknown;
+}, coach?: CoachPerkCarrier): number {
+  const age = Number(player.age ?? 24);
+  const overall = Number(player.overall ?? 65);
+  const perkMult = getPerkDevelopmentMultiplier(coach, player);
+  const devMult = devTraitMultiplier(String(player.dev ?? ""));
+  const practiceMult = focusMultiplier(player.practiceFocus ?? "NORMAL");
+
+  const youthCurve = age <= 24 ? 2.2 : age <= 27 ? 1.4 : age <= 30 ? 0.3 : -0.9;
+  const overallDrag = overall >= 90 ? -0.6 : overall >= 83 ? -0.25 : 0.2;
+  const base = (youthCurve + overallDrag) * devMult * practiceMult * perkMult;
+  const rounded = Math.round(base);
+
+  const snapCounts: SnapCounts = {
+    offensiveSnaps: Number(player.offensiveSnaps ?? 0),
+    defensiveSnaps: Number(player.defensiveSnaps ?? 0),
+    specialTeamsSnaps: Number(player.specialTeamsSnaps ?? 0),
+  };
+  const snapDelta = computeSnapBasedDevelopmentDelta({
+    age,
+    devTrait: String(player.dev ?? ""),
+    overall,
+    snaps: snapCounts,
+    maxTeamSnaps: 1200,
+    efficiencyScore: Number(player.efficiencyScore ?? 0.5),
+    teamSuccess: Number(player.teamSuccess ?? 0.5),
+    injurySetback: Number(player.injurySetback ?? 0),
+  });
+
+  return Math.max(-4, Math.min(5, Math.round((rounded + snapDelta) / 2)));
 }

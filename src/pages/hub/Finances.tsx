@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { PlayerNameLink } from "@/components/players/PlayerNameLink";
 
 function moneyShort(n: number) {
   const m = n / 1_000_000;
@@ -34,15 +36,19 @@ export default function Finances() {
     { to: "/hub/tag-center", label: "Tag Center" },
   ];
 
+  const players = useMemo(
+    () => getEffectivePlayersByTeam(state, teamId),
+    [state.playerTeamOverrides, state.playerContractOverrides, teamId],
+  );
+
   const rows = useMemo(() => {
-    const ps = getEffectivePlayersByTeam(state, teamId);
-    return ps
+    return players
       .map((p: any) => {
         const c = getContractSummaryForPlayer(state, String(p.playerId));
         return {
           id: String(p.playerId),
           name: String(p.fullName),
-          pos: normalizePos(String(p.pos ?? "UNK")),
+          pos: getPositionLabel(normalizePos(String(p.pos ?? "UNK"))),
           ovr: Number(p.overall ?? 0),
           capHit: Number(c?.capHit ?? 0),
           yearsLeft: Number(c?.yearsRemaining ?? 0),
@@ -50,7 +56,7 @@ export default function Finances() {
         };
       })
       .sort((a, b) => b.capHit - a.capHit);
-  }, [state, teamId]);
+  }, [players, state]);
 
   return (
     <Card>
@@ -108,7 +114,7 @@ export default function Finances() {
               <div key={r.id} className="rounded-xl border border-border bg-card/50 p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-semibold truncate">
-                    {r.name} <span className="text-muted-foreground">({r.pos})</span> <span className="text-muted-foreground">· OVR {r.ovr}</span>
+                    <PlayerNameLink playerId={r.id} name={r.name} pos={r.pos} namespace="contracts" /> <span className="text-muted-foreground">· OVR {r.ovr}</span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Cap Hit {moneyShort(r.capHit)} · Years Left {r.yearsLeft} {r.isOverride ? "· (Override)" : ""}
@@ -118,7 +124,14 @@ export default function Finances() {
                   <Button size="sm" variant="secondary" onClick={() => dispatch({ type: "TRADE_PLAYER", payload: { playerId: r.id } })}>
                     Trade
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => dispatch({ type: "CUT_PLAYER", payload: { playerId: r.id } })}>
+                  <Button size="sm" variant="destructive" onClick={() => dispatch({
+                    type: "CUT_APPLY",
+                    payload: {
+                      teamId: String(state.acceptedOffer?.teamId ?? ""),
+                      playerId: String(r.id),
+                      designation: "PRE_JUNE_1",
+                    },
+                  })}>
                     Cut
                   </Button>
                 </div>

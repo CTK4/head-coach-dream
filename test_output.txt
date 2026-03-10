@@ -1,0 +1,231 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run --run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/ubuntu/head-coach-dream[39m
+
+ [32m✓[39m src/engine/interviewHiring/__tests__/engine.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/saveManager.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2minjured player skips devXP but still gets fatigue effect
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2mweek advance practice application is atomic on throw
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2mmigration defaults missing practicePlan
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2mapplied practice familiarity carries into game sim bonus
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2mcombine reveal data persists through draft init
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/practiceFocus.test.ts[2m > [22m[2mpractice integration[2m > [22m[2mdefault plan applies when no explicit selection exists
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/practiceFocus.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 447[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/transactions.qa.test.ts[2m > [22m[2mtransactions QA closure[2m > [22m[2mfinalize cuts persists FA status across save/load
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/context/__tests__/mediumPriorityFixes.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 3671[2mms[22m[39m
+     [33m[2m✓[22m[39m PLAYOFFS_COMPLETE_SEASON resets weeklyResults, gameHistory, and league.results [33m 3649[2mms[22m[39m
+ [32m✓[39m src/engine/gameSim.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m src/engine/contracts/__tests__/oneYearDeals.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 8832[2mms[22m[39m
+     [33m[2m✓[22m[39m accepting a one-year re-sign replaces the contract object and keeps player on roster [33m 1213[2mms[22m[39m
+     [33m[2m✓[22m[39m one-year re-sign affects cap and expires after next offseason [33m 6250[2mms[22m[39m
+     [33m[2m✓[22m[39m one-year re-sign contract override survives JSON reload deterministically [33m 1128[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/playerGenerator.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 259[2mms[22m[39m
+ [32m✓[39m src/engine/contracts/__tests__/offerDecision.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/preseasonCutdownsNormalization.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 273[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/deadMoney.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [31m❯[39m src/context/__tests__/transactions.qa.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 11955[2mms[22m[39m
+[31m     [31m×[31m trade accept updates effective roster, injury selectors, and team ratings[39m[32m 179[2mms[22m[39m
+     [33m[2m✓[22m[39m cut apply sets free-agent override and affects effective selectors + ratings [33m 1173[2mms[22m[39m
+     [32m✓[39m finalize cuts persists FA status across save/load[32m 162[2mms[22m[39m
+     [33m[2m✓[22m[39m advancing season expires base player contracts into free agency [33m 3839[2mms[22m[39m
+     [33m[2m✓[22m[39m advancing season expires staff contracts and unassigns them [33m 6600[2mms[22m[39m
+ [32m✓[39m src/engine/transactions/__tests__/freeAgencyLedgerParity.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 305[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/franchiseTag.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 2377[2mms[22m[39m
+     [33m[2m✓[22m[39m tags an eligible expiring player, creates next-season override, and excludes from FA pool [33m 1266[2mms[22m[39m
+     [33m[2m✓[22m[39m rejects ineligible players (non-expiring or already tagged) [33m 1110[2mms[22m[39m
+ [32m✓[39m src/components/GameLog/GameLog.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/offseasonRegression.test.ts[2m > [22m[2moffseason regression coverage[2m > [22m[2mmigrates tampering step to free agency
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/context/__tests__/offseasonRegression.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1304[2mms[22m[39m
+     [33m[2m✓[22m[39m advances from DRAFT to TRAINING_CAMP when DRAFT step is complete [33m 383[2mms[22m[39m
+     [33m[2m✓[22m[39m free agency completion allows advance to pre-draft [33m 391[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/deterministicRng.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/playoffsTick.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 3981[2mms[22m[39m
+     [33m[2m✓[22m[39m playoffs.tick.repeatedTicksCompleteSeasonWithoutUserGame [33m 3909[2mms[22m[39m
+[90mstderr[2m | src/engine/badges/engine.test.ts[2m > [22m[2mbadges engine[2m > [22m[2msave migration adds empty playerBadges map
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/badges/engine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 765[2mms[22m[39m
+     [33m[2m✓[22m[39m rare or higher badge appends news [33m 384[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/personnelOverlayReplay.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 75[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/seasonRollover.freeAgency.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 20590[2mms[22m[39m
+     [33m[2m✓[22m[39m moves base-contract expirations to free agency [33m 3236[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps re-signed players on roster when override covers next season [33m 5735[2mms[22m[39m
+     [33m[2m✓[22m[39m does not change players already in free agency [33m 5889[2mms[22m[39m
+     [33m[2m✓[22m[39m increases free-agent pool when multiple base contracts expire [33m 5729[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/playbooksCombine.integration.test.ts[2m > [22m[2mplaybooks + combine wiring[2m > [22m[2mupdates offense/defense playbook ids via state action
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/playbooksCombine.integration.test.ts[2m > [22m[2mplaybooks + combine wiring[2m > [22m[2mauto-switches OC playbook on hire when user has not overridden
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/playbooksCombine.integration.test.ts[2m > [22m[2mplaybooks + combine wiring[2m > [22m[2mdoes not auto-switch OC playbook on hire when user override is set
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/playbooksCombine.integration.test.ts[2m > [22m[2mplaybooks + combine wiring[2m > [22m[2mselects and runs combine interviews deterministically
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+draftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/context/__tests__/playbooksCombine.integration.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 184[2mms[22m[39m
+[90mstderr[2m | src/engine/unicorns/engine.test.ts[2m > [22m[2municorn engine[2m > [22m[2msave migration adds empty playerUnicorns map
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/unicorns/engine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 577[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/phaseGuards.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 151[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/coachImpact.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/lib/__tests__/stateMachine.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/components/franchise-hub/__tests__/draftOrder.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/phase2Systems.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/engine/transactions/__tests__/tagApplyRemove.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 4162[2mms[22m[39m
+     [33m[2m✓[22m[39m apply emits ledger event and contract index reflects 1-year tag contract [33m 1092[2mms[22m[39m
+     [33m[2m✓[22m[39m remove emits ledger event, restores prior contract, and cap ledger reflects tag cap hit [33m 3066[2mms[22m[39m
+[90mstderr[2m | src/engine/tradeDeadline.test.ts[2m > [22m[2mengine enforcement[2m > [22m[2mTRADE_ACCEPT rejected after deadline
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/engine/tradeDeadline.test.ts[2m > [22m[2mengine enforcement[2m > [22m[2mmissing tradeDeadlineWeek in save uses canonical fallback
+[22m[39m{"level":"warn","event":"trade.deadline_missing_in_save","appliedWeek":10}
+draftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/tradeDeadline.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 131[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/playoffBracket.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/engine/unicorns/effects.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 80[2mms[22m[39m
+ [32m✓[39m src/engine/telemetry/__tests__/percentiles.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [31m❯[39m src/engine/physics/__tests__/catchPointResolver.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+[31m     [31m×[31m is deterministic for fixed seed[39m[32m 14[2mms[22m[39m
+     [32m✓[39m high-point WR height boost increases completion rate[32m 16[2mms[22m[39m
+     [32m✓[39m route-break severity with WR COD edge shifts separation positively[32m 7[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/replayParity.smoke.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 134[2mms[22m[39m
+ [31m❯[39m src/context/__tests__/autosave.guard.test.tsx [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 8[2mms[22m[39m
+[31m     [31m×[31m suppresses persistence pre-team and saves after team selection[39m[32m 7[2mms[22m[39m
+ [32m✓[39m src/engine/transactions/__tests__/faSignings.ledgerBacked.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 72[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/recoveryMode.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 114[2mms[22m[39m
+ [32m✓[39m src/engine/personnel.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/draftProspectIdFix.test.ts[2m > [22m[2mdraft prospect id source fix[2m > [22m[2mDRAFT_INIT produces PROSPECT ids instead of numeric ids
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/draftProspectIdFix.test.ts[2m > [22m[2mdraft prospect id source fix[2m > [22m[2mDRAFT_USER_PICK succeeds when using an id from the current pool
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/draftProspectIdFix.test.ts[2m > [22m[2mdraft prospect id source fix[2m > [22m[2mcreates a rookie record after a successful user pick
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/draftProspectIdFix.test.ts[2m > [22m[2mdraft prospect id source fix[2m > [22m[2mblocks duplicate picks of the same prospect id
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [31m❯[39m src/context/__tests__/draftProspectIdFix.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[32m 160[2mms[22m[39m
+     [32m✓[39m DRAFT_INIT produces PROSPECT ids instead of numeric ids[32m 62[2mms[22m[39m
+[31m     [31m×[31m DRAFT_USER_PICK succeeds when using an id from the current pool[39m[32m 64[2mms[22m[39m
+[31m     [31m×[31m creates a rookie record after a successful user pick[39m[32m 16[2mms[22m[39m
+[31m     [31m×[31m blocks duplicate picks of the same prospect id[39m[32m 17[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/snapBasedProgression.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/engine/interviews/interviewSelector.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [31m❯[39m src/context/__tests__/phaseUtils.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 98[2mms[22m[39m
+     [32m✓[39m prioritizes careerStage over week-derived value[32m 38[2mms[22m[39m
+     [32m✓[39m throws in dev when careerStage is invalid[32m 29[2mms[22m[39m
+     [32m✓[39m trade action window blocks playoffs and allows regular season[32m 0[2mms[22m[39m
+     [32m✓[39m legacy save missing careerStage gets normalized and blocks FA_SIGN[32m 1[2mms[22m[39m
+[31m     [31m×[31m phase transitions set career stage and league phase consistently[39m[32m 20[2mms[22m[39m
+     [32m✓[39m advanceToRegularSeason synchronizes week fields[32m 8[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/telemetry.playlog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 120[2mms[22m[39m
+[90mstderr[2m | src/engine/fatigue.test.ts[2m > [22m[2mmigration defaults[2m > [22m[2mdefaults missing fatigue fields correctly
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/fatigue.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 92[2mms[22m[39m
+ [32m✓[39m src/engine/jerseyNumbers/__tests__/allocator.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2938[2mms[22m[39m
+     [33m[2m✓[22m[39m reassigns on team change when destination already uses the number [33m 877[2mms[22m[39m
+     [33m[2m✓[22m[39m assigns no duplicates in deterministic batch [33m 1983[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/strengthOfSchedule.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/combineReducer.test.ts[2m > [22m[2mcombine reducer token/day behavior[2m > [22m[2muses exactly four combine days
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/combineReducer.test.ts[2m > [22m[2mcombine reducer token/day behavior[2m > [22m[2mresets day token budget to 10
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/combineReducer.test.ts[2m > [22m[2mcombine reducer token/day behavior[2m > [22m[2mdoes not carry over unused tokens between days
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/seasonloop.pbp.applies_weekly_postprocessing.test.ts[2m > [22m[2mseason loop pbp post-processing[2m > [22m[2mapplies weekly medical + media generation on RESOLVE_PLAY and matches ADVANCE_WEEK outputs
+[22m[39m{"level":"warn","event":"personnel.default_applied","default":"11"}
+
+ [32m✓[39m src/context/__tests__/seasonloop.pbp.applies_weekly_postprocessing.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 211[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/combineReducer.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 222[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/injuryRecurrence.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [31m❯[39m src/engine/physics/__tests__/contactResolver.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 28[2mms[22m[39m
+[31m     [31m×[31m is deterministic for fixed seed[39m[32m 13[2mms[22m[39m
+     [32m✓[39m higher tackler weight increases tackle rate[32m 14[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/tradeEngine.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/determinism.weekSeed.parity.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 62[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/configPinning.loadState.test.ts[2m > [22m[2mloadState config pinning[2m > [22m[2mbackfills default pins for legacy saves during migration
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/context/__tests__/configPinning.loadState.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 108[2mms[22m[39m
+ [32m✓[39m src/pages/hub/Settings.storageReset.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/engine/telemetry/__tests__/aggregateGame.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/pages/hub/__tests__/contracts.releaseRoutesToLedger.test.tsx [2m([22m[2m1 test[22m[2m)[22m[33m 1270[2mms[22m[39m
+     [33m[2m✓[22m[39m routes contract-screen release to CUT_APPLY so ledger, rosterIndex, and effective roster stay aligned [33m 1267[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/moraleEngine.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/telemetry.weekFinalize.integration.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 158[2mms[22m[39m
+ [32m✓[39m src/engine/gameSim.gameplan.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m src/engine/physics/__tests__/kickResolver.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/draftTierEngine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [31m❯[39m src/testHarness/__tests__/goldenPlayoffs.test.ts [2m([22m[2m0 test[22m[2m)[22m
+ [32m✓[39m src/engine/__tests__/injuries.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/strategyEngine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/engine/physics/__tests__/pileResolver.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/playoffs.transition.after_week17_pbp.test.ts[2m > [22m[2mplayoffs transition after week 17 via pbp[2m > [22m[2minitializes playoffs and moves league phase to WILD_CARD
+[22m[39m{"level":"warn","event":"personnel.default_applied","default":"11"}
+
+ [32m✓[39m src/context/__tests__/playoffs.transition.after_week17_pbp.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 234[2mms[22m[39m
+ [32m✓[39m src/engine/interviewFlavor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/context/__tests__/telemetry.rollover.retention.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 17500[2mms[22m[39m
+     [33m[2m✓[22m[39m preserves current season seasonAgg into historical telemetry [33m 6833[2mms[22m[39m
+     [33m[2m✓[22m[39m compacts old season play logs beyond retention window [33m 10664[2mms[22m[39m
+[90mstderr[2m | src/engine/__tests__/contracts.oneYear.test.ts[2m > [22m[2mcontracts one-year re-sign[2m > [22m[2mcreates next-season override ending in start season and survives roundtrip
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/engine/__tests__/contracts.oneYear.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1085[2mms[22m[39m
+     [33m[2m✓[22m[39m creates next-season override ending in start season and survives roundtrip [33m 1084[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/weather.integration.simParity.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m src/engine/scouting/__tests__/workouts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 127[2mms[22m[39m
+[90mstderr[2m | src/lib/__tests__/migrateDraftClassIds.test.ts[2m > [22m[2mmigrateDraftClassIdsInSave[2m > [22m[2mremaps old prospect ids, filters unknown ids, and rebuilds maps
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":1,"unknownMapIds":3}
+
+ [32m✓[39m src/lib/__tests__/migrateDraftClassIds.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/telemetry.percentiles.integration.test.ts[2m > [22m[2mtelemetry percentile persistence integration[2m > [22m[2madds telemetry percentile defaults during migration and preserves existing entries
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+draftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [32m✓[39m src/context/__tests__/telemetry.percentiles.integration.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+ [32m✓[39m src/engine/__tests__/cpuFiveSeason.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 2733[2mms[22m[39m
+     [33m[2m✓[22m[39m simulates 5 seasons with rankings and awards [33m 2731[2mms[22m[39m
+[90mstderr[2m | src/context/__tests__/draftReducer.integration.test.ts[2m > [22m[2mdraft reducer integration[2m > [22m[2mapplying a pick assigns rookie to roster and removes prospect from pool
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+[90mstderr[2m | src/context/__tests__/draftReducer.integration.test.ts[2m > [22m[2mdraft reducer integration[2m > [22m[2mfinalize clears old pool and creates deterministic next class
+[22m[39mdraftClassIdMigration unresolved prospect IDs {"unknownListIds":0,"unknownMapIds":224}
+
+ [31m❯[39m src/context/__tests__/draftReducer.integration.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 254[2mms[22m[39m
+[31m     [31m×[31m applying a pick assigns rookie to roster and removes prospect from pool[39m[32m 126[2mms[22m[39m
+     [32m✓[39m finalize clears old pool and creates deterministic next class[32m 125[2mms[22m[39m
+ [32m✓[39m src/pages/hub/__tests__/development.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/engine/telemetry/__tests__/aggregateSeason.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/engine/termination.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/lib/prospectPosition.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m

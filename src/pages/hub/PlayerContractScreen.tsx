@@ -1,3 +1,4 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -18,6 +19,10 @@ function fmt(n: number) {
   const m = n / 1_000_000;
   if (m >= 10) return `$${Math.round(m)}M`;
   return `$${(Math.round(m * 10) / 10).toFixed(1)}M`;
+}
+
+export function buildContractReleaseAction(args: { teamId: string; playerId: string; designation: "PRE_JUNE_1" | "POST_JUNE_1" }) {
+  return { type: "CUT_APPLY" as const, payload: args };
 }
 
 export default function PlayerContractScreen() {
@@ -49,7 +54,7 @@ export default function PlayerContractScreen() {
   if (!player) {
     return (
       <div>
-        <ScreenHeader title="CONTRACT" />
+        <ScreenHeader title="CONTRACT" showBack />
         <div className="p-6 text-center text-muted-foreground">Player not found.</div>
       </div>
     );
@@ -58,7 +63,7 @@ export default function PlayerContractScreen() {
   if (!contract) {
     return (
       <div>
-        <ScreenHeader title="CONTRACT" subtitle={String(player.fullName ?? "Player")} />
+        <ScreenHeader title="CONTRACT" subtitle={String(player.fullName ?? "Player")} showBack />
         <div className="p-6 text-center text-muted-foreground">No contract on file.</div>
       </div>
     );
@@ -76,7 +81,13 @@ export default function PlayerContractScreen() {
   };
 
   const handleRelease = () => {
-    dispatch({ type: "CUT_PLAYER", payload: { playerId } });
+    const teamId = String(state.acceptedOffer?.teamId ?? "");
+    if (!teamId) return;
+    dispatch(buildContractReleaseAction({
+      teamId,
+      playerId,
+      designation: postJune1 ? "POST_JUNE_1" : "PRE_JUNE_1",
+    }));
     navigate(-1);
   };
 
@@ -84,7 +95,8 @@ export default function PlayerContractScreen() {
     <div className="min-h-[calc(100vh-64px)] pb-24">
       <ScreenHeader
         title="CONTRACT BREAKDOWN"
-        subtitle={`${name} · ${pos}`}
+        showBack
+        subtitle={`${name} · ${getPositionLabel(pos)}`}
         rightAction={
           <div className="flex gap-1 flex-wrap justify-end">
             {isUfa && (
@@ -261,17 +273,9 @@ export default function PlayerContractScreen() {
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-white/10 px-4 py-3 flex gap-2 backdrop-blur-md">
         <Button
           variant="outline"
-          className="flex-1 rounded-xl border-white/15 text-xs"
-          disabled
-          title="Extend: coming soon"
-        >
-          Extend
-        </Button>
-        <Button
-          variant="outline"
           className={`flex-1 rounded-xl text-xs ${
             restructureElig.eligible
-              ? "border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
+              ? "border-blue-500/40 text-white hover:bg-blue-500/10"
               : "border-white/15"
           }`}
           disabled={!restructureElig.eligible}

@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getPlayersByTeam, getTeams } from "@/data/leagueDb";
+import { getTeams } from "@/data/leagueDb";
+import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { mulberry32, hashSeed } from "@/engine/rng";
 import type { Injury, InjuryStatus, InjuryBodyArea, InjurySeverity } from "@/engine/injuryTypes";
+import { getRecurrenceRiskLevel } from "@/engine/injuryTypes";
 import { HubPanel } from "@/components/franchise-hub/HubPanel";
 import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +28,7 @@ const STATUS_COLOR: Record<InjuryStatus, string> = {
   DOUBTFUL: "bg-orange-500/20 border-orange-400/40 text-orange-200",
   QUESTIONABLE: "bg-yellow-500/20 border-yellow-400/40 text-yellow-200",
   IR: "bg-purple-500/20 border-purple-400/40 text-purple-200",
-  PUP: "bg-blue-500/20 border-blue-400/40 text-blue-200",
+  PUP: "bg-blue-500/20 border-blue-400/40 text-white",
   DAY_TO_DAY: "bg-slate-500/20 border-slate-400/40 text-slate-200",
 };
 
@@ -40,7 +42,7 @@ const SEVERITY_COLOR: Record<InjurySeverity, string> = {
 const BADGE_COLORS: Record<string, string> = {
   NEW: "bg-emerald-500/20 border-emerald-400/40 text-emerald-200",
   WORSENED: "bg-red-500/20 border-red-400/40 text-red-200",
-  RETURNING: "bg-blue-500/20 border-blue-400/40 text-blue-200",
+  RETURNING: "bg-blue-500/20 border-blue-400/40 text-white",
 };
 
 // ─── Dev mock data ─────────────────────────────────────────────────────────────
@@ -55,9 +57,9 @@ const BODY_AREA_MAP: Record<string, InjuryBodyArea> = {
   "Rib Fracture": "RIBS", Thumb: "HAND", "Back Strain": "BACK", "Hip Flexor": "HIP",
 };
 
-function generateMockInjuries(teamId: string, saveSeed: number, week: number): Injury[] {
+function generateMockInjuries(state: ReturnType<typeof useGame>["state"], teamId: string, saveSeed: number, week: number): Injury[] {
   const rng = mulberry32(hashSeed(saveSeed, teamId, "injuries", week));
-  const players = getPlayersByTeam(teamId).slice(0, 22);
+  const players = getEffectivePlayersByTeam(state, teamId).slice(0, 22);
   const count = 3 + Math.floor(rng() * 4);
   const injuries: Injury[] = [];
   const statuses: InjuryStatus[] = ["OUT", "OUT", "DOUBTFUL", "QUESTIONABLE", "IR", "PUP", "DAY_TO_DAY"];
@@ -138,6 +140,25 @@ function formatRehabStage(r: string): string {
 // ─── InjuryRow component ───────────────────────────────────────────────────────
 
 type PlayerInfo = { name: string; pos?: string; overall?: number };
+
+export function getInjuryPlayersForTeam(state: ReturnType<typeof useGame>["state"], teamId: string): any[] {
+  return getEffectivePlayersByTeam(state, teamId);
+}
+
+export function buildInjuryPlayerMap(state: ReturnType<typeof useGame>["state"]): Map<string, PlayerInfo> {
+  const map = new Map<string, PlayerInfo>();
+  const all = getTeams()
+    .filter((t) => t.isActive !== false)
+    .flatMap((t) => getEffectivePlayersByTeam(state, t.teamId));
+  for (const p of all) {
+    map.set(p.playerId, {
+      name: p.fullName ?? "Unknown Player",
+      pos: p.pos,
+      overall: p.overall,
+    });
+  }
+  return map;
+}
 
 function InjuryRow({
   injury,
@@ -250,9 +271,9 @@ function MedicalStaffBanner({ rating }: { rating?: number }) {
     <div className="flex items-center gap-3 rounded-lg border border-blue-300/20 bg-blue-950/30 px-3 py-2">
       <Shield className="h-4 w-4 text-blue-300 shrink-0" aria-hidden="true" />
       <div className="flex-1 min-w-0">
-        <span className="text-xs font-semibold text-blue-200">Medical Staff Influence</span>
+        <span className="text-xs font-semibold text-white">Medical Staff Influence</span>
         {rating != null ? (
-          <span className="ml-2 text-xs text-slate-300">Rating: <span className="font-bold text-blue-200">{rating}/100</span></span>
+          <span className="ml-2 text-xs text-slate-300">Rating: <span className="font-bold text-white">{rating}/100</span></span>
         ) : (
           <span className="ml-2 text-[10px] text-slate-400 italic">Rating data unavailable</span>
         )}
@@ -374,6 +395,15 @@ function InjuryDrawer({
                     </div>
                   </>
                 ) : null}
+                {injury.recurrenceMultiplier != null ? (
+                  <>
+                    <div className="text-slate-400">Recurrence Risk</div>
+                    <div className={`font-semibold ${injury.recurrenceMultiplier >= 1.5 ? "text-red-300" : injury.recurrenceMultiplier >= 1.2 ? "text-orange-300" : "text-emerald-300"}`}>
+                      {getRecurrenceRiskLevel(injury.recurrenceMultiplier)}
+                      {injury.chronic ? " (Chronic)" : ""}
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -427,15 +457,6 @@ function InjuryDrawer({
                 >
                   Start Practice Window
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled
-                  className="border-slate-300/20 text-slate-400 opacity-40 cursor-not-allowed"
-                  title="Not yet implemented"
-                >
-                  Release / Injury Settlement (TODO)
-                </Button>
               </div>
             </div>
           ) : null}
@@ -466,37 +487,25 @@ export default function InjuryReport() {
   // Drawer state
   const [drawerInjuryId, setDrawerInjuryId] = useState<string | null>(null);
 
+  const mockInjuries = useMemo(() => {
+    if (!import.meta.env.DEV) return [] as Injury[];
+    const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
+    const mocked: Injury[] = [];
+    for (const team of teams) {
+      mocked.push(...generateMockInjuries(state, team.teamId, state.saveSeed, currentWeek));
+    }
+    return mocked;
+  }, [state.playerTeamOverrides, state.playerContractOverrides, state.saveSeed, currentWeek]);
+
   // Build the injury list: prefer real data, fall back to mock data in dev mode
   const allInjuries = useMemo(() => {
     const real = state.injuries ?? [];
     if (real.length > 0) return real;
-
-    // Dev-only mock data
-    if (!import.meta.env.DEV) return real;
-
-    const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
-    const mocked: Injury[] = [];
-    for (const team of teams) {
-      mocked.push(...generateMockInjuries(team.teamId, state.saveSeed, currentWeek));
-    }
-    return mocked;
-  }, [state.injuries, state.saveSeed, currentWeek]);
+    return mockInjuries;
+  }, [state.injuries, mockInjuries]);
 
   // Build player lookup map (stable)
-  const playerMap = useMemo(() => {
-    const map = new Map<string, PlayerInfo>();
-    const all = getTeams()
-      .filter((t) => t.isActive !== false)
-      .flatMap((t) => getPlayersByTeam(t.teamId));
-    for (const p of all) {
-      map.set(p.playerId, {
-        name: p.fullName ?? "Unknown Player",
-        pos: p.pos,
-        overall: p.overall,
-      });
-    }
-    return map;
-  }, []);
+  const playerMap = useMemo(() => buildInjuryPlayerMap(state), [state]);
 
   // Filtered injuries
   const filteredInjuries = useMemo(() => {

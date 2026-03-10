@@ -1,0 +1,10 @@
+{
+  "id": "calibration-pack-v1",
+  "configVersion": "1.0.0",
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "tunables": {
+    "fatigueRecoveryRate": 1,
+    "injuryDurationMultiplier": 1,
+    "contractDemandMultiplier": 1
+  }
+}

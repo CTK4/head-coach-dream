@@ -4,42 +4,28 @@ import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
-import { HubTile } from "@/components/franchise-hub/HubTile";
+import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
+import { readSettings } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
+import { HUB_TILE_IMAGES, type HubTileId } from "@/components/franchise-hub/tileImages";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
 import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
+import SeasonAwards from "@/pages/SeasonAwards";
 
-// Placeholder images - using simple colored gradients or specific placeholders from the list if available
-const IMAGES = {
-    staff: "/placeholders/coach.png",
-    roster: "/placeholders/depth_chart.png",
-    strategy: "/placeholders/strategy_meeting.png",
-    contracts: "/placeholders/accounting.png",
-    scouting: "/placeholders/scout.png",
-    news: "/placeholders/news.png",
-    freeAgency: "/placeholders/accounting.png",
-    resign: "/placeholders/depth_chart.png",
-    trades: "/placeholders/strategy_meeting.png",
-    injuryReport: "/placeholders/depth_chart.png",
-}
-
-type UserSettings = {
-  confirmAutoAdvance?: boolean;
+type HubTileConfig = {
+  id: HubTileId;
+  title: string;
+  subtitle?: string;
+  to: string;
+  imageUrl: string;
+  badgeCount?: number;
+  badgeHint?: string;
+  badgeKind?: HubBadgeKind;
+  cornerBubbleCount?: number;
+  imageObjectPosition?: string;
+  dataTest?: string;
 };
-
-const SETTINGS_KEY = "hcd:settings";
-
-function readSettings(): UserSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { confirmAutoAdvance: true };
-    const parsed = JSON.parse(raw) as UserSettings;
-    return { confirmAutoAdvance: parsed.confirmAutoAdvance ?? true };
-  } catch {
-    return { confirmAutoAdvance: true };
-  }
-}
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -51,28 +37,22 @@ export default function Hub() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const badgeCounts = useMemo(() => {
-    const hub = (state as any).hub;
-    const b = hub?.badges;
-    const unread = (hub?.news ?? []).filter((x: any) => !hub?.newsReadIds?.[String(x?.id)]).length;
     return {
-      hireStaff: clampInt(b?.hireStaff ?? 1, 0, 99),
-      franchiseStrategy: clampInt(b?.franchiseStrategy ?? 1, 0, 99),
-      scouting: clampInt(b?.scouting ?? 2, 0, 99),
-      roster: clampInt(b?.roster ?? 1, 0, 99),
-      finances: clampInt(b?.finances ?? 1, 0, 99),
-      leagueNews: clampInt(b?.leagueNews ?? 4, 0, 99),
-      leagueNewsUnread: clampInt(unread, 0, 99),
+      newsUnread: clampInt(state.unreadNewsCount ?? 0, 0, 99),
     };
-  }, [state]);
+  }, [state.unreadNewsCount]);
 
-  const assistantOpen = Object.values(state.assistantStaff ?? {}).filter((value) => !value).length;
-  // const hireStaffSubtitle = assistantOpen > 0 ? `${assistantOpen} Positions Open` : "Staff Filled";
-  
   const nextStage = nextStageForNavigate(state.careerStage);
+  const missingCoordinators = !state.staff.ocId || !state.staff.dcId || !state.staff.stcId;
+  const canHireCoordinatorsInHub = ["OFFSEASON_HUB", "RESIGN", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUTDOWNS"].includes(state.careerStage);
   const showTrades = isTradesAllowed(state);
   const showReSign = isReSignAllowed(state);
   const nextLabel = stageLabel(nextStage);
   const nextRoute = stageToRoute(nextStage);
+
+  if (state.careerStage === "SEASON_AWARDS") {
+    return <SeasonAwards />;
+  }
 
   function doAdvance() {
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
@@ -85,7 +65,6 @@ export default function Hub() {
     else doAdvance();
   }
 
-  // Determine Advance Label based on careerStage (Mock requirement)
   let advanceText = "ADVANCE PHASE";
   if (state.careerStage === "FREE_AGENCY") advanceText = "ADVANCE FA DAY";
   else if (state.careerStage === "COMBINE") advanceText = "ADVANCE COMBINE DAY";
@@ -94,96 +73,90 @@ export default function Hub() {
   else if (state.careerStage === "RESIGN") advanceText = "ADVANCE RE-SIGN DAY";
   else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
 
+  const optionalTiles: HubTileConfig[] = [
+    ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts" as HubTileId, title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
+    ...(missingCoordinators && canHireCoordinatorsInHub
+      ? [{ id: "staff" as HubTileId, title: "Hire Coordinators", subtitle: "OC · DC · STC", to: "/hub/coordinator-hiring", imageUrl: HUB_TILE_IMAGES.staff, dataTest: "hub-hire-coordinators" }]
+      : []),
+    ...(showReSign ? [{ id: "roster" as HubTileId, title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
+    ...(showTrades ? [{ id: "strategy" as HubTileId, title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
+    ...(state.careerStage === "PLAYOFFS" ? [{ id: "hall_of_fame" as HubTileId, title: "Playoffs", to: "/hub/playoffs", imageUrl: HUB_TILE_IMAGES.hall_of_fame }] : []),
+   ] satisfies HubTileConfig[];
+
+  const mainTiles: HubTileConfig[] = [
+    {
+      title: "Staff",
+      to: "/staff",
+      id: "staff",
+      imageUrl: HUB_TILE_IMAGES.staff,
+      imageObjectPosition: "50% 65%",
+    },
+    { id: "roster" as HubTileId, title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
+    { id: "strategy" as HubTileId, title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "strategy" as HubTileId, title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: "/placeholders/Trophy_Room.PNG" },
+    { id: "contracts" as HubTileId, title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
+    { id: "scouting", title: "Scouting", to: "/scouting", imageUrl: HUB_TILE_IMAGES.scouting },
+    {
+      id: "news",
+      title: "News",
+      to: "/news",
+      imageUrl: HUB_TILE_IMAGES.news,
+      badgeCount: badgeCounts.newsUnread,
+      badgeHint: "Unread news stories",
+      badgeKind: "unread",
+      cornerBubbleCount: Math.min(badgeCounts.newsUnread, 9),
+    },
+    { id: "strategy" as HubTileId, title: "Schedule", subtitle: "Slate + Results", to: "/hub/schedule", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "coachs_office", title: "Coach's Office", subtitle: "Profiles + Skill Tree", to: "/coachs-office", imageUrl: HUB_TILE_IMAGES.coachs_office },
+    { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
+    { id: "hall_of_fame" as HubTileId, title: "League History", subtitle: "Champions + MVPs + Legends", to: "/hub/league-history", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
+    { id: "strategy" as HubTileId, title: "Analytics", subtitle: "Career telemetry", to: "/hub/analytics", imageUrl: HUB_TILE_IMAGES.strategy },
+  ];
 
   return (
-    <section className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
-        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
-        <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
+    <div data-test="hub-root" className={`relative min-h-full overflow-x-hidden p-2 md:p-4 ${HUB_BG}`}>
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_TEXTURE}`} aria-hidden="true" />
+      <div className={`pointer-events-none absolute inset-0 z-0 ${HUB_VIGNETTE}`} aria-hidden="true" />
 
-        <div className={`relative z-10 mx-auto max-w-7xl p-4 md:p-6 ${HUB_FRAME} space-y-6`}>
-            
-            <FranchiseHeader />
+      <div className={`relative z-10 mx-auto max-w-7xl space-y-6 p-4 md:p-6 ${HUB_FRAME}`}>
+        <FranchiseHeader />
 
-            <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <HubTile
-                    title="Hire Staff"
-                    to="/staff"
-                    imageUrl={IMAGES.staff}
-                    badgeCount={assistantOpen > 0 ? Math.max(1, badgeCounts.hireStaff) : 0}
-                />
-                <HubTile
-                    title="Roster"
-                    to="/roster"
-                    imageUrl={IMAGES.roster}
-                    badgeCount={badgeCounts.roster}
-                />
-                <HubTile
-                    title="Franchise Strategy"
-                    to="/strategy"
-                    imageUrl={IMAGES.strategy}
-                    badgeCount={badgeCounts.franchiseStrategy}
-                />
-                <HubTile
-                    title="Contracts & Cap"
-                    subtitle="Management"
-                    to="/contracts"
-                    imageUrl={IMAGES.contracts}
-                    badgeCount={badgeCounts.finances}
-                />
-                <HubTile
-                    title="Scouting"
-                    to="/hub/scouting"
-                    imageUrl={IMAGES.scouting}
-                    badgeCount={badgeCounts.scouting}
-                />
-                <HubTile
-                    title="News"
-                    to="/news"
-                    imageUrl={IMAGES.news}
-                    badgeCount={badgeCounts.leagueNews}
-                    cornerBubbleCount={badgeCounts.leagueNewsUnread}
-                />
-                {state.careerStage === "FREE_AGENCY" ? (
-                  <HubTile title="Free Agency" to="/free-agency" imageUrl={IMAGES.freeAgency} badgeCount={1} />
-                ) : null}
-                {showReSign ? (
-                  <HubTile title="Re-Sign" to="/hub/re-sign" imageUrl={IMAGES.resign} badgeCount={1} />
-                ) : null}
-                {showTrades ? (
-                  <HubTile title="Trades" to="/hub/trades" imageUrl={IMAGES.trades} badgeCount={1} />
-                ) : null}
-                <HubTile
-                    title="Injury Report"
-                    subtitle="Health & Medical"
-                    to="/hub/injury-report"
-                    imageUrl={IMAGES.injuryReport}
-                />
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
+          {optionalTiles.map((tile) => (
+            <div key={`${tile.id}-${tile.to}`} data-test={tile.dataTest}>
+              <HubTile {...tile} />
             </div>
-
-            <HubPhaseQuickLinks />
-
-            <Button 
-                onClick={onAdvanceClick} 
-                className="w-full py-6 text-lg font-bold tracking-widest bg-gradient-to-r from-blue-900 to-slate-900 border border-blue-500/30 hover:from-blue-800 hover:to-slate-800 transition-all shadow-lg"
-            >
-                {advanceText}
-            </Button>
+          ))}
+          {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
+          {mainTiles.map((tile) => (
+            <HubTile key={`${tile.id}-${tile.to}`} {...tile} />
+          ))}
         </div>
 
-        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
-                <DialogHeader>
-                    <DialogTitle>Advance?</DialogTitle>
-                    <DialogDescription className="text-slate-200/70">
-                    Next: {nextLabel}.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                    <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-                    <Button onClick={doAdvance}>Advance</Button>
-                </div>
-            </DialogContent>
-        </Dialog>
-    </section>
+        <HubPhaseQuickLinks />
+
+        <Button
+          onClick={onAdvanceClick}
+          className="w-full border border-blue-500/30 bg-gradient-to-r from-blue-900 to-slate-900 py-6 text-lg font-bold tracking-widest shadow-lg transition-all hover:from-blue-800 hover:to-slate-800"
+        >
+          {advanceText}
+        </Button>
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+          <DialogHeader>
+            <DialogTitle>Advance?</DialogTitle>
+            <DialogDescription className="text-slate-200/70">Next: {nextLabel}.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={doAdvance}>Advance</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

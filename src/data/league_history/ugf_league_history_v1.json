@@ -1,0 +1,1824 @@
+{
+  "version": "1.0.0",
+  "system_id": "UGF_LEAGUE_HISTORY_V1",
+  "seasons": [
+    {
+      "season": 1980,
+      "champion": "Las Vegas Syndicate",
+      "runnerUp": "Memphis Blues",
+      "ironCrownMvp": {
+        "player": "Tim Plenwick",
+        "team": "Las Vegas Syndicate",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Bryce Sayer",
+        "team": "Milwaukee Northshore",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1981,
+      "champion": "Birmingham Vulcans",
+      "runnerUp": "Indianapolis Ignition",
+      "ironCrownMvp": {
+        "player": "Calder Rowan",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Kirk Andersen",
+        "team": "Indianapolis Ignition",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1982,
+      "champion": "Washington Sentinels",
+      "runnerUp": "Miami Tide",
+      "ironCrownMvp": {
+        "player": "John Rigginsley",
+        "team": "Washington Sentinels",
+        "position": "RB"
+      },
+      "regularSeasonMvp": {
+        "player": "Martin Morley",
+        "team": "Washington Sentinels",
+        "position": "K"
+      }
+    },
+    {
+      "season": 1983,
+      "champion": "Las Vegas Syndicate",
+      "runnerUp": "Washington Sentinels",
+      "ironCrownMvp": {
+        "player": "Miles Allard",
+        "team": "Las Vegas Syndicate",
+        "position": "RB"
+      },
+      "regularSeasonMvp": {
+        "player": "Jace Thieson",
+        "team": "Washington Sentinels",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1984,
+      "champion": "Birmingham Vulcans",
+      "runnerUp": "Miami Tide",
+      "ironCrownMvp": {
+        "player": "Calder Rowan",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Nico Marcelli",
+        "team": "Miami Tide",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1985,
+      "champion": "Pittsburgh Ironclads",
+      "runnerUp": "Dallas Imperials",
+      "ironCrownMvp": {
+        "player": "Raymond Denton",
+        "team": "Pittsburgh Ironclads",
+        "position": "EDGE"
+      },
+      "regularSeasonMvp": {
+        "player": "Miles Allard",
+        "team": "Las Vegas Syndicate",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 1986,
+      "champion": "Philadelphia Founders",
+      "runnerUp": "St. Louis Archons",
+      "ironCrownMvp": {
+        "player": "Phil Sayers",
+        "team": "Philadelphia Founders",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Landon Tayler",
+        "team": "Philadelphia Founders",
+        "position": "LB"
+      }
+    },
+    {
+      "season": 1987,
+      "champion": "Washington Sentinels",
+      "runnerUp": "St. Louis Archons",
+      "ironCrownMvp": {
+        "player": "Dean Whitaker",
+        "team": "Washington Sentinels",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Jim English",
+        "team": "St. Louis Archons",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1988,
+      "champion": "Birmingham Vulcans",
+      "runnerUp": "Indianapolis Ignition",
+      "ironCrownMvp": {
+        "player": "Terry Royce",
+        "team": "Birmingham Vulcans",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Boomer Esiasonn",
+        "team": "Indianapolis Ignition",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1989,
+      "champion": "Birmingham Vulcans",
+      "runnerUp": "St. Louis Archons",
+      "ironCrownMvp": {
+        "player": "Calder Rowan",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Calder Rowan",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1990,
+      "champion": "Philadelphia Founders",
+      "runnerUp": "Buffalo Northwind",
+      "ironCrownMvp": {
+        "player": "Orin Addison",
+        "team": "Philadelphia Founders",
+        "position": "RB"
+      },
+      "regularSeasonMvp": {
+        "player": "Calder Rowan",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1991,
+      "champion": "Washington Sentinels",
+      "runnerUp": "Buffalo Northwind",
+      "ironCrownMvp": {
+        "player": "Gareth Riven",
+        "team": "Washington Sentinels",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Truman Thayer",
+        "team": "Buffalo Northwind",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 1992,
+      "champion": "Jacksonville Fleet",
+      "runnerUp": "Buffalo Northwind",
+      "ironCrownMvp": {
+        "player": "Troy Caiman",
+        "team": "Jacksonville Fleet",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Emmett Sloane",
+        "team": "Jacksonville Fleet",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 1993,
+      "champion": "Jacksonville Fleet",
+      "runnerUp": "Buffalo Northwind",
+      "ironCrownMvp": {
+        "player": "Emmett Sloane",
+        "team": "Jacksonville Fleet",
+        "position": "RB"
+      },
+      "regularSeasonMvp": {
+        "player": "Steven Yorke",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1994,
+      "champion": "Birmingham Vulcans",
+      "runnerUp": "San Diego Armada",
+      "ironCrownMvp": {
+        "player": "Steven Yorke",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Blake Fairburn",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1995,
+      "champion": "Jacksonville Fleet",
+      "runnerUp": "New York Gothic Guardians",
+      "ironCrownMvp": {
+        "player": "Lyle Brower",
+        "team": "Jacksonville Fleet",
+        "position": "CB"
+      },
+      "regularSeasonMvp": {
+        "player": "Blake Fairburn",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1996,
+      "champion": "Boston Harbormen",
+      "runnerUp": "Dallas Imperials",
+      "ironCrownMvp": {
+        "player": "Desmond Hayward",
+        "team": "Boston Harbormen",
+        "position": "KR"
+      },
+      "regularSeasonMvp": {
+        "player": "Blake Fairburn",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1997,
+      "champion": "St. Louis Archons",
+      "runnerUp": "Boston Harbormen",
+      "ironCrownMvp": {
+        "player": "Torrin Dawes",
+        "team": "St. Louis Archons",
+        "position": "RB"
+      },
+      "regularSeasonMvp": {
+        "player": "Bennett Sandler",
+        "team": "Chicago Union",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 1998,
+      "champion": "St. Louis Archons",
+      "runnerUp": "Atlanta Apex",
+      "ironCrownMvp": {
+        "player": "Jim English",
+        "team": "St. Louis Archons",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Blake Fairburn",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 1999,
+      "champion": "Los Angeles Stars",
+      "runnerUp": "Austin Empire",
+      "ironCrownMvp": {
+        "player": "Kirk Weller",
+        "team": "Los Angeles Stars",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Kirk Weller",
+        "team": "Los Angeles Stars",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2000,
+      "champion": "Detroit Assembly",
+      "runnerUp": "Philadelphia Founders",
+      "ironCrownMvp": {
+        "player": "Reed Lowell",
+        "team": "Detroit Assembly",
+        "position": "LB"
+      },
+      "regularSeasonMvp": {
+        "player": "Marston Falkner",
+        "team": "Los Angeles Stars",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 2001,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Los Angeles Stars",
+      "ironCrownMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Kirk Weller",
+        "team": "Los Angeles Stars",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2002,
+      "champion": "Baltimore Admirals",
+      "runnerUp": "Las Vegas Syndicate",
+      "ironCrownMvp": {
+        "player": "Darren Jaxford",
+        "team": "Baltimore Admirals",
+        "position": "DB"
+      },
+      "regularSeasonMvp": {
+        "player": "Rhett Galloway",
+        "team": "Las Vegas Syndicate",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2003,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Charlotte Crown",
+      "ironCrownMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Spencer McRae",
+        "team": "Austin Empire",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2004,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Memphis Blues",
+      "ironCrownMvp": {
+        "player": "Darian Bannon",
+        "team": "Dallas Imperials",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Preston Mallory",
+        "team": "Denver Summit",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2005,
+      "champion": "New York Gothic Guardians",
+      "runnerUp": "Seattle Evergreens",
+      "ironCrownMvp": {
+        "player": "Hayes Warden",
+        "team": "New York Gothic Guardians",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Shane Albright",
+        "team": "Seattle Evergreens",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 2006,
+      "champion": "Denver Summit",
+      "runnerUp": "Pittsburgh Ironclads",
+      "ironCrownMvp": {
+        "player": "Preston Mallory",
+        "team": "Denver Summit",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Lamar Tolland",
+        "team": "San Diego Armada",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 2007,
+      "champion": "Philadelphia Founders",
+      "runnerUp": "Dallas Imperials",
+      "ironCrownMvp": {
+        "player": "Evan Mallory",
+        "team": "Philadelphia Founders",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2008,
+      "champion": "New York Gothic Guardians",
+      "runnerUp": "Phoenix Scorch",
+      "ironCrownMvp": {
+        "player": "Santino Harlan",
+        "team": "New York Gothic Guardians",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Preston Mallory",
+        "team": "Denver Summit",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2009,
+      "champion": "New Orleans Hex",
+      "runnerUp": "Denver Summit",
+      "ironCrownMvp": {
+        "player": "Dean Brevin",
+        "team": "New Orleans Hex",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Preston Mallory",
+        "team": "Denver Summit",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2010,
+      "champion": "Boston Harbormen",
+      "runnerUp": "New York Gothic Guardians",
+      "ironCrownMvp": {
+        "player": "Adrian Rookard",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2011,
+      "champion": "Philadelphia Founders",
+      "runnerUp": "Dallas Imperials",
+      "ironCrownMvp": {
+        "player": "Evan Mallory",
+        "team": "Philadelphia Founders",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Adrian Rookard",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2012,
+      "champion": "Detroit Assembly",
+      "runnerUp": "Birmingham Vulcans",
+      "ironCrownMvp": {
+        "player": "Joey Falco",
+        "team": "Detroit Assembly",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Aiden Petters",
+        "team": "Orlando Kingdom",
+        "position": "RB"
+      }
+    },
+    {
+      "season": 2013,
+      "champion": "Seattle Evergreens",
+      "runnerUp": "St. Louis Archons",
+      "ironCrownMvp": {
+        "player": "Malcolm Smithson",
+        "team": "Seattle Evergreens",
+        "position": "LB"
+      },
+      "regularSeasonMvp": {
+        "player": "Preston Mallory",
+        "team": "St. Louis Archons",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2014,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Seattle Evergreens",
+      "ironCrownMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Adrian Rookard",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2015,
+      "champion": "St. Louis Archons",
+      "runnerUp": "Charlotte Crown",
+      "ironCrownMvp": {
+        "player": "Vaughn Millar",
+        "team": "St. Louis Archons",
+        "position": "LB"
+      },
+      "regularSeasonMvp": {
+        "player": "Cal Newland",
+        "team": "Charlotte Crown",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2016,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Atlanta Apex",
+      "ironCrownMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Ryan Matthews",
+        "team": "Atlanta Apex",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2017,
+      "champion": "Memphis Blues",
+      "runnerUp": "Dallas Imperials",
+      "ironCrownMvp": {
+        "player": "Nick Folesen",
+        "team": "Memphis Blues",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Toby Branton",
+        "team": "Dallas Imperials",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2018,
+      "champion": "Dallas Imperials",
+      "runnerUp": "Los Angeles Stars",
+      "ironCrownMvp": {
+        "player": "Jules Edlin",
+        "team": "Dallas Imperials",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Parker Mahler",
+        "team": "Nashville Sound",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2019,
+      "champion": "Nashville Sound",
+      "runnerUp": "Birmingham Vulcans",
+      "ironCrownMvp": {
+        "player": "Parker Mahler",
+        "team": "Nashville Sound",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Landon Jaxley",
+        "team": "Detroit Assembly",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2020,
+      "champion": "Baltimore Admirals",
+      "runnerUp": "Nashville Sound",
+      "ironCrownMvp": {
+        "player": "Toby Branton",
+        "team": "Baltimore Admirals",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Adrian Rookard",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2021,
+      "champion": "Los Angeles Stars",
+      "runnerUp": "Indianapolis Ignition",
+      "ironCrownMvp": {
+        "player": "Rick Ervin",
+        "team": "Los Angeles Stars",
+        "position": "WR"
+      },
+      "regularSeasonMvp": {
+        "player": "Adrian Rookard",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2022,
+      "champion": "Nashville Sound",
+      "runnerUp": "Memphis Blues",
+      "ironCrownMvp": {
+        "player": "Parker Mahler",
+        "team": "Nashville Sound",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Parker Mahler",
+        "team": "Nashville Sound",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2023,
+      "champion": "Nashville Sound",
+      "runnerUp": "Birmingham Vulcans",
+      "ironCrownMvp": {
+        "player": "Parker Mahler",
+        "team": "Nashville Sound",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Ryley Cullen",
+        "team": "New Orleans Hex",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2024,
+      "champion": "Memphis Blues",
+      "runnerUp": "Nashville Sound",
+      "ironCrownMvp": {
+        "player": "Jace Harlan",
+        "team": "Memphis Blues",
+        "position": "QB"
+      },
+      "regularSeasonMvp": {
+        "player": "Brennan Epps",
+        "team": "Birmingham Vulcans",
+        "position": "QB"
+      }
+    },
+    {
+      "season": 2025,
+      "champion": "Boston Harbormen",
+      "runnerUp": "Philadelphia Founders",
+      "ironCrownMvp": {
+        "player": "Jamarcus Massey",
+        "team": "Boston Harbormen",
+        "position": "EDGE"
+      },
+      "regularSeasonMvp": {
+        "player": "Zakary Fairchild",
+        "team": "Boston Harbormen",
+        "position": "QB"
+      }
+    }
+  ],
+  "hallOfFame": [
+    {
+      "player": "Calder Rowan",
+      "position": "QB",
+      "team": "Birmingham Vulcans",
+      "classYear": 1995
+    },
+    {
+      "player": "Calvin Reddick",
+      "position": "RB",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 1995
+    },
+    {
+      "player": "Gordon Blake",
+      "position": "QB",
+      "team": "San Diego Armada",
+      "classYear": 1995
+    },
+    {
+      "player": "Trent Broadmoor",
+      "position": "QB",
+      "team": "New York Gothic Guardians",
+      "classYear": 1996
+    },
+    {
+      "player": "Vince Blackwell",
+      "position": "DT",
+      "team": "New York Gothic Guardians",
+      "classYear": 1996
+    },
+    {
+      "player": "Miles Strathmore",
+      "position": "QB",
+      "team": "Jacksonville Fleet",
+      "classYear": 1997
+    },
+    {
+      "player": "Damon Hargrave",
+      "position": "LB",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 1998
+    },
+    {
+      "player": "Rafael Montoya",
+      "position": "T",
+      "team": "Indianapolis Ignition",
+      "classYear": 1999
+    },
+    {
+      "player": "Kellan Rourke",
+      "position": "DB",
+      "team": "Birmingham Vulcans",
+      "classYear": 2000
+    },
+    {
+      "player": "Gage Tallman",
+      "position": "DE",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2000
+    },
+    {
+      "player": "Harlan Sutter",
+      "position": "T",
+      "team": "Orlando Kingdom",
+      "classYear": 2001
+    },
+    {
+      "player": "Eli Mercer",
+      "position": "WR",
+      "team": "New York Gothic Guardians",
+      "classYear": 2001
+    },
+    {
+      "player": "Nolan Cross",
+      "position": "T",
+      "team": "Los Angeles Stars",
+      "classYear": 2001
+    },
+    {
+      "player": "Caleb Varnak",
+      "position": "G",
+      "team": "Austin Empire",
+      "classYear": 2001
+    },
+    {
+      "player": "Marco Bellanti",
+      "position": "LB",
+      "team": "Miami Tide",
+      "classYear": 2001
+    },
+    {
+      "player": "Preston Hale",
+      "position": "WR",
+      "team": "New York Gothic Guardians",
+      "classYear": 2002
+    },
+    {
+      "player": "Ryan Kellman",
+      "position": "QB",
+      "team": "Buffalo Northwind",
+      "classYear": 2002
+    },
+    {
+      "player": "Grant Halston",
+      "position": "DE",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2002
+    },
+    {
+      "player": "Cole Granger",
+      "position": "TE",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2002
+    },
+    {
+      "player": "Darius Lockridge",
+      "position": "WR",
+      "team": "Boston Harbormen",
+      "classYear": 2003
+    },
+    {
+      "player": "Luc DeMarais",
+      "position": "G",
+      "team": "Buffalo Northwind",
+      "classYear": 2003
+    },
+    {
+      "player": "Eldon Baptiste",
+      "position": "DE",
+      "team": "Austin Empire",
+      "classYear": 2003
+    },
+    {
+      "player": "Miles Allard",
+      "position": "RB",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2003
+    },
+    {
+      "player": "Bennett Sandler",
+      "position": "RB",
+      "team": "Chicago Union",
+      "classYear": 2004
+    },
+    {
+      "player": "Jim English",
+      "position": "QB",
+      "team": "St. Louis Archons",
+      "classYear": 2004
+    },
+    {
+      "player": "Gunnar Halberg",
+      "position": "DE",
+      "team": "Orlando Kingdom",
+      "classYear": 2004
+    },
+    {
+      "player": "Hugh Carver",
+      "position": "T",
+      "team": "Memphis Blues",
+      "classYear": 2004
+    },
+    {
+      "player": "Steven Yorke",
+      "position": "QB",
+      "team": "Birmingham Vulcans",
+      "classYear": 2005
+    },
+    {
+      "player": "Nico Marcelli",
+      "position": "QB",
+      "team": "Miami Tide",
+      "classYear": 2005
+    },
+    {
+      "player": "Landon Pryor",
+      "position": "T",
+      "team": "Jacksonville Fleet",
+      "classYear": 2006
+    },
+    {
+      "player": "Malcolm Frost",
+      "position": "DE",
+      "team": "Memphis Blues",
+      "classYear": 2006
+    },
+    {
+      "player": "Gordon Vale",
+      "position": "QB",
+      "team": "Austin Empire",
+      "classYear": 2006
+    },
+    {
+      "player": "Miles Carrow",
+      "position": "LB",
+      "team": "Philadelphia Founders",
+      "classYear": 2006
+    },
+    {
+      "player": "Troy Caiman",
+      "position": "QB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2006
+    },
+    {
+      "player": "Dieter Wexler",
+      "position": "DB",
+      "team": "Phoenix Scorch",
+      "classYear": 2007
+    },
+    {
+      "player": "Truman Thayer",
+      "position": "RB",
+      "team": "Buffalo Northwind",
+      "classYear": 2007
+    },
+    {
+      "player": "Wesley Cairn",
+      "position": "TE",
+      "team": "Chicago Union",
+      "classYear": 2007
+    },
+    {
+      "player": "Duncan Marlowe",
+      "position": "G",
+      "team": "Austin Empire",
+      "classYear": 2007
+    },
+    {
+      "player": "Julius Merritt",
+      "position": "WR",
+      "team": "Jacksonville Fleet",
+      "classYear": 2007
+    },
+    {
+      "player": "Cal Porter",
+      "position": "G",
+      "team": "Milwaukee Northshore",
+      "classYear": 2007
+    },
+    {
+      "player": "Evan Chapel",
+      "position": "WR",
+      "team": "Washington Sentinels",
+      "classYear": 2008
+    },
+    {
+      "player": "Colin Zane",
+      "position": "T",
+      "team": "St. Louis Archons",
+      "classYear": 2008
+    },
+    {
+      "player": "Darius Trent",
+      "position": "LB",
+      "team": "Dallas Imperials",
+      "classYear": 2008
+    },
+    {
+      "player": "Reese Callahan",
+      "position": "DB",
+      "team": "Nashville Sound",
+      "classYear": 2008
+    },
+    {
+      "player": "Evan Chapel",
+      "position": "WR",
+      "team": "Washington Sentinels",
+      "classYear": 2008
+    },
+    {
+      "player": "Travis Cole",
+      "position": "DB",
+      "team": "Washington Sentinels",
+      "classYear": 2008
+    },
+    {
+      "player": "Nolan Pryce",
+      "position": "DE",
+      "team": "Birmingham Vulcans",
+      "classYear": 2008
+    },
+    {
+      "player": "Kirk Ashford",
+      "position": "DB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2009
+    },
+    {
+      "player": "Jalen Mercer",
+      "position": "LB",
+      "team": "Nashville Sound",
+      "classYear": 2009
+    },
+    {
+      "player": "Caleb Stone",
+      "position": "DE",
+      "team": "Buffalo Northwind",
+      "classYear": 2009
+    },
+    {
+      "player": "Fergus McRae",
+      "position": "G",
+      "team": "Orlando Kingdom",
+      "classYear": 2009
+    },
+    {
+      "player": "Luther Haines",
+      "position": "SE",
+      "team": "Jacksonville Fleet",
+      "classYear": 2009
+    },
+    {
+      "player": "Emmett Sloane",
+      "position": "RB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2010
+    },
+    {
+      "player": "Terry Royce",
+      "position": "WR",
+      "team": "Birmingham Vulcans",
+      "classYear": 2010
+    },
+    {
+      "player": "Nate Crowley",
+      "position": "DT",
+      "team": "Orlando Kingdom",
+      "classYear": 2010
+    },
+    {
+      "player": "Miles Redmond",
+      "position": "RB",
+      "team": "St. Louis Archons",
+      "classYear": 2010
+    },
+    {
+      "player": "Rene Leblanc",
+      "position": "DB",
+      "team": "Chicago Union",
+      "classYear": 2010
+    },
+    {
+      "player": "Miles Jaxon",
+      "position": "LB",
+      "team": "New Orleans Hex",
+      "classYear": 2010
+    },
+    {
+      "player": "Hugo Grimmond",
+      "position": "G",
+      "team": "Washington Sentinels",
+      "classYear": 2010
+    },
+    {
+      "player": "Dylan Keene",
+      "position": "TE",
+      "team": "St. Louis Archons",
+      "classYear": 2011
+    },
+    {
+      "player": "Kendall Sparks",
+      "position": "DB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2011
+    },
+    {
+      "player": "Holt Richterson",
+      "position": "LB",
+      "team": "Los Angeles Stars",
+      "classYear": 2011
+    },
+    {
+      "player": "Graham Hensley",
+      "position": "LB",
+      "team": "Washington Sentinels",
+      "classYear": 2011
+    },
+    {
+      "player": "Ronan Faulken",
+      "position": "RB",
+      "team": "Los Angeles Stars",
+      "classYear": 2011
+    },
+    {
+      "player": "Garrett Vance",
+      "position": "DE",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2011
+    },
+    {
+      "player": "Orson Rowe",
+      "position": "T",
+      "team": "New Orleans Hex",
+      "classYear": 2012
+    },
+    {
+      "player": "Ethan Marlow",
+      "position": "RB",
+      "team": "Cleveland Forge",
+      "classYear": 2012
+    },
+    {
+      "player": "Santos Kendrix",
+      "position": "DT",
+      "team": "Seattle Evergreens",
+      "classYear": 2012
+    },
+    {
+      "player": "Blaine Dolan",
+      "position": "DE",
+      "team": "Orlando Kingdom",
+      "classYear": 2012
+    },
+    {
+      "player": "Keaton Dorsey",
+      "position": "C",
+      "team": "New York Gothic Guardians",
+      "classYear": 2012
+    },
+    {
+      "player": "Wade Mercer",
+      "position": "DB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2012
+    },
+    {
+      "player": "Darius Slate",
+      "position": "DT",
+      "team": "Baltimore Admirals",
+      "classYear": 2013
+    },
+    {
+      "player": "Mason Robards",
+      "position": "LB",
+      "team": "Boston Harbormen",
+      "classYear": 2013
+    },
+    {
+      "player": "Elliot Osgood",
+      "position": "T",
+      "team": "Detroit Assembly",
+      "classYear": 2013
+    },
+    {
+      "player": "Rufus Calder",
+      "position": "DT",
+      "team": "Nashville Sound",
+      "classYear": 2013
+    },
+    {
+      "player": "Devon Carver",
+      "position": "WR",
+      "team": "Orlando Kingdom",
+      "classYear": 2013
+    },
+    {
+      "player": "Graham North",
+      "position": "G",
+      "team": "Jacksonville Fleet",
+      "classYear": 2013
+    },
+    {
+      "player": "Cassian Willard",
+      "position": "DB",
+      "team": "Phoenix Scorch",
+      "classYear": 2014
+    },
+    {
+      "player": "Victor Strand",
+      "position": "DE",
+      "team": "Philadelphia Founders",
+      "classYear": 2014
+    },
+    {
+      "player": "Julian Reeve",
+      "position": "WR",
+      "team": "Buffalo Northwind",
+      "classYear": 2014
+    },
+    {
+      "player": "Mason Trent",
+      "position": "T",
+      "team": "Seattle Evergreens",
+      "classYear": 2014
+    },
+    {
+      "player": "Bennett Humphries",
+      "position": "DE",
+      "team": "Atlanta Apex",
+      "classYear": 2014
+    },
+    {
+      "player": "Gideon Raynor",
+      "position": "P",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2014
+    },
+    {
+      "player": "Tanner Brooke",
+      "position": "LB",
+      "team": "Baltimore Admirals",
+      "classYear": 2014
+    },
+    {
+      "player": "Otto Tingley",
+      "position": "C",
+      "team": "Orlando Kingdom",
+      "classYear": 2015
+    },
+    {
+      "player": "Gavin Ward",
+      "position": "G",
+      "team": "Nashville Sound",
+      "classYear": 2015
+    },
+    {
+      "player": "Tomas Severo",
+      "position": "LB",
+      "team": "San Diego Armada",
+      "classYear": 2015
+    },
+    {
+      "player": "Brandon Hale",
+      "position": "DE",
+      "team": "Birmingham Vulcans",
+      "classYear": 2015
+    },
+    {
+      "player": "Jordan Umber",
+      "position": "WR",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2015
+    },
+    {
+      "player": "Hector Braddock",
+      "position": "RB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2015
+    },
+    {
+      "player": "Miles Stanwick",
+      "position": "G",
+      "team": "Los Angeles Stars",
+      "classYear": 2016
+    },
+    {
+      "player": "Gareth Staley",
+      "position": "QB",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2016
+    },
+    {
+      "player": "Dorian Piers",
+      "position": "T",
+      "team": "Los Angeles Stars",
+      "classYear": 2016
+    },
+    {
+      "player": "Quentin Harrow",
+      "position": "WR",
+      "team": "Denver Summit",
+      "classYear": 2016
+    },
+    {
+      "player": "Logan Verdant",
+      "position": "LB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2016
+    },
+    {
+      "player": "Blake Fairburn",
+      "position": "QB",
+      "team": "Boston Harbormen",
+      "classYear": 2016
+    },
+    {
+      "player": "Kirk Weller",
+      "position": "QB",
+      "team": "Los Angeles Stars",
+      "classYear": 2017
+    },
+    {
+      "player": "Lamar Tolland",
+      "position": "RB",
+      "team": "San Diego Armada",
+      "classYear": 2017
+    },
+    {
+      "player": "Rylan Tabor",
+      "position": "DE",
+      "team": "Miami Tide",
+      "classYear": 2017
+    },
+    {
+      "player": "Cyrus Easton",
+      "position": "DB",
+      "team": "Seattle Evergreens",
+      "classYear": 2017
+    },
+    {
+      "player": "Malik Davison",
+      "position": "RB",
+      "team": "St. Louis Archons",
+      "classYear": 2017
+    },
+    {
+      "player": "Soren Anders",
+      "position": "K",
+      "team": "New Orleans Hex",
+      "classYear": 2017
+    },
+    {
+      "player": "Graham Underhill",
+      "position": "LB",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2018
+    },
+    {
+      "player": "Damon Oakes",
+      "position": "WR",
+      "team": "Birmingham Vulcans",
+      "classYear": 2018
+    },
+    {
+      "player": "Landon Grove",
+      "position": "WR",
+      "team": "Orlando Kingdom",
+      "classYear": 2018
+    },
+    {
+      "player": "Marcus Leary",
+      "position": "LB",
+      "team": "Detroit Assembly",
+      "classYear": 2018
+    },
+    {
+      "player": "Harlan Kessler",
+      "position": "G",
+      "team": "Boston Harbormen",
+      "classYear": 2018
+    },
+    {
+      "player": "Elliot Dawes",
+      "position": "DB",
+      "team": "Memphis Blues",
+      "classYear": 2018
+    },
+    {
+      "player": "Roland Bisset",
+      "position": "LB",
+      "team": "Austin Empire",
+      "classYear": 2018
+    },
+    {
+      "player": "Jasper Rowan",
+      "position": "DB",
+      "team": "Nashville Sound",
+      "classYear": 2019
+    },
+    {
+      "player": "Eddie Raines",
+      "position": "DB",
+      "team": "Detroit Assembly",
+      "classYear": 2019
+    },
+    {
+      "player": "Colby Mayhew",
+      "position": "C",
+      "team": "Cleveland Forge",
+      "classYear": 2019
+    },
+    {
+      "player": "Troy Larkin",
+      "position": "DB",
+      "team": "Dallas Imperials",
+      "classYear": 2019
+    },
+    {
+      "player": "Marco Galvez",
+      "position": "TE",
+      "team": "Nashville Sound",
+      "classYear": 2019
+    },
+    {
+      "player": "Cade Baylor",
+      "position": "DB",
+      "team": "St. Louis Archons",
+      "classYear": 2019
+    },
+    {
+      "player": "Edwin Sprague",
+      "position": "DE",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2020
+    },
+    {
+      "player": "Mack Rusher",
+      "position": "E",
+      "team": "Milwaukee Northshore",
+      "classYear": 2020
+    },
+    {
+      "player": "Hugh Slayton",
+      "position": "T",
+      "team": "Phoenix Scorch",
+      "classYear": 2020
+    },
+    {
+      "player": "Rocco Shields",
+      "position": "DB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2020
+    },
+    {
+      "player": "Tomas Paladino",
+      "position": "DB",
+      "team": "New York Gothic Guardians",
+      "classYear": 2020
+    },
+    {
+      "player": "Nico Karsten",
+      "position": "DT",
+      "team": "Chicago Union",
+      "classYear": 2020
+    },
+    {
+      "player": "Darren Edgeworth",
+      "position": "RB",
+      "team": "Denver Summit",
+      "classYear": 2020
+    },
+    {
+      "player": "Gavin Hutchins",
+      "position": "G",
+      "team": "Seattle Evergreens",
+      "classYear": 2020
+    },
+    {
+      "player": "Alton Hillman",
+      "position": "T",
+      "team": "Cleveland Forge",
+      "classYear": 2020
+    },
+    {
+      "player": "Ronan Harrow",
+      "position": "DB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2020
+    },
+    {
+      "player": "Casey Dillinger",
+      "position": "DB",
+      "team": "Boston Harbormen",
+      "classYear": 2020
+    },
+    {
+      "player": "Jesse Corwin",
+      "position": "T",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2020
+    },
+    {
+      "player": "Harlan Carmody",
+      "position": "WR",
+      "team": "Memphis Blues",
+      "classYear": 2020
+    },
+    {
+      "player": "Elias Bruton",
+      "position": "WR",
+      "team": "Los Angeles Stars",
+      "classYear": 2020
+    },
+    {
+      "player": "Grant Atwood",
+      "position": "DB",
+      "team": "St. Louis Archons",
+      "classYear": 2020
+    },
+    {
+      "player": "Calvin Woods",
+      "position": "DB",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2021
+    },
+    {
+      "player": "Carter Pender",
+      "position": "WR",
+      "team": "Jacksonville Fleet",
+      "classYear": 2021
+    },
+    {
+      "player": "Hugh Marlowe",
+      "position": "QB",
+      "team": "Denver Summit",
+      "classYear": 2021
+    },
+    {
+      "player": "Colin Lanton",
+      "position": "DB",
+      "team": "Baltimore Admirals",
+      "classYear": 2021
+    },
+    {
+      "player": "Malcolm Jetson",
+      "position": "WR",
+      "team": "Chicago Union",
+      "classYear": 2021
+    },
+    {
+      "player": "Adrian Fennick",
+      "position": "G",
+      "team": "New York Gothic Guardians",
+      "classYear": 2021
+    },
+    {
+      "player": "Bennett Young",
+      "position": "DT",
+      "team": "Birmingham Vulcans",
+      "classYear": 2022
+    },
+    {
+      "player": "Harrison Seabrook",
+      "position": "DE",
+      "team": "Dallas Imperials",
+      "classYear": 2022
+    },
+    {
+      "player": "Calvin Millar",
+      "position": "LB",
+      "team": "New Orleans Hex",
+      "classYear": 2022
+    },
+    {
+      "player": "Leon Hadley",
+      "position": "DB",
+      "team": "Boston Harbormen",
+      "classYear": 2022
+    },
+    {
+      "player": "Graham Barlow",
+      "position": "WR",
+      "team": "Las Vegas Syndicate",
+      "classYear": 2022
+    },
+    {
+      "player": "Vito Boscarino",
+      "position": "T",
+      "team": "St. Petersburg Pelicans",
+      "classYear": 2022
+    },
+    {
+      "player": "Marquis Weller",
+      "position": "LB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2023
+    },
+    {
+      "player": "Zane Thorne",
+      "position": "LB",
+      "team": "Miami Tide",
+      "classYear": 2023
+    },
+    {
+      "player": "Evan Thayer",
+      "position": "T",
+      "team": "Milwaukee Northshore",
+      "classYear": 2023
+    },
+    {
+      "player": "Noah Rylan",
+      "position": "DB",
+      "team": "Indianapolis Ignition",
+      "classYear": 2023
+    },
+    {
+      "player": "Darian Rhoades",
+      "position": "DB",
+      "team": "Cleveland Forge",
+      "classYear": 2023
+    },
+    {
+      "player": "Vince Klemm",
+      "position": "DT",
+      "team": "Cleveland Forge",
+      "classYear": 2023
+    },
+    {
+      "player": "Chet Howland",
+      "position": "LB",
+      "team": "Jacksonville Fleet",
+      "classYear": 2023
+    },
+    {
+      "player": "Ronan Barrow",
+      "position": "DB",
+      "team": "Baltimore Admirals",
+      "classYear": 2023
+    },
+    {
+      "player": "Parker Willard",
+      "position": "LB",
+      "team": "Birmingham Vulcans",
+      "classYear": 2024
+    },
+    {
+      "player": "Julian Pepperell",
+      "position": "DE",
+      "team": "Charlotte Crown",
+      "classYear": 2024
+    },
+    {
+      "player": "Stan McCormick",
+      "position": "DT",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2024
+    },
+    {
+      "player": "Desmond Jolson",
+      "position": "WR",
+      "team": "Houston Launch",
+      "classYear": 2024
+    },
+    {
+      "player": "Keegan Harlow",
+      "position": "PR",
+      "team": "Pittsburgh Ironclads",
+      "classYear": 2024
+    },
+    {
+      "player": "Gordon Grady",
+      "position": "LB",
+      "team": "St. Louis Archons",
+      "classYear": 2024
+    },
+    {
+      "player": "Dorian Freeport",
+      "position": "DE",
+      "team": "Denver Summit",
+      "classYear": 2024
+    },
+    {
+      "player": "Stellan Keen",
+      "position": "WR",
+      "team": "Boston Harbormen",
+      "classYear": 2025
+    },
+    {
+      "player": "Rafael Gatewood",
+      "position": "TE",
+      "team": "San Diego Armada",
+      "classYear": 2025
+    },
+    {
+      "player": "Colton Alder",
+      "position": "DE",
+      "team": "Orlando Kingdom",
+      "classYear": 2025
+    },
+    {
+      "player": "Ethan Allenby",
+      "position": "DB",
+      "team": "Memphis Blues",
+      "classYear": 2025
+    },
+    {
+      "player": "Adrian Valenti",
+      "position": "K",
+      "team": "Dallas Imperials",
+      "classYear": 2026
+    },
+    {
+      "player": "Lucas Keegan",
+      "position": "ILB",
+      "team": "Charlotte Crown",
+      "classYear": 2026
+    },
+    {
+      "player": "Loren Fitzpatrick",
+      "position": "WR",
+      "team": "Phoenix Scorch",
+      "classYear": 2026
+    },
+    {
+      "player": "Gareth Crain",
+      "position": "RB",
+      "team": "Birmingham Vulcans",
+      "classYear": 2026
+    },
+    {
+      "player": "Beau Dresden",
+      "position": "QB",
+      "team": "New Orleans Hex",
+      "classYear": 2026
+    }
+  ],
+  "championshipsByTeam": [
+    {
+      "team": "DALLAS IMPERIALS",
+      "titles": 6
+    },
+    {
+      "team": "BIRMINGHAM VULCANS",
+      "titles": 5
+    },
+    {
+      "team": "PHILADELPHIA FOUNDERS",
+      "titles": 4
+    },
+    {
+      "team": "NASHVILLE SOUND",
+      "titles": 3
+    },
+    {
+      "team": "JACKSONVILLE FLEET",
+      "titles": 3
+    },
+    {
+      "team": "BOSTON HARBORMEN",
+      "titles": 3
+    },
+    {
+      "team": "WASHINGTON SENTINELS",
+      "titles": 3
+    },
+    {
+      "team": "ST. LOUIS ARCHONS",
+      "titles": 3
+    },
+    {
+      "team": "MEMPHIS BLUES",
+      "titles": 2
+    },
+    {
+      "team": "NEW YORK GOTHIC GUARDIANS",
+      "titles": 2
+    },
+    {
+      "team": "DETROIT ASSEMBLY",
+      "titles": 2
+    },
+    {
+      "team": "LAS VEGAS SYNDICATE",
+      "titles": 2
+    },
+    {
+      "team": "LOS ANGELES STARS",
+      "titles": 2
+    },
+    {
+      "team": "BALTIMORE ADMIRALS",
+      "titles": 2
+    },
+    {
+      "team": "NEW ORLEANS HEX",
+      "titles": 1
+    },
+    {
+      "team": "PITTSBURGH IRONCLADS",
+      "titles": 1
+    },
+    {
+      "team": "SEATTLE EVERGREENS",
+      "titles": 1
+    },
+    {
+      "team": "DENVER SUMMIT",
+      "titles": 1
+    },
+    {
+      "team": "INDIANAPOLIS IGNITION",
+      "titles": 0
+    },
+    {
+      "team": "HOUSTON LAUNCH",
+      "titles": 0
+    },
+    {
+      "team": "ORLANDO KINGDOM",
+      "titles": 0
+    },
+    {
+      "team": "CHICAGO UNION",
+      "titles": 0
+    },
+    {
+      "team": "CHARLOTTE CROWN",
+      "titles": 0
+    },
+    {
+      "team": "MIAMI TIDE",
+      "titles": 0
+    },
+    {
+      "team": "PHOENIX SCORCH",
+      "titles": 0
+    },
+    {
+      "team": "BUFFALO NORTHWIND",
+      "titles": 0
+    },
+    {
+      "team": "SAN DIEGO ARMADA",
+      "titles": 0
+    },
+    {
+      "team": "ST. PETERSBURG PELICANS",
+      "titles": 0
+    },
+    {
+      "team": "MILWAUKEE NORTHSHORE",
+      "titles": 0
+    },
+    {
+      "team": "ATLANTA APEX",
+      "titles": 0
+    },
+    {
+      "team": "CLEVELAND FORGE",
+      "titles": 0
+    },
+    {
+      "team": "AUSTIN EMPIRE",
+      "titles": 0
+    }
+  ]
+}

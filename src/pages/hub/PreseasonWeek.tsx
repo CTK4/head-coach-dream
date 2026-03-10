@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import PreseasonSnaps from "@/pages/hub/PreseasonSnaps";
+import { getPositionLabel } from "@/lib/displayLabels";
 
 export default function PreseasonWeek() {
   const { state, dispatch } = useGame();
@@ -92,7 +93,7 @@ export default function PreseasonWeek() {
                   <div className="min-w-0">
                     <div className="font-medium truncate">{p.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.pos} · OVR {p.ovr}
+                      {getPositionLabel(p.pos)} · OVR {p.ovr}
                     </div>
                   </div>
                   <Badge variant="outline">Active</Badge>

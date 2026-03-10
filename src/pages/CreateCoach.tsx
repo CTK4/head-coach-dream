@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { getLeagueCities, getTeams } from "@/data/leagueDb";
+import { getLeagueCities, getTeamById, getTeams } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const AGE_TIERS = ["32-35", "36-39", "40-43", "44-47", "48-51", "52-55"] as const;
+const COACH_AGES = Array.from({ length: 24 }, (_, index) => String(32 + index));
 
 const LEAGUE_CITIES = getLeagueCities();
 
@@ -17,24 +17,26 @@ function findHometownTeamId(hometown: string): string | undefined {
 
 const CreateCoach = () => {
   const { state, dispatch } = useGame();
+  const lockedTeamId = state.storySetup?.teamLocked ? state.storySetup.teamId : undefined;
+  const lockedTeam = lockedTeamId ? getTeamById(lockedTeamId) : undefined;
   const [name, setName] = useState(state.coach.name);
-  const [ageTier, setAgeTier] = useState(state.coach.ageTier || AGE_TIERS[0]);
-  const [hometown, setHometown] = useState(state.coach.hometown);
+  const [ageTier, setAgeTier] = useState(state.coach.ageTier || COACH_AGES[0]);
+  const [hometown, setHometown] = useState(state.coach.hometown || String(lockedTeam?.region ?? ""));
 
   const handleContinue = () => {
     if (!name.trim() || !hometown) return;
 
-    const hometownTeamId = findHometownTeamId(hometown);
+    const hometownTeamId = lockedTeamId ?? findHometownTeamId(hometown);
     dispatch({
       type: "SET_COACH",
       payload: {
         name: name.trim(),
-        hometown,
+        hometown: lockedTeam?.region ?? hometown,
         ageTier,
         hometownTeamId,
       },
     });
-    dispatch({ type: "SET_PHASE", payload: "BACKGROUND" });
+    dispatch({ type: "SET_PHASE", payload: lockedTeamId ? "COORD_HIRING" : "BACKGROUND" });
   };
 
   return (
@@ -50,32 +52,43 @@ const CreateCoach = () => {
             <Input id="name" placeholder="Coach Name" value={name} onChange={(e) => setName(e.target.value)} className="bg-secondary" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="age-tier">Age Tier</Label>
+            <Label htmlFor="age-tier">Age</Label>
             <Select value={ageTier} onValueChange={setAgeTier}>
               <SelectTrigger id="age-tier" className="bg-secondary">
-                <SelectValue placeholder="Select age tier" />
+                <SelectValue placeholder="Select age" />
               </SelectTrigger>
               <SelectContent>
-                {AGE_TIERS.map((tier) => (
-                  <SelectItem key={tier} value={tier}>{tier}</SelectItem>
+                {COACH_AGES.map((age) => (
+                  <SelectItem key={age} value={age}>{age}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="hometown">Hometown</Label>
-            <Select value={hometown} onValueChange={setHometown}>
-              <SelectTrigger id="hometown" className="bg-secondary">
-                <SelectValue placeholder="Select hometown" />
+            <Select
+              value={lockedTeam ? String(lockedTeam.region ?? "") : hometown}
+              onValueChange={setHometown}
+              disabled={Boolean(lockedTeam)}
+            >
+              <SelectTrigger
+                data-test="hometown-select"
+                id="hometown"
+                className="bg-secondary"
+              >
+                <SelectValue placeholder={lockedTeam ? `Locked: ${lockedTeam.name}` : "Select hometown"} />
               </SelectTrigger>
               <SelectContent>
                 {LEAGUE_CITIES.map((city) => (
-                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                  <SelectItem data-test={`hometown-option-${city}`} key={city} value={city}>
+                    {city}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {lockedTeam ? <p className="text-xs text-muted-foreground">Story Mode locked team: {lockedTeam.region} {lockedTeam.name}</p> : null}
           </div>
-          <Button onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
+          <Button data-test="create-coach-continue" onClick={handleContinue} disabled={!name.trim() || !hometown} className="w-full mt-4">
             Continue
           </Button>
         </CardContent>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeDeadMoneyLedger } from "@/engine/deadMoney";
+import { getLeague } from "@/data/leagueDb";
 import type { GameState, Transaction } from "@/context/GameContext";
 
 function makeMinimalState(overrides: Partial<GameState> = {}): GameState {
@@ -7,14 +8,14 @@ function makeMinimalState(overrides: Partial<GameState> = {}): GameState {
     season: 2026,
     saveSeed: 12345,
     finances: {
-      cap: 250_000_000,
+      cap: getLeague().salaryCap,
       carryover: 0,
       incentiveTrueUps: 0,
       deadCapThisYear: 0,
       deadCapNextYear: 0,
       baseCommitted: 0,
       capCommitted: 0,
-      capSpace: 250_000_000,
+      capSpace: getLeague().salaryCap,
       cash: 100_000_000,
       postJune1Sim: false,
     },
@@ -97,20 +98,20 @@ describe("computeDeadMoneyLedger", () => {
     const state = makeMinimalState({
       transactions: [tx],
       finances: {
-        cap: 250_000_000,
+        cap: getLeague().salaryCap,
         carryover: 0,
         incentiveTrueUps: 0,
         deadCapThisYear: 0,
         deadCapNextYear: 0,
         baseCommitted: 0,
         capCommitted: 0,
-        capSpace: 250_000_000,
+        capSpace: getLeague().salaryCap,
         cash: 100_000_000,
         postJune1Sim: false,
       },
     } as any);
     const ledger = computeDeadMoneyLedger(state, "TEAM_A", 2026);
-    expect(ledger.capPct).toBeCloseTo(0.1, 5);
+    expect(ledger.capPct).toBeCloseTo(25_000_000 / getLeague().salaryCap, 5);
   });
 
   it("handles Post–June 1 next-year dead cap", () => {

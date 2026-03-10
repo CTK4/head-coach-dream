@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getDraftClass, labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
+import { labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +21,7 @@ export default function Draft() {
     dispatch({ type: "DRAFT_INIT" });
   }, [dispatch]);
 
-  const board = useMemo(() => getDraftClass(), []);
-  const available = useMemo(() => board.filter((p) => !state.draft.takenProspectIds[p.prospectId]), [board, state.draft.takenProspectIds]);
+  const available = useMemo(() => state.draft.prospectPool.filter((p) => !state.draft.takenProspectIds[p.prospectId]), [state.draft.prospectPool, state.draft.takenProspectIds]);
 
   const slot = state.draft.slots[state.draft.cursor];
   const isUserOnClock = !!slot && slot.teamId === state.draft.userTeamId;
@@ -29,6 +29,12 @@ export default function Draft() {
   useEffect(() => {
     if (!state.draft.complete && slot && !isUserOnClock) dispatch({ type: "DRAFT_CPU_ADVANCE" });
   }, [dispatch, isUserOnClock, slot, state.draft.complete]);
+
+  useEffect(() => {
+    if (state.draft.completed) {
+      dispatch({ type: "DRAFT_COMPLETE" });
+    }
+  }, [dispatch, state.draft.completed]);
 
   const upcoming = useMemo(() => upcomingUserPickSlots(state.draft, 8), [state.draft]);
   const recent = useMemo(() => (state.draft.selections ?? []).slice(-10).reverse(), [state.draft.selections]);
@@ -167,7 +173,7 @@ export default function Draft() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold truncate">{p.name}</span><Badge variant="outline">{p.pos}</Badge><span className="text-xs text-muted-foreground">#{p.rank}</span>{p.tier ? <Badge variant="secondary">{p.tier}</Badge> : null}
+                            <span className="font-semibold truncate">{p.name}</span><Badge variant="outline">{getPositionLabel(p.pos)}</Badge><span className="text-xs text-muted-foreground">#{p.rank}</span>{p.tier ? <Badge variant="secondary">{p.tier}</Badge> : null}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">{p.college}</div>
                         </div>
@@ -223,7 +229,7 @@ export default function Draft() {
 
           <Card>
             <CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardTitle>Recent Picks</CardTitle><Badge variant="secondary">{state.draft.selections.length}/224</Badge></div></CardHeader>
-            <CardContent className="pt-0"><ScrollArea className="h-[60vh] pr-3"><div className="space-y-2">{recent.map((p) => <div key={`${p.overall}-${p.prospectId}`} className="rounded-md border px-3 py-2"><div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">{p.overall}. {p.name}</div><Badge variant="secondary">{p.pos}</Badge></div><div className="text-xs text-muted-foreground">R{p.round}P{p.pickInRound} · {p.teamId} · #{p.rank}</div></div>)}{!recent.length && <div className="text-sm text-muted-foreground">No picks yet.</div>}</div></ScrollArea></CardContent>
+            <CardContent className="pt-0"><ScrollArea className="h-[60vh] pr-3"><div className="space-y-2">{recent.map((p) => <div key={`${p.overall}-${p.prospectId}`} className="rounded-md border px-3 py-2"><div className="flex items-center justify-between gap-2"><div className="font-semibold text-sm">{p.overall}. {p.name}</div><Badge variant="secondary">{getPositionLabel(p.pos)}</Badge></div><div className="text-xs text-muted-foreground">R{p.round}P{p.pickInRound} · {p.teamId} · #{p.rank}</div></div>)}{!recent.length && <div className="text-sm text-muted-foreground">No picks yet.</div>}</div></ScrollArea></CardContent>
           </Card>
         </div>
       </div>

@@ -1,19 +1,66 @@
 import { useMemo } from "react";
+import { Layers } from "lucide-react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
-import { useGame, type PriorityPos } from "@/context/GameContext";
+import { useGame, type GmMode, type PriorityPos } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getPositionLabel } from "@/lib/displayLabels";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import PlaybookScreen from "@/pages/hub/strategy/PlaybookScreen";
+import {
+  DEFENSE_SCHEME_IDS,
+  DEFENSE_SCHEME_LABELS,
+  DEFAULT_DEFENSE_SCHEME_ID,
+  DEFAULT_OFFENSE_SCHEME_ID,
+  OFFENSE_SCHEME_IDS,
+  OFFENSE_SCHEME_LABELS,
+} from "@/lib/schemeLabels";
 
 const POS_GROUPS: PriorityPos[] = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K", "P"];
 
+const GM_MODES: { value: GmMode; label: string; desc: string }[] = [
+  { value: "REBUILD", label: "Rebuild", desc: "Draft-heavy, cap-conservative. Favors youth & upside." },
+  { value: "RELOAD", label: "Reload", desc: "Balanced mix of FA signings and youth development." },
+  { value: "CONTEND", label: "Contend", desc: "FA-aggressive, trade for veterans. Win now." },
+];
+
 function StrategyHome() {
+  const { state, dispatch } = useGame();
+  const gmMode = state.strategy?.gmMode ?? "CONTEND";
+
   return (
     <div className="min-w-0">
       <ScreenHeader title="FRANCHISE STRATEGY" subtitle="Identity + Priorities" />
       <div className="space-y-3 p-4">
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <Card>
+          <CardHeader>
+            <CardTitle>Franchise Mode</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {GM_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => dispatch({ type: "SET_GM_MODE", payload: { gmMode: m.value } })}
+                  className={`rounded-lg border px-3 py-3 text-left transition ${
+                    gmMode === m.value
+                      ? "border-blue-400/50 bg-blue-500/15 text-blue-100"
+                      : "border-white/10 bg-white/5 text-slate-300"
+                  }`}
+                >
+                  <div className="font-semibold text-sm">{m.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-70">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+            <div className="text-xs text-slate-400">
+              Affects draft board sorting, FA offer aggression, and trade acceptance thresholds.
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <Link to="identity" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
             <div className="font-semibold">Team Identity</div>
             <div className="text-xs text-slate-400">Offense/Defense style & tempo</div>
@@ -21,6 +68,15 @@ function StrategyHome() {
           <Link to="priorities" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
             <div className="font-semibold">Draft / FA Priorities</div>
             <div className="text-xs text-slate-400">Set position targets</div>
+          </Link>
+          <Link to="playbooks" className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold">Playbook</div>
+                <div className="text-xs text-slate-400">Offensive and defensive scheme, formation packages</div>
+              </div>
+              <Layers className="h-4 w-4 text-blue-400" />
+            </div>
           </Link>
         </div>
 
@@ -47,11 +103,27 @@ function IdentityScreen() {
   const offenseTempo = state.scheme?.offense?.tempo ?? "NORMAL";
   const defenseStyle = state.scheme?.defense?.style ?? "MIXED";
   const defenseAgg = state.scheme?.defense?.aggression ?? "NORMAL";
+  const offenseSchemeId = state.scheme?.offense?.schemeId ?? DEFAULT_OFFENSE_SCHEME_ID;
+  const defenseSchemeId = state.scheme?.defense?.schemeId ?? DEFAULT_DEFENSE_SCHEME_ID;
+
 
   return (
     <div className="min-w-0">
-      <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" />
+      <ScreenHeader title="TEAM IDENTITY" subtitle="Scheme & Tendencies" showBack />
       <div className="space-y-3 p-4">
+        <Link
+          to="/strategy/playbooks"
+          className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold">Playbooks</div>
+              <div className="text-xs text-muted-foreground">Offense &amp; Defense (driven by coordinator system)</div>
+            </div>
+            <span className="text-sm text-accent">Open →</span>
+          </div>
+        </Link>
+
         <Card>
           <CardHeader>
             <CardTitle>Offense</CardTitle>
@@ -64,7 +136,7 @@ function IdentityScreen() {
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: v as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: v as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -80,13 +152,40 @@ function IdentityScreen() {
             </div>
 
             <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Scheme</div>
+              <Select
+                value={offenseSchemeId}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: {
+                      offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: v as never },
+                      defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId },
+                    },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OFFENSE_SCHEME_IDS.map((schemeId) => (
+                    <SelectItem key={schemeId} value={schemeId}>
+                      {OFFENSE_SCHEME_LABELS[schemeId]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
               <div className="text-xs text-slate-400">Tempo</div>
               <Select
                 value={offenseTempo}
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: v as never }, defense: { style: defenseStyle as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: v as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -115,7 +214,7 @@ function IdentityScreen() {
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: v as never, aggression: defenseAgg as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: v as never, aggression: defenseAgg as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -131,13 +230,40 @@ function IdentityScreen() {
             </div>
 
             <div className="grid gap-2">
+              <div className="text-xs text-slate-400">Scheme</div>
+              <Select
+                value={defenseSchemeId}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_SCHEME",
+                    payload: {
+                      offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId },
+                      defense: { style: defenseStyle as never, aggression: defenseAgg as never, schemeId: v as never },
+                    },
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEFENSE_SCHEME_IDS.map((schemeId) => (
+                    <SelectItem key={schemeId} value={schemeId}>
+                      {DEFENSE_SCHEME_LABELS[schemeId]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
               <div className="text-xs text-slate-400">Aggression</div>
               <Select
                 value={defenseAgg}
                 onValueChange={(v) =>
                   dispatch({
                     type: "SET_SCHEME",
-                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never }, defense: { style: defenseStyle as never, aggression: v as never } },
+                    payload: { offense: { style: offenseStyle as never, tempo: offenseTempo as never, schemeId: offenseSchemeId }, defense: { style: defenseStyle as never, aggression: v as never, schemeId: defenseSchemeId } },
                   })
                 }
               >
@@ -175,7 +301,7 @@ function PrioritiesScreen() {
 
   return (
     <div className="min-w-0">
-      <ScreenHeader title="DRAFT / FA PRIORITIES" subtitle="Targets & Focus" />
+      <ScreenHeader title="DRAFT / FA PRIORITIES" subtitle="Targets & Focus" showBack />
       <div className="space-y-3 p-4">
         <Card>
           <CardHeader>
@@ -183,7 +309,7 @@ function PrioritiesScreen() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              {top3.length ? top3.map((p) => <Badge key={p}>{p}</Badge>) : <span className="text-sm text-slate-400">None selected</span>}
+              {top3.length ? top3.map((p) => <Badge key={p}>{getPositionLabel(p)}</Badge>) : <span className="text-sm text-slate-400">None selected</span>}
             </div>
             <div className="grid grid-cols-3 gap-2">
               {POS_GROUPS.map((p) => (
@@ -191,10 +317,10 @@ function PrioritiesScreen() {
                   key={p}
                   onClick={() => toggle(p)}
                   className={`rounded-lg border px-3 py-2 text-xs ${
-                    priorities.includes(p) ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-100" : "border-white/10 bg-white/5"
+                    priorities.includes(p) ? "border-blue-400/40 bg-blue-500/10 text-white" : "border-white/10 bg-white/5"
                   }`}
                 >
-                  {p}
+                  {getPositionLabel(p)}
                 </button>
               ))}
             </div>
@@ -214,7 +340,7 @@ export default function StrategyRoutes() {
       <Route index element={<StrategyHome />} />
       <Route path="identity" element={<IdentityScreen />} />
       <Route path="priorities" element={<PrioritiesScreen />} />
-      <Route path="tag" element={<Navigate to="/hub/tag-center" replace />} />
+      <Route path="playbooks" element={<PlaybookScreen />} />
       <Route path="*" element={<Navigate to="/strategy" replace />} />
     </Routes>
   );

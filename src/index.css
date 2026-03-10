@@ -4,57 +4,59 @@
 
 @layer base {
   :root {
-    --background: 220 20% 10%;
-    --foreground: 210 40% 96%;
+    --token-accent: #3b82f6;
+    --token-accent-hover: #2563eb;
+    --token-accent-subtle: rgba(59, 130, 246, 0.12);
+    --token-surface-0: #0a0a0f;
+    --token-surface-1: #13131a;
+    --token-surface-2: #1c1c27;
+    --token-surface-3: #252535;
+    --token-text-primary: #f1f1f5;
+    --token-text-secondary: #8b8b9e;
+    --token-text-muted: #52526a;
 
-    --card: 220 18% 14%;
-    --card-foreground: 210 40% 96%;
-
-    --popover: 220 18% 14%;
-    --popover-foreground: 210 40% 96%;
-
-    --primary: 142 60% 45%;
-    --primary-foreground: 220 20% 10%;
-
-    --secondary: 220 14% 22%;
-    --secondary-foreground: 210 40% 96%;
-
-    --muted: 220 14% 18%;
-    --muted-foreground: 215 16% 55%;
-
-    --accent: 38 90% 55%;
-    --accent-foreground: 220 20% 10%;
-
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 96%;
-
-    --border: 220 14% 22%;
-    --input: 220 14% 22%;
-    --ring: 142 60% 45%;
-
+    --background: 235 21% 5%;
+    --foreground: 240 18% 95%;
+    --card: 240 13% 9%;
+    --card-foreground: 240 18% 95%;
+    --popover: 240 13% 9%;
+    --popover-foreground: 240 18% 95%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 240 20% 10%;
+    --secondary: 237 17% 13%;
+    --secondary-foreground: 240 18% 95%;
+    --muted: 237 17% 13%;
+    --muted-foreground: 239 13% 58%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 240 18% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 240 18% 95%;
+    --border: 236 17% 20%;
+    --input: 236 17% 20%;
+    --ring: 217 91% 60%;
     --radius: 0.75rem;
 
-    --sidebar-background: 220 20% 8%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 142 60% 45%;
-    --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 220 14% 18%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 220 14% 22%;
-    --sidebar-ring: 142 60% 45%;
+    --sidebar-background: 235 21% 5%;
+    --sidebar-foreground: 240 18% 95%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 240 18% 95%;
+    --sidebar-accent: 237 17% 13%;
+    --sidebar-accent-foreground: 240 18% 95%;
+    --sidebar-border: 236 17% 20%;
+    --sidebar-ring: 217 91% 60%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
   }
 }
 
-html, body {
+html,
+body {
   overflow-x: hidden;
 }

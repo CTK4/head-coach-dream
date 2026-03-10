@@ -1,13 +1,17 @@
+import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
 import { computeDevArrow, computeDevRisk } from "@/engine/devCalculators";
+import { coachAttrModifier, coachesForPosition } from "@/engine/coachImpact";
+import { CORE_ATTRIBUTE_KEYS } from "@/engine/snapBasedProgression";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // ──────────────────────────────────────────────────────────
 // Constants
@@ -103,7 +107,7 @@ export default function Development() {
       .map((p: Record<string, unknown>) => ({
         playerId: String(p.playerId ?? ""),
         name: String(p.fullName ?? "Unknown"),
-        pos: normalizePos(String(p.pos ?? "UNK")),
+        pos: getPositionLabel(normalizePos(String(p.pos ?? "UNK"))),
         age: Number(p.age ?? 0),
         ovr: clamp100(Number(p.overall ?? 0)),
         potential: Number(p.potential ?? 0),
@@ -143,11 +147,40 @@ export default function Development() {
   }
 
   // ── Player drawer ────────────────────────────────────────
+  const seasonDevDeltas = useMemo(() => {
+    const events = (state.memoryLog ?? []).filter((e) => e.type === "SEASON_DEVELOPMENT");
+    const latest = events.length ? (events[events.length - 1].payload as { deltas?: Record<string, number> }) : null;
+    return (latest?.deltas ?? {}) as Record<string, number>;
+  }, [state.memoryLog]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedPlayer = useMemo(
     () => players.find((p) => p.playerId === selectedId) ?? null,
     [players, selectedId],
   );
+
+  // ── Attribute deltas for selected player ────────────────
+  const selectedAttrDeltas = useMemo<Record<string, number>>(() => {
+    if (!selectedId) return {};
+    return state.playerAttributeDeltasById?.[selectedId] ?? {};
+  }, [selectedId, state.playerAttributeDeltasById]);
+
+  // ── Staff coaching bonus for selected player's position ──
+  const selectedCoachBonus = useMemo<Array<{ label: string; delta: number }>>(() => {
+    if (!selectedPlayer || !state.staffRoster?.coaches?.length) return [];
+    const pos = selectedPlayer.pos; // already display-label; use raw pos from players array
+    const rawPlayer = state.playerAttributeDeltasById ? selectedId : null;
+    // get raw pos from effective players
+    const rawPos = rawPlayer
+      ? String(getEffectivePlayersByTeam(state, teamId).find((p: Record<string, unknown>) => String(p.playerId) === selectedId)?.pos ?? pos)
+      : pos;
+    const relevant = coachesForPosition(state.staffRoster.coaches, rawPos);
+    if (!relevant.length) return [];
+    return CORE_ATTRIBUTE_KEYS.map((attr) => ({
+      label: attr.replace(/_/g, " "),
+      delta: relevant.reduce((sum, c) => sum + coachAttrModifier(c, attr.toLowerCase()), 0),
+    })).filter((row) => Math.abs(row.delta) > 0.001);
+  }, [selectedPlayer, selectedId, state, teamId]);
 
   // ── Loading / empty guard ────────────────────────────────
   if (!teamId) {
@@ -244,9 +277,9 @@ export default function Development() {
             {POS_GROUPS.map((pos) => {
               const level: FocusLevel = draftFocus[pos] ?? "NORMAL";
               return (
-                <Card key={pos} className="rounded-2xl border-white/10 bg-white/[0.04]">
+                <Card key={getPositionLabel(pos)} className="rounded-2xl border-white/10 bg-white/[0.04]">
                   <CardContent className="flex items-center gap-3 p-3">
-                    <div className="w-12 shrink-0 text-sm font-bold text-slate-200">{pos}</div>
+                    <div className="w-12 shrink-0 text-sm font-bold text-slate-200">{getPositionLabel(pos)}</div>
                     <div className="flex flex-1 gap-1">
                       {(["LOW", "NORMAL", "HIGH"] as FocusLevel[]).map((lvl) => (
                         <button
@@ -278,40 +311,35 @@ export default function Development() {
 
         {/* ── Player Progress ───────────────────────────── */}
         <TabsContent value="progress" className="p-4 space-y-2">
-          {players.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">No players found.</p>
-          ) : (
-            players.map((p) => {
-              const arrow = computeDevArrow(p);
-              const risk = computeDevRisk(p);
-              const moraleColor =
-                p.morale >= 80 ? "text-emerald-300" : p.morale >= 60 ? "text-slate-300" : "text-rose-400";
-              return (
-                <button
-                  key={p.playerId}
-                  onClick={() => setSelectedId(p.playerId)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.06]"
-                >
-                  <div className={`w-6 shrink-0 text-center text-xl font-bold ${DEV_ARROW_COLOR[arrow]}`}>{arrow}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{p.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {p.pos} · Age {p.age}
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
-                    <div className="text-base font-extrabold text-emerald-300">{p.ovr}</div>
-                    <div className={`text-[10px] font-medium ${moraleColor}`}>M:{p.morale}</div>
-                  </div>
-                  {risk !== "LOW" ? (
-                    <Badge variant="outline" className={`shrink-0 px-1 py-0 text-[9px] ${RISK_CLASS[risk]}`}>
-                      {risk}
-                    </Badge>
-                  ) : null}
-                </button>
-              );
-            })
-          )}
+          <Card className="rounded-2xl border-white/10 bg-white/[0.04]">
+            <CardHeader className="pb-2"><CardTitle className="text-sm tracking-wider text-slate-300">SEASON DEVELOPMENT RESULTS</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Player</TableHead>
+                    <TableHead>Pos</TableHead>
+                    <TableHead>Projected</TableHead>
+                    <TableHead>Actual Δ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {players.map((p) => {
+                    const arrow = computeDevArrow(p, state.coach);
+                    const actual = Number(seasonDevDeltas[p.playerId] ?? 0);
+                    return (
+                      <TableRow key={p.playerId} onClick={() => setSelectedId(p.playerId)} className="cursor-pointer">
+                        <TableCell className="font-semibold">{p.name}</TableCell>
+                        <TableCell>{p.pos}</TableCell>
+                        <TableCell className={DEV_ARROW_COLOR[arrow]}>{arrow}</TableCell>
+                        <TableCell className={actual > 0 ? "text-emerald-300" : actual < 0 ? "text-rose-300" : "text-slate-300"}>{actual > 0 ? `+${actual}` : `${actual}`}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -368,13 +396,31 @@ export default function Development() {
                   </Card>
                 ) : null}
 
-                {/* Attribute delta (snap-based — placeholder until sim is wired) */}
+                {/* Attribute Delta (snap-based progression) */}
                 <Card className="rounded-xl border-white/10 bg-white/[0.04]">
                   <CardContent className="p-3">
                     <div className="mb-2 text-xs uppercase tracking-wider text-slate-400">Attribute Delta</div>
-                    <div className="text-xs italic text-slate-500">
-                      Snap-based growth tracking not yet available — deltas will appear after game simulation.
-                    </div>
+                    {Object.keys(selectedAttrDeltas).length === 0 ? (
+                      <div className="text-xs italic text-slate-500">
+                        No snap data yet — deltas accumulate after regular season games.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {Object.entries(selectedAttrDeltas)
+                          .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
+                          .slice(0, 10)
+                          .map(([attr, delta]) => (
+                            <div key={attr} className="flex items-center justify-between gap-1">
+                              <span className="text-xs text-slate-400 truncate">{attr.replace(/_/g, " ")}</span>
+                              <span
+                                className={`text-xs font-bold shrink-0 ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-slate-400"}`}
+                              >
+                                {delta > 0 ? `+${delta}` : delta}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -396,13 +442,30 @@ export default function Development() {
                   </CardContent>
                 </Card>
 
-                {/* Coaching / staff modifiers (placeholder) */}
+                {/* Coaching Modifiers (staff affinity bonuses) */}
                 <Card className="rounded-xl border-white/10 bg-white/[0.04]">
                   <CardContent className="p-3">
                     <div className="mb-1 text-xs uppercase tracking-wider text-slate-400">Coaching Modifiers</div>
-                    <div className="text-xs italic text-slate-500">
-                      Staff coaching bonuses will display here when staff system is wired.
-                    </div>
+                    {selectedCoachBonus.length === 0 ? (
+                      <div className="text-xs italic text-slate-500">
+                        {state.staffRoster?.coaches?.length
+                          ? "No applicable coaches for this position."
+                          : "Hire position coaches to see attribute bonuses."}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {selectedCoachBonus.map(({ label, delta }) => (
+                          <div key={label} className="flex items-center justify-between gap-1">
+                            <span className="text-xs text-slate-400 truncate">{label}</span>
+                            <span
+                              className={`text-xs font-bold shrink-0 ${delta > 0 ? "text-emerald-400" : "text-rose-400"}`}
+                            >
+                              {delta > 0 ? `+${(delta * 100).toFixed(0)}%` : `${(delta * 100).toFixed(0)}%`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
