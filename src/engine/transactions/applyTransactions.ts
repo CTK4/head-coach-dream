@@ -27,6 +27,9 @@ function applyMovement(playerToTeam: Record<string, string | "FREE_AGENT">, even
     case "RELEASE":
       for (const playerId of event.playerIds) playerToTeam[String(playerId)] = "FREE_AGENT";
       break;
+    case "FRANCHISE_TAG_REMOVE":
+      for (const playerId of event.playerIds) playerToTeam[String(playerId)] = normTeamId(event.teamId);
+      break;
     case "TRADE": {
       const toTeamByPlayer: Record<string, string> = event.details?.toTeamByPlayer ?? {};
       for (const playerId of event.playerIds) {
@@ -51,6 +54,9 @@ export function buildRosterIndex(state: GameState): RosterIndex {
 
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
   for (const event of events) applyMovement(playerToTeam, event as TransactionEvent);
+  for (const [playerId, teamId] of Object.entries(state.playerTeamOverrides ?? {})) {
+    playerToTeam[String(playerId)] = normTeamId(teamId);
+  }
 
   const teamToPlayers: Record<string, string[]> = {};
   const freeAgents: string[] = [];

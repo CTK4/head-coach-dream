@@ -77,10 +77,12 @@ function rand01(key: string): number {
 }
 
 export function playerTradeValue(p: TradePlayer): number {
+  // Draft pick assets carry their trade value directly in `overall` (no age adjustment).
+  if (p.isPick) return Number(p.overall ?? 140);
   return calculateTradeValue({
     overall: Number(p.overall ?? 60),
     age: Number(p.age ?? 26),
-    isPick: Boolean(p.isPick),
+    isPick: false,
   }, { teamStage: "competitive", positionalNeed: 0.5 });
 }
 
@@ -103,6 +105,7 @@ export function deriveTeamContext(opts: {
   winPct?: number;
   avgRosterAge?: number;
   priorWinPct?: number;
+  playoffResult?: "missed" | "wildCard" | "divisional" | "conference" | "superbowlLoss" | "champion";
   gmMode?: "REBUILD" | "RELOAD" | "CONTEND";
   gmRelationship?: number;
   leaguePrestige?: number;
@@ -129,7 +132,7 @@ export function deriveTeamContext(opts: {
     winPct,
     capSpaceRatio: clamp(1 - capStress, 0, 1),
     avgRosterAge: opts.avgRosterAge ?? 26,
-    priorWinPct: opts.priorWinPct,
+    playoffResult: opts.playoffResult ?? "missed",
   });
   const gmMode = opts.gmMode ?? mapRebuildStageToGmMode(derivedStage);
   const windowScore = gmMode === "REBUILD" ? 0.2 : gmMode === "CONTEND" ? clamp(winPct + 0.2, 0, 1) : 0.5;

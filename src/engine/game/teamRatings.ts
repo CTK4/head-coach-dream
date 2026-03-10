@@ -1,6 +1,8 @@
 import type { GameState } from "@/context/GameContext";
 import { getPlayersByTeam } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
+import { applyStaffModifiers, coachesForPosition } from "@/engine/coachImpact";
+import type { CoachProfile } from "@/data/coachTraits";
 
 export type TeamGameRatings = {
   /** Quarterback processing / decision-making (55–85) */
@@ -37,7 +39,44 @@ function scale(raw: number): number {
   return clamp(raw, 55, 85);
 }
 
-/** Compute position-group ratings for a team from their roster. */
+/**
+ * P2 FIX: Apply staff coaching bonuses to a position group's rating.
+ *
+ * coachImpact.ts has a full trait/affinity model but was never called during
+ * game simulation. The rating pipeline goes:
+ *
+ *   player OVRs → group average → scale to 55–85 → TeamGameRatings → PAS
+ *
+ * We apply staff modifiers at the last step before scale() so the bonus is
+ * additive to the raw average before clamping.
+ *
+ * The mapping from TeamGameRatings key → position group is:
+ *   qbProcessing  ← QB coaches + OC  → "processing" affinity
+ *   olPassBlock   ← OL coaches + OC  → "pass_blocking" affinity
+ *   wrSeparation  ← WR/TE coaches    → "route_running" affinity
+ *   rbBurst       ← RB coaches       → "burst" affinity
+ *   dlPassRush    ← DL coaches + DC  → "pass_rush" affinity
+ *   dbCoverage    ← DB coaches + DC  → "coverage" affinity
+ *
+ * The impact is intentionally subtle: a position coach at "Advanced" tier adds
+ * ~BASE_BOOST(0.10) × TRAIT_STRENGTH("Advanced"=1.5) × tenureMultiplier
+ * ≈ 0.15 modifier × position group average ≈ 1–2 OVR points at most.
+ * This is appropriate — coaching should tip close matchups, not override talent.
+ */
+function applyPositionGroupCoachBonus(
+  rawAvg: number,
+  pos: string, // representative position for coachesForPosition() lookup
+  attrId: string, // the affinity attribute to evaluate (e.g. "processing")
+  staff: CoachProfile[],
+): number {
+  if (!staff.length) return rawAvg;
+  const relevantCoaches = coachesForPosition(staff, pos);
+  if (!relevantCoaches.length) return rawAvg;
+  // applyStaffModifiers returns baseAttr * product(1 + modifier_per_coach)
+  return applyStaffModifiers(rawAvg, attrId, relevantCoaches);
+}
+
+/** Compute position-group ratings for a team from their roster, optionally boosted by staff. */
 export function computeTeamGameRatings(teamId: string): TeamGameRatings;
 export function computeTeamGameRatings(state: GameState, teamId: string): TeamGameRatings;
 export function computeTeamGameRatings(stateOrTeamId: GameState | string, maybeTeamId?: string): TeamGameRatings {
@@ -45,6 +84,11 @@ export function computeTeamGameRatings(stateOrTeamId: GameState | string, maybeT
   const players = typeof stateOrTeamId === "string"
     ? getPlayersByTeam(teamId)
     : getEffectivePlayersByTeam(stateOrTeamId, teamId);
+
+  // P2 FIX: pull staff roster from state when available
+  const staff: CoachProfile[] = typeof stateOrTeamId !== "string"
+    ? (stateOrTeamId.staffRoster?.coaches ?? [])
+    : [];
 
   // Build per-group overalls in a single pass over the roster.
   const groups = {
@@ -71,13 +115,23 @@ export function computeTeamGameRatings(stateOrTeamId: GameState | string, maybeT
     else if (pos.startsWith("CB") || pos.startsWith("SS") || pos.startsWith("FS") || pos.startsWith("DB") || pos === "S") groups.db.push(ovr);
   }
 
-  const qbOvr = scale(avg(groups.qb));
-  const olOvr = scale(avg(groups.ol));
-  const wrOvr = scale(avg(groups.wr));
-  const rbOvr = scale(avg(groups.rb));
-  const dlOvr = scale(avg(groups.dl));
-  const lbOvr = scale(avg(groups.lb));
-  const dbOvr = scale(avg(groups.db));
+  // P2 FIX: apply staff coaching bonus per position group before scaling.
+  // Using the most representative attribute per group for the affinity lookup.
+  const qbRaw = applyPositionGroupCoachBonus(avg(groups.qb), "QB", "processing", staff);
+  const olRaw = applyPositionGroupCoachBonus(avg(groups.ol), "OL", "pass_blocking", staff);
+  const wrRaw = applyPositionGroupCoachBonus(avg(groups.wr), "WR", "route_running", staff);
+  const rbRaw = applyPositionGroupCoachBonus(avg(groups.rb), "RB", "burst", staff);
+  const dlRaw = applyPositionGroupCoachBonus(avg(groups.dl), "DL", "pass_rush", staff);
+  const lbRaw = applyPositionGroupCoachBonus(avg(groups.lb), "LB", "tackle", staff);
+  const dbRaw = applyPositionGroupCoachBonus(avg(groups.db), "CB", "coverage", staff);
+
+  const qbOvr = scale(qbRaw);
+  const olOvr = scale(olRaw);
+  const wrOvr = scale(wrRaw);
+  const rbOvr = scale(rbRaw);
+  const dlOvr = scale(dlRaw);
+  const lbOvr = scale(lbRaw);
+  const dbOvr = scale(dbRaw);
 
   return {
     qbProcessing: qbOvr,

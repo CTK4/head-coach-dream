@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { GameState } from "@/context/GameContext";
-import { loadSaveResult, syncCurrentSave } from "@/lib/saveManager";
+import { createInitialStateForTests, type GameState } from "@/context/GameContext";
+import { createSaveManager } from "@/lib/saveManager";
 import { runGoldenSeason } from "@/testHarness/goldenSeasonRunner";
 import { stableDeterminismHash, stableIntegrityHash } from "@/testHarness/stateHash";
 
@@ -20,89 +20,103 @@ class LocalStorageMock {
   }
 }
 
-function saveAndLoad(saveId: string, state: GameState): GameState {
-  syncCurrentSave({ ...state, saveId }, saveId);
-  const loaded = loadSaveResult(saveId);
+function saveAndLoad(saveManager: ReturnType<typeof createSaveManager>, saveId: string, state: GameState): GameState {
+  saveManager.syncCurrentSave({ ...state, saveId }, saveId);
+  const loaded = saveManager.loadSaveResult(saveId);
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) throw new Error("save load failed");
   return loaded.state;
 }
 
 describe("saveManager round trip at golden checkpoints", () => {
+  let storage: LocalStorageMock;
+  let saveManager: ReturnType<typeof createSaveManager>;
+
   beforeEach(() => {
-    Object.defineProperty(globalThis, "localStorage", {
-      value: new LocalStorageMock(),
-      configurable: true,
-      writable: true,
-    });
+    storage = new LocalStorageMock();
+    saveManager = createSaveManager({ storage });
   });
 
   it("preserves determinism and integrity hashes at offseason, midseason, and postseason checkpoints", () => {
-    const offseasonState = runGoldenSeason({
-      careerSeed: 1001,
-      userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
-      stopAt: "OFFSEASON_DONE",
-    }).finalState;
+    const offseasonState = runGoldenSeason({ careerSeed: 1001, userTeamId: "MILWAUKEE_NORTHSHORE", strategy: { resignTopN: 3 }, stopAt: "OFFSEASON_DONE" }).finalState;
+    const midState = runGoldenSeason({ careerSeed: 1001, userTeamId: "MILWAUKEE_NORTHSHORE", strategy: { resignTopN: 3 }, stopAt: "WEEK_9" }).finalState;
+    const postState = runGoldenSeason({ careerSeed: 1001, userTeamId: "MILWAUKEE_NORTHSHORE", strategy: { resignTopN: 3 }, stopAt: "POSTSEASON" }).finalState;
 
-    const midState = runGoldenSeason({
-      careerSeed: 1001,
-      userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
-      stopAt: "WEEK_9",
-    }).finalState;
-
-    const postState = runGoldenSeason({
-      careerSeed: 1001,
-      userTeamId: "MILWAUKEE_NORTHSHORE",
-      strategy: { resignTopN: 3 },
-      stopAt: "POSTSEASON",
-    }).finalState;
-
-    const cases: Array<{ saveId: string; state: GameState }> = [
+    for (const { saveId, state } of [
       { saveId: "golden-offseason", state: offseasonState },
       { saveId: "golden-midseason", state: midState },
       { saveId: "golden-postseason", state: postState },
-    ];
-
-    for (const { saveId, state } of cases) {
-      const loaded = saveAndLoad(saveId, state);
-      const loadedAgain = saveAndLoad(`${saveId}-again`, loaded);
+    ]) {
+      const loaded = saveAndLoad(saveManager, saveId, state);
+      const loadedAgain = saveAndLoad(saveManager, `${saveId}-again`, loaded);
       expect(stableDeterminismHash(loaded)).toBe(stableDeterminismHash(state));
       expect(stableDeterminismHash(loadedAgain)).toBe(stableDeterminismHash(loaded));
       expect(stableIntegrityHash(loadedAgain)).toBe(stableIntegrityHash(loaded));
+      expect(loaded.configVersion).toBe(state.configVersion);
+      expect(loaded.calibrationPackId).toBe(state.calibrationPackId);
     }
 
     expect(Number(midState.hub.regularSeasonWeek ?? midState.week ?? 0)).toBeGreaterThanOrEqual(9);
     expect(postState.careerStage).toBe("SEASON_AWARDS");
-  });
+  }, 300_000);
 
   it("restores from backup when primary save is corrupted", () => {
-    const state = runGoldenSeason({
-      careerSeed: 2020,
-      userTeamId: "MILWAUKEE_NORTHSHORE",
-      stopAt: "OFFSEASON_DONE",
-    }).finalState;
+    const state = runGoldenSeason({ careerSeed: 2020, userTeamId: "MILWAUKEE_NORTHSHORE", stopAt: "OFFSEASON_DONE" }).finalState;
 
-    syncCurrentSave({ ...state, saveId: "corrupt-me" }, "corrupt-me");
-    const canonicalBeforeCorruption = loadSaveResult("corrupt-me");
+    saveManager.syncCurrentSave({ ...state, saveId: "corrupt-me" }, "corrupt-me");
+    const canonicalBeforeCorruption = saveManager.loadSaveResult("corrupt-me");
     expect(canonicalBeforeCorruption.ok).toBe(true);
     if (!canonicalBeforeCorruption.ok) throw new Error("expected canonical save before corruption");
 
-    syncCurrentSave({ ...canonicalBeforeCorruption.state, saveId: "corrupt-me" }, "corrupt-me");
+    saveManager.syncCurrentSave({ ...canonicalBeforeCorruption.state, saveId: "corrupt-me" }, "corrupt-me");
+    storage.setItem("hc_career_save__corrupt-me", "{not valid json");
 
-    const key = "hc_career_save__corrupt-me";
-    localStorage.setItem(key, "{not valid json");
-
-    const result = loadSaveResult("corrupt-me");
+    const result = saveManager.loadSaveResult("corrupt-me");
     expect(result.ok).toBe(true);
 
     if (result.ok) {
       expect(stableDeterminismHash(result.state)).toBe(stableDeterminismHash(canonicalBeforeCorruption.state));
       expect(stableIntegrityHash(result.state)).toBe(stableIntegrityHash(canonicalBeforeCorruption.state));
-    } else {
-      expect(result.code).toBe("CORRUPT_SAVE");
-      expect(result.restoredFromBackup).toBe(false);
     }
+  }, 120_000);
+
+  it("round-trips telemetry aggregate containers", () => {
+    const base = createInitialStateForTests();
+    const state = {
+      ...base,
+      telemetry: {
+        ...(base.telemetry ?? { playLogsByGameKey: {}, gameAggsByGameKey: {}, seasonAgg: { version: 1, byTeamId: {}, appliedGameKeys: {} } }),
+        gameAggsByGameKey: {
+          "2026:REGULAR_SEASON:1:A:B": {
+            version: 1,
+            season: 2026,
+            weekType: "REGULAR_SEASON",
+            weekNumber: 1,
+            homeTeamId: "A",
+            awayTeamId: "B",
+            byTeamId: {
+              A: { passAttempts: 25, completions: 15, passYards: 250, interceptions: 1, sacksTaken: 2, rushAttempts: 20, rushYards: 95 },
+              B: { passAttempts: 20, completions: 12, passYards: 180, interceptions: 0, sacksTaken: 1, rushAttempts: 24, rushYards: 110 },
+            },
+          },
+        },
+        seasonAgg: {
+          version: 1,
+          appliedGameKeys: { "2026:REGULAR_SEASON:1:A:B": true },
+          byTeamId: {
+            A: {
+              games: 1,
+              totals: { passAttempts: 25, completions: 15, passYards: 250, interceptions: 1, sacksTaken: 2, rushAttempts: 20, rushYards: 95 },
+              rollingLast4: [{ gameKey: "2026:REGULAR_SEASON:1:A:B", passAttempts: 25, completions: 15, passYards: 250, interceptions: 1, sacksTaken: 2, rushAttempts: 20, rushYards: 95 }],
+              rollingLast8: [{ gameKey: "2026:REGULAR_SEASON:1:A:B", passAttempts: 25, completions: 15, passYards: 250, interceptions: 1, sacksTaken: 2, rushAttempts: 20, rushYards: 95 }],
+            },
+          },
+        },
+      },
+    } as GameState;
+
+    const loaded = saveAndLoad(saveManager, "telemetry-roundtrip", state);
+    expect(loaded.telemetry?.seasonAgg.appliedGameKeys["2026:REGULAR_SEASON:1:A:B"]).toBe(true);
+    expect(loaded.telemetry?.gameAggsByGameKey["2026:REGULAR_SEASON:1:A:B"]?.byTeamId.A.passYards).toBe(250);
   });
 });

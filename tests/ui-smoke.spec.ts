@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import { updateActiveSave } from "./helpers/saveSlot";
 
 async function completeOnboarding(page: Page) {
   await page.goto("/");
@@ -26,15 +27,15 @@ async function completeOnboarding(page: Page) {
 }
 
 async function forceCareerStage(page: Page, careerStage: string) {
-  await page.evaluate((nextCareerStage) => {
-    const key = "hc_career_save";
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    parsed.careerStage = nextCareerStage;
-    parsed.phase = "HUB";
-    window.localStorage.setItem(key, JSON.stringify(parsed));
-  }, careerStage);
+  await updateActiveSave(
+    page,
+    (state, nextCareerStage) => ({
+      ...state,
+      careerStage: nextCareerStage,
+      phase: "HUB",
+    }),
+    careerStage,
+  );
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

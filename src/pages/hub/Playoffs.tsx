@@ -18,9 +18,10 @@ export default function PlayoffsPage() {
   const pending = playoffs.pendingUserGame;
 
   useEffect(() => {
-    dispatch({ type: "PLAYOFFS_SIM_CPU_GAMES_FOR_ROUND" });
-  }, [dispatch, playoffs?.round]);
+    dispatch({ type: "PLAYOFFS_TICK" });
+  }, [dispatch]);
 
+  const advancePlayoffs = () => dispatch({ type: "PLAYOFFS_TICK" });
 
   const playNext = () => {
     if (!pending) return;
@@ -34,11 +35,36 @@ export default function PlayoffsPage() {
     navigate("/hub/playcall");
   };
 
-  return <div className="space-y-4"><h2 className="text-2xl font-bold">Playoffs · {playoffs.round.replace("_", " ")}</h2>
-    {pending ? <Button onClick={playNext}>Play Next Game</Button> : <div className="text-sm text-muted-foreground">No pending user game this round.</div>}
-    <div className="space-y-3">{games.map((g) => {
-      const fin = playoffs.completedGames[g.gameId];
-      return <Card key={g.gameId}><CardContent className="p-4"><div className="text-sm">{getTeamById(g.awayTeamId)?.name ?? g.awayTeamId} @ {getTeamById(g.homeTeamId)?.name ?? g.homeTeamId}</div>{fin ? <div className="text-xs text-muted-foreground">Final {fin.awayScore}-{fin.homeScore}</div> : <div className="text-xs text-muted-foreground">Pending</div>}</CardContent></Card>;
-    })}</div>
-  </div>;
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold">Playoffs · {playoffs.round.replace("_", " ")}</h2>
+      {pending ? (
+        <Button onClick={playNext}>Play Next Game</Button>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">No pending user game this round.</div>
+          <Button onClick={advancePlayoffs}>Advance Playoffs</Button>
+        </div>
+      )}
+      <div className="space-y-3">
+        {games.map((g) => {
+          const fin = playoffs.completedGames[g.gameId];
+          return (
+            <Card key={g.gameId}>
+              <CardContent className="p-4">
+                <div className="text-sm">
+                  {getTeamById(g.awayTeamId)?.name ?? g.awayTeamId} @ {getTeamById(g.homeTeamId)?.name ?? g.homeTeamId}
+                </div>
+                {fin ? (
+                  <div className="text-xs text-muted-foreground">Final {fin.awayScore}-{fin.homeScore}</div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">Pending</div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

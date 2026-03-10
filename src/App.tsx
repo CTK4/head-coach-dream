@@ -6,7 +6,7 @@ import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense, lazy, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
-import { GameProvider, useGame } from "@/context/GameContext";
+import { GameProvider, useGame, type GameState } from "@/context/GameContext";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logError } from "@/lib/logger";
@@ -55,10 +55,12 @@ import Landing from "@/pages/Landing";
 import LoadSave from "@/pages/LoadSave";
 import SaveModeSelect from "@/pages/SaveModeSelect";
 import StoryInterview from "@/pages/story/StoryInterview";
+import FiredScreen from "@/pages/FiredScreen";
 import FreePlaySetup from "@/pages/FreePlaySetup";
 import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES } from "@/routes/appRoutes";
+import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
 import { getUserTeamId } from "@/lib/userTeam";
 import PlayoffsPage from "@/pages/hub/Playoffs";
 import GameplanPage from "@/pages/hub/Gameplan";
@@ -68,10 +70,26 @@ import GameDetails from "@/pages/hub/schedule/GameDetails";
 import TeamSchedule from "@/pages/hub/schedule/TeamSchedule";
 import WeekSlate from "@/pages/hub/schedule/WeekSlate";
 import ScheduleHome from "@/pages/hub/schedule/ScheduleHome";
+import AnalyticsPage from "@/pages/hub/Analytics";
+import RecoveryModePage from "@/pages/RecoveryModePage";
 
 const queryClient = new QueryClient();
-const shouldEnableDevPanel = import.meta.env.DEV || (typeof window !== "undefined" && localStorage.getItem("DEV_PANEL") === "1");
+const shouldEnableDevPanel = DEV_TOOLS_ENABLED;
 const DevPanel = shouldEnableDevPanel ? lazy(() => import("@/dev/DevPanel")) : null;
+
+export const isDevPanelEnabled = (env: DevToolsEnv) => isDevToolsEnabled(env);
+
+export function DevPanelMount({
+  env,
+  PanelComponent,
+}: {
+  env: DevToolsEnv;
+  PanelComponent: React.ComponentType;
+}) {
+  if (!isDevPanelEnabled(env)) return null;
+  const Panel = PanelComponent;
+  return <Panel />;
+}
 
 function PhaseGate({ children, requiredPhase }: { children: React.ReactNode; requiredPhase: string[] }) {
   const { state } = useGame();
@@ -88,12 +106,28 @@ function HubGate({ children }: { children: React.ReactNode }) {
     const phaseRoutes: Record<string, string> = { CREATE: "/onboarding", BACKGROUND: "/onboarding/background", INTERVIEWS: "/story/interview", OFFERS: "/onboarding/offers", COORD_HIRING: "/onboarding/coordinators" };
     return <Navigate to={phaseRoutes[state.phase] ?? "/"} replace />;
   }
+  // Redirect fired coaches away from hub to the fired/rehiring flow
+  if (state.careerStage === "FIRED") return <Navigate to="/fired" replace />;
+  if (state.careerStage === "REHIRING") return <Navigate to={ROUTES.storyInterview} replace />;
   return <>{children}</>;
 }
 
-const LegacyHubScoutingRedirect = () => <Navigate to={`/scouting${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
-const LegacyHubOffseasonRedirect = () => <Navigate to={`/offseason${useParams()["*"] ? `/${useParams()["*"]}` : ""}`} replace />;
-const LegacyHubPlayerRedirect = () => { const { playerId } = useParams(); return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />; };
+function LegacyHubScoutingRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/scouting/${wildcard}` : "/scouting"} replace />;
+}
+
+function LegacyHubOffseasonRedirect() {
+  const params = useParams();
+  const wildcard = params["*"];
+  return <Navigate to={wildcard ? `/offseason/${wildcard}` : "/offseason"} replace />;
+}
+
+function LegacyHubPlayerRedirect() {
+  const { playerId } = useParams();
+  return <Navigate to={playerId ? `/roster/player/${playerId}` : "/roster/players"} replace />;
+}
 
 function OnboardingRouteGuard({ children }: { children: React.ReactNode }) {
   const { state } = useGame();
@@ -119,6 +153,10 @@ export function shouldRouteRootToHub(state: Parameters<typeof getUserTeamId>[0])
   return state.phase === "HUB" && !!state.coach?.name && !!state.careerStage && !!getUserTeamId(state);
 }
 
+export function shouldRenderRecoveryMode(state: Pick<GameState, "recoveryNeeded">) {
+  return state.recoveryNeeded === true;
+}
+
 function StoryRouteShell() {
   const [storyError, setStoryError] = useState<Error | null>(null);
   return <ErrorBoundary fallback={<StoryErrorScreen error={storyError} />} onError={(error) => setStoryError(error)}><StoryInterview /></ErrorBoundary>;
@@ -132,7 +170,7 @@ function AppRoutes() {
   const { state, dispatch } = useGame();
   const handleExportDebugBundle = () => exportDebugBundle({ state, saveMeta: getActiveSaveMetadata() });
   const handleResetToMainMenu = () => {
-    try { (dispatch as any)({ type: "RESET" }); } catch { /* no-op */ }
+    try { dispatch({ type: "RESET" }); } catch { /* no-op */ }
     sessionStorage.setItem("show_main_menu", "1");
     window.location.href = "/";
   };
@@ -158,8 +196,9 @@ function AppRoutes() {
           <Route path="/hub/scouting/*" element={<LegacyHubScoutingRedirect />} /><Route path="/offseason/*" element={<OffseasonRoutes />} /><Route path="/hub/offseason/*" element={<LegacyHubOffseasonRedirect />} /><Route path="/news" element={<LeagueNews />} /><Route path="/hub/stats" element={<StatsPage />} /><Route path="/hub/activity" element={<ActivityLog />} /><Route path="/hub/owner-relations" element={<OwnerRelations />} /><Route path="/hub/team-strategy" element={<TeamStrategy />} /><Route path="/hub/front-office" element={<FrontOffice />} /><Route path="/coachs-office/*" element={<CoachOfficeRoutes />} /><Route path="/settings" element={<SettingsPage />} />
           <Route path="/free-agency/*" element={<FreeAgencyRoutes />} /><Route path="/re-sign/*" element={<ReSignRoutes />} /><Route path="/trades/*" element={<TradesRoutes />} /><Route path="/hub/trades" element={<TradesPage />} /><Route path="/hub/re-sign" element={<ReSignPage />} /><Route path="/hub/free-agency" element={<Navigate to="/free-agency" replace />} />
           <Route path="/hub/draft" element={<Navigate to="/offseason/draft" replace />} /><Route path="/hub/draft-results" element={<DraftResults />} /><Route path="/hub/free-agency-recap" element={<FreeAgencyRecap />} /><Route path="/hub/training-camp" element={<Navigate to="/offseason/training-camp" replace />} /><Route path="/hub/cutdowns" element={<Navigate to="/offseason/cutdowns" replace />} />
-          <Route path="/hub/preseason" element={<PreseasonWeek />} /><Route path="/hub/regular-season" element={<RegularSeason />} /><Route path="/hub/gameplan" element={<GameplanPage />} /><Route path="/hub/playoffs" element={<PlayoffsPage />} /><Route path="/hub/playoffs/bracket" element={<PlayoffBracketPage />} /><Route path="/hub/playoffs/game/:id" element={<PlayoffGamePage />} /><Route path="/hub/schedule" element={<ScheduleHome />} /><Route path="/hub/schedule/week/:weekNumber" element={<WeekSlate />} /><Route path="/hub/schedule/team/:teamId" element={<TeamSchedule />} /><Route path="/hub/schedule/game/:gameKey" element={<GameDetails />} /><Route path="/hub/playcall" element={<Playcall />} /><Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} /><Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} /><Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} /><Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} /><Route path="/hub/development" element={<Navigate to="/roster/development" replace />} /><Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} /><Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} /><Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} /><Route path="/hub/coordinator-hiring" element={<CoordinatorHiring />} /><Route path="/hub/hall-of-fame" element={<HallOfFame />} /><Route path="/hub/league-history" element={<LeagueHistory />} /><Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} /><Route path="/hub/tampering" element={<Navigate to="/free-agency" replace />} /><Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} /><Route path="/skill-tree" element={<SkillTree />} /><Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} /><Route path="/contracts/cap-baseline" element={<CapBaseline />} /><Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
+          <Route path="/hub/preseason" element={<PreseasonWeek />} /><Route path="/hub/regular-season" element={<RegularSeason />} /><Route path="/hub/gameplan" element={<GameplanPage />} /><Route path="/hub/playoffs" element={<PlayoffsPage />} /><Route path="/hub/playoffs/bracket" element={<PlayoffBracketPage />} /><Route path="/hub/playoffs/game/:id" element={<PlayoffGamePage />} /><Route path="/hub/schedule" element={<ScheduleHome />} /><Route path="/hub/schedule/week/:weekNumber" element={<WeekSlate />} /><Route path="/hub/schedule/team/:teamId" element={<TeamSchedule />} /><Route path="/hub/schedule/game/:gameKey" element={<GameDetails />} /><Route path="/hub/playcall" element={<Playcall />} /><Route path="/hub/player/:playerId" element={<LegacyHubPlayerRedirect />} /><Route path="/hub/cap-projection" element={<Navigate to="/contracts/cap-projection" replace />} /><Route path="/hub/tag-center" element={<Navigate to="/contracts/tag" replace />} /><Route path="/hub/dead-money" element={<Navigate to="/contracts/dead-money" replace />} /><Route path="/hub/development" element={<Navigate to="/roster/development" replace />} /><Route path="/hub/injury-report" element={<Navigate to="/roster/injury-report" replace />} /><Route path="/hub/cap-baseline" element={<Navigate to="/contracts/cap-baseline" replace />} /><Route path="/hub/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/hub/assistant-hiring" element={<Navigate to="/staff/hire" replace />} /><Route path="/hub/coordinator-hiring" element={<CoordinatorHiring />} /><Route path="/hub/hall-of-fame" element={<HallOfFame />} /><Route path="/hub/league-history" element={<LeagueHistory />} /><Route path="/hub/analytics" element={<AnalyticsPage />} /><Route path="/hub/combine" element={<Navigate to="/offseason/combine" replace />} /><Route path="/hub/tampering" element={<Navigate to="/free-agency" replace />} /><Route path="/hub/pre-draft" element={<Navigate to="/offseason/pre-draft" replace />} /><Route path="/skill-tree" element={<SkillTree />} /><Route path="/hub/resign" element={<Navigate to="/hub/re-sign" replace />} /><Route path="/contracts/cap-baseline" element={<CapBaseline />} /><Route path="/contracts/roster-audit" element={<Navigate to="/roster/audit" replace />} /><Route path="/roster" element={<Navigate to="/roster/depth-chart" replace />} />
         </Route>
+        <Route path="/fired" element={<FiredScreen />} />
         <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -167,6 +206,17 @@ function AppRoutes() {
   </ErrorBoundary>;
 }
 
-const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><GameProvider><OfferResultModalHost /><AppRoutes /></GameProvider></TooltipProvider></QueryClientProvider>;
+function AppContent() {
+  const { state } = useGame();
+  if (shouldRenderRecoveryMode(state)) {
+    return <RecoveryModePage />;
+  }
+  return <>
+    <OfferResultModalHost />
+    <AppRoutes />
+  </>;
+}
+
+const App = () => <QueryClientProvider client={queryClient}><TooltipProvider><Toaster /><Sonner /><GameProvider><AppContent /></GameProvider></TooltipProvider></QueryClientProvider>;
 
 export default App;

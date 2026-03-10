@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useGame } from "@/context/GameContext";
+import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { getTeamById } from "@/data/leagueDb";
 import { getHallOfFame, getMvpBySeason, getSeasons } from "@/engine/leagueHistory/loader";
 
@@ -39,7 +40,7 @@ export default function LeagueHistory() {
   const [positionFilter, setPositionFilter] = useState<PositionFilter>("All");
   const [teamLegendsOnly, setTeamLegendsOnly] = useState(false);
 
-  const userTeamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
+  const userTeamId = resolveCurrentUserTeamId(state);
   const userTeamName = userTeamId ? getTeamById(String(userTeamId))?.name ?? "" : "";
   const showTeamLegendToggle = Boolean(userTeamName);
 

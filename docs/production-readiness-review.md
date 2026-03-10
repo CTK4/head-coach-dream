@@ -1,5 +1,11 @@
 # Production Readiness Review
 
+## Release signoff source of truth
+
+Use the dedicated [Release Approval Gate](./release-approval-gate.md) for live failing tests, blockers, and pass/fail release signoff.
+
+---
+
 ## Search precheck (requested)
 
 Executed targeted scans for incomplete/stubbed code:

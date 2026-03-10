@@ -43,6 +43,26 @@ export type CombineResult = {
   ras?: number;
 };
 
+export type InterviewResult = {
+  prospectId: string;
+  category: "CHARACTER" | "INTELLIGENCE" | "WORK_ETHIC";
+  score: number;
+  reveal?: string;
+};
+
+export type MedicalResult = {
+  prospectId: string;
+  category: "DURABILITY" | "INJURY_HISTORY" | "STRUCTURAL";
+  riskTier: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+  notes?: string;
+};
+
+export type PrivateWorkoutResult = {
+  prospectId: string;
+  drills: Record<string, number>;
+  notes: string[];
+};
+
 export type CombineDayRecap = {
   risers: string[];
   fallers: string[];
@@ -88,10 +108,16 @@ export type InterviewState = {
   interviewsRemaining: number;
   history: Record<string, { category: "IQ" | "LEADERSHIP" | "STRESS" | "CULTURAL"; outcome: string; windowKey: string }[]>;
   modelARevealByProspectId: Record<string, { characterRevealPct: number; intelligenceRevealPct: number }>;
+  resultsByProspectId: Record<string, InterviewResult[]>;
 };
 
 export type MedicalBoardState = {
   requests: Record<string, { requested: boolean; windowKey: string }>;
+  resultsByProspectId: Record<string, MedicalResult>;
+};
+
+export type WorkoutState = {
+  resultsByProspectId: Record<string, PrivateWorkoutResult>;
 };
 
 export type ScoutAllocationState = {
@@ -127,6 +153,7 @@ export type ScoutingState = {
   visits: VisitState;
   interviews: InterviewState;
   medical: MedicalBoardState;
+  workouts: WorkoutState;
   allocation: ScoutAllocationState;
   inSeason: InSeasonScoutingState;
 };

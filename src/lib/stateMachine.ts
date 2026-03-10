@@ -1,19 +1,4 @@
-export type CareerStage =
-  | "OFFSEASON_HUB"
-  | "SEASON_AWARDS"
-  | "ASSISTANT_HIRING"
-  | "STAFF_CONSTRUCTION"
-  | "ROSTER_REVIEW"
-  | "RESIGN"
-  | "COMBINE"
-  | "TAMPERING"
-  | "FREE_AGENCY"
-  | "PRE_DRAFT"
-  | "DRAFT"
-  | "TRAINING_CAMP"
-  | "PRESEASON"
-  | "CUTDOWNS"
-  | "REGULAR_SEASON";
+import type { CareerStage } from "@/types/careerStage";
 
 export enum PhaseKeyEnum {
   PHASE_2_RETENTION = "PHASE_2_RETENTION",
@@ -96,8 +81,14 @@ export class StateMachine {
   static nextOffseasonStepId(current: OffseasonStepId, config: StateMachineConfig): OffseasonStepId | null {
     const steps = StateMachine.getOffseasonSequence(config);
     const idx = steps.findIndex((s) => s === current);
-    if (idx < 0) return steps[0] ?? null;
-    return steps[idx + 1] ?? null;
+    if (idx >= 0) return steps[idx + 1] ?? null;
+    // Current step not in active sequence (e.g. TAMPERING when disabled).
+    // Find position in canonical sequence and return next step present in active sequence.
+    const canonical = StateMachine.getOffseasonSequence({ ...config, enableTamperingStep: true });
+    const canonicalIdx = canonical.findIndex((s) => s === current);
+    if (canonicalIdx < 0) return steps[0] ?? null;
+    const subsequent = canonical.slice(canonicalIdx + 1);
+    return subsequent.find((s) => (steps as string[]).includes(s)) ?? null;
   }
 
   static assertValidOffseasonTransition(from: OffseasonStepId, to: OffseasonStepId, config: StateMachineConfig): void {
@@ -121,8 +112,18 @@ export class StateMachine {
 
   static careerStageForOffseasonStep(step: OffseasonStepId, currentStage: CareerStage): CareerStage {
     switch (step) {
+      case OffseasonStepEnum.RESIGNING:
+        return "RESIGN";
+      case OffseasonStepEnum.COMBINE:
+        return "COMBINE";
+      case OffseasonStepEnum.TAMPERING:
+        return "TAMPERING";
       case OffseasonStepEnum.FREE_AGENCY:
         return "FREE_AGENCY";
+      case OffseasonStepEnum.PRE_DRAFT:
+        return "PRE_DRAFT";
+      case OffseasonStepEnum.DRAFT:
+        return "DRAFT";
       case OffseasonStepEnum.TRAINING_CAMP:
         return "TRAINING_CAMP";
       case OffseasonStepEnum.PRESEASON:

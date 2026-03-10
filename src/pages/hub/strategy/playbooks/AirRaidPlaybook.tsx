@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { LOS } from "./playbookConstants";
 
 /* ── PALETTE ─────────────────────────────────── */
 const CLR = {
@@ -26,8 +27,6 @@ const CAT_META = {
 const P  = (...pts) => pts.map((p,i) => `${i?'L':'M'}${p[0]} ${p[1]}`).join(' ');
 const QQ = (s,c,e)  => `M${s[0]} ${s[1]} Q${c[0]} ${c[1]} ${e[0]} ${e[1]}`;
 const CB = (s,c1,c2,e) => `M${s[0]} ${s[1]} C${c1[0]} ${c1[1]},${c2[0]} ${c2[1]},${e[0]} ${e[1]}`;
-
-const LOS  = 72;
 /* Air Raid: wide splits, shotgun QB */
 const OL_X = [70, 80, 90, 100, 110]; // tight OL in spread
 /* Typical formation helpers */
@@ -460,7 +459,7 @@ const PLAYS = [
     ],
     rt:[
       {d:CB([26,LOS],[26,32],[44,20],[62,18]),   c:CLR.pass,w:2.2,a:true},
-      {d:CB([6,LOS],[6,LOS+4],[6,LOS+10],[10,LOS+16],[32,LOS+14],[40,LOS+4],[40,36]),c:CLR.pass,w:2.2,a:true},
+      {d:CB([6,LOS],[6,LOS+4],[32,LOS+14],[40,36]),c:CLR.pass,w:2.2,a:true},
       {d:CB([162,LOS],[162,32],[144,20],[128,18]),c:CLR.pass,w:2.2,a:true},
       {d:P([180,LOS],[180,26]),  c:CLR.pass,w:1.8,a:true},
       {d:P([88,QB_Y],[88,QB_Y+8]),c:CLR.qbmove,w:1.5,a:false,dsh:true},

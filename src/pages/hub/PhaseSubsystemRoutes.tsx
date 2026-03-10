@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import FreeAgencyPage from "./FreeAgency";
 import ResignPlayers from "./ResignPlayers";
@@ -8,8 +8,39 @@ import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
+import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
+
+function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
+  const { state, dispatch } = useGame();
+  const navigate = useNavigate();
+  const isOffseasonActive = state.phase === "HUB" && Boolean(state.offseason) && state.offseason.stepId === stepId;
+  if (!isOffseasonActive) return null;
+
+  const isStepComplete = Boolean(state.offseason?.stepsComplete?.[stepId]);
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-slate-950/90 backdrop-blur p-3">
+      <div className="mx-auto flex max-w-5xl items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId } })} disabled={isStepComplete}>
+          {completeLabel}
+        </Button>
+        <Button
+          onClick={() => {
+            if (!state.offseason?.stepsComplete?.[stepId]) return;
+            dispatch({ type: "OFFSEASON_ADVANCE_STEP" });
+            navigate("/offseason", { replace: true });
+          }}
+          disabled={!isStepComplete}
+        >
+          Next →
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function PhaseLocked({ title, detail }: { title: string; detail: string }) {
   return (
@@ -101,33 +132,42 @@ function FaTransactions() {
 
 export function FreeAgencyRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
+  const phase = getUnifiedPhase(state);
+  const canAccessFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
+  if (!canAccessFreeAgency) return <Navigate to="/hub" replace />;
   return (
-    <Routes>
-      <Route index element={<Navigate to="top" replace />} />
-      <Route path="top" element={<FreeAgencyPage />} />
-      <Route path="targets" element={<FaTargets />} />
-      <Route path="transactions" element={<FaTransactions />} />
-      <Route path="player/:playerId" element={<FreeAgencyPage />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route index element={<Navigate to="top" replace />} />
+        <Route path="top" element={<FreeAgencyPage />} />
+        <Route path="targets" element={<FaTargets />} />
+        <Route path="transactions" element={<FaTransactions />} />
+        <Route path="player/:playerId" element={<FreeAgencyPage />} />
+      </Routes>
+      <StepFooter stepId="FREE_AGENCY" completeLabel="Complete Free Agency Step" />
+    </>
   );
 }
 
 export function ReSignRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "RESIGN") return <Navigate to="/hub" replace />;
+  const canAccessReSign = state.careerStage === "RESIGN" || state.offseason?.stepId === "RESIGNING";
+  if (!canAccessReSign) return <Navigate to="/hub" replace />;
   return (
-    <Routes>
-      <Route index element={<Navigate to="expiring" replace />} />
-      <Route path="expiring" element={<ResignPlayers />} />
-      <Route path="player/:playerId" element={<ResignPlayers />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route index element={<Navigate to="expiring" replace />} />
+        <Route path="expiring" element={<ResignPlayers />} />
+        <Route path="player/:playerId" element={<ResignPlayers />} />
+      </Routes>
+      <StepFooter stepId="RESIGNING" completeLabel="Complete Re-Signing Step" />
+    </>
   );
 }
 
 export function TradesRoutes() {
   const { state } = useGame();
-  if (state.careerStage !== "REGULAR_SEASON" && state.careerStage !== "FREE_AGENCY") return <Navigate to="/hub" replace />;
+  if (!isInFranchiseActionWindow(getUnifiedPhase(state), "trade")) return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="block" replace />} />
@@ -145,11 +185,14 @@ export function ProspectProfileScreen() {
 
 export function HubPhaseQuickLinks() {
   const { state } = useGame();
+  const phase = getUnifiedPhase(state);
+  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
+  const isTradeWindow = isInFranchiseActionWindow(phase, "trade");
   return (
     <div className="grid grid-cols-3 gap-2 text-xs">
-      {state.careerStage === "FREE_AGENCY" ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
-      {state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
-      {(state.careerStage === "REGULAR_SEASON" || state.careerStage === "FREE_AGENCY") ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
+      {isFreeAgency ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}
+      {state.offseason?.stepId === "RESIGNING" || state.careerStage === "RESIGN" ? <Link to="/re-sign" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Re-Sign</Link> : null}
+      {isTradeWindow ? <Link to="/trades" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Trades</Link> : null}
     </div>
   );
 }

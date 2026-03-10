@@ -443,6 +443,10 @@ export function simulateLeagueWeek(params: {
   }
 
   return {
+    ...params.league,
+    phase: params.league.phase,
+    weekIndex: week,
+    playoffs: params.league.playoffs,
     standings,
     results: [...params.league.results, ...newResults],
     gmByTeamId: params.league.gmByTeamId,

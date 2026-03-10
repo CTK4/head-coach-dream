@@ -3,6 +3,7 @@ import type { Prospect } from "@/engine/offseasonData";
 import { genProspects } from "@/engine/offseasonGen";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
+import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 
 export type DevAction =
   | "SPAWN_FREE_AGENTS"
@@ -48,7 +49,7 @@ function regenerateDraftClass(state: GameState, payload?: Record<string, unknown
 
 function spawnFreeAgents(state: GameState, payload?: Record<string, unknown>): GameState {
   const count = Math.max(1, Number(payload?.count ?? 50));
-  const taken = new Set(Object.values(state.playerTeamOverrides ?? {}).filter(Boolean));
+  const taken = new Set(Object.keys(state.playerTeamOverrides ?? {}));
   const candidates = getPlayers().filter((p) => {
     const pid = String((p as any).playerId ?? "");
     const teamId = String((p as any).teamId ?? "");
@@ -105,6 +106,8 @@ function fillRosterNeeds(state: GameState, payload?: Record<string, unknown>): G
 }
 
 export function runDevAction(state: GameState, action: DevAction, payload?: Record<string, unknown>): GameState {
+  if (!DEV_TOOLS_ENABLED) return state;
+
   switch (action) {
     case "SPAWN_FREE_AGENTS":
       return spawnFreeAgents(state, payload);

@@ -43,8 +43,12 @@ export default function BigBoard() {
           ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
           ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
         }).combineScore10,
+        unicornConfidence: Number(state.playerUnicorns?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence ?? 0),
+        interviewScore: state.scoutingState?.interviews?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.slice(-1)?.[0]?.score,
+        medicalRiskTier: state.scoutingState?.medical?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.riskTier,
+        workoutDone: Boolean(state.scoutingState?.workouts?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]),
       })),
-    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId]
+    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId, state.scoutingState?.interviews?.resultsByProspectId, state.scoutingState?.medical?.resultsByProspectId, state.scoutingState?.workouts?.resultsByProspectId]
   );
 
   useEffect(() => {
@@ -123,6 +127,7 @@ export default function BigBoard() {
                 isDragging={draggedId === p.id}
                 isDragOver={dragOverId === p.id}
                 report={report}
+                unicornCandidate={p.unicornConfidence > 0.5 ? p.unicornConfidence : undefined}
                 onOpenProfile={openProspectProfile}
               />
             );

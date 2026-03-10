@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { getPersonnel, getTeamById } from "@/data/leagueDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ export default function UserProfile() {
   const { state } = useGame();
   const navigate = useNavigate();
 
-  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? state.profile?.teamId ?? state.coach?.teamId;
+  const teamId = resolveCurrentUserTeamId(state);
   const team = getTeamById(String(teamId ?? ""));
 
   const gm = useMemo(() => {

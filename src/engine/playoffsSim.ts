@@ -41,10 +41,10 @@ export function buildPlayoffBracket(params: { league: LeagueState; season: numbe
   const conferences: PlayoffsBracket["conferences"] = {};
 
   for (const confId of confIds) {
-    const seeds = seeded.filter((id) => getTeamById(id)?.conferenceId === confId).slice(0, 8);
+    const seeds = seeded.filter((id) => getTeamById(id)?.conferenceId === confId).slice(0, 7);
     const gamesByRound: PlayoffsBracket["conferences"][string]["gamesByRound"] = {};
 
-    if (seeds.length >= 8) {
+    if (seeds.length === 7) {
       gamesByRound.WILD_CARD = [mkGame("WILD_CARD", seeds[1], seeds[6], confId, 1), mkGame("WILD_CARD", seeds[2], seeds[5], confId, 2), mkGame("WILD_CARD", seeds[3], seeds[4], confId, 3)];
     } else if (seeds.length >= 4) {
       gamesByRound.DIVISIONAL = [mkGame("DIVISIONAL", seeds[0], seeds[3], confId, 1), mkGame("DIVISIONAL", seeds[1], seeds[2], confId, 2)];
@@ -83,7 +83,7 @@ export function getPlayoffRoundGames(playoffs: PlayoffsState): PlayoffGame[] {
 export function simulateCpuPlayoffGamesForRound(params: { playoffs: PlayoffsState; userTeamId?: string; seed: number }) {
   const games = getPlayoffRoundGames(params.playoffs);
   const completedGames = { ...params.playoffs.completedGames };
-  let pendingUserGame = params.playoffs.pendingUserGame;
+  let pendingUserGame = undefined;
   for (const game of games) {
     if (completedGames[game.gameId]) continue;
     if (params.userTeamId && (game.homeTeamId === params.userTeamId || game.awayTeamId === params.userTeamId)) {
@@ -152,7 +152,10 @@ export function buildPostseasonResults(params: { league: LeagueState; playoffs: 
   }
 
   const sb = params.playoffs.bracket.superBowl;
-  const championTeamId = sb ? params.playoffs.completedGames[sb.gameId]?.winnerTeamId : Object.values(resultsByTeamId).find((r) => r.madePlayoffs)?.teamId ?? allStandingsTeams[0];
+  const championTeamId = sb ? params.playoffs.completedGames[sb.gameId]?.winnerTeamId : undefined;
+  if (!championTeamId) {
+    throw new Error("Cannot build postseason results until the Super Bowl is finalized.");
+  }
   if (championTeamId) resultsByTeamId[championTeamId] = { teamId: championTeamId, madePlayoffs: true, isChampion: true };
   return { postseason: { season: params.playoffs.season, resultsByTeamId }, championTeamId };
 }

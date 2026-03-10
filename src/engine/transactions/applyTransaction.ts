@@ -47,10 +47,43 @@ export function applyTransaction(state: GameState, tx: TransactionEvent): GameSt
         delete contractOverrides[p];
       }
       break;
+    case "FRANCHISE_TAG_REMOVE":
+      for (const p of tx.playerIds) {
+        teamOverrides[p] = String(tx.teamId);
+        if (tx.details?.contract) setContract(p, tx.details.contract);
+        else delete contractOverrides[p];
+      }
+      break;
     case "TRADE": {
       const toTeamByPlayer = tx.details?.toTeamByPlayer ?? {};
       for (const p of tx.playerIds) teamOverrides[p] = String(toTeamByPlayer[p] ?? tx.otherTeamId ?? tx.teamId);
-      break;
+      const pickSwaps = Array.isArray(tx.details?.pickSwaps) ? tx.details.pickSwaps : [];
+      const draftAny = state.draft as any;
+      const nextDraft = Array.isArray(draftAny?.slots)
+        ? {
+            ...state.draft,
+            slots: (draftAny.slots ?? []).map((slot: any) => {
+              let teamId = String(slot.teamId ?? "");
+              for (const swap of pickSwaps) {
+                const sameRound = Number(slot.round) === Number(swap.round);
+                const sameYear = swap.year == null || Number(slot.year) === Number(swap.year);
+                const sameOrigin = String(slot.originalTeamId ?? "") === String(swap.originalTeamId ?? "");
+                const fromTeam = String(swap.fromTeamId ?? "");
+                if (sameRound && sameYear && sameOrigin && teamId === fromTeam) {
+                  teamId = String(swap.toTeamId ?? teamId);
+                }
+              }
+              return teamId === String(slot.teamId ?? "") ? slot : { ...slot, teamId };
+            }),
+          }
+        : state.draft;
+      return {
+        ...state,
+        playerTeamOverrides: teamOverrides,
+        playerContractOverrides: contractOverrides,
+        draft: nextDraft,
+        transactionLedger: nextLedger(state, tx),
+      };
     }
     case "DRAFT_PICK":
       for (const p of tx.playerIds) teamOverrides[p] = String(tx.teamId);

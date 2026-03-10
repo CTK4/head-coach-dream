@@ -69,7 +69,7 @@ function pairTeamsForWeek(teamIds: string[], week: number): Matchup[] {
   return matchups;
 }
 
-export function generateLeagueSchedule(teamIds: string[], seed = Date.now()): LeagueSchedule {
+export function generateLeagueSchedule(teamIds: string[], seed: number): LeagueSchedule {
   const activeTeamIds = teamIds.filter(Boolean);
 
   const preseasonWeeks: WeekSchedule[] = [];

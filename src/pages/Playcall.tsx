@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
+import { formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
@@ -121,7 +122,7 @@ const BOX_COUNT_BY_PACKAGE: Record<DefensivePackage, Record<DefensiveLook["box"]
 
 function toSituationLabel(bucket?: SituationBucket): string {
   if (!bucket) return "Unknown";
-  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replaceAll("_", " ").replace("3RD", "3rd").replace("4TH", "4th");
+  return bucket === "3RD_8_PLUS" ? "3rd & 8+" : bucket.replace(/_/g, " ").replace("3RD", "3rd").replace("4TH", "4th");
 }
 
 function compactCallLabel(signature: string): string {
@@ -293,6 +294,18 @@ function PostgamePanel({ g, homeName, awayName, fatigueById }: { g: GameSim; hom
           </div>
         </div>
         <div className="space-y-2">
+          <p className="text-sm font-semibold">Unicorn Contributions</p>
+          {(g.unicornImpactLog ?? []).length === 0 ? (
+            <p className="text-xs text-muted-foreground">No unicorn boosts triggered this game.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {(g.unicornImpactLog ?? []).slice(-6).map((impact) => (
+                <Badge key={`${impact.playId}-${impact.playerId}`} variant="secondary">🦄 {impact.archetypeId}: {impact.description}</Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
           <p className="text-sm font-semibold">High Workload</p>
           {Object.entries(g.snapLoadThisGame).filter(([playerId]) => (g.playerFatigue[playerId] ?? 50) > HIGH_WORKLOAD_THRESHOLD).length === 0 ? (
             <p className="text-xs text-muted-foreground">No warning badges.</p>
@@ -336,11 +349,17 @@ const Playcall = () => {
   const isOver = g.clock.quarter === 4 && g.clock.timeRemainingSec === 0;
   const canShowPlay = useMemo(() => !invalid && !isOver, [invalid, isOver]);
 
+  const roster = useMemo(
+    () => (teamId ? getEffectivePlayersByTeam(state, teamId) : []),
+    [state.playerTeamOverrides, state.playerContractOverrides, teamId],
+  );
+
   const userTeamQbArchetype = useMemo(() => {
-    if (!teamId) return "GAME_MANAGER" as const;
-    const qb = getEffectivePlayersByTeam(state, teamId).filter((p: any) => String(p.pos ?? "").toUpperCase() === "QB").sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
+    const qb = roster
+      .filter((p: any) => String(p.pos ?? "").toUpperCase() === "QB")
+      .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
     return qb ? resolveQbArchetypeTag(qb as any) : "GAME_MANAGER" as const;
-  }, [state, teamId]);
+  }, [roster]);
   const canCallRpo = userTeamQbArchetype === "DUAL_THREAT" || userTeamQbArchetype === "SCRAMBLER";
 
   const rec = useMemo(
@@ -449,6 +468,7 @@ const Playcall = () => {
               <Badge variant="outline">{possessionLabel(g)}</Badge>
               <Badge variant="outline">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
               <Badge variant="outline">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
+              <Badge variant="outline">{formatWeatherSummary(g.weather)}</Badge>
             </div>
 
             {/* Last result + tags */}
@@ -603,7 +623,10 @@ const Playcall = () => {
               </div>
               <div className="flex items-center justify-between rounded border p-3">
                 <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
-                <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={needsDefensiveCall} onClick={() => dispatch({ type: "SIMULATE_REST_OF_GAME" })}>Sim Rest</Button>
+                  <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                </div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Recommended stem updates instantly from card selection. Two-tap flow: select then confirm.</p>

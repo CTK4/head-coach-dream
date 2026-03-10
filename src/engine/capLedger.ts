@@ -1,7 +1,8 @@
 import type { GameState } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getLeague } from "@/data/leagueDb";
 
-const LEAGUE_CAP_DEFAULT = 250_000_000;
+const LEAGUE_CAP_DEFAULT = getLeague().salaryCap;
 const moneyRound = (n: number) => Math.round(n / 50_000) * 50_000;
 
 export type CapLedgerOptions = {

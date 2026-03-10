@@ -74,14 +74,14 @@ export default function Hub() {
   else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
 
   const optionalTiles: HubTileConfig[] = [
-    ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts", title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
+    ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts" as HubTileId, title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
     ...(missingCoordinators && canHireCoordinatorsInHub
-      ? [{ id: "staff", title: "Hire Coordinators", subtitle: "OC · DC · STC", to: "/hub/coordinator-hiring", imageUrl: HUB_TILE_IMAGES.staff, dataTest: "hub-hire-coordinators" }]
+      ? [{ id: "staff" as HubTileId, title: "Hire Coordinators", subtitle: "OC · DC · STC", to: "/hub/coordinator-hiring", imageUrl: HUB_TILE_IMAGES.staff, dataTest: "hub-hire-coordinators" }]
       : []),
-    ...(showReSign ? [{ id: "roster", title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
-    ...(showTrades ? [{ id: "strategy", title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
-    ...(state.careerStage === "PLAYOFFS" ? [{ id: "hall_of_fame", title: "Playoffs", to: "/hub/playoffs", imageUrl: HUB_TILE_IMAGES.hall_of_fame }] : []),
-  ];
+    ...(showReSign ? [{ id: "roster" as HubTileId, title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
+    ...(showTrades ? [{ id: "strategy" as HubTileId, title: "Trades", to: "/hub/trades", imageUrl: HUB_TILE_IMAGES.strategy }] : []),
+    ...(state.careerStage === "PLAYOFFS" ? [{ id: "hall_of_fame" as HubTileId, title: "Playoffs", to: "/hub/playoffs", imageUrl: HUB_TILE_IMAGES.hall_of_fame }] : []),
+   ] satisfies HubTileConfig[];
 
   const mainTiles: HubTileConfig[] = [
     {
@@ -91,10 +91,10 @@ export default function Hub() {
       imageUrl: HUB_TILE_IMAGES.staff,
       imageObjectPosition: "50% 65%",
     },
-    { id: "roster", title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
-    { id: "strategy", title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
-    { id: "strategy", title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: "/placeholders/Trophy_Room.PNG" },
-    { id: "contracts", title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
+    { id: "roster" as HubTileId, title: "Roster", to: "/roster", imageUrl: HUB_TILE_IMAGES.roster },
+    { id: "strategy" as HubTileId, title: "Franchise Strategy", to: "/strategy", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "strategy" as HubTileId, title: "Front Office", subtitle: "Owner + GM", to: "/hub/front-office", imageUrl: "/placeholders/Trophy_Room.PNG" },
+    { id: "contracts" as HubTileId, title: "Contracts & Cap", subtitle: "Management", to: "/contracts", imageUrl: HUB_TILE_IMAGES.contracts },
     { id: "scouting", title: "Scouting", to: "/scouting", imageUrl: HUB_TILE_IMAGES.scouting },
     {
       id: "news",
@@ -106,10 +106,11 @@ export default function Hub() {
       badgeKind: "unread",
       cornerBubbleCount: Math.min(badgeCounts.newsUnread, 9),
     },
-    { id: "strategy", title: "Schedule", subtitle: "Slate + Results", to: "/hub/schedule", imageUrl: HUB_TILE_IMAGES.strategy },
+    { id: "strategy" as HubTileId, title: "Schedule", subtitle: "Slate + Results", to: "/hub/schedule", imageUrl: HUB_TILE_IMAGES.strategy },
     { id: "coachs_office", title: "Coach's Office", subtitle: "Profiles + Skill Tree", to: "/coachs-office", imageUrl: HUB_TILE_IMAGES.coachs_office },
     { id: "injury_report", title: "Injury Report", subtitle: "Health & Medical", to: "/hub/injury-report", imageUrl: HUB_TILE_IMAGES.injury_report },
-    { id: "hall_of_fame", title: "League History", subtitle: "Champions + MVPs + Legends", to: "/hub/league-history", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
+    { id: "hall_of_fame" as HubTileId, title: "League History", subtitle: "Champions + MVPs + Legends", to: "/hub/league-history", imageUrl: HUB_TILE_IMAGES.hall_of_fame },
+    { id: "strategy" as HubTileId, title: "Analytics", subtitle: "Career telemetry", to: "/hub/analytics", imageUrl: HUB_TILE_IMAGES.strategy },
   ];
 
   return (
