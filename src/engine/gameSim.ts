@@ -1307,24 +1307,24 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (isTO) {
       side.turnovers += 1;
       const desc = sack ? `Sack for ${yards}y.` : incomplete ? "Intercepted!" : `Fumble! Ball lost.`;
-      let s2: GameSim = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
-      if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
+      let turnoverSim: GameSim = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
+      if (unicornImpact) turnoverSim = { ...turnoverSim, unicornImpactLog: [...(turnoverSim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       if (sack) {
         const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
-        s2 = advanceDown({ ...s2, ballOn: nextBallOn }, yards);
+        turnoverSim = advanceDown({ ...turnoverSim, ballOn: nextBallOn }, yards);
       } else {
-        s2 = turnover(s2, rng);
+        turnoverSim = turnover(turnoverSim, rng);
       }
       const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER";
-      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, isRun ? "RUN_IN_BOUNDS" : "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
+      return { sim: turnoverSim, tag: "IN_BOUNDS" as const, live: liveTime(rng, isRun ? "RUN_IN_BOUNDS" : "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
 
     if (sack) {
       const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
       const desc = `Sack for ${yards}y.`;
-      let s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
-      if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
-      return { sim: s2, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
+      let sackSim = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
+      if (unicornImpact) sackSim = { ...sackSim, unicornImpactLog: [...(sackSim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
+      return { sim: sackSim, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
 
     if (incomplete) {
@@ -1350,10 +1350,10 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     }
 
     const labelWithUnicorn = unicornImpact ? `${label} 🦄 ${unicornImpact.description}` : label;
-    let s2 = advanceDown({ ...sim, stats: updatedStats, ballOn: newBallOn, lastResult: labelWithUnicorn, lastResultTags: tags }, yards);
-    if (unicornImpact) s2 = { ...s2, unicornImpactLog: [...(s2.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
+    let resolvedPlaySim = advanceDown({ ...sim, stats: updatedStats, ballOn: newBallOn, lastResult: labelWithUnicorn, lastResultTags: tags }, yards);
+    if (unicornImpact) resolvedPlaySim = { ...resolvedPlaySim, unicornImpactLog: [...(resolvedPlaySim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
     return {
-      sim: s2,
+      sim: resolvedPlaySim,
       tag: oob ? ("OOB" as const) : ("IN_BOUNDS" as const),
       live: liveTime(rng, oob ? (isRunP ? "RUN_OOB" : "SHORT_OOB") : isRunP ? "RUN_IN_BOUNDS" : yards >= 16 ? "DEEP_IN_BOUNDS" : "SHORT_IN_BOUNDS"),
       admin: adminTime(rng, yards >= sim.distance ? "FIRST_DOWN" : "ROUTINE"),
