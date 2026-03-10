@@ -49,7 +49,6 @@ const rankBg = (rank: number) => {
   return "from-slate-500/60 to-slate-700/70";
 };
 
-export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
 export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
   const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
