@@ -8,6 +8,7 @@ import { migrateDraftClassIdsInSave } from "@/lib/migrations/migrateDraftClassId
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
 import type { DraftState, GameState, OffseasonData, OffseasonState } from "@/context/GameContext";
 import { deriveSaveSeedFromState } from "@/context/state/seedPolicy";
+import { deriveCareerSeed, deriveScoutingBoardSeed } from "@/engine/determinism/seedDerivation";
 import type { CareerStage } from "@/types/careerStage";
 
 interface MigrateSaveDependencies {
@@ -103,7 +104,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
     saveSeed,
     season: Number((oldState as any).season ?? 2026),
     week: Number((oldState as any).week ?? 1),
-    careerSeed: Number((oldState as any).careerSeed ?? (saveSeed ^ 0x85ebca6b)),
+    careerSeed: Number((oldState as any).careerSeed ?? deriveCareerSeed(saveSeed)),
     careerStage: (oldState.careerStage as CareerStage) ?? "OFFSEASON_HUB",
     seasonHistory: Array.isArray(oldState.seasonHistory) ? oldState.seasonHistory : [],
     earnedMilestoneIds: Array.isArray(oldState.earnedMilestoneIds) ? oldState.earnedMilestoneIds.map(String) : [],
@@ -168,7 +169,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
       },
     },
     strategy: { ...deps.DEFAULT_STRATEGY, ...((oldState as any).strategy ?? {}), draftFaPriorities: deps.normalizePriorityList((oldState as any).strategy?.draftFaPriorities) },
-    scouting: oldState.scouting ?? { boardSeed: saveSeed ^ 0x9e3779b9 },
+    scouting: oldState.scouting ?? { boardSeed: deriveScoutingBoardSeed(saveSeed) },
     hub: {
       ...(oldState.hub ?? ({} as any)),
       news: migratedNews,

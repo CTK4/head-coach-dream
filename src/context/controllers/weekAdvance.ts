@@ -2,10 +2,7 @@ import { resolveInjuries as resolveInjuriesEngine } from "@/engine/injuries";
 import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
 import type { GameType } from "@/engine/schedule";
 import type { GameAction, GameState, WeekKey } from "@/context/GameContext";
-
-export function seedForWeeklyFinalization(leagueSeed: number, a: number, b: number, c: number): number {
-  return (leagueSeed ^ a ^ (b << 8) ^ (c << 16)) >>> 0;
-}
+import { deriveWeeklySeed } from "@/engine/determinism/seedDerivation";
 
 export function finalizeWeekController(
   state: GameState,
@@ -17,8 +14,8 @@ export function finalizeWeekController(
   if (!alreadyProcessed) {
     out = resolveInjuriesEngine(out);
     out = reduce(out, { type: "MEDICAL_TICK_RECOVERY", payload: { weekKey: context.weekKey } });
-    out = reduce(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey: context.weekKey, seed: seedForWeeklyFinalization(context.seed, context.season, context.week, 202) } });
-    out = reduce(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: context.weekKey, seed: seedForWeeklyFinalization(context.seed, context.season, context.week, 101) } });
+    out = reduce(out, { type: "MEDICAL_GENERATE_WEEKLY_INJURIES", payload: { weekKey: context.weekKey, seed: deriveWeeklySeed(context.seed, context.season, context.week, 202) } });
+    out = reduce(out, { type: "MEDIA_GENERATE_WEEKLY_STORIES", payload: { weekKey: context.weekKey, seed: deriveWeeklySeed(context.seed, context.season, context.week, 101) } });
   }
 
   if (context.gameType === "REGULAR_SEASON" && context.week >= REGULAR_SEASON_WEEKS) {
