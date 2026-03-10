@@ -125,13 +125,7 @@ const RegularSeason = () => {
 
   return (
     <div className="space-y-4">
-      <Card><CardContent className="p-6 space-y-3"><h2 className="text-2xl font-bold">Regular Season Week {state.hub.regularSeasonWeek}</h2><p className="text-sm text-muted-foreground">Regular season currently runs {REGULAR_SEASON_WEEKS} weeks.</p><p>Matchup: <strong>{opponent?.name ?? "No matchup available"}</strong></p><Button onClick={kickoff} disabled={!opponentId}>Kickoff</Button></CardContent></Card>
-
       <Card>
-        <CardContent className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Weekly Practice Allocation</h3>
-            <Badge variant={remaining === 0 ? "default" : "outline"}>Remaining: {remaining}</Badge>
         <CardContent className="p-6 space-y-3">
           <h2 className="text-2xl font-bold">Regular Season Week {state.hub.regularSeasonWeek}</h2>
           <p className="text-sm text-muted-foreground">Regular season currently runs {REGULAR_SEASON_WEEKS} weeks.</p>
@@ -143,14 +137,12 @@ const RegularSeason = () => {
           </Button>
         </CardContent>
       </Card>
-            <Card>
-        <CardContent className="p-6 space-y-3">
-          <h3 className="text-lg font-semibold">Weekly Practice Focus</h3>
-          {/* STUB — Phase N: Practice Targeted Development controls/per-position targeting are deferred. */}
-          <div className="flex flex-wrap gap-2">
-            {(["Install", "Conditioning", "Fundamentals", "Recovery"] as FocusType[]).map((f) => (
-              <Button key={f} size="sm" variant={focus === f ? "default" : "outline"} onClick={() => setFocus(f)}>{f}</Button>
-            ))}
+
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Weekly Practice Allocation</h3>
+            <Badge variant={remaining === 0 ? "default" : "outline"}>Remaining: {remaining}</Badge>
           </div>
 
           {(["fundamentals", "schemeInstall", "conditioning"] as PracticeCategory[]).map((cat) => (
