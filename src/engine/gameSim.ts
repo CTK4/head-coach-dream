@@ -457,7 +457,6 @@ function callVsLook(playType: PlayType, look: DefensiveLook): number {
 
 /** MatchupEdge from team ratings. Returns roughly [-1, +1]. */
 function matchupEdge(sim: GameSim, playType: PlayType, off: TeamGameRatings, def: TeamGameRatings): number {
-function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRatings, sim: GameSim): number {
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
   const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
@@ -553,7 +552,6 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
 
   const cvl = callVsLook(playType, look);
   const me = off && def ? matchupEdge(sim, playType, off, def) : 0;
-  const me = off && def ? matchupEdge(playType, off, def, sim) : 0;
   const sf = situationFit(playType, sim);
   const exec = executionState(sim, playType, matchup);
   const qbId = sim.trackedPlayers[sim.possession]?.QB;
@@ -692,7 +690,6 @@ export function computeDefensiveLook(sim: GameSim, rng: () => number): Defensive
 
 /** Generate 1-2 result tags explaining the outcome. */
 function buildResultTags(
-  sim: GameSim,
   playType: PlayType,
   look: DefensiveLook,
   pasComponents: { pas: number; cvl: number; me: number; sf: number },
@@ -824,7 +821,6 @@ function resolveWithPAS(
   let incomplete = false;
   let outcomeLabel = "normal";
 
-  const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
   const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression, sim);
   const resolverTags: ResultTag[] = [];
   const callFx = applyDefensiveCallMultipliers(defensiveCall);
