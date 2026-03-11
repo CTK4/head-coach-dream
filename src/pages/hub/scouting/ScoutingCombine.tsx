@@ -5,6 +5,8 @@ import { combineDayForPosition } from "@/engine/scouting/combineDay";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
+import { ExplainerDrawer } from "@/components/scouting/ExplainerDrawer";
+import { athleticCompositeModelCard } from "@/engine/scouting/modelCards";
 import { getCanonicalCombineResult, getCanonicalDraftProspects, getCanonicalInterviewReveal, getCanonicalInterviewRevealRanges, getCanonicalScoutProfile, hasEnoughAthleticDataForSummary, parseCanonicalMetric } from "@/engine/scouting/selectors";
 
 const DAYS = [
@@ -204,7 +206,10 @@ export default function ScoutingCombine() {
                 </div>
 
                 <div className="mt-3 rounded border border-white/10 bg-black/20 p-2 text-xs">
-                  <div className="font-semibold">Drill Metrics</div>
+                  <div className="flex items-center gap-2 font-semibold">
+                    <span>Drill Metrics</span>
+                    <ExplainerDrawer card={athleticCompositeModelCard} />
+                  </div>
                   <div className="mt-1 flex flex-wrap gap-3 opacity-85">
                     <span>40: {String(metrics?.forty ?? "—")}</span>
                     <span>Vert: {String(metrics?.vert ?? "—")}</span>
