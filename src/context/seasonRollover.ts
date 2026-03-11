@@ -17,8 +17,22 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
   const validation = validatePostTx(draftState);
   if (validation.ok) return draftState;
   const issues = "errors" in validation ? validation.errors : [];
-  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${issues.join("|")}`);
-  return { ...state, uiToast: `Transaction blocked: ${issues[0] ?? "invalid state"}` };
+  const txPlayerIds = new Set((draft.playerIds ?? []).map((id) => String(id)));
+  const extractPid = (issue: string): string | null => {
+    const match = issue.match(/\b(PLY_\d+)\b/);
+    return match ? match[1] : null;
+  };
+  const isPreExistingDebt = (issue: string): boolean => {
+    if (!(issue.startsWith("invalid contract span") || issue.startsWith("negative yearsRemaining"))) {
+      return false;
+    }
+    const pid = extractPid(issue);
+    return pid != null && !txPlayerIds.has(pid);
+  };
+  const blockingIssues = issues.filter((issue) => !isPreExistingDebt(issue));
+  if (blockingIssues.length === 0) return draftState;
+  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${blockingIssues.join("|")}`);
+  return { ...state, uiToast: `Transaction blocked: ${blockingIssues[0] ?? "invalid state"}` };
 }
 
 function resolvePlayerContractEndSeason(state: GameState, playerId: string, basePlayer: any): number | null {
