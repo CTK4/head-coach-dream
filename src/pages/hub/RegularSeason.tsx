@@ -119,11 +119,18 @@ const RegularSeason = () => {
     setStep("ALLOCATE");
   };
 
+  const gameInProgress = state.league.phase === "REGULAR_SEASON_GAME" && state.game.homeTeamId !== "HOME";
+
   const kickoff = () => {
     if (!opponentId || !current) return;
     if (state.league.phase === "REGULAR_SEASON") {
       dispatch({ type: "ADVANCE_WEEK" });
       navigate("/hub/gameplan");
+      return;
+    }
+    // Checkpoint resume: game already in progress (restored from drive-boundary checkpoint)
+    if (gameInProgress) {
+      navigate("/hub/playcall");
       return;
     }
     dispatch({ type: "START_GAME", payload: { opponentTeamId: opponentId, weekType: "REGULAR_SEASON", weekNumber: current.week } });
@@ -140,7 +147,7 @@ const RegularSeason = () => {
             Matchup: <strong>{opponent?.name ?? "No matchup available"}</strong>
           </p>
           <Button onClick={kickoff} disabled={!opponentId}>
-            Kickoff
+            {gameInProgress ? "Resume Game" : "Kickoff"}
           </Button>
         </CardContent>
       </Card>

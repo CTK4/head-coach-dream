@@ -16,8 +16,9 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
   const draftState = applyTransaction(state, tx);
   const validation = validatePostTx(draftState);
   if (validation.ok) return draftState;
-  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${validation.errors.join("|")}`);
-  return { ...state, uiToast: `Transaction blocked: ${validation.errors[0] ?? "invalid state"}` };
+  const issues = "errors" in validation ? validation.errors : [];
+  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${issues.join("|")}`);
+  return { ...state, uiToast: `Transaction blocked: ${issues[0] ?? "invalid state"}` };
 }
 
 function resolvePlayerContractEndSeason(state: GameState, playerId: string, basePlayer: any): number | null {

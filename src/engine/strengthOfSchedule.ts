@@ -1,9 +1,9 @@
-import type { LeagueState, WeekResult } from "@/engine/leagueSim";
+import type { LeagueState, WeekResultRecord } from "@/engine/leagueSim";
 
 export type NormalizedGame = { homeId: string; awayId: string; homeScore: number; awayScore: number };
 export type WL = { w: number; l: number };
 
-function asGame(result: WeekResult): NormalizedGame | null {
+function asGame(result: WeekResultRecord): NormalizedGame | null {
   const homeId = String((result as any).homeTeamId ?? (result as any).teamAId ?? "").trim();
   const awayId = String((result as any).awayTeamId ?? (result as any).teamBId ?? "").trim();
   const homeScore = Number((result as any).homeScore);

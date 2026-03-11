@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { updateActiveSave } from "./helpers/saveSlot";
 
 test("playoffs page renders bracket and playable CTA", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -6,14 +7,12 @@ test("playoffs page renders bracket and playable CTA", async ({ page }) => {
   await page.locator('[data-test="start-free-play"]').click();
   await page.locator('[data-test="team-select-MILWAUKEE_NORTHSHORE"]').click();
 
-  await page.evaluate(() => {
-    const raw = localStorage.getItem("hc_career_save");
-    if (!raw) return;
-    const s = JSON.parse(raw);
-    s.phase = "HUB";
-    s.careerStage = "PLAYOFFS";
-    s.playoffs = {
-      season: s.season,
+  await updateActiveSave(page, (state) => ({
+    ...state,
+    phase: "HUB",
+    careerStage: "PLAYOFFS",
+    playoffs: {
+      season: state.season,
       round: "DIVISIONAL",
       bracket: {
         conferences: {
@@ -39,9 +38,8 @@ test("playoffs page renders bracket and playable CTA", async ({ page }) => {
         awayTeamId: "CLEVELAND_BULLDOGS",
       },
       completedGames: {},
-    };
-    localStorage.setItem("hc_career_save", JSON.stringify(s));
-  });
+    },
+  }));
 
   await page.reload();
   await page.goto("/hub/playoffs");

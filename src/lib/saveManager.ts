@@ -25,6 +25,13 @@ type SaveIndexRow = SaveMetadata & { storageKey: string };
 const LEGACY_KEY = "hc_career_save";
 const SAVE_INDEX_KEY = "hc_career_saves_index";
 const SAVE_ACTIVE_ID_KEY = "hc_career_active_save_id";
+const SAVE_ID_COUNTER_KEY = "hc_career_save_id_counter";
+const UNSLOTTED_SAVE_ID = "unslotted-initial-state";
+
+
+function isPersistableSaveId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value !== UNSLOTTED_SAVE_ID && !value.startsWith("transient-career-");
+}
 
 function getStorageKey(saveId: string) {
   return `hc_career_save__${saveId}`;
@@ -79,6 +86,7 @@ class SaveWriteError extends Error {
 
 function assertStorageWrite(result: StorageWriteResult, operation: "set" | "remove", key: string, context: string): void {
   if (result.ok) return;
+  if (!("error" in result)) return;
   throw new SaveWriteError(`Failed to ${operation} localStorage key \"${key}\" during ${context}.`, operation, key, result.error);
 }
 
@@ -96,7 +104,7 @@ function readAndValidateState(raw: string | null, saveId: string): { state: Game
   if (!parsed) return { state: null };
   const migrated = migrateSaveSchema(parsed, saveId);
   const validation = validateCriticalSaveState(migrated);
-  if (!validation.ok) {
+  if (!validation.ok && "code" in validation) {
     return { state: null, validationCode: validation.code };
   }
   return { state: migrated };
@@ -236,8 +244,33 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     assertStorageWrite(safeSetItem(SAVE_ACTIVE_ID_KEY, saveId), "set", SAVE_ACTIVE_ID_KEY, "active save update");
   }
 
+  function allocateSaveId(prefix = "save"): string {
+    const rows = readIndex();
+    const usedIds = new Set(rows.map((row) => row.saveId));
+    const suffixRegex = new RegExp(`^${prefix}-(\\d+)$`);
+    const maxExistingSuffix = rows.reduce((max, row) => {
+      const m = suffixRegex.exec(row.saveId);
+      if (!m) return max;
+      const n = Number(m[1]);
+      return Number.isFinite(n) ? Math.max(max, n) : max;
+    }, 0);
+
+    const rawCounter = Number(safeGetItem(SAVE_ID_COUNTER_KEY));
+    const normalizedCounter = Number.isFinite(rawCounter) && rawCounter >= 0 ? Math.floor(rawCounter) : 0;
+    let candidate = Math.max(normalizedCounter, maxExistingSuffix) + 1;
+    while (usedIds.has(`${prefix}-${candidate}`)) candidate += 1;
+
+    assertStorageWrite(safeSetItem(SAVE_ID_COUNTER_KEY, String(candidate)), "set", SAVE_ID_COUNTER_KEY, "save id allocation");
+    return `${prefix}-${candidate}`;
+  }
+
   function syncCurrentSave(state: GameState, saveId?: string) {
-    const id = saveId || getActiveSaveId() || `save-${Date.now()}`;
+    const explicitId = isPersistableSaveId(saveId) ? saveId : undefined;
+    const stateSaveIdWasProvided = state.saveId !== undefined && state.saveId !== null;
+    const stateId = isPersistableSaveId(state.saveId) ? state.saveId : undefined;
+    const rawActiveId = getActiveSaveId();
+    const activeId = isPersistableSaveId(rawActiveId) ? rawActiveId : undefined;
+    const id = explicitId || (stateSaveIdWasProvided ? (stateId ?? allocateSaveId("career")) : undefined) || activeId || allocateSaveId("career");
     const storageKey = getStorageKey(id);
     const nextState = migrateSaveSchema(state, id);
     const serialized = JSON.stringify(nextState);
@@ -281,13 +314,15 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
       return { ok: true, state: readResult.state };
     }
 
-    if (readResult.error.code === "MISSING_SAVE") {
+    if (!("error" in readResult)) return { ok: false, code: "CORRUPT_SAVE", saveId, restoredFromBackup: false, message: "Unknown save read error." };
+    const readError = readResult.error;
+    if (readError.code === "MISSING_SAVE") {
       logWarn("save.load.failure", { saveId, meta: { code: "MISSING_SAVE" } });
     } else {
-      logError("save.load.failure", { saveId, meta: { code: readResult.error.code, validationCode: readResult.error.validationCode } });
+      logError("save.load.failure", { saveId, meta: { code: readError.code, validationCode: readError.validationCode } });
     }
 
-    return { ...readResult.error, restoredFromBackup: false };
+    return { ...readError, restoredFromBackup: false };
   }
 
   function getActiveSaveMetadata(): SaveMetadata | null {
@@ -327,7 +362,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     const saveId = `import-${Date.now()}`;
     const migrated = migrateSaveSchema(parsed, saveId);
     const validation = validateCriticalSaveState(migrated);
-    if (!validation.ok) {
+    if (!validation.ok && "code" in validation) {
       return {
         ok: false,
         code: "INVALID_SAVE",
@@ -365,6 +400,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     deleteSave,
     getActiveSaveId,
     setActiveSaveId,
+    allocateSaveId,
     getActiveSaveMetadata,
   };
 }
@@ -380,4 +416,5 @@ export const syncCurrentSave = defaultSaveManager.syncCurrentSave;
 export const deleteSave = defaultSaveManager.deleteSave;
 export const getActiveSaveId = defaultSaveManager.getActiveSaveId;
 export const setActiveSaveId = defaultSaveManager.setActiveSaveId;
+export const allocateSaveId = defaultSaveManager.allocateSaveId;
 export const getActiveSaveMetadata = defaultSaveManager.getActiveSaveMetadata;

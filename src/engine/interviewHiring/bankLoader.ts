@@ -1,7 +1,7 @@
 import bank from "@/data/ugf_interview_bank_150.json";
 import type { InterviewBank, TeamConfig } from "./types";
 
-const interviewBank = bank as InterviewBank;
+const interviewBank = bank as unknown as InterviewBank;
 
 export function loadInterviewBank(): InterviewBank {
   return interviewBank;

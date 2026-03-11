@@ -20,6 +20,11 @@ export interface FeedbackEvent {
   timestamp: number;
 }
 
+export type FeedbackEventIdentity = {
+  id: string;
+  timestamp: number;
+};
+
 type BasePayload = Partial<Pick<FeedbackEvent, "severity" | "teamIds" | "playerIds" | "capDelta">>;
 
 export type FeedbackPayloadByCategory = {
@@ -39,9 +44,12 @@ function formatCap(capDelta: number): string {
   return `$${abs.toFixed(0)}K`;
 }
 
-export function createFeedbackEvent<C extends FeedbackCategory>(category: C, payload: FeedbackPayloadByCategory[C]): FeedbackEvent {
-  const id = `${category}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const timestamp = Date.now();
+export function createFeedbackEvent<C extends FeedbackCategory>(
+  category: C,
+  payload: FeedbackPayloadByCategory[C],
+  identity: FeedbackEventIdentity,
+): FeedbackEvent {
+  const { id, timestamp } = identity;
 
   switch (category) {
     case "CAP_CHANGE": {

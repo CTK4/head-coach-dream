@@ -229,6 +229,20 @@ export function getEffectivePlayersByTeam(state: GameState, teamId: string): any
   return getEffectivePlayers(state).filter((p: any) => String(p.teamId ?? "") === t);
 }
 
+export function getAvailableEffectivePlayersByTeam(state: GameState, teamId: string): any[] {
+  const unavailable = new Set(["OUT", "IR", "PUP"]);
+  const injuryStatusByPlayerId: Record<string, string> = {};
+  for (const injury of state.injuries ?? []) {
+    const playerId = String(injury.playerId ?? "");
+    if (!playerId) continue;
+    injuryStatusByPlayerId[playerId] = String(injury.status ?? "").toUpperCase();
+  }
+  return getEffectivePlayersByTeam(state, teamId).filter((p: any) => {
+    const status = injuryStatusByPlayerId[String(p.playerId)] ?? "";
+    return !unavailable.has(status);
+  });
+}
+
 export function getEffectivePlayer(state: GameState, playerId: string): any | undefined {
   return getEffectivePlayers(state).find((p: any) => String(p.playerId) === String(playerId));
 }

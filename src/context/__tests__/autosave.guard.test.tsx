@@ -5,10 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { GameProvider, useGame } from "@/context/GameContext";
 import { validateCriticalSaveState } from "@/lib/migrations/saveSchema";
 
-const syncCurrentSaveMock = vi.fn();
+const { syncCurrentSaveMock } = vi.hoisted(() => ({
+  syncCurrentSaveMock: vi.fn(),
+}));
 
 vi.mock("@/lib/saveManager", () => ({
   getActiveSaveId: () => "slot-1",
+  loadSaveResult: () => ({ ok: false, message: "missing save" }),
   syncCurrentSave: syncCurrentSaveMock,
 }));
 
@@ -79,7 +82,6 @@ describe("GameProvider autosave guard", () => {
       vi.advanceTimersByTime(700);
     });
 
-    expect(localStorage.getItem("hc_career_save")).toBeNull();
     expect(syncCurrentSaveMock).not.toHaveBeenCalled();
 
     expect(dispatchRef).toBeTruthy();
@@ -105,11 +107,9 @@ describe("GameProvider autosave guard", () => {
       vi.advanceTimersByTime(700);
     });
 
-    const persisted = localStorage.getItem("hc_career_save");
-    expect(persisted).toBeTruthy();
     expect(syncCurrentSaveMock).toHaveBeenCalledTimes(1);
 
-    const parsed = JSON.parse(String(persisted));
+    const parsed = syncCurrentSaveMock.mock.calls[0]?.[0];
     expect(validateCriticalSaveState(parsed).ok).toBe(true);
   });
 });

@@ -9,11 +9,23 @@ export type PassRushInput = {
   context: { rushAngleDeg: number; depthYds: number; chipHelp: boolean; quickGame: boolean };
 };
 
+export type PassRushDiag = {
+  pressureScore: number;
+  blockScore: number;
+  anglePenalty: number;
+  chipHelpPenalty: number;
+  delta: number;
+  pPressure: number;
+  pSack: number;
+  pressureRoll: number;
+  sackRoll: number;
+};
+
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 
 /** roll order: pressureRoll, sackRoll(if pressured) */
-export function resolvePassRush(input: PassRushInput, rng: () => number): { pressured: boolean; sacked: boolean; timePenaltySec: number; resultTags: ResultTag[]; debug: Record<string, number> } {
+export function resolvePassRush(input: PassRushInput, rng: () => number): { pressured: boolean; sacked: boolean; timePenaltySec: number; resultTags: ResultTag[]; debug: Record<string, number>; diag: PassRushDiag } {
   const bendZ = ratingZ(input.rusher.bend);
   const pressureScore =
     0.3 * ratingZ(input.rusher.speed) +
@@ -38,5 +50,6 @@ export function resolvePassRush(input: PassRushInput, rng: () => number): { pres
   if (pressured) resultTags.push({ kind: "PRESSURE", text: `EDGE_PRESSURE:${delta.toFixed(2)}` });
   if (sacked) resultTags.push({ kind: "PRESSURE", text: "SACK_CONVERTED" });
 
-  return { pressured, sacked, timePenaltySec, resultTags, debug: { pressureScore, blockScore, anglePenalty, chipHelpPenalty, delta, pPressure, pSack, pressureRoll, sackRoll } };
+  const diag: PassRushDiag = { pressureScore, blockScore, anglePenalty, chipHelpPenalty, delta, pPressure, pSack, pressureRoll, sackRoll };
+  return { pressured, sacked, timePenaltySec, resultTags, debug: diag, diag };
 }

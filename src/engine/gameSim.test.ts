@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDefensiveLook, initGameSim, recommendFourthDown, stepPlay } from "@/engine/gameSim";
+import { computeDefensiveLook, initGameSim, recommendFourthDown, SITUATION_WINDOW_SIZE, stepPlay } from "@/engine/gameSim";
 import { mulberry32 } from "@/engine/rand";
 
 describe("clock sim + drive log", () => {
@@ -145,8 +145,119 @@ describe("defensive tendency window + confidence", () => {
 
     expect(sim.observedSnaps).toBe(14);
     const rollingTotal = Object.values(sim.situationWindowCounts).reduce((sum, bucket) => sum + (bucket?.total ?? 0), 0);
-    expect(rollingTotal).toBe(12);
-    const confidencePct = Math.min(100, Math.round((sim.observedSnaps / 12) * 100));
+    expect(rollingTotal).toBe(SITUATION_WINDOW_SIZE);
+    const confidencePct = Math.min(100, Math.round((sim.observedSnaps / SITUATION_WINDOW_SIZE) * 100));
     expect(confidencePct).toBe(100);
   });
 });
+
+
+describe("spike semantics", () => {
+  it("legal spike consumes a down and stops the clock", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 333 });
+    sim = {
+      ...sim,
+      down: 2,
+      distance: 7,
+      ballOn: 61,
+      clock: { ...sim.clock, quarter: 4, timeRemainingSec: 42, clockRunning: true, restartMode: "READY" },
+    };
+
+    const out = stepPlay(sim, "SPIKE").sim;
+
+    expect(out.down).toBe(3);
+    expect(out.distance).toBe(7);
+    expect(out.ballOn).toBe(61);
+    expect(out.clock.clockRunning).toBe(false);
+    expect(out.clock.restartMode).toBe("SNAP");
+  });
+
+  it("legal spike burns only small live-play time (2-5s) when no between-play runoff applies", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 334 });
+    sim = {
+      ...sim,
+      down: 1,
+      distance: 10,
+      ballOn: 48,
+      clock: { ...sim.clock, quarter: 2, timeRemainingSec: 55, clockRunning: true, restartMode: "SNAP" },
+    };
+
+    const before = sim.clock.timeRemainingSec;
+    const out = stepPlay(sim, "SPIKE").sim;
+    const elapsed = before - out.clock.timeRemainingSec;
+
+    expect(elapsed).toBeGreaterThanOrEqual(2);
+    expect(elapsed).toBeLessThanOrEqual(5);
+  });
+
+  it("invalid spikes are blocked safely without corrupting game state", () => {
+    const base = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 444 });
+    const scenarios = [
+      {
+        name: "clock already stopped",
+        sim: { ...base, down: 2 as const, distance: 6, ballOn: 48, clock: { ...base.clock, quarter: 4 as const, timeRemainingSec: 38, clockRunning: false, restartMode: "SNAP" as const } },
+      },
+      {
+        name: "4th down",
+        sim: { ...base, down: 4 as const, distance: 2, ballOn: 72, clock: { ...base.clock, quarter: 4 as const, timeRemainingSec: 29, clockRunning: true, restartMode: "READY" as const } },
+      },
+      {
+        name: "outside late-game window",
+        sim: { ...base, down: 2 as const, distance: 8, ballOn: 40, clock: { ...base.clock, quarter: 2 as const, timeRemainingSec: 125, clockRunning: true, restartMode: "READY" as const } },
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const before = scenario.sim;
+      const out = stepPlay(before, "SPIKE").sim;
+
+      expect(out.down, scenario.name).toBe(before.down);
+      expect(out.distance, scenario.name).toBe(before.distance);
+      expect(out.ballOn, scenario.name).toBe(before.ballOn);
+      expect(out.clock.timeRemainingSec, scenario.name).toBe(before.clock.timeRemainingSec);
+      expect(out.driveLog.length, scenario.name).toBe(before.driveLog.length);
+      expect(out.playLog.length, scenario.name).toBe(before.playLog.length);
+      expect(out.lastResult, scenario.name).toBe("Spike not available in this situation.");
+      expect(out.lastResultTags?.some((t) => t.text === "SPIKE_BLOCKED"), scenario.name).toBe(true);
+    }
+  });
+
+  it("end of half stays sane after legal spike drains clock to 0", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 9001 });
+    sim = {
+      ...sim,
+      down: 2,
+      distance: 5,
+      ballOn: 68,
+      clock: { ...sim.clock, quarter: 2, timeRemainingSec: 2, clockRunning: true, restartMode: "SNAP" },
+    };
+
+    const out = stepPlay(sim, "SPIKE").sim;
+
+    expect(out.clock.quarter).toBe(3);
+    expect(out.clock.timeRemainingSec).toBe(15 * 60);
+    expect(out.clock.clockRunning).toBe(false);
+    expect(out.clock.restartMode).toBe("SNAP");
+  });
+
+  it("end of game stays sane after legal spike drains clock to 0", () => {
+    let sim = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed: 9002 });
+    sim = {
+      ...sim,
+      down: 2,
+      distance: 5,
+      ballOn: 68,
+      clock: { ...sim.clock, quarter: 4, timeRemainingSec: 2, clockRunning: true, restartMode: "SNAP" },
+    };
+
+    const result = stepPlay(sim, "SPIKE");
+    const out = result.sim;
+
+    expect(result.ended).toBe(true);
+    expect(out.clock.quarter).toBe(4);
+    expect(out.clock.timeRemainingSec).toBe(0);
+    expect(out.clock.clockRunning).toBe(false);
+    expect(out.clock.restartMode).toBe("SNAP");
+  });
+});
+

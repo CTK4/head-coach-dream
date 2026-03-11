@@ -459,7 +459,7 @@ const PLAYS = [
     ],
     rt:[
       {d:CB([26,LOS],[26,32],[44,20],[62,18]),   c:CLR.pass,w:2.2,a:true},
-      {d:CB([6,LOS],[6,LOS+4],[6,LOS+10],[10,LOS+16],[32,LOS+14],[40,LOS+4],[40,36]),c:CLR.pass,w:2.2,a:true},
+      {d:CB([6,LOS],[6,LOS+4],[32,LOS+14],[40,36]),c:CLR.pass,w:2.2,a:true},
       {d:CB([162,LOS],[162,32],[144,20],[128,18]),c:CLR.pass,w:2.2,a:true},
       {d:P([180,LOS],[180,26]),  c:CLR.pass,w:1.8,a:true},
       {d:P([88,QB_Y],[88,QB_Y+8]),c:CLR.qbmove,w:1.5,a:false,dsh:true},

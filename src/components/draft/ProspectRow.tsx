@@ -17,6 +17,10 @@ export interface Prospect {
   forty?: string;
   positionRank?: string;
   combineScore10?: number | null;
+  unicornConfidence?: number;
+  interviewScore?: number;
+  medicalRiskTier?: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
+  workoutDone?: boolean;
 }
 
 interface ProspectRowProps {
@@ -32,6 +36,7 @@ interface ProspectRowProps {
   isDragOver?: boolean;
   report?: ScoutingReport;
   onOpenProfile?: (prospectId: string) => void;
+  unicornCandidate?: number;
 }
 
 const scoreClass = (score: number | null | undefined) => {
@@ -49,7 +54,7 @@ const rankBg = (rank: number) => {
   return "from-slate-500/60 to-slate-700/70";
 };
 
-export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile }: ProspectRowProps) {
+export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile, unicornCandidate }: ProspectRowProps) {
   const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
     <div className="relative">
@@ -88,6 +93,10 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
                 CS {formatCombineScore10(prospect.combineScore10)}
               </span>
               {prospect.confidence ? <span className="text-[11px] text-slate-400">Conf {prospect.confidence}%</span> : null}
+              {typeof prospect.interviewScore === "number" ? <span className="rounded border border-sky-300/40 bg-sky-500/15 px-2 py-0.5 text-[11px] text-sky-100">🎤 {prospect.interviewScore}</span> : null}
+              {prospect.medicalRiskTier ? <span className="rounded border border-rose-300/40 bg-rose-500/15 px-2 py-0.5 text-[11px] text-rose-100">🩺 {prospect.medicalRiskTier}</span> : null}
+              {prospect.workoutDone ? <span className="rounded border border-emerald-300/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-100">🏋️ workout</span> : null}
+              {unicornCandidate ? <span className="rounded border border-fuchsia-300/50 bg-fuchsia-500/15 px-2 py-0.5 text-[11px] text-fuchsia-100">🦄 unicorn candidate ({Math.round(unicornCandidate * 100)}%)</span> : null}
             </div>
           </div>
           <div className="flex items-center px-3 text-slate-300">{isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</div>

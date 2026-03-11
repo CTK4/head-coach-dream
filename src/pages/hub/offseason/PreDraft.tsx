@@ -79,7 +79,7 @@ export default function PreDraft() {
 
     return ranked
       .map((p) => {
-        const rank = Number(p.rank ?? p.Rank ?? 9999);
+        const rank = Number((p as any).rank ?? (p as any).Rank ?? 9999);
         const grade = Number(p.grade ?? 0);
         const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
         return { ...p, __score: score };

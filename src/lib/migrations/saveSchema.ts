@@ -1,7 +1,13 @@
 import type { GameState } from "@/context/GameContext";
-import { getUserTeamId } from "@/lib/userTeam";
+import { resolveCurrentUserTeamId } from "@/lib/userTeam";
+import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { validateConfigPins } from "@/engine/config/validateConfig";
+import type { CareerStage } from "@/types/careerStage";
+import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
+import { logInfo } from "@/lib/logger";
 
-export const LATEST_SAVE_SCHEMA_VERSION = 1;
+export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
 export type SaveValidationErrorCode =
   | "INVALID_ROOT"
@@ -11,7 +17,8 @@ export type SaveValidationErrorCode =
   | "INVALID_SEASON"
   | "INVALID_WEEK"
   | "INVALID_TEAM"
-  | "INVALID_COACH";
+  | "INVALID_COACH"
+  | "INVALID_CONFIG_PIN";
 
 export type SaveValidationResult =
   | { ok: true }
@@ -54,6 +61,73 @@ const VALID_CAREER_STAGES = new Set<string>([
 
 // ---------------------------------------------------------------------------
 
+
+const VALID_LEAGUE_PHASES = new Set<string>([
+  "PRESEASON",
+  "REGULAR_SEASON",
+  "REGULAR_SEASON_GAMEPLAN",
+  "REGULAR_SEASON_GAME",
+  "WILD_CARD",
+  "DIVISIONAL",
+  "CONFERENCE",
+  "SUPER_BOWL",
+  "OFFSEASON",
+]);
+
+function deriveCareerStageFromWeek(week: number): CareerStage {
+  if (week <= 0) return "OFFSEASON_HUB";
+  if (week <= 4) return "PRESEASON";
+  if (week <= 18) return "REGULAR_SEASON";
+  return "PLAYOFFS";
+}
+
+function clampWeek(rawWeek: unknown): number {
+  const week = Number(rawWeek);
+  if (!Number.isFinite(week)) return 1;
+  return Math.max(1, Math.min(23, Math.floor(week)));
+}
+
+function hardenPhaseFields(state: Partial<GameState>): Partial<GameState> {
+  const next: any = { ...state };
+  const safeWeek = clampWeek(next?.league?.week ?? next?.hub?.regularSeasonWeek ?? next?.week ?? 1);
+
+  const hasValidCareerStage = VALID_CAREER_STAGES.has(String(next.careerStage ?? ""));
+  if (!hasValidCareerStage) {
+    next.careerStage = deriveCareerStageFromWeek(safeWeek);
+
+    if (next?.telemetry) {
+      logInfo("save.phase.normalized_from_week", {
+        meta: {
+          week: safeWeek,
+          leaguePhase: String(next?.league?.phase ?? ""),
+          derivedCareerStage: String(next.careerStage),
+        },
+      });
+    }
+  }
+
+  if (!VALID_CAREER_STAGES.has(String(next.careerStage ?? ""))) {
+    throw new Error(`save_schema: unable to normalize careerStage '${String(next.careerStage ?? "")}'`);
+  }
+
+  const league = { ...(next.league ?? {}) };
+  const leaguePhase = String(league.phase ?? "");
+  if (!VALID_LEAGUE_PHASES.has(leaguePhase)) {
+    league.phase = "OFFSEASON";
+  }
+
+  league.week = safeWeek;
+  league.tradeDeadlineWeek = resolveTradeDeadlineWeek(league.tradeDeadlineWeek ?? TRADE_DEADLINE_DEFAULT_WEEK);
+  next.league = league;
+
+  const hub = { ...(next.hub ?? {}) };
+  hub.regularSeasonWeek = clampWeek(hub.regularSeasonWeek ?? safeWeek);
+  next.hub = hub;
+  next.week = safeWeek;
+
+  return next;
+}
+
 const VALID_OFFSEASON_STEPS = new Set([
   "RESIGNING",
   "COMBINE",
@@ -90,16 +164,24 @@ function migrateV0toV1(state: Partial<GameState>): Partial<GameState> {
     (next as any).careerSeed = Number((next as any).saveSeed ?? 1);
   }
   if (!(next as any).userTeamId) {
-    const userTeamId = getUserTeamId(next as GameState);
+    const userTeamId = resolveCurrentUserTeamId(next);
     if (userTeamId) (next as any).userTeamId = userTeamId;
   }
   return { ...next, schemaVersion: 1 };
 }
 
+function migrateV1toV2(state: Partial<GameState>): Partial<GameState> {
+  const next = { ...state };
+  (next as any).configVersion = String((next as any).configVersion ?? DEFAULT_CONFIG_VERSION);
+  (next as any).calibrationPackId = String((next as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID);
+  return { ...next, schemaVersion: 2 };
+}
+
 /** Ordered list of migrations. Index 0 upgrades schema version 0 → 1, etc. */
 const MIGRATIONS: MigrationFn[] = [
   migrateV0toV1,
-  // Add future migrations here: migrateV1toV2, migrateV2toV3, …
+  migrateV1toV2,
+  // Add future migrations here: migrateV2toV3, migrateV3toV4, …
 ];
 
 export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): GameState {
@@ -123,11 +205,13 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   if (!(next as any).userTeamId) {
-    const userTeamId = getUserTeamId(next as GameState);
+    const userTeamId = resolveCurrentUserTeamId(next);
     if (userTeamId) (next as any).userTeamId = userTeamId;
   }
 
   (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
+
+  next = hardenPhaseFields(next);
 
   return next as GameState;
 }
@@ -167,19 +251,28 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
   // Keep a single declaration here; duplicate declarations break esbuild in production builds.
-  const teamId = getUserTeamId(state);
+  const teamId = resolveCurrentUserTeamId(state);
   if (!teamId || typeof teamId !== "string") {
     return { ok: false, code: "INVALID_TEAM", message: "Team assignment is missing." };
   }
 
-  if (!(state as any).coach || typeof (state as any).coach.name !== "string") {
+  if (!state.coach || typeof state.coach.name !== "string") {
     return { ok: false, code: "INVALID_COACH", message: "Coach data is missing or invalid." };
+  }
+
+  const loadedConfig = loadConfigRegistry();
+  if (loadedConfig.ok === false) {
+    return { ok: false, code: "INVALID_CONFIG_PIN", message: loadedConfig.validation.message };
+  }
+
+  const pinResult = validateConfigPins(loadedConfig.registry, {
+    configVersion: state.configVersion,
+    calibrationPackId: state.calibrationPackId,
+  });
+  if (pinResult.ok === false) {
+    return { ok: false, code: "INVALID_CONFIG_PIN", message: pinResult.message };
   }
 
   return { ok: true };
 }
 
-export function getUserTeamId(state: Partial<GameState>): string | null {
-  const teamId = (state as any).acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
-  return typeof teamId === "string" && teamId.trim().length > 0 ? teamId : null;
-}

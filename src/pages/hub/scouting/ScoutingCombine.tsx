@@ -101,7 +101,7 @@ export default function ScoutingCombine() {
 
   const day = scouting.combine.day;
   const focusEnabled = day === 2 || day === 3;
-  const interviewEnabled = day === 4;
+
   const feed = scouting.combine.feed.filter((f) => f.day === day).slice(-12).reverse();
   const recap =
     scouting.combine.recapByDay[day] ?? {
@@ -162,6 +162,8 @@ export default function ScoutingCombine() {
   const urgencyTone = interviewsRemaining <= 0 ? "text-rose-200" : interviewsRemaining <= 1 ? "text-rose-300" : interviewsRemaining <= 3 ? "text-amber-200" : "text-emerald-200";
   const bucketLabel = DAY_BUCKETS[currentDay].label;
   const interviewsEnabled = currentDay === 4;
+  const selectedForRun = scouting.combine.selectedByDay?.[currentDay]?.IQ ?? [];
+  const canRunSelectedInterviews = interviewsEnabled && interviewsRemaining > 0 && selectedForRun.length > 0;
   const formatRange = (trueScore: number, revealPct: number) => {
     const [low, high] = getDeterministicRevealRange({ trueScore, revealPct });
     return low === high ? `${low}` : `${low}–${high}`;
@@ -172,7 +174,7 @@ export default function ScoutingCombine() {
       <div className="sticky top-[52px] z-20 rounded-lg border border-white/10 bg-black/70 p-3 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-semibold tracking-wide sm:text-base">COMBINE — DAY {currentDay} / 4</div>
-          <div className="text-right text-xs font-semibold text-amber-200">INTERVIEWS REMAINING: {interviewsRemaining}</div>
+          <div className="text-right text-xs font-semibold text-amber-200">INTERVIEWS REMAINING: {interviewsRemaining} · BUDGET: {scouting.budget.remaining}</div>
         </div>
         <div className="mt-1 text-xs opacity-70">Current bucket: {bucketLabel}</div>
         <div className="mt-3 overflow-x-auto">
@@ -269,10 +271,10 @@ export default function ScoutingCombine() {
                     disabled={addInterviewDisabled}
                     onClick={() => dispatch({ type: "SCOUT_COMBINE_SELECT", payload: { prospectId: id, category: iqReveal <= charReveal ? "IQ" : "LEADERSHIP" } })}
                   >
-                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : !interviewsEnabled ? "DAY 4 ONLY" : "[SELECT]"}
+                    {alreadyInterviewedToday ? "INTERVIEWED TODAY" : !interviewsEnabled ? "DAY 4 ONLY" : "SELECT"}
                   </button>
                   <button type="button" className="min-h-11 rounded border border-sky-500 px-3 text-xs text-sky-200 sm:text-sm" onClick={() => openProspectProfile(id)}>
-                    [VIEW PROFILE]
+                    VIEW PROFILE
                   </button>
                 </div>
               </div>
@@ -287,8 +289,8 @@ export default function ScoutingCombine() {
           {shortlist.map((prospect) => {
             const combinedReveal = Math.max(prospect.profile.clarity.CHAR ?? 0, prospect.profile.clarity.FIT ?? 0);
             const reveal = scouting.interviews.modelARevealByProspectId?.[prospect.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-            const charRange = getDeterministicRevealRange(65, reveal.characterRevealPct);
-            const iqRange = getDeterministicRevealRange(65, reveal.intelligenceRevealPct);
+            const charRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.characterRevealPct });
+            const iqRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.intelligenceRevealPct });
             return (
               <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <div className="min-w-0">
@@ -306,7 +308,7 @@ export default function ScoutingCombine() {
                     <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
                   </div>
                   <div className="mt-1 text-xs opacity-70">
-                    Character: {charRange.low}-{charRange.high} • Football IQ: {iqRange.low}-{iqRange.high} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
+                    Character: {charRange[0]}-{charRange[1]} • Football IQ: {iqRange[0]}-{iqRange[1]} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
                   <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
@@ -353,10 +355,11 @@ export default function ScoutingCombine() {
           </button>
           <button
             type="button"
-            className="min-h-11 rounded border border-emerald-500 px-4 text-sm text-emerald-200"
+            className={`min-h-11 rounded border px-4 text-sm ${canRunSelectedInterviews ? "border-emerald-500 text-emerald-200" : "cursor-not-allowed border-white/10 text-white/40"}`}
+            disabled={!canRunSelectedInterviews}
             onClick={() => dispatch({ type: "SCOUT_COMBINE_RUN_INTERVIEWS", payload: { category: "IQ" } })}
           >
-            RUN INTERVIEWS
+            RUN INTERVIEWS ({selectedForRun.length})
           </button>
           <div className={`text-sm font-semibold ${urgencyTone}`}>Token urgency: {urgencyText} ({interviewsRemaining} left)</div>
         </div>

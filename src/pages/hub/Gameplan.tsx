@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DEFAULT_WEEKLY_GAMEPLAN, deriveOpponentTendencies } from "@/engine/gameplan";
+import { buildWeatherGameKey, formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import type { LeaguePhase } from "@/engine/leaguePhase";
 
 // Phases that represent playoff rounds - used to branch opponent/lock logic
@@ -49,6 +50,13 @@ export default function GameplanPage() {
         ? current.matchup.awayTeamId
         : current?.matchup.homeTeamId;
   }
+
+
+  const weekNumber = isPlayoffGameplan ? Number(state.playoffs?.round ?? 1) : state.hub.regularSeasonWeek;
+  const weekType = isPlayoffGameplan ? "PLAYOFFS" as const : "REGULAR_SEASON" as const;
+
+  const weatherKey = oppId ? buildWeatherGameKey({ season: state.season, weekType, weekNumber, homeTeamId: teamId, awayTeamId: String(oppId) }) : "";
+  const persistedWeather = weatherKey ? state.weatherByGameKey?.[weatherKey] : undefined;
 
   const tendencies = deriveOpponentTendencies(
     state.saveSeed,
@@ -101,6 +109,7 @@ export default function GameplanPage() {
           <div>3rd Down Pass Rate: {(tendencies.thirdDownPassRate * 100).toFixed(0)}%</div>
           <div>Red Zone Pass Rate: {(tendencies.redZonePassRate * 100).toFixed(0)}%</div>
           <div>Blitz Rate: {(tendencies.blitzRate * 100).toFixed(0)}%</div>
+          <div>{formatWeatherSummary(persistedWeather)}</div>
         </CardContent>
       </Card>
 

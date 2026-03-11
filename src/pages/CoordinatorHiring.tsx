@@ -29,6 +29,7 @@ export default function CoordinatorHiring() {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [offerYears, setOfferYears] = useState(3);
   const [offerSalaryValue, setOfferSalaryValue] = useState(0);
+  const [negotiatingOfferId, setNegotiatingOfferId] = useState<string | null>(null);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
@@ -97,17 +98,30 @@ export default function CoordinatorHiring() {
 
   const openOfferEditor = (candidate: Cand) => {
     setEditingCandidateId(candidate.p.personId);
+    setNegotiatingOfferId(null);
     setOfferYears(3);
     setOfferSalaryValue(candidate.salary);
   };
 
+  const openCounterRevision = (candidate: Cand, offerId: string, years: number, salary: number) => {
+    setEditingCandidateId(candidate.p.personId);
+    setNegotiatingOfferId(offerId);
+    setOfferYears(years);
+    setOfferSalaryValue(salary);
+  };
+
   const submitOffer = (personId: string) => {
     if (roleFilled) return;
-    dispatch({
-      type: "CREATE_STAFF_OFFER",
-      payload: { roleType: "COORDINATOR", role, personId, years: offerYears, salary: offerSalaryValue },
-    });
+    if (negotiatingOfferId) {
+      dispatch({ type: "STAFF_COUNTER_OFFER", payload: { offerId: negotiatingOfferId, years: offerYears, salary: offerSalaryValue } });
+    } else {
+      dispatch({
+        type: "CREATE_STAFF_OFFER",
+        payload: { roleType: "COORDINATOR", role, personId, years: offerYears, salary: offerSalaryValue },
+      });
+    }
     setEditingCandidateId(null);
+    setNegotiatingOfferId(null);
   };
 
   const latestOfferByPerson = useMemo(() => {
@@ -210,7 +224,7 @@ export default function CoordinatorHiring() {
             </div>
             <Slider value={[levelIdx]} min={0} max={2} step={1} onValueChange={(v) => setLevelIdx(v[0] ?? 1)} />
             <div className="text-xs text-muted-foreground mt-1">Offer: {LEVEL_LABEL[level]}</div>
-            <div className="text-xs text-muted-foreground">Counter-offers will be resolved automatically.</div>
+            <div className="text-xs text-muted-foreground">Counter-offers require your decision (accept, reject, or revise once).</div>
             {roleFilled ? <div className="text-xs text-amber-300">Role already filled</div> : null}
           </div>
         </CardContent>
@@ -253,6 +267,11 @@ export default function CoordinatorHiring() {
                         })()}
                         <div className="text-xs text-muted-foreground">Rep {Number(p.reputation ?? 0)} · Suggested {money(salary)} · Expected {money(exp)}</div>
                         {latest?.status === "REJECTED" ? <div className="text-xs text-amber-300 mt-1">{latest.reason}</div> : null}
+                        {latest?.status === "COUNTERED" && latest.counterProposal ? (
+                          <div className="text-xs text-sky-300 mt-1">
+                            Counter: {latest.counterProposal.years}y @ {money(latest.counterProposal.salary)} {latest.revisionCount ? `(revised ${latest.revisionCount}x)` : ""}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -264,10 +283,45 @@ export default function CoordinatorHiring() {
                           event.stopPropagation();
                           openOfferEditor(candidate);
                         }}
-                        disabled={roleFilled}
+                        disabled={roleFilled || latest?.status === "COUNTERED"}
                       >
                         Create Offer
                       </Button>
+                      {latest?.status === "COUNTERED" && latest.counterProposal ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              dispatch({ type: "STAFF_COUNTER_OFFER_RESPONSE", payload: { offerId: latest.id, accepted: true } });
+                            }}
+                            disabled={roleFilled}
+                          >
+                            Accept Counter
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              dispatch({ type: "STAFF_COUNTER_OFFER_RESPONSE", payload: { offerId: latest.id, accepted: false } });
+                            }}
+                          >
+                            Reject Counter
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openCounterRevision(candidate, latest.id, latest.counterProposal.years, latest.counterProposal.salary);
+                            }}
+                            disabled={(latest.revisionCount ?? 0) >= 1 || roleFilled}
+                          >
+                            Revise & Resubmit
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
 
@@ -296,9 +350,9 @@ export default function CoordinatorHiring() {
                         />
                       </label>
                       <Button size="sm" onClick={(event) => { event.stopPropagation(); submitOffer(p.personId); }} disabled={offerSalaryValue <= 0}>
-                        Submit Offer
+                        {negotiatingOfferId ? "Submit Revision" : "Submit Offer"}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); setEditingCandidateId(null); }}>
+                      <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); setEditingCandidateId(null); setNegotiatingOfferId(null); }}>
                         Cancel
                       </Button>
                     </div>

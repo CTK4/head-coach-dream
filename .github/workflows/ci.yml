@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -12,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,11 +30,58 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint changed-files helper tests
+        run: npm run test:lint:changed
+
+      - name: Lint changed files (blocking)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            BASE_REF="origin/${{ github.base_ref }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            BEFORE_SHA="${{ github.event.before }}"
+            if [[ -z "${BEFORE_SHA}" || "${BEFORE_SHA}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_REF="origin/main"
+            else
+              BASE_REF="${BEFORE_SHA}"
+            fi
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            BASE_REF="origin/main"
+          else
+            BASE_REF="origin/main"
+          fi
+
+          if [[ -z "${BASE_REF}" ]]; then
+            echo "ERROR: BASE_REF resolved to empty value" >&2
+            exit 1
+          fi
+
+          echo "Using lint:changed base ref: ${BASE_REF} (event: ${GITHUB_EVENT_NAME})"
+          npm run lint:changed -- --base "${BASE_REF}"
+
+      - name: Lint full repo (non-blocking debt visibility)
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
       - name: Validate JSON
         run: node scripts/validateJson.mjs
 
       - name: Smoke test
         run: npm run smoke
 
+      - name: Determinism tripwire
+        run: npm run check:determinism
+
       - name: Unit tests
         run: npx vitest run
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: UI tests
+        run: npm run test:ui

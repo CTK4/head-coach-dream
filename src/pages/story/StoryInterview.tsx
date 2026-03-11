@@ -7,7 +7,7 @@ import { useGame } from "@/context/GameContext";
 import { ROUTES } from "@/routes/appRoutes";
 import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
 import { scoreInterview, deriveInterviewOutcome } from "@/engine/interviewHiring/engine";
-import type { InterviewOutcome as EngineInterviewOutcome, OfferItem } from "@/engine/interviewHiring/types";
+import type { InterviewOutcome as EngineInterviewOutcome } from "@/engine/interviewHiring/types";
 import { getFlavorLine } from "@/engine/interviewFlavor";
 import { interviewProfiles } from "@/data/interviewProfiles";
 import { selectInterviewQuestions, type InterviewQuestion } from "@/engine/interviews/interviewSelector";
@@ -29,6 +29,16 @@ type StoryOffer = {
 };
 
 type OfferDecision = "ACCEPTED" | "DECLINED";
+
+type OfferItem = {
+  teamId: StoryTeamId;
+  years: number;
+  salary: number;
+  autonomy: number;
+  patience: number;
+  mediaNarrativeKey: string;
+  base: { years: number; salary: number; autonomy: number };
+};
 
 type LocalInterviewOutcome = {
   band: "HIRED" | "BORDERLINE" | "REJECTED";
