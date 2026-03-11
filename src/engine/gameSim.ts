@@ -235,6 +235,13 @@ export type PlayResult = {
   explanation: PlayExplanation;
 };
 
+export type PendingOffensiveCall = {
+  playType?: PlayType;
+  personnelPackage?: PersonnelPackage;
+  aggression?: AggressionLevel;
+  tempo?: TempoMode;
+};
+
 export type PassPlayDiag = PassResolverDiagV1;
 
 export type GameSim = {
@@ -302,6 +309,7 @@ export type GameSim = {
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
   lastPlayDiag?: PassPlayDiag;
   offenseUserMode?: "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
+  pendingOffensiveCall?: PendingOffensiveCall;
   defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
   pendingDefensiveCall?: DefensiveCall;
   lastDefensiveCall?: DefensiveCall;
@@ -1614,6 +1622,7 @@ export function initGameSim(params: {
     playerBadges: { ...(params.playerBadges ?? {}) },
     unicornImpactLog: [],
     offenseUserMode: params.offenseUserMode ?? "FULL_AUTO",
+    pendingOffensiveCall: undefined,
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,
     forceAutoDefenseCall: false,

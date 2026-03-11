@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -332,15 +332,16 @@ const Playcall = () => {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [, force] = useState(0);
-  const [aggression, setAggression] = useState<AggressionLevel>("NORMAL");
-  const [tempo, setTempo] = useState<TempoMode>("NORMAL");
-  const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
   const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
   const offensePlaybookId = state.playbooks?.offensePlaybookId;
   const defensePlaybookId = state.playbooks?.defensePlaybookId;
 
   const teamId = state.acceptedOffer?.teamId;
   const g = state.game;
+  const pendingCall = g.pendingOffensiveCall;
+  const aggression = pendingCall?.aggression ?? g.aggression;
+  const tempo = pendingCall?.tempo ?? g.tempo;
+  const personnelPackage = pendingCall?.personnelPackage ?? g.currentPersonnelPackage ?? "11";
 
   const team = teamId ? getTeamById(teamId) : null;
   const opp = g.awayTeamId && g.awayTeamId !== "AWAY" ? getTeamById(g.awayTeamId) : null;
@@ -362,6 +363,21 @@ const Playcall = () => {
   }, [roster]);
   const canCallRpo = userTeamQbArchetype === "DUAL_THREAT" || userTeamQbArchetype === "SCRAMBLER";
 
+  useEffect(() => {
+    if (g.pendingOffensiveCall) return;
+    const defaultCall = {
+      playType: selectedPlayId ?? undefined,
+      aggression: g.aggression,
+      tempo: g.tempo,
+      personnelPackage: g.currentPersonnelPackage ?? "11",
+    };
+    dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: defaultCall });
+  }, [dispatch, g.aggression, g.currentPersonnelPackage, g.pendingOffensiveCall, g.tempo, selectedPlayId]);
+
+  useEffect(() => {
+    if (pendingCall?.playType && pendingCall.playType !== selectedPlayId) setSelectedPlayId(pendingCall.playType);
+  }, [pendingCall?.playType, selectedPlayId]);
+
   const rec = useMemo(
     () => (g.down === 4 ? recommendFourthDown(g) : null),
     [g]
@@ -380,6 +396,7 @@ const Playcall = () => {
   }, [g, aggression, tempo, personnelPackage, canCallRpo, offensePlaybookId, defensePlaybookId]);
 
   const handlePlay = (playType: PlayType) => {
+    dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType, personnelPackage, aggression, tempo } });
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
     setSelectedPlayId(null);
     force((x) => x + 1);
@@ -504,7 +521,7 @@ const Playcall = () => {
                 </Badge>
                 <div className="flex gap-1 overflow-x-auto">
                   {(["10","11","12","21","22"] as PersonnelPackage[]).map((pkg) => (
-                    <Button key={pkg} size="sm" variant={personnelPackage === pkg ? "default" : "outline"} onClick={() => setPersonnelPackage(pkg)}>{pkg}</Button>
+                    <Button key={pkg} size="sm" variant={personnelPackage === pkg ? "default" : "outline"} onClick={() => dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { personnelPackage: pkg } })}>{pkg}</Button>
                   ))}
                 </div>
               </div>
@@ -551,7 +568,7 @@ const Playcall = () => {
                     <div className="flex gap-1">
                       {(["AGGRESSIVE", "NORMAL", "CONSERVATIVE"] as AggressionLevel[]).map((a) => (
                         <Button key={a} size="sm" variant={aggression === a ? "default" : "outline"}
-                          onClick={() => setAggression(a)}>
+                          onClick={() => dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { aggression: a } })}>
                           {a === "CONSERVATIVE" ? "Conservative" : a === "AGGRESSIVE" ? "Aggressive" : "Balanced"}
                         </Button>
                       ))}
@@ -573,7 +590,7 @@ const Playcall = () => {
                     <div className="flex gap-1">
                       {(["NORMAL", "MILK", "HURRY_UP"] as TempoMode[]).map((t) => (
                         <Button key={t} size="sm" variant={tempo === t ? "default" : "outline"}
-                          onClick={() => setTempo(t)}>
+                          onClick={() => dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { tempo: t } })}>
                           {t === "HURRY_UP" ? "Hurry" : t === "MILK" ? "Milk" : "Normal"}
                         </Button>
                       ))}
@@ -594,7 +611,7 @@ const Playcall = () => {
                     ? `${g.stats.home.rushYards} rush yds`
                     : `${g.stats.home.passYards} pass yds`;
                   return (
-                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => setSelectedPlayId(play.id)}>
+                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => { setSelectedPlayId(play.id); dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType: play.id } }); }}>
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold flex items-center gap-1">{play.icon} {play.label}</span>

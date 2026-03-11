@@ -207,6 +207,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
           playerBadges: { ...((oldState.game as any).playerBadges ?? oldState.playerBadges ?? {}) },
           playerUnicorns: { ...((oldState.game as any).playerUnicorns ?? oldState.playerUnicorns ?? {}) },
           specialistsBySide: resolveMigratedSpecialistsBySide(oldState, oldState.game as Partial<GameSim>),
+          pendingOffensiveCall: (oldState.game as any).pendingOffensiveCall ?? undefined,
         } as GameSim)
       : initGameSim({
           homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",
