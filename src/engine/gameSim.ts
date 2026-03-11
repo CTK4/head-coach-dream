@@ -727,11 +727,6 @@ function buildResultTags(
   const { shell, box, blitz } = look;
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
-  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
-  const qbId = sim.trackedPlayers[sim.possession]?.QB;
-  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
-  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
 
   // Pick the largest contributing factor
   const factors: { key: string; val: number }[] = [
