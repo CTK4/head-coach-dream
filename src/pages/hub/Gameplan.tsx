@@ -2,9 +2,11 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DEFAULT_WEEKLY_GAMEPLAN, deriveOpponentTendencies } from "@/engine/gameplan";
 import { buildWeatherGameKey, formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import type { LeaguePhase } from "@/engine/leaguePhase";
+import { readSettings, writeSettings, type OffensePlaycallingMode } from "@/lib/settings";
 
 // Phases that represent playoff rounds - used to branch opponent/lock logic
 const PLAYOFF_PHASES: LeaguePhase[] = ["WILD_CARD", "DIVISIONAL", "CONFERENCE", "CHAMPIONSHIP"];
@@ -95,6 +97,13 @@ export default function GameplanPage() {
     ? `Playoff Gameplan · ${String(state.league.phase).replace("_", " ")}`
     : "Weekly Gameplan";
 
+  const offensePlaycallingMode = state.game.offenseUserMode ?? readSettings().offensePlaycallingMode ?? "FULL_AUTO";
+
+  const onOffensePlaycallingModeChange = (mode: OffensePlaycallingMode) => {
+    dispatch({ type: "SET_OFFENSE_USER_MODE", payload: { mode } });
+    writeSettings({ ...readSettings(), offensePlaycallingMode: mode });
+  };
+
   return (
     <div className="space-y-4 p-4">
       <h2 className="text-2xl font-bold">{pageTitle}</h2>
@@ -124,6 +133,23 @@ export default function GameplanPage() {
       <Card>
         <CardContent className="p-4 text-sm">
           Defense: {plan.defensiveFocus} · Pressure: {plan.pressureRate}
+        </CardContent>
+      </Card>
+
+
+      <Card>
+        <CardContent className="p-4 text-sm space-y-2">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">Offense Playcalling Mode</div>
+          <Select value={offensePlaycallingMode} onValueChange={(v) => onOffensePlaycallingModeChange(v as OffensePlaycallingMode)}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="FULL_AUTO">Full Auto</SelectItem>
+              <SelectItem value="KEY_SITUATIONS">Key Situations</SelectItem>
+              <SelectItem value="FULL_PLAYCALLING">Full Playcalling</SelectItem>
+            </SelectContent>
+          </Select>
         </CardContent>
       </Card>
 

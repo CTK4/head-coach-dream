@@ -1,5 +1,7 @@
 import { assignTeamRosterNumbers } from "@/engine/jerseyNumbers/assignTeamRoster";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
+import { findSmallestEligibleCapRelease, isMinorCapOverage, markRecoverableCapFailure, partitionValidationErrors } from "@/engine/transactions/capRecovery";
+import { Tx } from "@/engine/transactions/transactionAPI";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import type { GameState } from "@/context/GameContext";
@@ -36,12 +38,41 @@ export function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent,
   };
   const draftState = applyTransaction(state, tx);
   const withJerseys = reconcileJerseyNumbersForTx(draftState, tx);
-  const validation = validatePostTx(withJerseys);
-  if (validation.ok) return withJerseys;
-  if ("errors" in validation) {
-    const errs = validation.errors;
-    if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${errs.join("|")}`);
-    return { ...state, uiToast: `Transaction blocked: ${errs[0] ?? "invalid state"}` };
+  let candidate = withJerseys;
+  let validation = validatePostTx(candidate);
+  if (validation.ok) return candidate;
+  if (!("errors" in validation)) return candidate;
+
+  const initialPartition = partitionValidationErrors(validation.errors);
+  if (initialPartition.integrityErrors.length > 0) {
+    if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${initialPartition.integrityErrors.join("|")}`);
+    return { ...state, uiToast: `Transaction blocked: ${initialPartition.integrityErrors[0] ?? "invalid state"}` };
   }
-  return withJerseys;
+
+  const minorOverages = initialPartition.capOverages.filter(isMinorCapOverage);
+  if (minorOverages.length === initialPartition.capOverages.length && minorOverages.length > 0) {
+    for (const issue of minorOverages.sort((a, b) => a.teamId.localeCompare(b.teamId))) {
+      const releaseCandidate = findSmallestEligibleCapRelease(candidate, issue.teamId);
+      if (!releaseCandidate) continue;
+      const remediationTx: TransactionEvent = {
+        ...Tx.release(issue.teamId, releaseCandidate.playerId, "AUTO_CAP_REMEDIATION"),
+        txId: buildTxId(candidate),
+        season: Number(candidate.season ?? 1),
+        weekIndex: Number(candidate.week ?? 0),
+        ts: Number(candidate.season ?? 1) * 10_000 + Number(candidate.week ?? 0) * 100 + Number(candidate.transactionLedger?.counter ?? 0) + 1,
+      };
+      candidate = reconcileJerseyNumbersForTx(applyTransaction(candidate, remediationTx), remediationTx);
+    }
+    validation = validatePostTx(candidate);
+    if (validation.ok) return candidate;
+    if (!("errors" in validation)) return candidate;
+    const rerunPartition = partitionValidationErrors(validation.errors);
+    if (rerunPartition.integrityErrors.length > 0) {
+      if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${rerunPartition.integrityErrors.join("|")}`);
+      return { ...state, uiToast: `Transaction blocked: ${rerunPartition.integrityErrors[0] ?? "invalid state"}` };
+    }
+    return markRecoverableCapFailure(candidate, rerunPartition.capOverages);
+  }
+
+  return markRecoverableCapFailure(candidate, initialPartition.capOverages);
 }

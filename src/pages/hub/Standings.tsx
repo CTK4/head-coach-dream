@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { TeamStanding } from "@/engine/standings";
+import { useNavigate } from "react-router-dom";
 
 function lastFiveDots(lastFive: Array<"W" | "L" | "T">) { return lastFive.map((r, i) => <span key={`${r}-${i}`} className={`inline-block h-2.5 w-2.5 rounded-full ${r === "W" ? "bg-emerald-400" : r === "L" ? "bg-red-400" : "bg-slate-400"}`} />); }
 
@@ -34,5 +35,21 @@ export function StandingsTable() {
 }
 
 export default function Standings() {
-  return <Card><CardContent className="p-6"><h2 className="text-2xl font-bold mb-4">Standings</h2><StandingsTable /></CardContent></Card>;
+  const navigate = useNavigate();
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold">Standings</h2>
+          <button
+            onClick={() => navigate("/hub/power-rankings")}
+            className="text-xs text-blue-400 underline"
+          >
+            Power Rankings →
+          </button>
+        </div>
+        <StandingsTable />
+      </CardContent>
+    </Card>
+  );
 }

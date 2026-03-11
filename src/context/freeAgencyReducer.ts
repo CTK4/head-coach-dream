@@ -201,7 +201,7 @@ export function freeAgencyReducer(state: GameState, action: GameAction): GameSta
       if (state.freeAgency.initStatus !== "ready") return state;
 
       const filtered = withCapFilteredPendingOffers(state);
-      const resolving = { ...filtered, freeAgency: { ...filtered.freeAgency, status: "resolving", isResolving: true } };
+      const resolving: GameState = { ...filtered, freeAgency: { ...filtered.freeAgency, status: "resolving", isResolving: true } };
       const resolved = gameReducerMonolith(resolving, { type: "FA_RESOLVE" });
       return {
         ...resolved,

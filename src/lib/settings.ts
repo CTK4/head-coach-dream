@@ -1,4 +1,8 @@
+import { DEFAULT_SIM_TUNING, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
+
 export const SETTINGS_KEY = "hcd:settings";
+
+export type OffensePlaycallingMode = "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
 
 export type UserSettings = {
   simSpeed?: "SLOW" | "NORMAL" | "FAST";
@@ -10,11 +14,17 @@ export type UserSettings = {
   useTop51CapRule?: boolean;
   units?: "IMPERIAL" | "METRIC";
   showTooltips?: boolean;
+  difficultyPreset?: DifficultyPresetId;
+  realismPreset?: RealismPresetId;
+  offensePlaycallingMode?: OffensePlaycallingMode;
 };
 
-const DEFAULT_SETTINGS: Required<Pick<UserSettings, "confirmAutoAdvance" | "showTooltips">> = {
+const DEFAULT_SETTINGS: Required<Pick<UserSettings, "confirmAutoAdvance" | "showTooltips" | "difficultyPreset" | "realismPreset" | "offensePlaycallingMode">> = {
   confirmAutoAdvance: true,
   showTooltips: true,
+  difficultyPreset: DEFAULT_SIM_TUNING.difficultyPreset,
+  realismPreset: DEFAULT_SIM_TUNING.realismPreset,
+  offensePlaycallingMode: "FULL_AUTO",
 };
 
 export function readSettings(): UserSettings {
@@ -26,6 +36,9 @@ export function readSettings(): UserSettings {
       ...parsed,
       confirmAutoAdvance: parsed?.confirmAutoAdvance ?? DEFAULT_SETTINGS.confirmAutoAdvance,
       showTooltips: parsed?.showTooltips ?? DEFAULT_SETTINGS.showTooltips,
+      difficultyPreset: parsed?.difficultyPreset ?? DEFAULT_SETTINGS.difficultyPreset,
+      realismPreset: parsed?.realismPreset ?? DEFAULT_SETTINGS.realismPreset,
+      offensePlaycallingMode: parsed?.offensePlaycallingMode ?? DEFAULT_SETTINGS.offensePlaycallingMode,
     };
   } catch {
     return DEFAULT_SETTINGS;

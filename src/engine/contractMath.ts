@@ -1,5 +1,5 @@
 import type { GameState, PlayerContractOverride } from "@/context/GameContext";
-import { getContractById, getPlayerById } from "@/data/leagueDb";
+import { getPlayerById } from "@/data/leagueDb";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 
 export type CapYearRow = { season: number; salary: number; bonus: number; capHit: number };
@@ -42,32 +42,9 @@ function buildOverrideCapRows(state: GameState, o: PlayerContractOverride, seaso
   return rows;
 }
 
-function buildBaseCapRows(state: GameState, playerId: string, seasons: number) {
-  const p = getPlayerById(playerId);
-  if (!p?.contractId) return null;
-  const c = getContractById(p.contractId);
-  if (!c) return null;
-
-  const start = Number(c.startSeason ?? state.season);
-  const end = Number(c.endSeason ?? start);
-  const salByIdx = [Number(c.salaryY1 ?? 0), Number(c.salaryY2 ?? 0), Number(c.salaryY3 ?? 0), Number(c.salaryY4 ?? 0)];
-
-  const rows: CapYearRow[] = [];
-  for (let i = 0; i < seasons; i++) {
-    const season = state.season + i;
-    if (season < start || season > end) rows.push({ season, salary: 0, bonus: 0, capHit: 0 });
-    else {
-      const idx = clamp(season - start, 0, salByIdx.length - 1);
-      const salary = round50k(salByIdx[idx] ?? 0);
-      rows.push({ season, salary, bonus: 0, capHit: salary });
-    }
-  }
-  return rows;
-}
-
 export function buildCapTable(state: GameState, playerId: string, seasons = 5): CapTable {
   const o = state.playerContractOverrides[playerId];
-  const rows = o ? buildOverrideCapRows(state, o, seasons) : buildBaseCapRows(state, playerId, seasons) ?? [];
+  const rows = o ? buildOverrideCapRows(state, o, seasons) : [];
   const total5y = round50k(rows.reduce((a, r) => a + r.capHit, 0));
   return { rows, total5y };
 }

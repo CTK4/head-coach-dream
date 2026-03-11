@@ -1,5 +1,25 @@
 import type { GameState, PersistedFatigue, PlayerContractOverride } from "@/context/GameContext";
 import type { LeagueRecords } from "@/engine/leagueRecords";
+import { getContractById, getPlayerById } from "@/data/leagueDb";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
+
+function toOverrideFromBaseContract(baseContract: any): PlayerContractOverride {
+  const startSeason = Number(baseContract?.startSeason ?? 0);
+  const endSeason = Number(baseContract?.endSeason ?? startSeason);
+  const years = Math.max(1, endSeason - startSeason + 1);
+  const salaries = [
+    Number(baseContract?.salaryY1 ?? 0),
+    Number(baseContract?.salaryY2 ?? 0),
+    Number(baseContract?.salaryY3 ?? 0),
+    Number(baseContract?.salaryY4 ?? 0),
+  ].slice(0, years);
+  return {
+    startSeason,
+    endSeason,
+    salaries,
+    signingBonus: 0,
+  };
+}
 
 interface HydrateStateDependencies {
   normalizePriorityList: (value: unknown) => string[];
@@ -17,7 +37,7 @@ export function hydrateLoadedState(
   defaultDeterministicCounters: GameState["deterministicCounters"],
   deps: HydrateStateDependencies,
 ): GameState {
-      return {
+      const merged = {
         ...initial,
         ...migrated,
         coach: { ...initial.coach, ...migrated.coach },
@@ -157,6 +177,7 @@ export function hydrateLoadedState(
         playerSeasonStatsById: { ...(initial.playerSeasonStatsById ?? {}), ...((migrated as any).playerSeasonStatsById ?? {}) },
         playerCareerStatsById: { ...(initial.playerCareerStatsById ?? {}), ...((migrated as any).playerCareerStatsById ?? {}) },
         leagueRecords: { ...deps.defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
+        franchiseRecordsByTeamId: { ...((initial as any).franchiseRecordsByTeamId ?? {}), ...((migrated as any).franchiseRecordsByTeamId ?? {}) },
         draft: { ...initial.draft, ...migrated.draft },
         upcomingDraftClass: (migrated as any).upcomingDraftClass ?? initial.upcomingDraftClass,
         futureClasses: (migrated as any).futureClasses ?? initial.futureClasses,
@@ -214,5 +235,23 @@ export function hydrateLoadedState(
         unreadNewsCount: Number((migrated as any).unreadNewsCount ?? 0),
         lastNewsReadWeek: Number((migrated as any).lastNewsReadWeek ?? 0),
         storySetup: (migrated as any).storySetup,
+      } as GameState;
+
+      const rosterIndex = buildRosterIndex(merged);
+      const hydratedContractOverrides: Record<string, PlayerContractOverride> = { ...merged.playerContractOverrides };
+      for (const [playerId, teamId] of Object.entries(rosterIndex.playerToTeam ?? {})) {
+        if (String(teamId).toUpperCase() === "FREE_AGENT") continue;
+        if (hydratedContractOverrides[playerId]) continue;
+        const basePlayer = getPlayerById(playerId);
+        const contractId = String(basePlayer?.contractId ?? "");
+        if (!contractId) continue;
+        const baseContract = getContractById(contractId);
+        if (!baseContract) continue;
+        hydratedContractOverrides[playerId] = toOverrideFromBaseContract(baseContract);
+      }
+
+      return {
+        ...merged,
+        playerContractOverrides: hydratedContractOverrides,
       };
 }

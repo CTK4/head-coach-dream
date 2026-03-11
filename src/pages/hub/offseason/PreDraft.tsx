@@ -8,12 +8,26 @@ import { Badge } from "@/components/ui/badge";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
-import { getDrillCompositeScore } from "@/engine/scouting/drillComposite";
-import { getLegacyPreDraftBoardView } from "@/engine/scouting/legacyBridge";
-import { getCanonicalCombineResult, getCanonicalInterviewResult, getCanonicalMedicalResult, getCanonicalScoutProfile } from "@/engine/scouting/selectors";
+import { getDrillCompositeScore, hasEnoughDrillDataForPercentile } from "@/engine/scouting/drillComposite";
+import { getCanonicalCombineResult, getCanonicalDraftProspects, getCanonicalInterviewResult, getCanonicalMedicalResult, getCanonicalScoutProfile, hasEnoughAthleticDataForSummary, parseCanonicalMetric } from "@/engine/scouting/selectors";
 import { buildProspectForGmEval } from "@/engine/scouting/gmEvalAdapter";
+import { athleticTierFromTopPercentile, topPercentDisplay, topPercentileFromAscendingRank } from "@/engine/scouting/percentiles";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
+
+function consensusRankValue(rank: unknown): number {
+  const numeric = Number(rank);
+  return Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER;
+}
+
+function combineScoreOrNull(result: { forty?: number | string; vert?: number | string; shuttle?: number | string; bench?: number | string }): number | null {
+  return getDrillCompositeScore({
+    forty: parseCanonicalMetric(result.forty) ?? undefined,
+    vert: parseCanonicalMetric(result.vert) ?? undefined,
+    shuttle: parseCanonicalMetric(result.shuttle) ?? undefined,
+    bench: parseCanonicalMetric(result.bench) ?? undefined,
+  });
+}
 const POS_FILTER_ALL = "ALL";
 
 // Same group normalization as Combine page
@@ -21,14 +35,6 @@ function normalizeCombinePosGroup(pos: string): string {
   const raw = normalizeProspectPosition(String(pos ?? ""), "DRAFT");
   if (raw === "DT") return "DL";
   return raw;
-}
-
-function pctToTier(pct: number): string {
-  if (pct >= 90) return "Elite";
-  if (pct >= 85) return "Top 15%";
-  if (pct >= 60) return "Above Avg";
-  if (pct >= 40) return "Average";
-  return "Below Avg";
 }
 
 // Deterministic integer hash for a string
@@ -62,6 +68,7 @@ function priorityWeight(priorities: PriorityPos[], pos: string): number {
 
 type TabMode = "BOARD" | "MY_BOARD";
 
+
 export default function PreDraft() {
   const { state, dispatch } = useGame();
   const { openProspectProfile, modal } = useProspectProfileModal(state);
@@ -76,46 +83,50 @@ export default function PreDraft() {
   const shortlist = useMemo(() => (combine as { shortlist?: Record<string, boolean> }).shortlist ?? {}, [combine]);
   const intelByProspectId = state.offseasonData.preDraft.intelByProspectId ?? {};
 
-  const board = useMemo(() => {
-    const ranked = getLegacyPreDraftBoardView(state);
-    if (viewMode !== "TEAM") return ranked.slice(0, 90);
 
-    return ranked
+  const canonicalPool = useMemo(() => {
+    return getCanonicalDraftProspects(state)
+      .slice()
+      .sort((a, b) => consensusRankValue(a.rank) - consensusRankValue(b.rank));
+  }, [state]);
+
+  const board = useMemo(() => {
+    if (viewMode !== "TEAM") return canonicalPool.slice(0, 90);
+
+    return canonicalPool
       .map((p) => {
-        const rank = Number(p.rank ?? 9999);
+        const rank = consensusRankValue(p.rank);
         const grade = Number(p.grade ?? 0);
         const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
         return { ...p, __score: score };
       })
       .sort((a, b) => (b.__score ?? 0) - (a.__score ?? 0))
       .slice(0, 90);
-  }, [state, viewMode, priorities]);
+  }, [canonicalPool, viewMode, priorities]);
 
   // Compute percentiles from combine drill data
-  const percentileMap = useMemo(() => {
-    const allProspects = board;
+  const topPercentileByProspectId = useMemo(() => {
+    const allProspects = canonicalPool;
     const byGroup: Record<string, Array<{ id: string; score: number }>> = {};
     for (const p of allProspects) {
       const id = String(p.id ?? "");
       const result = getCanonicalCombineResult(state, id);
-      const forty = Number(result.forty ?? p.forty ?? 4.9);
-      const vert = Number(result.vert ?? p.vert ?? 30);
-      const shuttle = Number(result.shuttle ?? p.shuttle ?? 4.4);
-      const bench = Number(result.bench ?? p.bench ?? 18);
-      const drillScore = getDrillCompositeScore({ forty, vert, shuttle, bench });
+      if (!hasEnoughDrillDataForPercentile({ forty: parseCanonicalMetric(result.forty), vert: parseCanonicalMetric(result.vert), shuttle: parseCanonicalMetric(result.shuttle), bench: parseCanonicalMetric(result.bench) })) continue;
+      const drillScore = combineScoreOrNull(result);
+      if (drillScore == null) continue;
       const grp = normalizeCombinePosGroup(String(p.pos ?? ""));
       (byGroup[grp] ??= []).push({ id, score: drillScore });
     }
     const out: Record<string, number> = {};
     for (const group of Object.values(byGroup)) {
-      const sorted = group.slice().sort((a, b) => a.score - b.score);
+      const sorted = group.slice().sort((a, b) => b.score - a.score);
       const n = sorted.length;
       sorted.forEach(({ id }, rank) => {
-        out[id] = n > 1 ? Math.round((rank / (n - 1)) * 100) : 100;
+        out[id] = topPercentileFromAscendingRank(rank, n);
       });
     }
     return out;
-  }, [board, state]);
+  }, [canonicalPool, state]);
 
   const visits = state.offseasonData.preDraft.visits;
   const workouts = state.offseasonData.preDraft.workouts;
@@ -136,6 +147,7 @@ export default function PreDraft() {
     return board.filter((p) => String(p.pos ?? "UNK").toUpperCase() === posFilter);
   }, [board, posFilter]);
 
+  // MY_BOARD intentionally follows the active board model/order (CONSENSUS / TEAM overlay).
   const myBoard = useMemo(() => board.filter((p) => Boolean(shortlist[p.id])), [board, shortlist]);
 
   const toggleVisit = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
@@ -160,20 +172,22 @@ export default function PreDraft() {
     const disableWorkoutAdd = (!w && allSlotsUsed) || v;
 
     const intel = intelByProspectId[id] ?? 0;
-    const evalProspect = buildProspectForGmEval(state, id);
-    const gmEval = viewMode === "GM" && evalProspect ? getUserProspectEval(state, evalProspect) : null;
+    const gmEvalInput = buildProspectForGmEval(state, id);
+    const gmEval = viewMode === "GM" && gmEvalInput ? getUserProspectEval(state, gmEvalInput.prospect, gmEvalInput) : null;
     const combineResult = getCanonicalCombineResult(state, id);
-    const athleticSummary = getAthleticSummary({
-      forty: Number(combineResult.forty ?? p.forty),
-      vert: Number(combineResult.vert ?? p.vert),
-      shuttle: Number(combineResult.shuttle ?? p.shuttle),
-      threeCone: Number(combineResult.threeCone ?? p.threeCone),
-      bench: Number(combineResult.bench ?? p.bench),
-    });
+    const scoutProfile = getCanonicalScoutProfile(state, id);
+    const athleticSummary = hasEnoughAthleticDataForSummary(combineResult)
+      ? getAthleticSummary({
+          forty: parseCanonicalMetric(combineResult.forty) ?? undefined,
+          vert: parseCanonicalMetric(combineResult.vert) ?? undefined,
+          shuttle: parseCanonicalMetric(combineResult.shuttle) ?? undefined,
+          threeCone: parseCanonicalMetric(combineResult.threeCone) ?? undefined,
+          bench: parseCanonicalMetric(combineResult.bench) ?? undefined,
+        })
+      : null;
 
-    const pct = percentileMap[id];
-    const tier = pct != null ? pctToTier(pct) : null;
-    const topPct = pct != null ? 100 - pct : null;
+    const topPercentile = topPercentileByProspectId[id];
+    const tier = topPercentile != null ? athleticTierFromTopPercentile(topPercentile) : null;
 
     const blurbSeed = simpleHash(id + String(p.archetype ?? "") + String(state.saveSeed ?? 0));
     const blurb = SCOUT_BLURBS[blurbSeed % SCOUT_BLURBS.length];
@@ -193,18 +207,18 @@ export default function PreDraft() {
 
             {viewMode === "CONSENSUS" ? (
               <div className="text-xs text-muted-foreground">
-                40 {String(combineResult.forty ?? p.forty ?? "—")} · Vert {String(combineResult.vert ?? p.vert ?? "—")} · Shuttle {String(combineResult.shuttle ?? p.shuttle ?? "—")} · Bench {String(combineResult.bench ?? p.bench ?? "—")} · {String(p.archetype ?? "Prospect")}
+                40 {String(combineResult.forty ?? "—")} · Vert {String(combineResult.vert ?? "—")} · Shuttle {String(combineResult.shuttle ?? "—")} · Bench {String(combineResult.bench ?? "—")} · {String(p.archetype ?? "Prospect")}
               </div>
             ) : (
               <div className="text-xs text-muted-foreground">
-                GM Grade {gmEval ? gmEval.roundBand : "—"} <span className="text-muted-foreground">({gmEval ? gmEval.value : "Pending"})</span> · Consensus {p.grade ?? "—"} · {athleticSummary.overallLabel}
+                GM Grade {gmEval ? gmEval.roundBand : "—"} <span className="text-muted-foreground">({gmEval ? `${gmEval.value}${gmEvalInput?.completeness === "PARTIAL" ? ` · Partial scouting data · σ≈${gmEval.sigma.toFixed(1)}` : ""}` : "Pending canonical combine or interview"})</span> · Consensus {p.grade ?? "—"} · {athleticSummary?.overallLabel ?? "No combine data"}
               </div>
             )}
 
             {/* Intel-gated info */}
             {intel >= 1 ? (
               <div className="text-xs text-sky-300">
-                Athletic {athleticSummary.overallLabel}{tier ? ` · ${tier}${topPct != null ? ` (Top ${topPct}%)` : ""}` : ""} · Interview {(getCanonicalInterviewResult(state, id) as Array<{ score?: number }> | null)?.slice(-1)?.[0]?.score ?? p.interview ?? "—"} · Medical {(getCanonicalMedicalResult(state, id) as { riskTier?: string } | null)?.riskTier ?? "—"} · Scout Conf {Math.round(getCanonicalScoutProfile(state, id)?.confidence ?? 0)}%
+                Athletic {athleticSummary?.overallLabel ?? "No combine data"}{tier ? ` · ${tier}${topPercentile != null ? ` (${topPercentDisplay(topPercentile)})` : ""}` : ""} · Interview {getCanonicalInterviewResult(state, id)?.slice(-1)?.[0]?.score ?? "—"} · Medical {(getCanonicalMedicalResult(state, id) as { riskTier?: string } | null)?.riskTier ?? "—"} · Scout Conf {typeof scoutProfile?.confidence === "number" ? `${Math.round(scoutProfile.confidence)}%` : "—"}
               </div>
             ) : intel === 0 ? (
               <div className="text-xs text-slate-500">Schedule a visit or workout to unlock scouting intel.</div>
@@ -231,6 +245,14 @@ export default function PreDraft() {
     );
   }
 
+
+  if (board.length === 0) {
+    return (
+      <div className="p-4 md:p-8">
+        <Card><CardContent className="p-6 text-sm text-muted-foreground">No canonical draft prospects are available.</CardContent></Card>
+      </div>
+    );
+  }
   return (
     <div className="p-4 md:p-8 space-y-4">
       <Card>

@@ -50,7 +50,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { CORE_ATTRIBUTE_KEYS, calculateProgressionDelta, defaultDevelopmentTrait, type DevelopmentProfile, type SeasonStats, type SnapCounts } from "@/engine/snapBasedProgression";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
-import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
+import { defaultLeagueRecords, updateFranchiseRecordsAtRollover, updateLeagueRecords, type FranchiseRecords, type LeagueRecords } from "@/engine/leagueRecords";
 import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
 import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
 import { advancePlayoffRound, buildPlayoffBracket, buildPostseasonResults, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
@@ -61,6 +61,7 @@ import { buyoutTotal, splitBuyout } from "@/engine/buyout";
 import { getRestructureEligibility } from "@/engine/contractMath";
 import { autoFillDepthChartGaps } from "@/engine/depthChart";
 import { getAvailableEffectivePlayersByTeam, getContractSummaryForPlayer, getEffectiveFreeAgents, getEffectivePlayers, getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
+import { resolveSpecialistsBySide } from "@/engine/game/specialists";
 import { migrateExpiredContractsToFreeAgency } from "@/context/seasonRollover";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { computeSeasonDevelopmentDelta } from "@/engine/devCalculators";
@@ -69,12 +70,12 @@ import { applyFullStaffImpact, coachesForPosition } from "@/engine/coachImpact";
 import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import { getGmTraits } from "@/engine/gmScouting";
-import { evalProspectForGm } from "@/engine/prospectEval";
+import { evalProspectForGm, type ProspectEvalUncertaintyOptions } from "@/engine/prospectEval";
 import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
-import { isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
+import { isActionAllowedInCurrentPhase, shouldForcePreseasonCutdownTransition, type ValidPhaseActions } from "@/context/phaseGuards";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_EXEC_SCALE,
@@ -109,6 +110,7 @@ import {
   COMBINE_FOCUS_HOURS_COST,
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
+import { combineDayForPosition } from "@/engine/scouting/combineDay";
 import type {
   CampSettings,
   CutDecision,
@@ -161,9 +163,11 @@ import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { allocateSaveId, getActiveSaveId, setActiveSaveId } from "@/lib/saveManager";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { DEFAULT_SIM_TUNING, type SimTuningSettings } from "@/config/simTuning";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
+import { readSettings, type OffensePlaycallingMode } from "@/lib/settings";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
@@ -1001,6 +1005,7 @@ export type GameState = {
   saveVersion: number;
   configVersion: string;
   calibrationPackId: string;
+  simTuningSettings: SimTuningSettings;
   memoryLog: MemoryEvent[];
   contextFlags: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
@@ -1103,6 +1108,7 @@ export type GameState = {
   playerSeasonStatsById: Record<string, PlayerSeasonStats[]>;
   playerCareerStatsById: Record<string, import("@/types/stats").PlayerCareerStats>;
   leagueRecords: LeagueRecords;
+  franchiseRecordsByTeamId: Record<string, FranchiseRecords>;
   draft: DraftState;
   upcomingDraftClass: import("@/engine/draftSim").Prospect[];
   futureClasses: Partial<Record<ClassYear, GeneratedPlayer[]>>;
@@ -1122,6 +1128,7 @@ export type GameState = {
   practiceNeglectCounters: PracticeNeglectTracker;
   cumulativeNeglectPenalty: number;
   weeklyFamiliarityBonus: number;
+  chemistryExecutionBonus?: number;
   weeklyMentalErrorMod: number;
   weeklySchemeConceptBonus: number;
   weeklyLateGameRetentionBonus: number;
@@ -1209,10 +1216,12 @@ export type GameAction =
         teamId: string;
         teamName: string;
         offer?: Partial<Pick<OfferItem, "years" | "salary" | "autonomy" | "patience" | "mediaNarrativeKey">>;
+        simTuningSettings?: Partial<SimTuningSettings>;
       };
     }
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
+  | { type: "SET_SIM_TUNING"; payload: Partial<SimTuningSettings> }
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
@@ -1235,6 +1244,7 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
+  | { type: "SET_OFFENSE_USER_MODE"; payload: { mode: OffensePlaycallingMode } }
   | { type: "ENSURE_GAME_WEATHER"; payload: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
@@ -1527,6 +1537,22 @@ function buildTrackedPlayers(state: GameState, teamId: string): Partial<Record<i
   return { QB: qb, RB: rb, WR: wr, TE: te, OL: ol, DL: dl, LB: lb, DB: db };
 }
 
+
+function buildSpecialistsBySide(state: GameState, homeTeamId: string, awayTeamId: string): Record<Possession, Partial<Record<"K" | "P", string>>> {
+  const homeDepth = homeTeamId === state.acceptedOffer?.teamId ? state.depthChart : state.leagueDepthCharts?.[homeTeamId];
+  const awayDepth = awayTeamId === state.acceptedOffer?.teamId ? state.depthChart : state.leagueDepthCharts?.[awayTeamId];
+  const userActiveIds = new Set(Object.keys(state.rosterMgmt.active ?? {}));
+  return resolveSpecialistsBySide(state, {
+    homeTeamId,
+    awayTeamId,
+    homeDepthStarterIds: { K: String(homeDepth?.startersByPos?.K ?? ""), P: String(homeDepth?.startersByPos?.P ?? "") },
+    awayDepthStarterIds: { K: String(awayDepth?.startersByPos?.K ?? ""), P: String(awayDepth?.startersByPos?.P ?? "") },
+    // Only the user team has explicit active roster constraints in current state shape.
+    ...(homeTeamId === state.acceptedOffer?.teamId ? { homeActivePlayerIds: userActiveIds } : {}),
+    ...(awayTeamId === state.acceptedOffer?.teamId ? { awayActivePlayerIds: userActiveIds } : {}),
+  });
+}
+
 function hydrateGameFatigue(state: GameState, trackedPlayers: Record<Possession, Partial<Record<import("@/engine/fatigue").FatigueTrackedPosition, string>>>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const side of ["HOME", "AWAY"] as const) {
@@ -1810,6 +1836,7 @@ function createInitialState(saveIdInput?: string): GameState {
     saveId,
     configVersion: DEFAULT_CONFIG_VERSION,
     calibrationPackId: DEFAULT_CALIBRATION_PACK_ID,
+    simTuningSettings: { ...DEFAULT_SIM_TUNING },
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
@@ -1881,11 +1908,12 @@ function createInitialState(saveIdInput?: string): GameState {
     leagueStatLeaders: { passingYards: [], rushingYards: [], receivingYards: [], sacks: [] },
     saveSeed,
     careerSeed,
-    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: careerSeed }),
+    game: initGameSim({ homeTeamId: "HOME", awayTeamId: "AWAY", seed: careerSeed, playerUnicorns: {}, playerBadges: {}, specialistsBySide: { HOME: {}, AWAY: {} } }),
     gameHistory: [],
     playerSeasonStatsById: {},
     playerCareerStatsById: {},
     leagueRecords: defaultLeagueRecords(),
+    franchiseRecordsByTeamId: {},
     draft: createInitialDraftState(draftContext),
     upcomingDraftClass: generateDraftClass({ year: season, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
     futureClasses: {},
@@ -1966,14 +1994,14 @@ function prospectEvalDetRand(saveSeed: number, key: string) {
   return mulberry32(saveSeed ^ hashStr(key));
 }
 
-export function getUserProspectEval(state: GameState, prospect: Prospect) {
+export function getUserProspectEval(state: GameState, prospect: Prospect, options?: ProspectEvalUncertaintyOptions) {
   const userTeamId = resolveCurrentUserTeamId(state) ?? "";
   const gmPersonId = state.league.gmByTeamId[userTeamId];
   const gm = getGmTraits(gmPersonId);
   const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
   const spent = prospectSpentProxyForUser(state, prospect.id);
   const need = userTeamId ? teamNeedAtPos01(state, userTeamId, prospect.pos) : 0;
-  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need, uncertainty: options });
 }
 
 export function getCpuProspectEval(state: GameState, teamId: string, prospect: Prospect) {
@@ -1982,7 +2010,8 @@ export function getCpuProspectEval(state: GameState, teamId: string, prospect: P
   const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
   const spent = prospectSpentProxyForCpu(gmPersonId);
   const need = teamNeedAtPos01(state, teamId, prospect.pos);
-  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  const evalResult = evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  return evalResult;
 }
 
 function makeOfferId(state: GameState) {
@@ -4809,25 +4838,6 @@ function posToGroup(pos: string) {
 
 type CombineFeedCategory = keyof typeof COMBINE_FEED_TEMPLATES;
 
-function normalizeCombinePosition(pos: string): string {
-  const p = String(pos || "").toUpperCase();
-  if (["DE", "OLB"].includes(p)) return "EDGE";
-  if (["DT", "NT"].includes(p)) return "DT";
-  if (["ILB", "MLB"].includes(p)) return "LB";
-  if (["FS", "SS"].includes(p)) return "S";
-  if (["G"].includes(p)) return "OG";
-  if (["T"].includes(p)) return "OT";
-  return p;
-}
-
-function combineDayForPosition(pos: string): 1 | 2 | 3 | 4 {
-  const normalized = normalizeCombinePosition(pos);
-  for (const [day, bucket] of Object.entries(COMBINE_DAY_POSITION_BUCKETS)) {
-    if ((bucket.positions as readonly string[]).includes(normalized)) return Number(day) as 1 | 2 | 3 | 4;
-  }
-  return 2;
-}
-
 function defaultCombineDays() {
   return {
     1: { dayIndex: 1 as const, categoryKey: COMBINE_DAY_POSITION_BUCKETS[1].categoryKey, interviewsRemaining: COMBINE_DEFAULT_INTERVIEW_TOKENS },
@@ -5073,7 +5083,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return ensureMinimumFreeAgencyPool(next as GameState);
     }
     case "INIT_FREE_PLAY_CAREER": {
-      const { teamId, teamName, offer } = action.payload;
+      const { teamId, teamName, offer, simTuningSettings } = action.payload;
       const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
       const acceptedOffer: OfferItem = {
         teamId,
@@ -5093,6 +5103,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         acceptedOffer,
         autonomyRating: acceptedOffer.autonomy,
         ownerPatience: acceptedOffer.patience,
+        simTuningSettings: { ...state.simTuningSettings, ...simTuningSettings },
         userTeamId: teamId,
         teamId,
         storySetup: state.storySetup ?? {
@@ -5147,6 +5158,15 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "SET_PHASE":
       logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
+    case "SET_SIM_TUNING": {
+      return {
+        ...state,
+        simTuningSettings: {
+          ...state.simTuningSettings,
+          ...action.payload,
+        },
+      };
+    }
     case "ADVANCE_LEAGUE_PHASE": {
       const nextPhase = advanceLeaguePhase(state.league.phase as LeaguePhase);
       let next: GameState = { ...state, league: { ...state.league, phase: nextPhase } };
@@ -8647,15 +8667,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       out = applySeasonMilestoneAwards(out);
       const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
       const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
+      const normalizedSeasonStats = seasonStats.map((ps) => ({ ...ps, teamId: String(ps.teamId ?? "") || String(out.acceptedOffer?.teamId ?? "") }));
+      const nameById = Object.fromEntries(getEffectivePlayers(out).map((p: any) => [String(p.playerId ?? ""), String(p.fullName ?? p.playerId ?? "Unknown Player")]));
       const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
-      for (const ps of seasonStats) {
+      for (const ps of normalizedSeasonStats) {
         const pid = String((ps as any).playerId ?? "");
         if (!pid) continue;
         nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
       }
       const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
       const careerById = { ...(out.playerCareerStatsById ?? {}) };
-      for (const ps of seasonStats) {
+      for (const ps of normalizedSeasonStats) {
         const pid = String((ps as any).playerId ?? "");
         if (!pid) continue;
         const cur = { playerId: pid, careerStats: careerById[pid] };
@@ -8698,6 +8720,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         activeSeason: Number(out.season ?? 2026),
       });
       out = applySeasonUnicorns(applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById }));
+      const nextLeagueRecords = updateLeagueRecords(out.leagueRecords, normalizedSeasonStats, coachWithCareer.careerRecord, { playerNameById: nameById });
+      const nextFranchiseRecordsByTeamId = updateFranchiseRecordsAtRollover(out.franchiseRecordsByTeamId ?? {}, normalizedSeasonStats, careerById, { playerNameById: nameById });
+      const userTeamIdForRecords = String(out.acceptedOffer?.teamId ?? "");
+      const prevFranchiseRecords = out.franchiseRecordsByTeamId?.[userTeamIdForRecords];
+      const nextFranchiseRecords = nextFranchiseRecordsByTeamId[userTeamIdForRecords];
+      const earnedRecordMilestones = [
+        ["FRANCHISE_RECORD_PASS_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonPassingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonPassingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_RUSH_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonRushingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonRushingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_REC_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonReceivingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonReceivingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_TDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonTDs.value ?? 0), Number(nextFranchiseRecords?.singleSeasonTDs.value ?? 0)],
+        ["FRANCHISE_RECORD_SACKS_SINGLE", Number(prevFranchiseRecords?.singleSeasonSacks.value ?? 0), Number(nextFranchiseRecords?.singleSeasonSacks.value ?? 0)],
+        ["FRANCHISE_RECORD_PASS_YARDS_CAREER", Number(prevFranchiseRecords?.careerPassingYards.value ?? 0), Number(nextFranchiseRecords?.careerPassingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_RUSH_YARDS_CAREER", Number(prevFranchiseRecords?.careerRushingYards.value ?? 0), Number(nextFranchiseRecords?.careerRushingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_REC_YARDS_CAREER", Number(prevFranchiseRecords?.careerReceivingYards.value ?? 0), Number(nextFranchiseRecords?.careerReceivingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_TDS_CAREER", Number(prevFranchiseRecords?.careerTDs.value ?? 0), Number(nextFranchiseRecords?.careerTDs.value ?? 0)],
+        ["FRANCHISE_RECORD_SACKS_CAREER", Number(prevFranchiseRecords?.careerSacks.value ?? 0), Number(nextFranchiseRecords?.careerSacks.value ?? 0)],
+      ].filter(([, prev, next]) => next > prev).map(([id]) => String(id));
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -8705,7 +8744,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         playerProgressionSeasonStatsById: progressionSeasonStatsById,
         playerSnapCountsById: snapCountsById,
         playerCareerStatsById: careerById,
-        leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
+        leagueRecords: nextLeagueRecords,
+        franchiseRecordsByTeamId: nextFranchiseRecordsByTeamId,
+        earnedMilestoneIds: Array.from(new Set([...(out.earnedMilestoneIds ?? []), ...earnedRecordMilestones])),
         season: nextSeason,
         week: 0,
         // P3 FIX: compact per-season ephemeral data on rollover.
@@ -8767,9 +8808,12 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         return base;
       }
       const trackedPlayers = { HOME: buildTrackedPlayers(base, teamId), AWAY: buildTrackedPlayers(base, action.payload.opponentTeamId) };
+      const specialistsBySide = buildSpecialistsBySide(base, teamId, action.payload.opponentTeamId);
       const weekType = (gameType ?? "REGULAR_SEASON") as "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
       const weekNumber = Number(action.payload.weekNumber ?? action.payload.week ?? 0);
       const persistedWeather = resolvePersistedWeather(base, { weekType, weekNumber, homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId });
+      const persistedSettings = readSettings();
+      const offenseUserMode = base.game.offenseUserMode ?? persistedSettings.offensePlaycallingMode ?? "FULL_AUTO";
       let started: GameState = {
         ...base,
         league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
@@ -8786,8 +8830,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           homeRatings: computeTeamGameRatings(base, teamId),
           awayRatings: computeTeamGameRatings(base, action.payload.opponentTeamId),
           trackedPlayers,
+          specialistsBySide,
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
-          practiceExecutionBonus: base.weeklyFamiliarityBonus,
+          practiceExecutionBonus: (base.weeklyFamiliarityBonus ?? 0) + (base.chemistryExecutionBonus ?? 0),
           lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
           coachArchetypeId: base.coach?.archetypeId,
           coachTenureYear: base.coach?.tenureYear,
@@ -8795,10 +8840,15 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           homeGameplan: base.teamGameplans?.[teamId],
           awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
           playerUnicorns: base.playerUnicorns,
+          playerBadges: base.playerBadges,
+          offenseUserMode,
         }),
       };
       started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
       return started;
+    }
+    case "SET_OFFENSE_USER_MODE": {
+      return { ...state, game: { ...state.game, offenseUserMode: action.payload.mode } };
     }
     case "SET_DEFENSE_USER_MODE": {
       return { ...state, game: { ...state.game, defenseUserMode: action.payload.mode } };
@@ -8838,7 +8888,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         const out = gameReducer({
           ...nextWithPractice,
           gameHistory: [...(state.gameHistory ?? []), finalizedBox],
-          game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+          game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds, playerUnicorns: state.playerUnicorns, playerBadges: state.playerBadges, specialistsBySide: buildSpecialistsBySide(state, state.game.homeTeamId, state.game.awayTeamId) }),
         }, { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: state.game.homeScore, awayScore: state.game.awayScore, winnerTeamId } });
         return gameReducer(out, { type: "PLAYOFFS_TICK" });
       }
@@ -8910,6 +8960,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
               coachArchetypeId: state.coach.archetypeId,
               coachTenureYear: state.coach.tenureYear,
               coachUnlockedPerkIds: state.coach.unlockedPerkIds,
+              playerUnicorns: state.playerUnicorns,
+              playerBadges: state.playerBadges,
+              specialistsBySide: buildSpecialistsBySide(state, state.game.homeTeamId, state.game.awayTeamId),
             }),
           };
         }
@@ -8927,7 +8980,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         gameHistory: [...(state.gameHistory ?? []), finalizedBox],
         hub,
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
-        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds, playerUnicorns: state.playerUnicorns, playerBadges: state.playerBadges, specialistsBySide: buildSpecialistsBySide(state, state.game.homeTeamId, state.game.awayTeamId) }),
       };
       nextState = persistUserGamePlayLog(nextState, stepped.sim);
       nextState = applyTelemetryAggregatesForGame(nextState, stepped.sim);
@@ -8957,7 +9010,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "EXIT_GAME":
       return {
         ...state,
-        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`exit:${state.hub.regularSeasonWeek}:${state.hub.preseasonWeek}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        game: initGameSim({ homeTeamId: state.acceptedOffer?.teamId ?? "HOME", awayTeamId: "AWAY", seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`exit:${state.hub.regularSeasonWeek}:${state.hub.preseasonWeek}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds, playerUnicorns: state.playerUnicorns, playerBadges: state.playerBadges, specialistsBySide: buildSpecialistsBySide(state, state.acceptedOffer?.teamId ?? "HOME", "AWAY") }),
       };
     case "SIMULATE_REST_OF_GAME": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
@@ -8983,7 +9036,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         const winnerTeamId = sim.homeScore >= sim.awayScore ? sim.homeTeamId : sim.awayTeamId;
         const finalizedBox = buildGameBoxScore(sim, state.season);
         const out = gameReducer(
-          { ...nextWithPractice, gameHistory: [...(state.gameHistory ?? []), finalizedBox], game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }) },
+          { ...nextWithPractice, gameHistory: [...(state.gameHistory ?? []), finalizedBox], game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:PLAYOFFS:${state.playoffs.round}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds, playerUnicorns: state.playerUnicorns, playerBadges: state.playerBadges, specialistsBySide: buildSpecialistsBySide(state, state.game.homeTeamId, state.game.awayTeamId) }) },
           { type: "PLAYOFFS_MARK_GAME_FINAL", payload: { gameId: state.game.playoffGameId, homeScore: sim.homeScore, awayScore: sim.awayScore, winnerTeamId } },
         );
         return gameReducer(out, { type: "PLAYOFFS_TICK" });
@@ -9025,7 +9078,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         gameHistory: [...(state.gameHistory ?? []), simFinalizedBox],
         hub: simHub,
         contextFlags: applyFlagsToContext(nextWithPractice.coach),
-        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds }),
+        game: initGameSim({ homeTeamId: state.game.homeTeamId, awayTeamId: state.game.awayTeamId, seed: (state.careerSeed ?? state.saveSeed) ^ hashStr(`postgame:${state.game.weekType ?? "REGULAR_SEASON"}:${state.game.weekNumber ?? 0}`), coachArchetypeId: state.coach.archetypeId, coachTenureYear: state.coach.tenureYear, coachUnlockedPerkIds: state.coach.unlockedPerkIds, playerUnicorns: state.playerUnicorns, playerBadges: state.playerBadges, specialistsBySide: buildSpecialistsBySide(state, state.game.homeTeamId, state.game.awayTeamId) }),
       };
       simNextState = persistUserGamePlayLog(simNextState, sim);
       simNextState = applyTelemetryAggregatesForGame(simNextState, sim);
@@ -9160,6 +9213,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
           },
           hub: { ...out.hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+        };
+      }
+
+      if (shouldForcePreseasonCutdownTransition(state, action) && out.careerStage === "PRESEASON") {
+        out = {
+          ...out,
+          careerStage: "CUTDOWNS",
+          offseason: {
+            ...out.offseason,
+            stepId: "CUT_DOWNS",
+            stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
+          },
+          hub: {
+            ...out.hub,
+            preseasonWeek: Math.min(PRESEASON_WEEKS, out.hub.preseasonWeek),
+            regularSeasonWeek: 1,
+          },
         };
       }
 
@@ -9514,7 +9584,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "RECOVERY_SET_ERRORS":
       throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
     default:
-      return assertNever(action);
+      return assertNever(action as never);
   }
 }
 

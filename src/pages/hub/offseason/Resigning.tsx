@@ -18,7 +18,9 @@ export default function Resigning() {
     return getEffectivePlayersByTeam(state, String(teamId))
       .filter((p: any) => {
         const summary = getContractSummaryForPlayer(state, String(p.playerId));
-        return summary && Number(summary.endSeason) === state.season;
+        if (!summary) return false;
+        if (typeof summary.yearsRemaining === "number") return Number(summary.yearsRemaining) === 1;
+        return Number(summary.endSeason) === state.season;
       })
       .sort((a: any, b: any) => Number(b.overall ?? b.ovr ?? 0) - Number(a.overall ?? a.ovr ?? 0));
   }, [state, teamId]);

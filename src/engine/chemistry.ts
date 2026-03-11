@@ -17,9 +17,6 @@ export function updateChemistry(state: GameState): GameState {
 
   return {
     ...state,
-    game: {
-      ...state.game,
-      practiceExecutionBonus: executionMod,
-    },
+    chemistryExecutionBonus: executionMod,
   };
 }

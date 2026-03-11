@@ -1,11 +1,13 @@
 import type { GameState } from "@/context/GameContext";
 import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
 import type { CareerStage } from "@/types/careerStage";
 import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 import { logInfo } from "@/lib/logger";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
@@ -18,7 +20,8 @@ export type SaveValidationErrorCode =
   | "INVALID_WEEK"
   | "INVALID_TEAM"
   | "INVALID_COACH"
-  | "INVALID_CONFIG_PIN";
+  | "INVALID_CONFIG_PIN"
+  | "MISSING_PLAYER_CONTRACT_OVERRIDE";
 
 export type SaveValidationResult =
   | { ok: true }
@@ -174,6 +177,10 @@ function migrateV1toV2(state: Partial<GameState>): Partial<GameState> {
   const next = { ...state };
   (next as any).configVersion = String((next as any).configVersion ?? DEFAULT_CONFIG_VERSION);
   (next as any).calibrationPackId = String((next as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID);
+  (next as any).simTuningSettings = {
+    difficultyPreset: String((next as any).simTuningSettings?.difficultyPreset ?? DEFAULT_SIM_TUNING.difficultyPreset),
+    realismPreset: String((next as any).simTuningSettings?.realismPreset ?? DEFAULT_SIM_TUNING.realismPreset),
+  };
   return { ...next, schemaVersion: 2 };
 }
 
@@ -210,6 +217,10 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
+  (next as any).simTuningSettings = {
+    difficultyPreset: String((next as any).simTuningSettings?.difficultyPreset ?? DEFAULT_SIM_TUNING.difficultyPreset),
+    realismPreset: String((next as any).simTuningSettings?.realismPreset ?? DEFAULT_SIM_TUNING.realismPreset),
+  };
 
   next = hardenPhaseFields(next);
 
@@ -248,6 +259,21 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   const week = toNum((state as any).hub?.regularSeasonWeek ?? (state as any).week ?? 1);
   if (!Number.isFinite(week) || week < 0) {
     return { ok: false, code: "INVALID_WEEK", message: "Week value is invalid." };
+  }
+
+
+  const rosterIndex = buildRosterIndex(state as GameState);
+  const rosteredPlayerIds = Object.entries(rosterIndex.playerToTeam ?? {})
+    .filter(([, teamId]) => String(teamId ?? "").toUpperCase() !== "FREE_AGENT")
+    .map(([playerId]) => String(playerId));
+  const playerContractOverrides = ((state as any).playerContractOverrides ?? {}) as Record<string, unknown>;
+  const missingOverridePlayerId = rosteredPlayerIds.find((playerId) => !playerContractOverrides[playerId]);
+  if (missingOverridePlayerId) {
+    return {
+      ok: false,
+      code: "MISSING_PLAYER_CONTRACT_OVERRIDE",
+      message: `Missing playerContractOverrides entry for rostered player '${missingOverridePlayerId}'.`,
+    };
   }
 
   // Keep a single declaration here; duplicate declarations break esbuild in production builds.
