@@ -157,6 +157,7 @@ export function hydrateLoadedState(
         playerSeasonStatsById: { ...(initial.playerSeasonStatsById ?? {}), ...((migrated as any).playerSeasonStatsById ?? {}) },
         playerCareerStatsById: { ...(initial.playerCareerStatsById ?? {}), ...((migrated as any).playerCareerStatsById ?? {}) },
         leagueRecords: { ...deps.defaultLeagueRecords(), ...((migrated as any).leagueRecords ?? {}) },
+        franchiseRecordsByTeamId: { ...((initial as any).franchiseRecordsByTeamId ?? {}), ...((migrated as any).franchiseRecordsByTeamId ?? {}) },
         draft: { ...initial.draft, ...migrated.draft },
         upcomingDraftClass: (migrated as any).upcomingDraftClass ?? initial.upcomingDraftClass,
         futureClasses: (migrated as any).futureClasses ?? initial.futureClasses,
