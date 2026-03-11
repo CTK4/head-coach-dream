@@ -301,6 +301,7 @@ export type GameSim = {
   lastPlayResult?: PlayResult;
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
   lastPlayDiag?: PassPlayDiag;
+  offenseUserMode?: "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
   defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
   pendingDefensiveCall?: DefensiveCall;
   lastDefensiveCall?: DefensiveCall;
@@ -866,7 +867,7 @@ function resolveWithPAS(
   let diag: PassPlayDiag | undefined;
   let unicornImpact: { playerId: string; archetypeId: UnicornArchetypeId; description: string } | undefined;
 
-  const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression);
+  const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
   const callFx = applyDefensiveCallMultipliers(defensiveCall);
   if (callFx.debug.length) resolverTags.push({ kind: "SITUATION", text: `DEF_CALL:${callFx.debug.join(",")}` });
@@ -1564,6 +1565,7 @@ export function initGameSim(params: {
   weather?: GameWeather;
   playerUnicorns?: Record<string, PlayerUnicorn>;
   playerBadges?: Record<string, PlayerBadge[]>;
+  offenseUserMode?: GameSim["offenseUserMode"];
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1611,6 +1613,7 @@ export function initGameSim(params: {
     playerUnicorns: { ...(params.playerUnicorns ?? {}) },
     playerBadges: { ...(params.playerBadges ?? {}) },
     unicornImpactLog: [],
+    offenseUserMode: params.offenseUserMode ?? "FULL_AUTO",
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,
     forceAutoDefenseCall: false,
