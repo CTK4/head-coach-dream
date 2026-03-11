@@ -1127,6 +1127,7 @@ export type GameState = {
   practiceNeglectCounters: PracticeNeglectTracker;
   cumulativeNeglectPenalty: number;
   weeklyFamiliarityBonus: number;
+  chemistryExecutionBonus?: number;
   weeklyMentalErrorMod: number;
   weeklySchemeConceptBonus: number;
   weeklyLateGameRetentionBonus: number;
@@ -8827,7 +8828,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           trackedPlayers,
           specialistsBySide,
           playerFatigue: hydrateGameFatigue(base, trackedPlayers),
-          practiceExecutionBonus: base.weeklyFamiliarityBonus,
+          practiceExecutionBonus: (base.weeklyFamiliarityBonus ?? 0) + (base.chemistryExecutionBonus ?? 0),
           lateGamePracticeRetentionBonus: base.weeklyLateGameRetentionBonus,
           coachArchetypeId: base.coach?.archetypeId,
           coachTenureYear: base.coach?.tenureYear,
