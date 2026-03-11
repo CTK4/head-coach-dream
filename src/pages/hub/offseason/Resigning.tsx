@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getEffectivePlayersByTeam, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { getUserTeamId } from "@/lib/userTeam";
+import { ContractMarketInfoTrigger } from "@/components/explainability/ContractMarketInfoTrigger";
 
 export default function Resigning() {
   const { state, dispatch } = useGame();
@@ -69,7 +70,10 @@ export default function Resigning() {
                   <div className="font-semibold">{p.name ?? p.fullName ?? "Player"} <span className="text-muted-foreground font-normal">({getPositionLabel(String(p.pos ?? ""))})</span></div>
                   <Badge variant="outline">OVR {ovr}</Badge>
                 </div>
-                <div className="text-sm text-muted-foreground">Current APY: ${Math.round(apy / 1_000_000)}M/yr</div>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <span>Current APY: ${Math.round(apy / 1_000_000)}M/yr</span>
+                  <ContractMarketInfoTrigger className="h-5 w-5 text-muted-foreground" />
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant={d?.action === "RESIGN" ? "default" : "outline"} onClick={() => set(playerId, "RESIGN")}>Re-sign</Button>
                   <Button size="sm" variant={d?.action === "TAG_FRANCHISE" ? "default" : "outline"} onClick={() => set(playerId, "TAG_FRANCHISE")}>Franchise</Button>
