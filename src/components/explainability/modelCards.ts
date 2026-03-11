@@ -9,7 +9,8 @@ export type ModelCardConfig = {
     | "draft-ai"
     | "trade-ai"
     | "fa-market"
-    | "injury-recurrence-concussion"
+    | "injury-recurrence-model"
+    | "concussion-model"
     | "contract-market";
   title: string;
   description: string;
@@ -262,39 +263,75 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
     ],
     example: "A strong over-market offer with good scheme fit can still lose if contract length is far from preferred years and interest has already cratered from prior lowballs.",
   },
-  "injury-recurrence-concussion": {
-    id: "injury-recurrence-concussion",
-    title: "Injury, recurrence, and concussion risk",
+  "injury-recurrence-model": {
+    id: "injury-recurrence-model",
+    title: "Injury and recurrence model",
     description:
-      "Weekly injuries are generated from base rates, severity distributions, recurrence multipliers, and context modifiers such as QB contact exposure.",
+      "Weekly injury generation starts from a base chance and applies recurrence plus context modifiers before a hard clamp keeps probabilities bounded.",
     factors: [
       {
         label: "Base weekly injury chance",
         weight: "High",
-        description: "Injury generation starts from a base probability and is clamped to a bounded range to avoid extreme outcomes.",
+        description: "Injury generation starts from a base rate (default 0.035) and applies risk modifiers from neglect/practice context before rolling.",
       },
       {
-        label: "Severity roll controls downtime",
+        label: "Recurrence multiplier window",
         weight: "High",
-        description: "Severity buckets map to statuses and week ranges, with season-ending outcomes forcing long-term IR-style loss.",
+        description: "Same-type prior injuries inside the recurrence window (default 8 weeks) apply a recurrence multiplier (default 1.3), increasing new-injury odds.",
       },
       {
-        label: "Recurrence window multiplier",
+        label: "Soft-tissue chronic pressure",
         weight: "Medium",
-        description: "Recent same-type injuries within the recurrence window increase risk, and repeat soft-tissue patterns can add chronic pressure.",
+        description: "Two or more prior soft-tissue injuries add a chronic boost in recurrence logic, and new soft-tissue injuries after prior history are flagged chronic.",
       },
       {
-        label: "Concussion profile is explicit",
+        label: "QB exposure and risk clamp",
         weight: "Medium",
-        description: "Concussions are part of the injury definition pool with head body area and dedicated base/severe recovery ranges.",
+        description: "QB run-contact exposure can switch to a QB-specific base injury rate adjusted by slide behavior, then clamped to safe tuning bounds.",
       },
       {
-        label: "QB run contact exposure",
+        label: "Final probability clamp",
         weight: "Rule",
-        description: "QB injury base rate can be elevated by run-contact exposure and slide behavior, then constrained by tuning bounds.",
+        description: "After recurrence and modifiers, final injury probability is clamped to 0.5%–16% so outcomes remain realistic and stable.",
       },
     ],
-    example: "A QB with repeated run contact and poor sliding can carry elevated weekly injury risk, while a second hamstring issue in-window increases recurrence odds.",
+    example:
+      "If a player strains a hamstring again within 8 weeks, the recurrence multiplier raises risk; if that player already has repeated soft-tissue history, chronic logic pushes risk higher again.",
+  },
+  "concussion-model": {
+    id: "concussion-model",
+    title: "Concussion severity and return model",
+    description:
+      "Concussions are explicit injury definitions, then severity rolls and duration ranges determine expected return timing and status progression.",
+    factors: [
+      {
+        label: "Dedicated concussion definition",
+        weight: "High",
+        description: "Concussion exists as its own injury definition with HEAD body area and distinct base (1–2 weeks) vs severe (3–5 weeks) duration ranges.",
+      },
+      {
+        label: "Severity roll pipeline",
+        weight: "High",
+        description: "Severity is rolled through weighted buckets (MINOR, MODERATE, SEVERE, SEASON_ENDING), which then drive status and return timing.",
+      },
+      {
+        label: "Duration from severity",
+        weight: "Medium",
+        description: "MINOR/MODERATE pull from base weeks, SEVERE pulls from severe weeks, and SEASON_ENDING forces long-term loss without expected return.",
+      },
+      {
+        label: "Expected return + status mapping",
+        weight: "Medium",
+        description: "Expected return week is current week plus duration, while severity maps to status (for example severe/moderate to OUT, season-ending to IR).",
+      },
+      {
+        label: "Practice defaults",
+        weight: "Rule",
+        description: "New injuries default to LIMITED practice for minor cases and DNP for higher severities, reinforcing return-to-play pacing.",
+      },
+    ],
+    example:
+      "A minor concussion can project a 1–2 week return, while a severe concussion projects 3–5 weeks and usually lands as OUT longer before the player reaches return-to-play stages.",
   },
   "contract-market": {
     id: "contract-market",
