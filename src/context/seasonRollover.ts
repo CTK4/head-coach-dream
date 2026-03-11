@@ -1,6 +1,7 @@
 import type { GameState } from "@/context/GameContext";
 import { getContractById, getPlayerContract, getPlayers } from "@/data/leagueDb";
 import { applyTransaction, buildTxId } from "@/engine/transactions/applyTransaction";
+import { findSmallestEligibleCapRelease, isMinorCapOverage, markRecoverableCapFailure, partitionValidationErrors } from "@/engine/transactions/capRecovery";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import type { TransactionEvent } from "@/engine/transactions/types";
 import { validatePostTx } from "@/engine/transactions/validatePostTx";
@@ -13,9 +14,9 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
     weekIndex: Number(state.week ?? 0),
     ts: Number(state.season ?? 1) * 10_000 + Number(state.week ?? 0) * 100 + Number(state.transactionLedger?.counter ?? 0) + 1,
   };
-  const draftState = applyTransaction(state, tx);
-  const validation = validatePostTx(draftState);
-  if (validation.ok) return draftState;
+  let candidate = applyTransaction(state, tx);
+  let validation = validatePostTx(candidate);
+  if (validation.ok) return candidate;
   const issues = "errors" in validation ? validation.errors : [];
   const txPlayerIds = new Set((draft.playerIds ?? []).map((id) => String(id)));
   const extractPid = (issue: string): string | null => {
@@ -29,10 +30,43 @@ function applyCanonicalTx(state: GameState, draft: Omit<TransactionEvent, "txId"
     const pid = extractPid(issue);
     return pid != null && !txPlayerIds.has(pid);
   };
-  const blockingIssues = issues.filter((issue) => !isPreExistingDebt(issue));
-  if (blockingIssues.length === 0) return draftState;
-  if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${blockingIssues.join("|")}`);
-  return { ...state, uiToast: `Transaction blocked: ${blockingIssues[0] ?? "invalid state"}` };
+  const partition = partitionValidationErrors(issues);
+  const blockingIntegrityIssues = partition.integrityErrors
+    .filter((issue) => !isPreExistingDebt(issue));
+  if (blockingIntegrityIssues.length > 0) {
+    if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${blockingIntegrityIssues.join("|")}`);
+    return { ...state, uiToast: `Transaction blocked: ${blockingIntegrityIssues[0] ?? "invalid state"}` };
+  }
+
+  const minorOverages = partition.capOverages.filter(isMinorCapOverage);
+  if (minorOverages.length === partition.capOverages.length && minorOverages.length > 0) {
+    for (const issue of minorOverages.sort((a, b) => a.teamId.localeCompare(b.teamId))) {
+      const releaseCandidate = findSmallestEligibleCapRelease(candidate, issue.teamId);
+      if (!releaseCandidate) continue;
+      const remediationTx: TransactionEvent = {
+        ...Tx.release(issue.teamId, releaseCandidate.playerId, "AUTO_CAP_REMEDIATION"),
+        txId: buildTxId(candidate),
+        season: Number(candidate.season ?? 1),
+        weekIndex: Number(candidate.week ?? 0),
+        ts: Number(candidate.season ?? 1) * 10_000 + Number(candidate.week ?? 0) * 100 + Number(candidate.transactionLedger?.counter ?? 0) + 1,
+      };
+      candidate = applyTransaction(candidate, remediationTx);
+    }
+    validation = validatePostTx(candidate);
+    if (validation.ok) return candidate;
+    const rerunIssues = "errors" in validation ? validation.errors : [];
+    const rerunPartition = partitionValidationErrors(rerunIssues);
+    const rerunBlockingIntegrityIssues = rerunPartition.integrityErrors
+      .filter((issue) => !isPreExistingDebt(issue));
+    if (rerunBlockingIntegrityIssues.length > 0) {
+      if (import.meta.env.DEV) throw new Error(`tx_validation_failed:${rerunBlockingIntegrityIssues.join("|")}`);
+      return { ...state, uiToast: `Transaction blocked: ${rerunBlockingIntegrityIssues[0] ?? "invalid state"}` };
+    }
+    return markRecoverableCapFailure(candidate, rerunPartition.capOverages);
+  }
+
+  if (partition.capOverages.length > 0) return markRecoverableCapFailure(candidate, partition.capOverages);
+  return candidate;
 }
 
 function resolvePlayerContractEndSeason(state: GameState, playerId: string, basePlayer: any): number | null {
