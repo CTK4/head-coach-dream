@@ -1,5 +1,5 @@
 import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
-import { XorShift32 } from "@/engine/interviewHiring/rng";
+import { mulberry32 } from "@/engine/rng";
 import type { TeamConfig } from "@/engine/interviewHiring/types";
 
 export type InterviewQuestion = {
@@ -36,13 +36,13 @@ export function stableTeamHash(teamId: string): number {
   return hash >>> 0;
 }
 
-function pickOneWeightedIndex(weights: number[], rng: XorShift32): number {
+function pickOneWeightedIndex(weights: number[], rng: () => number): number {
   const total = weights.reduce((sum, value) => sum + Math.max(0, value), 0);
   if (total <= 0) {
-    return Math.floor(rng.nextFloat01() * weights.length);
+    return Math.floor(rng() * weights.length);
   }
 
-  const roll = rng.nextFloat01() * total;
+  const roll = rng() * total;
   let cumulative = 0;
   for (let i = 0; i < weights.length; i += 1) {
     cumulative += Math.max(0, weights[i]);
@@ -52,7 +52,7 @@ function pickOneWeightedIndex(weights: number[], rng: XorShift32): number {
   return Math.max(0, weights.length - 1);
 }
 
-function weightedNoReplacement<T>(items: T[], getWeight: (item: T) => number, count: number, rng: XorShift32): T[] {
+function weightedNoReplacement<T>(items: T[], getWeight: (item: T) => number, count: number, rng: () => number): T[] {
   const pool = [...items];
   const selected: T[] = [];
   const target = Math.min(count, pool.length);
@@ -72,7 +72,7 @@ function weightedNoReplacement<T>(items: T[], getWeight: (item: T) => number, co
 function pickWithAskerConstraint(
   pool: TeamPoolQuestion[],
   asker: "OWNER" | "GM",
-  rng: XorShift32,
+  rng: () => number,
   askerWeighting: Record<string, number>,
 ): TeamPoolQuestion | undefined {
   const bucket = pool.filter((question) => question.asker === asker);
@@ -127,7 +127,7 @@ export function selectInterviewQuestions(params: SelectInterviewQuestionsParams)
 
   const teamHash = stableTeamHash(teamId);
   const seed = (leagueSeed ^ teamHash ^ saveSlotId ^ (weekIndex << 8) ^ interviewIndex) >>> 0;
-  const rng = new XorShift32(seed || 0x9e3779b9);
+  const rng = mulberry32((seed >>> 0) || 0x9e3779b9);
 
   const contextualRules = teamConfig.interview_flow.mix_rules.contextual_questions;
   const contextualPool = dedupeByQuestionId((teamConfig.contextual_pool.questions ?? []).map(asInterviewQuestion));

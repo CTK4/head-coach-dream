@@ -1,6 +1,4 @@
-import { mulberry32 } from "../rng";
-
-export { mulberry32 };
+import { hashStr, mulberry32 } from "../rng";
 
 export { mulberry32, hashStr };
 
