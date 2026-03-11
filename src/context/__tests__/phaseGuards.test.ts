@@ -84,9 +84,4 @@ describe("phaseGuards", () => {
     expect(migrated.league.phase).toBe("OFFSEASON");
   });
 
-  it("legacy TRADE_PLAYER alias is a deterministic no-op", () => {
-    const state = withCareerStage("REGULAR_SEASON");
-    const out = gameReducer(state, { type: "TRADE_PLAYER", payload: { playerId: "PLY_1" } } as GameAction);
-    expect(out).toBe(state);
-  });
 });

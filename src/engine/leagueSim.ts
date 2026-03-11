@@ -1,4 +1,5 @@
 import { simulateFullGame } from "@/engine/gameSim";
+import { mulberry32 } from "@/engine/rng";
 import type { GameType, LeagueSchedule, Matchup } from "@/engine/schedule";
 import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
 import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
@@ -141,16 +142,6 @@ function hashMatchup(m: Matchup): number {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
-}
-
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), t | 1);
-    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function gaussian(rand: () => number) {

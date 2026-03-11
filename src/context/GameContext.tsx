@@ -175,7 +175,7 @@ import { freeAgencyReducer } from "@/context/freeAgencyReducer";
 import { staffingReducer, isStaffingAction } from "@/context/reducers/staffingReducer";
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
-import { getWeekSeed } from "@/engine/rng";
+import { getWeekSeed, mulberry32 } from "@/engine/rng";
 import { deriveCareerSeed, deriveScoutingBoardSeed, deriveWeeklySeed } from "@/engine/determinism/seedDerivation";
 import type { CareerStage } from "@/types/careerStage";
 import { generateGameWeather, buildWeatherGameKey, type GameWeather } from "@/engine/weather/generateGameWeather";
@@ -1344,7 +1344,6 @@ export type GameAction =
   | { type: "FA_REJECT_OFFER"; payload: { playerId: string; offerId: string } }
   | { type: "CUT_APPLY"; payload: { teamId: string; playerId: string; designation?: "PRE_JUNE_1" | "POST_JUNE_1" } }
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
-  | { type: "TRADE_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
   | { type: "ADD_NEWS_ITEM"; payload: { title: string; body?: string; category?: string } }
   | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
@@ -1447,7 +1446,7 @@ export type GameAction =
   | { type: "RESET" };
 
 type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
-type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE" | "TRADE_PLAYER";
+type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE";
 
 const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
   "FA_SIGN",
@@ -1469,7 +1468,6 @@ const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
 const EXTRA_PHASE_GUARDED_MUTATIONS = new Set<CentralPhaseGuardAction>([
   "DRAFT_CPU_ADVANCE",
   "EXECUTE_TRADE",
-  "TRADE_PLAYER",
 ]);
 
 function isCentralPhaseGuardAction(type: GameAction["type"]): type is CentralPhaseGuardAction {
@@ -1478,10 +1476,6 @@ function isCentralPhaseGuardAction(type: GameAction["type"]): type is CentralPha
 }
 
 function getPhaseGuardVerdict(state: GameState, action: GameAction): { allowed: boolean; reason?: string } {
-  if (action.type === "TRADE_PLAYER") {
-    return { allowed: false, reason: "TRADE_PLAYER is a deprecated alias and is intentionally disabled." };
-  }
-
   if (action.type === "DRAFT_CPU_ADVANCE") {
     return isActionAllowedInCurrentPhase(state, { type: "DRAFT_USER_PICK", payload: { prospectId: "__phase_guard__" } } as GameAction);
   }
@@ -1929,16 +1923,6 @@ function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), 1 | t);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function detRand(saveSeed: number, key: string): number {
@@ -7820,10 +7804,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       }
       return state;
     }
-
-    case "TRADE_PLAYER":
-      // Deprecated ambiguous alias: intentionally no-op to avoid accidental mutations.
-      return state;
 
     case "PREGENERATE_FUTURE_CLASS": {
       const classYear = action.payload.classYear;
