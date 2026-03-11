@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { ContractMarketInfoTrigger } from "@/components/explainability/ContractMarketInfoTrigger";
@@ -22,6 +24,7 @@ export function selectFreeAgencyPool(state: any) {
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const faModelCard = MODEL_CARDS["fa-market"];
 
   const pool = useMemo(() => selectFreeAgencyPool(state).sort((a, b) => b.ovr - a.ovr), [state]);
   const pendingUserOffers = Object.values(state.freeAgency.offersByPlayerId ?? {}).flat().filter((offer: any) => offer.isUser && offer.status === "PENDING").length;
@@ -43,7 +46,17 @@ export default function FreeAgency() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">FREE AGENCY</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">FREE AGENCY</h1>
+          <ExplainerDrawer
+            title={faModelCard.title}
+            description={faModelCard.description}
+            factors={faModelCard.factors}
+            example={faModelCard.example}
+            trigger={<button className="rounded border px-2 py-0.5 text-sm" type="button">ⓘ</button>}
+            triggerAriaLabel="Open free-agency market model explainer"
+          />
+        </div>
         <div className="flex items-center gap-2 text-sm">
           <span>Cap Space: ${Math.round(Number(state.finances.capSpace ?? 0) / 1_000_000)}M</span>
           <span>Pending Offers: {pendingUserOffers}</span>

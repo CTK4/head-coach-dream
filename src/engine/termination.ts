@@ -1,4 +1,4 @@
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashStr } from "@/engine/rng";
 
 export type OwnerAxes = Partial<Record<
   | "stability"
@@ -43,12 +43,6 @@ function clamp01(n: number) {
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
 }
 
 export function deterministicRoll(saveSeed: number, key: string): number {

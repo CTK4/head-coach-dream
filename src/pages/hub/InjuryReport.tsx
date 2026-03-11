@@ -7,13 +7,15 @@ import type { Injury, InjuryStatus, InjuryBodyArea, InjurySeverity } from "@/eng
 import { getRecurrenceRiskLevel } from "@/engine/injuryTypes";
 import { HubPanel } from "@/components/franchise-hub/HubPanel";
 import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
-import { Activity, AlertTriangle, ChevronRight, Shield, Users } from "lucide-react";
+import { Activity, AlertTriangle, ChevronRight, Shield, Sparkles, Users } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -528,6 +530,8 @@ export default function InjuryReport() {
   const medicalRating: number | undefined = undefined;
 
   const hasInjuries = filteredInjuries.length > 0;
+  const recurrenceModelCard = MODEL_CARDS["injury-recurrence-model"];
+  const concussionModelCard = MODEL_CARDS["concussion-model"];
 
   return (
     <section className={`relative min-h-full overflow-x-hidden ${HUB_BG}`}>
@@ -549,6 +553,35 @@ export default function InjuryReport() {
 
         {/* Medical Staff Banner */}
         <MedicalStaffBanner rating={medicalRating} />
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <ExplainerDrawer
+            title={recurrenceModelCard.title}
+            description={recurrenceModelCard.description}
+            factors={recurrenceModelCard.factors}
+            example={recurrenceModelCard.example}
+            trigger={
+              <Button variant="outline" size="sm" className="w-full justify-start gap-2 border-slate-300/20 bg-slate-900/40 text-slate-100">
+                <Sparkles className="h-3.5 w-3.5 text-orange-300" aria-hidden="true" />
+                injury / recurrence model
+              </Button>
+            }
+            triggerAriaLabel="Open injury recurrence model explainability"
+          />
+          <ExplainerDrawer
+            title={concussionModelCard.title}
+            description={concussionModelCard.description}
+            factors={concussionModelCard.factors}
+            example={concussionModelCard.example}
+            trigger={
+              <Button variant="outline" size="sm" className="w-full justify-start gap-2 border-slate-300/20 bg-slate-900/40 text-slate-100">
+                <Sparkles className="h-3.5 w-3.5 text-cyan-300" aria-hidden="true" />
+                concussion model
+              </Button>
+            }
+            triggerAriaLabel="Open concussion model explainability"
+          />
+        </div>
 
         {/* Filters */}
         <div className={`rounded-xl border border-slate-300/15 bg-slate-950/60 p-3 space-y-2 ${HUB_FRAME}`}>

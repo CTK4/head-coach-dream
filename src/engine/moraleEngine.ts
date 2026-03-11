@@ -35,19 +35,12 @@ export type MoraleResult = {
   topModifiers: MoraleModifier[];
 };
 
+import { hashStr } from "@/engine/rng";
+
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
-function fnv1a32(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 function deterministicRand(seed: number, key: string): number {
-  return (fnv1a32(`${seed}|${key}`) & 0xffffff) / 0x1000000;
+  return (hashStr(`${seed}|${key}`) & 0xffffff) / 0x1000000;
 }
 
 function snapDelta(actual: number, expected: number): number {

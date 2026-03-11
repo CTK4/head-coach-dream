@@ -1,19 +1,9 @@
 import { getTeamRosterPlayers } from "@/data/leagueDb";
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashStr } from "@/engine/rng";
 import type { GameState } from "../context/GameContext";
 import type { Injury, InjuryBodyArea, InjurySeverity, InjuryStatus } from "./injuryTypes";
 import { computeRecurrenceMultiplier, SOFT_TISSUE_TYPES } from "./injuryTypes";
 import { QB_TUNING } from "@/config/qbTuning";
-
-function fnv1a32(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -67,7 +57,7 @@ function shouldGenerateInjury(rng: () => number, recurrenceMultiplier = 1.0, ris
 }
 
 function newInjuryId(seed: number, playerId: string, week: number): string {
-  return `INJ_${fnv1a32(`${seed}|${playerId}|${week}`)}`;
+  return `INJ_${hashStr(`${seed}|${playerId}|${week}`)}`;
 }
 
 function progressExisting(injuries: Injury[], currentWeek: number): Injury[] {

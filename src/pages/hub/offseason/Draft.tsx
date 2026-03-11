@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { IntelMeters } from "@/components/IntelMeters";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
 import { hashSeed, mulberry32 } from "@/engine/rng";
@@ -36,6 +38,7 @@ export default function Draft() {
   const resultsEndRef = useRef<HTMLDivElement | null>(null);
 
   const sim = state.draft;
+  const draftAiCard = MODEL_CARDS["draft-ai"];
   const scouting = state.offseasonData.scouting;
   const draftStepComplete = state.offseason.stepsComplete.DRAFT === true;
   const currentSlot = sim.slots[sim.cursor];
@@ -149,7 +152,21 @@ export default function Draft() {
     <div className="p-4 space-y-4">
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-xl font-bold">DRAFT</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold">DRAFT</h1>
+            <ExplainerDrawer
+              title={draftAiCard.title}
+              description={draftAiCard.description}
+              factors={draftAiCard.factors}
+              example={draftAiCard.example}
+              triggerAriaLabel="Open Draft AI explainer"
+              trigger={
+                <button type="button" className="rounded border px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-100">
+                  ⓘ
+                </button>
+              }
+            />
+          </div>
           <div className="text-right text-sm">
             <div className="font-semibold">{sim.complete ? "Draft complete" : onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div>
             {currentSlot && !sim.complete && (

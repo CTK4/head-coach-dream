@@ -1,5 +1,5 @@
 import { simulateFullGame } from "@/engine/gameSim";
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashSeed } from "@/engine/rng";
 import type { GameType, LeagueSchedule, Matchup } from "@/engine/schedule";
 import { REGULAR_SEASON_WEEKS } from "@/engine/schedule";
 import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
@@ -134,16 +134,6 @@ function applyResult(standings: Record<string, TeamStandingRecord>, r: WeekResul
   standings[r.awayTeamId] = away;
 }
 
-function hashMatchup(m: Matchup): number {
-  let h = 2166136261;
-  const s = `${m.homeTeamId}|${m.awayTeamId}`;
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 function gaussian(rand: () => number) {
   const u = 1 - rand();
   const v = 1 - rand();
@@ -179,7 +169,7 @@ function topNames(teamId: string, positions: string[], count = 2) {
 }
 
 export function simulateAIGame(homeTeamId: string, awayTeamId: string, seed: number, week: number): AIGameResult {
-  const rand = mulberry32(seed ^ hashMatchup({ homeTeamId, awayTeamId }));
+  const rand = mulberry32(seed ^ hashSeed(`${homeTeamId}|${awayTeamId}`));
   const homeRating = teamStrength(homeTeamId);
   const awayRating = teamStrength(awayTeamId);
   const spread = (homeRating - awayRating) * 0.6;
@@ -292,7 +282,7 @@ export function simulateWeek(params: {
       const ai = simulateAIGame(m.homeTeamId, m.awayTeamId, seed + week * 97, week);
       return { ...ai, homeScore: userScore.homeScore, awayScore: userScore.awayScore };
     }
-    const sim = simulateAIGame(m.homeTeamId, m.awayTeamId, seed + hashMatchup(m) + week * 997, week);
+    const sim = simulateAIGame(m.homeTeamId, m.awayTeamId, seed + hashSeed(`${m.homeTeamId}|${m.awayTeamId}`) + week * 997, week);
     return sim;
   });
 
@@ -426,7 +416,7 @@ export function simulateLeagueWeek(params: {
 
     const scores = isUserGame
       ? userScore
-      : simulateFullGame({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, seed: seed + hashMatchup(m) + week * 997 });
+      : simulateFullGame({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, seed: seed + hashSeed(`${m.homeTeamId}|${m.awayTeamId}`) + week * 997 });
 
     const r: WeekResultRecord = { gameType, week, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, ...scores };
     applyResult(standings, r);

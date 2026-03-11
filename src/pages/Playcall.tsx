@@ -1,16 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
-import { evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
+import { autoPickPlay, evaluatePlayConcepts, recommendFourthDown, type SituationBucket } from "@/engine/gameSim";
 import { formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { resolveQbArchetypeTag } from "@/engine/qb/qbArchetype";
 import { FATIGUE_THRESHOLDS, HIGH_WORKLOAD_THRESHOLD } from "@/engine/fatigue";
 import { PERSONNEL_PACKAGE_DEFINITIONS, getDefensiveReaction, type DefensivePackage, type PersonnelPackage } from "@/engine/personnel";
 import type { AggressionLevel, DefensiveLook, GameSim, PlayType, ResultTag, TempoMode } from "@/engine/gameSim";
-import { getOffensePlaybookPlays, hasDefensePlaybook } from "@/engine/playbooks/playbookCatalog";
+import {
+  filterEligiblePlayConcepts,
+  getOffensePlaybookConcepts,
+  hasDefensePlaybook,
+  type PlayFormation,
+} from "@/engine/playbooks/playbookCatalog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +50,14 @@ const SPECIAL_PLAYS: PlayDef[] = [
 ];
 
 const PLAYBOOK: PlayDef[] = [...RUN_PLAYS, ...PASS_PLAYS, ...SPECIAL_PLAYS];
+
+const FORMATION_LABELS: Record<PlayFormation, string> = {
+  UNDER_CENTER: "Under Center",
+  SHOTGUN: "Shotgun",
+  PISTOL: "Pistol",
+  HEAVY: "Heavy",
+  SPECIAL_TEAMS: "Special Teams",
+};
 
 // ─── Utility ────────────────────────────────────────────────────────────────
 
@@ -220,6 +233,22 @@ function compactPct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
+type OffensiveUserMode = "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
+
+function resolveOffensiveUserMode(controlMode: GameSim["controlMode"]): OffensiveUserMode {
+  if (controlMode === "COACH") return "FULL_AUTO";
+  if (controlMode === "HYBRID") return "KEY_SITUATIONS";
+  return "FULL_PLAYCALLING";
+}
+
+function isKeySituation(g: GameSim): boolean {
+  const isLateHalf = (g.clock.quarter === 2 || g.clock.quarter === 4) && g.clock.timeRemainingSec <= 120;
+  const isRedZone = g.ballOn >= 80;
+  const isHighLeverageDown = g.down >= 3;
+  const isGoalToGo = g.ballOn >= 90 && g.distance <= 3;
+  return isLateHalf || isRedZone || isHighLeverageDown || isGoalToGo;
+}
+
 function gradeFromScore(score: number): string {
   if (score >= 0.62) return "A";
   if (score >= 0.5) return "B";
@@ -336,6 +365,7 @@ const Playcall = () => {
   const [tempo, setTempo] = useState<TempoMode>("NORMAL");
   const [personnelPackage, setPersonnelPackage] = useState<PersonnelPackage>("11");
   const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
+  const [selectedFormation, setSelectedFormation] = useState<PlayFormation>("SHOTGUN");
   const offensePlaybookId = state.playbooks?.offensePlaybookId;
   const defensePlaybookId = state.playbooks?.defensePlaybookId;
 
@@ -361,15 +391,39 @@ const Playcall = () => {
     return qb ? resolveQbArchetypeTag(qb as any) : "GAME_MANAGER" as const;
   }, [roster]);
   const canCallRpo = userTeamQbArchetype === "DUAL_THREAT" || userTeamQbArchetype === "SCRAMBLER";
+  const userIsHomeTeam = teamId === g.homeTeamId;
+  const userOffensivePossession = userIsHomeTeam ? g.possession === "HOME" : g.possession === "AWAY";
+  const offenseUserMode = resolveOffensiveUserMode(g.controlMode);
+  const pauseForUserOffenseSnap = userOffensivePossession
+    && (offenseUserMode === "FULL_PLAYCALLING" || (offenseUserMode === "KEY_SITUATIONS" && isKeySituation(g)));
 
   const rec = useMemo(
     () => (g.down === 4 ? recommendFourthDown(g) : null),
     [g]
   );
 
+  const playbookConcepts = useMemo(() => {
+    if (!offensePlaybookId) return [];
+    return getOffensePlaybookConcepts(offensePlaybookId).filter((concept) => canCallRpo || concept.playType !== "RPO_READ");
+  }, [offensePlaybookId, canCallRpo]);
+
+  const availableFormations = useMemo(() => {
+    const uniq = Array.from(new Set(playbookConcepts.map((concept) => concept.formation)));
+    return uniq.length ? uniq : ["SHOTGUN" as PlayFormation];
+  }, [playbookConcepts]);
+
+  const legalConcepts = useMemo(() => {
+    return filterEligiblePlayConcepts(
+      playbookConcepts,
+      { down: g.down, distance: g.distance, ballOn: g.ballOn, quarter: Number(g.clock.quarter), clockSec: g.clock.timeRemainingSec },
+      selectedFormation,
+    );
+  }, [playbookConcepts, g.down, g.distance, g.ballOn, g.clock.quarter, g.clock.timeRemainingSec, selectedFormation]);
+
   const rankedCards = useMemo(() => {
     if (!offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId)) return [];
-    const allowedPlayIds = getOffensePlaybookPlays(offensePlaybookId).filter((id) => canCallRpo || id !== "RPO_READ");
+    const allowedPlayIds = legalConcepts.map((concept) => concept.playType);
+    if (!allowedPlayIds.length) return [];
     const evaluations = evaluatePlayConcepts(g, allowedPlayIds, { aggression, tempo, personnelPackage, look: g.defLook });
     return evaluations
       .map((evaluation) => ({
@@ -377,13 +431,14 @@ const Playcall = () => {
         play: PLAYBOOK.find((p) => p.id === evaluation.playType) ?? PLAYBOOK[0],
       }))
       .sort((a, b) => b.evaluation.score - a.evaluation.score);
-  }, [g, aggression, tempo, personnelPackage, canCallRpo, offensePlaybookId, defensePlaybookId]);
+  }, [g, aggression, tempo, personnelPackage, offensePlaybookId, defensePlaybookId, legalConcepts]);
 
   const handlePlay = (playType: PlayType) => {
+    if (!window.confirm(`Call ${playType.replace(/_/g, " ")}?`)) return;
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
     setSelectedPlayId(null);
     force((x) => x + 1);
-  };
+  }, [aggression, dispatch, personnelPackage, tempo]);
 
   const handleDefensiveConfirm = (call: DefensiveCall | "AUTO") => {
     if (call === "AUTO") {
@@ -395,8 +450,28 @@ const Playcall = () => {
   };
 
   const selectedCard = rankedCards.find((c) => c.play.id === selectedPlayId) ?? rankedCards[0];
+  const legalPlayIds = new Set(legalConcepts.map((concept) => concept.playType));
   const missingPlaybookSelection = !offensePlaybookId || !defensePlaybookId || !hasDefensePlaybook(defensePlaybookId);
   const needsDefensiveCall = Boolean(g.needsDefensiveCall && g.defensiveCallSituation);
+  const autoResolveSnap = canShowPlay && !needsDefensiveCall && !pauseForUserOffenseSnap;
+  const showAutoAdvance = !(offenseUserMode === "FULL_PLAYCALLING" && userOffensivePossession);
+
+  useEffect(() => {
+    if (!autoResolveSnap) return;
+    handlePlay(autoPickPlay(g));
+  }, [autoResolveSnap, g, handlePlay]);
+
+  useEffect(() => {
+    if (!availableFormations.includes(selectedFormation)) {
+      setSelectedFormation(availableFormations[0]);
+    }
+  }, [availableFormations, selectedFormation]);
+
+  useEffect(() => {
+    if (selectedPlayId && !rankedCards.some((card) => card.play.id === selectedPlayId)) {
+      setSelectedPlayId(null);
+    }
+  }, [selectedPlayId, rankedCards]);
 
   const exit = () => {
     dispatch({ type: "EXIT_GAME" });
@@ -525,12 +600,17 @@ const Playcall = () => {
             {rec && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Badge variant="secondary">Recommended</Badge>
-                {rec.ranked.map((r) => (
-                  <Button key={r.playType} size="sm" variant={r.playType === rec.best ? "default" : "outline"}
-                    onClick={() => handlePlay(r.playType === "RUN" ? "INSIDE_ZONE" : r.playType)}>
-                    {r.playType === "RUN" ? "Go" : r.playType}
-                  </Button>
-                ))}
+                {rec.ranked.map((r) => {
+                  const playType = r.playType === "RUN" ? "INSIDE_ZONE" : r.playType;
+                  const legal = legalPlayIds.has(playType);
+                  if (!legal) return null;
+                  return (
+                    <Button key={r.playType} size="sm" variant={r.playType === rec.best ? "default" : "outline"}
+                      onClick={() => handlePlay(playType)}>
+                      {r.playType === "RUN" ? "Go" : r.playType}
+                    </Button>
+                  );
+                })}
                 <Badge variant="outline">Breakeven {Math.round(rec.breakevenGoRate * 100)}%</Badge>
               </div>
             )}
@@ -541,6 +621,28 @@ const Playcall = () => {
           <>
             <DefensiveIntelPanel g={g} />
             <FieldPreview ballOn={g.ballOn} distance={g.distance} selectedPlay={selectedCard?.play.id} defensiveLook={g.defLook} />
+
+            <Card>
+              <CardContent className="p-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Formation</p>
+                <div className="flex flex-wrap gap-1">
+                  {availableFormations.map((formation) => (
+                    <Button
+                      key={formation}
+                      size="sm"
+                      variant={selectedFormation === formation ? "default" : "outline"}
+                      onClick={() => {
+                        setSelectedFormation(formation);
+                        setSelectedPlayId(null);
+                      }}
+                    >
+                      {FORMATION_LABELS[formation]}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">Only legal calls for this down/distance/clock are shown.</p>
+              </CardContent>
+            </Card>
 
             {/* ── Aggression / Tempo toggles ── */}
             <Card>
@@ -585,6 +687,11 @@ const Playcall = () => {
 
             {/* ── Zone 5 ranked card grid ── */}
             <div className="space-y-3">
+              {rankedCards.length === 0 ? (
+                <Card>
+                  <CardContent className="p-4 text-sm text-muted-foreground">No legal concepts available for this formation and game state. Choose another formation.</CardContent>
+                </Card>
+              ) : null}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {rankedCards.map(({ play, evaluation }) => {
                   const isSelected = selectedPlayId === play.id;
@@ -594,7 +701,11 @@ const Playcall = () => {
                     ? `${g.stats.home.rushYards} rush yds`
                     : `${g.stats.home.passYards} pass yds`;
                   return (
-                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => setSelectedPlayId(play.id)}>
+                    <Card
+                      key={play.id}
+                      className={`transition-colors ${pauseForUserOffenseSnap ? "cursor-pointer" : "cursor-not-allowed opacity-70"} ${isSelected ? "border-primary" : "hover:border-primary/50"}`}
+                      onClick={() => pauseForUserOffenseSnap && setSelectedPlayId(play.id)}
+                    >
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold flex items-center gap-1">{play.icon} {play.label}</span>
@@ -624,8 +735,10 @@ const Playcall = () => {
               <div className="flex items-center justify-between rounded border p-3">
                 <div className="text-xs text-muted-foreground">Confirm selected call: <span className="font-semibold text-foreground">{selectedCard?.play.label ?? "None"}</span></div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" disabled={needsDefensiveCall} onClick={() => dispatch({ type: "SIMULATE_REST_OF_GAME" })}>Sim Rest</Button>
-                  <Button size="sm" disabled={!selectedCard || needsDefensiveCall} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
+                  {showAutoAdvance ? (
+                    <Button size="sm" variant="outline" disabled={needsDefensiveCall} onClick={() => dispatch({ type: "SIMULATE_REST_OF_GAME" })}>Sim Rest</Button>
+                  ) : null}
+                  <Button size="sm" disabled={!selectedCard || needsDefensiveCall || !pauseForUserOffenseSnap} onClick={() => selectedCard && handlePlay(selectedCard.play.id)}>Call Play</Button>
                 </div>
               </div>
               <div>
