@@ -34,6 +34,32 @@ describe("moraleEngine", () => {
     expect(result.topModifiers.length).toBeLessThanOrEqual(3);
   });
 
+
+
+  it("bounds morale output between 0 and 100 under extreme inputs", () => {
+    const low = updateMorale(
+      { morale: 1, roleExpectation: "STARTER" as const, playingTimeSatisfaction: -100 },
+      { teamWins: 0, teamLosses: 17, isContractYear: false, strategyModeFit: 0, playerRespect: 0, lockerRoomCred: 0 },
+      { snapsPlayed: 0, snapsExpected: 100 },
+    );
+    const high = updateMorale(
+      { morale: 99, roleExpectation: "STARTER" as const, playingTimeSatisfaction: 100 },
+      { teamWins: 17, teamLosses: 0, isContractYear: true, strategyModeFit: 100, playerRespect: 100, lockerRoomCred: 100 },
+      { snapsPlayed: 100, snapsExpected: 1 },
+    );
+    expect(low.morale).toBeGreaterThanOrEqual(0);
+    expect(high.morale).toBeLessThanOrEqual(100);
+  });
+
+  it("keeps an existing trade request active even after morale rebound (anti-exploit)", () => {
+    const result = updateMorale(
+      { morale: 45, roleExpectation: "DEPTH" as const, playingTimeSatisfaction: 20, tradeRequest: true },
+      { teamWins: 12, teamLosses: 1, isContractYear: false, strategyModeFit: 90, playerRespect: 90, lockerRoomCred: 90 },
+      { snapsPlayed: 60, snapsExpected: 20 },
+    );
+    expect(result.morale).toBeGreaterThan(40);
+    expect(result.tradeRequest).toBe(true);
+  });
   it("moraleChipColor returns green for high morale", () => {
     expect(moraleChipColor(85)).toContain("emerald");
   });
