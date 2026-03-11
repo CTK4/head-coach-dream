@@ -161,6 +161,7 @@ import { DEV_TOOLS_ENABLED } from "@/dev/devToolsGate";
 import { logError, logInfo } from "@/lib/logger";
 import { allocateSaveId, getActiveSaveId, setActiveSaveId } from "@/lib/saveManager";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
+import { DEFAULT_SIM_TUNING, type SimTuningSettings } from "@/config/simTuning";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
@@ -1001,6 +1002,7 @@ export type GameState = {
   saveVersion: number;
   configVersion: string;
   calibrationPackId: string;
+  simTuningSettings: SimTuningSettings;
   memoryLog: MemoryEvent[];
   contextFlags: string[];
   teamFinances: { cash: number; deadMoneyBySeason: Record<number, number> };
@@ -1209,10 +1211,12 @@ export type GameAction =
         teamId: string;
         teamName: string;
         offer?: Partial<Pick<OfferItem, "years" | "salary" | "autonomy" | "patience" | "mediaNarrativeKey">>;
+        simTuningSettings?: Partial<SimTuningSettings>;
       };
     }
   | { type: "SET_COACH"; payload: Partial<GameState["coach"]> }
   | { type: "SET_PHASE"; payload: GamePhase }
+  | { type: "SET_SIM_TUNING"; payload: Partial<SimTuningSettings> }
   | { type: "COMPLETE_INTERVIEW"; payload: { teamId: string; answers: Record<string, number>; result: InterviewResult } }
   | { type: "GENERATE_OFFERS" }
   | { type: "ACCEPT_OFFER"; payload: OfferItem }
@@ -1810,6 +1814,7 @@ function createInitialState(saveIdInput?: string): GameState {
     saveId,
     configVersion: DEFAULT_CONFIG_VERSION,
     calibrationPackId: DEFAULT_CALIBRATION_PACK_ID,
+    simTuningSettings: { ...DEFAULT_SIM_TUNING },
     memoryLog: [],
     teamFinances: { cash: 60_000_000, deadMoneyBySeason: {} },
     owner: { approval: 65, budgetBreaches: 0, financialRating: 70, jobSecurity: 68 },
@@ -5073,7 +5078,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return ensureMinimumFreeAgencyPool(next as GameState);
     }
     case "INIT_FREE_PLAY_CAREER": {
-      const { teamId, teamName, offer } = action.payload;
+      const { teamId, teamName, offer, simTuningSettings } = action.payload;
       const financeRow = getTeamFinancesRow(String(teamId), Number(state.season));
       const acceptedOffer: OfferItem = {
         teamId,
@@ -5093,6 +5098,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         acceptedOffer,
         autonomyRating: acceptedOffer.autonomy,
         ownerPatience: acceptedOffer.patience,
+        simTuningSettings: { ...state.simTuningSettings, ...simTuningSettings },
         userTeamId: teamId,
         teamId,
         storySetup: state.storySetup ?? {
@@ -5147,6 +5153,15 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "SET_PHASE":
       logInfo("phase.transition", { phase: action.payload, season: state.season, week: state.week, saveId: getActiveSaveId(), meta: { from: state.phase, to: action.payload } });
       return { ...state, phase: action.payload };
+    case "SET_SIM_TUNING": {
+      return {
+        ...state,
+        simTuningSettings: {
+          ...state.simTuningSettings,
+          ...action.payload,
+        },
+      };
+    }
     case "ADVANCE_LEAGUE_PHASE": {
       const nextPhase = advanceLeaguePhase(state.league.phase as LeaguePhase);
       let next: GameState = { ...state, league: { ...state.league, phase: nextPhase } };
