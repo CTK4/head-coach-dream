@@ -39,7 +39,7 @@ describe("validatePostTx cap checks", () => {
       week: 1,
       rookies: [],
       finances: {},
-      playerTeamOverrides: { p1: "A" },
+      playerTeamOverrides: { p1: "A", p2: "FREE_AGENT" },
       playerContractOverrides: {
         p1: { startSeason: 2025, endSeason: 2026, salaries: [1_600_000, 1_000_000], signingBonus: 200_000 },
       },
@@ -50,6 +50,24 @@ describe("validatePostTx cap checks", () => {
     expect(result).toEqual({
       ok: false,
       errors: ["cap overage A: used=1700000 cap=1500000 delta=200000"],
+    });
+  });
+
+  it("emits validation error when a rostered active player is missing a contract mapping", () => {
+    const state = {
+      season: 2025,
+      week: 1,
+      rookies: [],
+      finances: { cap: 10_000_000 },
+      playerTeamOverrides: { p1: "A", p2: "FREE_AGENT" },
+      playerContractOverrides: {},
+      transactionLedger: { events: [], counter: 0 },
+    } as unknown as GameState;
+
+    const result = validatePostTx(state);
+    expect(result).toEqual({
+      ok: false,
+      errors: ["missing active contract mapping p1: team=A"],
     });
   });
 });
