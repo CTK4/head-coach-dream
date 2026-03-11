@@ -1,5 +1,5 @@
 import { getPositionLabel } from "@/lib/displayLabels";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import {
@@ -38,6 +38,8 @@ import { getQbSchemeFitMultiplier, getQbSchemeFitSignal } from "@/engine/qb/qbSc
 import { BADGE_DEFINITIONS } from "@/engine/badges/engine";
 import { UNICORN_DEFINITIONS } from "@/engine/unicorns/engine";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 
 function clamp100(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -56,6 +58,7 @@ export default function PlayerProfile() {
   const { playerId = "" } = useParams();
 
   const [offerOpen, setOfferOpen] = useState(false);
+  const [badgeExplainerOpen, setBadgeExplainerOpen] = useState(false);
   const [years, setYears] = useState(2);
   const [aav, setAav] = useState(8_000_000);
 
@@ -129,6 +132,31 @@ export default function PlayerProfile() {
     [playerBadges],
   );
 
+  const badgeModelCard = MODEL_CARDS.badges;
+
+  const openBadgeExplainer = () => setBadgeExplainerOpen(true);
+
+  const handleBadgeLongPress = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.pointerType === "mouse") return;
+    let pressTriggered = false;
+    const timeout = window.setTimeout(() => {
+      pressTriggered = true;
+      openBadgeExplainer();
+    }, 550);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("pointerup", cleanup);
+      window.removeEventListener("pointercancel", cleanup);
+      if (pressTriggered) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("pointerup", cleanup, { once: true });
+    window.addEventListener("pointercancel", cleanup, { once: true });
+  };
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background via-background to-black/40">
       <div className="max-w-3xl mx-auto px-4 py-4">
@@ -189,29 +217,52 @@ export default function PlayerProfile() {
                   </Tooltip>
                 ) : null}
                 {playerBadges.length > 0 ? (
-                  <TooltipProvider>
-                    {playerBadges.map((badge) => {
-                      const definition = BADGE_DEFINITIONS.find((d) => d.id === badge.badgeId);
-                      if (!definition) return null;
-                      return (
-                        <Tooltip key={`${badge.badgeId}-${badge.awardedSeason}`}>
-                          <TooltipTrigger asChild>
-                            <Badge
-                              variant="outline"
-                              className="rounded-xl border-white/15 bg-white/5"
-                            >
-                              {definition.name}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            <div className="text-xs font-semibold">{definition.name}</div>
-                            <div className="text-xs text-muted-foreground">{definition.description}</div>
-                            <div className="mt-1 text-[11px]">{definition.rarity} • Awarded {badge.awardedSeason}</div>
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    })}
-                  </TooltipProvider>
+                  <div className="flex items-center gap-2">
+                    <TooltipProvider>
+                      {playerBadges.map((badge) => {
+                        const definition = BADGE_DEFINITIONS.find((d) => d.id === badge.badgeId);
+                        if (!definition) return null;
+                        return (
+                          <Tooltip key={`${badge.badgeId}-${badge.awardedSeason}`}>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="outline"
+                                className="rounded-xl border-white/15 bg-white/5"
+                                onPointerDown={handleBadgeLongPress}
+                              >
+                                {definition.name}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <div className="text-xs font-semibold">{definition.name}</div>
+                              <div className="text-xs text-muted-foreground">{definition.description}</div>
+                              <div className="mt-1 text-[11px]">{definition.rarity} • Awarded {badge.awardedSeason}</div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </TooltipProvider>
+                    <ExplainerDrawer
+                      title={badgeModelCard.title}
+                      description={badgeModelCard.description}
+                      factors={badgeModelCard.factors}
+                      example={badgeModelCard.example}
+                      triggerAriaLabel="Open badge trigger rules"
+                      open={badgeExplainerOpen}
+                      onOpenChange={setBadgeExplainerOpen}
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 min-w-7 rounded-full px-2 text-xs"
+                          onClick={openBadgeExplainer}
+                        >
+                          ⓘ
+                        </Button>
+                      }
+                    />
+                  </div>
                 ) : null}
                 </div>
               </div>
