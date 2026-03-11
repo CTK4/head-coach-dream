@@ -1,17 +1,8 @@
 import type { Prospect } from "@/engine/offseasonData";
 import type { GmScoutTraits } from "@/engine/gmScouting";
+import { hashStr } from "@/engine/rng";
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
-
-// Deterministic hash for noise generation
-function fnv1a32(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 /** Minimum sigma reduction multiplier regardless of film_process */
 const MIN_SIGMA_MULTIPLIER = 0.3;
@@ -20,7 +11,7 @@ const FILM_PROCESS_REDUCTION_RATE = 0.005;
 
 function deterministicNoise(seed: number, prospectId: string, filmProcess: number, sigma: number): number {
   const key = `TIER_NOISE|${seed}|${prospectId}`;
-  const h = fnv1a32(key);
+  const h = hashStr(key);
   // Box-Muller using deterministic hash values
   const u1 = Math.max(1e-9, ((h & 0xffffff) / 0x1000000));
   const u2 = Math.max(1e-9, (((h >>> 8) & 0xffffff) / 0x1000000));

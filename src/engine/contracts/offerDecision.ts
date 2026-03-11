@@ -1,4 +1,4 @@
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashStr } from "@/engine/rng";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { normalizePos } from "@/engine/rosterOverlay";
 
@@ -39,14 +39,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function hashStr(s: string) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 function sigmoid(x: number) {
   return 1 / (1 + Math.exp(-x));

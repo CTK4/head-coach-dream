@@ -16,27 +16,10 @@ export type LeagueSchedule = {
   regularSeasonWeeks: WeekSchedule[];
 };
 
+import { mulberry32, shuffleDeterministic } from "./rng";
+
 export const PRESEASON_WEEKS = 3;
 export const REGULAR_SEASON_WEEKS = 17;
-
-function shuffle<T>(items: T[], seed: number): T[] {
-  const out = [...items];
-  let localSeed = seed >>> 0;
-
-  const random = () => {
-    localSeed += 0x6d2b79f5;
-    let x = Math.imul(localSeed ^ (localSeed >>> 15), 1 | localSeed);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-
-  return out;
-}
 
 function pairTeamsForWeek(teamIds: string[], week: number): Matchup[] {
   const rotating = [...teamIds];
@@ -74,7 +57,7 @@ export function generateLeagueSchedule(teamIds: string[], seed: number): LeagueS
 
   const preseasonWeeks: WeekSchedule[] = [];
   for (let week = 1; week <= PRESEASON_WEEKS; week += 1) {
-    const shuffled = shuffle(activeTeamIds, seed + week * 11);
+    const shuffled = shuffleDeterministic(activeTeamIds, mulberry32((seed + week * 11) >>> 0));
     const matchups: Matchup[] = [];
     for (let i = 0; i + 1 < shuffled.length; i += 2) {
       const homeFirst = week % 2 === 1;

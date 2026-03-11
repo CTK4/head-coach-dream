@@ -1,4 +1,4 @@
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashStr } from "@/engine/rng";
 import type { CoachReputation } from "@/engine/reputation";
 import { applyRejectionPenalty, computeHrs, ownerPatienceToStability, volatilityTo100, clamp100 } from "@/engine/reputation";
 import { getPerkHiringModifier, type CoachPerkCarrier } from "@/engine/perkWiring";
@@ -13,12 +13,6 @@ export type StaffAcceptance = {
   tier: AssistantTier;
   threshold: number;
 };
-
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
 
 function assistantTierFromRep(rep: number): AssistantTier {
   if (rep >= 80) return "A";
