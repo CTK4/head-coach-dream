@@ -182,6 +182,43 @@ export function ensureLeagueGmMap(state: GameState): GameState {
   return { ...state, league: { ...state.league, gmByTeamId: { ...seeded.gmByTeamId, ...gmByTeamId } } };
 }
 
+
+function migrateLegacyOffseasonFreeAgencyToCanonical(state: Partial<GameState>): Partial<GameState> {
+  const canonical = (state as any).freeAgency ?? {};
+  const legacy = (state as any).offseasonData?.freeAgency;
+  if (!legacy) return state;
+
+  const canonicalSignings = canonical.signingsByPlayerId ?? {};
+  const migratedSignings = { ...canonicalSignings } as Record<string, { teamId: string; years: number; aav: number; signingBonus: number }>;
+  const userTeamId = String((state as any).acceptedOffer?.teamId ?? (state as any).userTeamId ?? "");
+
+  for (const playerId of legacy.signings ?? []) {
+    const pid = String(playerId);
+    if (!pid || migratedSignings[pid]) continue;
+    migratedSignings[pid] = {
+      teamId: userTeamId,
+      years: 1,
+      aav: Number(legacy.capHitsByPlayerId?.[pid] ?? 0),
+      signingBonus: 0,
+    };
+  }
+
+  return {
+    ...state,
+    freeAgency: {
+      ...canonical,
+      signingsByPlayerId: migratedSignings,
+      offersByPlayerId: { ...(canonical.offersByPlayerId ?? {}) },
+      draftByPlayerId: { ...(canonical.draftByPlayerId ?? {}) },
+      initStatus: canonical.initStatus ?? "idle",
+      isResolving: Boolean(canonical.isResolving ?? false),
+      resolveRoundByPlayerId: { ...(canonical.resolveRoundByPlayerId ?? {}) },
+      pendingCounterTeamByPlayerId: { ...(canonical.pendingCounterTeamByPlayerId ?? {}) },
+      cpuTickedOnOpen: Boolean(canonical.cpuTickedOnOpen ?? false),
+    },
+  };
+}
+
 export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDependencies): Partial<GameState> {
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   // Preserve the existing saveSeed to ensure deterministic simulation replay.
@@ -634,6 +671,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
     s = { ...(s as any), scoutingState: scoutingAfterIdMigration };
   }
 
+  s = migrateLegacyOffseasonFreeAgencyToCanonical(s);
   s = deps.ensureAccolades(deps.bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
 }

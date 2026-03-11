@@ -24,11 +24,11 @@ describe("phaseUtils", () => {
     expect(isInFranchiseActionWindow("IN_SEASON", "trade")).toBe(true);
   });
 
-  it("legacy save missing careerStage gets normalized and blocks FA_SIGN", () => {
+  it("legacy save missing careerStage gets normalized and blocks FA_SUBMIT_OFFER", () => {
     const migrated = migrateSaveSchema({ phase: "HUB", season: 2026, coach: { name: "Coach" }, league: { week: 8, tradeDeadlineWeek: 10 } } as any);
     expect(migrated.careerStage).toBe("REGULAR_SEASON");
 
-    const verdict = isActionAllowedInCurrentPhase(migrated, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } } as any);
+    const verdict = isActionAllowedInCurrentPhase(migrated, { type: "FA_SUBMIT_OFFER", payload: { playerId: "P1" } } as any);
     expect(verdict.allowed).toBe(false);
   });
 
@@ -36,11 +36,11 @@ describe("phaseUtils", () => {
     const base = createInitialStateForTests();
     const faState = advanceToFreeAgency(base);
     expect(faState.careerStage).toBe("FREE_AGENCY");
-    expect(faState.league.phase).toBe("OFFSEASON");
+    expect(faState.league.phase).toBe("FREE_AGENCY");
 
     const draftState = advanceToDraft(base);
     expect(draftState.careerStage).toBe("DRAFT");
-    expect(draftState.league.phase).toBe("OFFSEASON");
+    expect(draftState.league.phase).toBe("DRAFT");
   });
 
   it("advanceToRegularSeason synchronizes week fields", () => {

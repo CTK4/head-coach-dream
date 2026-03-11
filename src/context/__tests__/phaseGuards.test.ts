@@ -9,16 +9,16 @@ function withCareerStage(stage: ReturnType<typeof createInitialStateForTests>["c
 }
 
 describe("phaseGuards", () => {
-  it("rejects FA_SIGN outside FREE_AGENCY", () => {
+  it("rejects FA_SUBMIT_OFFER outside FREE_AGENCY", () => {
     const state = withCareerStage("REGULAR_SEASON");
-    const verdict = isActionAllowedInCurrentPhase(state, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } });
+    const verdict = isActionAllowedInCurrentPhase(state, { type: "FA_SUBMIT_OFFER", payload: { playerId: "P1" } } as any);
     expect(verdict.allowed).toBe(false);
     expect(verdict.reason).toContain("FREE_AGENCY");
   });
 
-  it("allows FA_SIGN in FREE_AGENCY", () => {
+  it("allows FA_SUBMIT_OFFER in FREE_AGENCY", () => {
     const state = withCareerStage("FREE_AGENCY");
-    const verdict = isActionAllowedInCurrentPhase(state, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } });
+    const verdict = isActionAllowedInCurrentPhase(state, { type: "FA_SUBMIT_OFFER", payload: { playerId: "P1" } } as any);
     expect(verdict.allowed).toBe(true);
   });
 
@@ -51,9 +51,9 @@ describe("phaseGuards", () => {
     expect(verdict.allowed).toBe(true);
   });
 
-  it("reducer no-ops out-of-phase FA_SIGN", () => {
+  it("reducer no-ops out-of-phase FA_SUBMIT_OFFER", () => {
     const state = withCareerStage("REGULAR_SEASON");
-    const out = gameReducer(state, { type: "FA_SIGN", payload: { offerId: "OFFER_1" } } as GameAction);
+    const out = gameReducer(state, { type: "FA_SUBMIT_OFFER", payload: { playerId: "P1" } } as GameAction);
     expect(out).toBe(state);
   });
 
