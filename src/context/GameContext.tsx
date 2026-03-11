@@ -9497,7 +9497,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "RECOVERY_SET_ERRORS":
       throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
     default:
-      return assertNever(action);
+      return assertNever(action as never);
   }
 }
 

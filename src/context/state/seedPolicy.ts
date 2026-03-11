@@ -53,8 +53,8 @@ export function deriveSaveSeedFromState(input: LegacySeedInput): number {
   if (Number.isFinite(existing) && existing > 0) return Math.floor(existing) % SAVE_SEED_MODULUS || 1;
 
   const fingerprint = {
-    season: normalizeNumber(input.season, 2026),
-    week: normalizeNumber(input.week, 1),
+    season: normalizeNumber(input.season, "2026"),
+    week: normalizeNumber(input.week, "1"),
     saveId: normalizeString(input.saveId),
     teamId: normalizeString(input.teamId),
     userTeamId: normalizeString(input.userTeamId),

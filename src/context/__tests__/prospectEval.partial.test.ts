@@ -36,8 +36,6 @@ describe("getUserProspectEval partial uncertainty", () => {
     expect(explicitFull.roundBand).toBe(base.roundBand);
     expect(explicitFull.sigma).toBe(base.sigma);
   });
-});
-
 
   it("passes uncertainty into evaluator path", () => {
     const state = createInitialStateForTests();
@@ -47,3 +45,4 @@ describe("getUserProspectEval partial uncertainty", () => {
     expect(partial.sigma).toBeGreaterThan(full.sigma);
     expect(partial.roundBand).toBe(valueToRoundBand(partial.value));
   });
+});

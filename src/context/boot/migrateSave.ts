@@ -151,7 +151,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   // Preserve the existing saveSeed to ensure deterministic simulation replay.
   // If missing, derive one from persisted legacy fields.
-  const saveSeed = deriveSaveSeedFromState(oldState);
+  const saveSeed = deriveSaveSeedFromState(oldState as Parameters<typeof deriveSaveSeedFromState>[0]);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? deps.createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
