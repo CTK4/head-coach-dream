@@ -16,9 +16,38 @@ function fmtClock(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function downOrdinal(n: number): string {
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  return `${n}th`;
+}
+
+const CALL_LABELS = new Map<string, string>([
+  [JSON.stringify({ kind: "SHELL", shell: "COVER_2", press: false }), "Cover 2"],
+  [JSON.stringify({ kind: "SHELL", shell: "COVER_3", press: false }), "Cover 3"],
+  [JSON.stringify({ kind: "SHELL", shell: "QUARTERS", press: false }), "Quarters"],
+  [JSON.stringify({ kind: "SHELL", shell: "MAN", press: true }), "Man Press"],
+  [JSON.stringify({ kind: "PRESSURE", pressure: "SIM", blitzRate: 1 }), "Sim"],
+  [JSON.stringify({ kind: "PRESSURE", pressure: "BLITZ", blitzRate: 2 }), "Blitz"],
+  [JSON.stringify({ kind: "RUN_FIT", box: "LIGHT", containEdge: false }), "Light box"],
+  [JSON.stringify({ kind: "RUN_FIT", box: "NORMAL", containEdge: false }), "Normal box"],
+  [JSON.stringify({ kind: "RUN_FIT", box: "HEAVY", containEdge: true }), "Heavy box"],
+  [JSON.stringify({ kind: "SPECIAL", tag: "SPY_QB" }), "Spy QB"],
+  [JSON.stringify({ kind: "SPECIAL", tag: "BRACKET_STAR" }), "Bracket Star"],
+  [JSON.stringify({ kind: "SPECIAL", tag: "PREVENT" }), "Prevent"],
+]);
+
+function selectedCallLabel(call: DefensiveCall): string {
+  return CALL_LABELS.get(JSON.stringify(call)) ?? call.kind;
+}
+
 export default function DefensiveCallDrawer({ open, situation, onConfirm }: Props) {
   const [selected, setSelected] = useState<DefensiveCall | null>(null);
-  const header = useMemo(() => `${situation.down}rd & ${situation.distance} • Ball on ${situation.yardLine} • ${fmtClock(situation.clockSec)} Q${situation.quarter}`, [situation]);
+  const header = useMemo(
+    () => `${downOrdinal(situation.down)} & ${situation.distance} • Ball on ${situation.yardLine} • ${fmtClock(situation.clockSec)} Q${situation.quarter}`,
+    [situation],
+  );
 
   const pick = (call: DefensiveCall) => setSelected(call);
 
@@ -49,7 +78,7 @@ export default function DefensiveCallDrawer({ open, situation, onConfirm }: Prop
           <Button size="sm" variant="outline" onClick={() => pick({ kind: "SPECIAL", tag: "PREVENT" })}>Prevent</Button>
         </div>
 
-        {selected ? <Badge variant="secondary">Selected: {selected.kind}</Badge> : null}
+        {selected ? <Badge variant="secondary">Selected: {selectedCallLabel(selected)}</Badge> : null}
 
         <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" onClick={() => onConfirm("AUTO")}>Auto</Button>

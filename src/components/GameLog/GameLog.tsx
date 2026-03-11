@@ -2,12 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { sanitizeEntries, type GameLogEntry, type GameLogProps, type LogFilter } from "@/components/GameLog/types";
-import { useVirtualList } from "@/hooks/useVirtualList";
 
 const ITEM_HEIGHT = 76;
 const HEADER_HEIGHT = 30;
 const CONTAINER_HEIGHT = 360;
 const SCROLLED_UP_THRESHOLD_PX = 50;
+const OVERSCAN_PX = ITEM_HEIGHT * 3;
 
 const FILTERS: Array<{ key: LogFilter; label: string }> = [
   { key: "all", label: "All" },
@@ -51,11 +51,11 @@ function rowClass(type: GameLogEntry["type"]): string {
   return "border";
 }
 
-function quarterScore(entries: GameLogEntry[]): string | null {
-  const last = entries[entries.length - 1];
-  if (!last) return null;
-  return null;
-}
+type GroupedRow =
+  | { kind: "header"; quarter: GameLogEntry["quarter"] }
+  | { kind: "entry"; entry: GameLogEntry };
+
+type RowMeta = { offsetY: number; height: number };
 
 export default function GameLog({ entries, isLive = false, onJumpToLatest, defaultFilter = "all" }: GameLogProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -66,23 +66,41 @@ export default function GameLog({ entries, isLive = false, onJumpToLatest, defau
   const counts = useMemo(() => computeFilterCounts(sanitized), [sanitized]);
 
   const filtered = useMemo(() => sanitized.filter((entry) => matchesFilter(entry, activeFilter)), [sanitized, activeFilter]);
-  const grouped = useMemo(() => {
+
+  const grouped = useMemo<GroupedRow[]>(() => {
     return QUARTERS.flatMap((quarter) => {
       const quarterEntries = filtered.filter((entry) => entry.quarter === quarter);
       if (!quarterEntries.length) return [];
-      return [{ kind: "header" as const, quarter, score: quarterScore(quarterEntries) }, ...quarterEntries.map((entry) => ({ kind: "entry" as const, entry }))];
+      return [
+        { kind: "header" as const, quarter },
+        ...quarterEntries.map((entry) => ({ kind: "entry" as const, entry })),
+      ];
     });
   }, [filtered]);
 
-  const range = useVirtualList({
-    itemCount: grouped.length,
-    itemHeight: ITEM_HEIGHT,
-    containerHeight: CONTAINER_HEIGHT,
-    scrollTop,
-  });
+  // Compute per-row absolute offsets based on actual row heights (headers ≠ entries)
+  const rowMeta = useMemo<RowMeta[]>(() => {
+    let y = 0;
+    return grouped.map((row) => {
+      const h = row.kind === "header" ? HEADER_HEIGHT : ITEM_HEIGHT;
+      const meta: RowMeta = { offsetY: y, height: h };
+      y += h;
+      return meta;
+    });
+  }, [grouped]);
 
-  const visibleRows = grouped.slice(Math.max(0, range.startIndex), Math.max(range.endIndex + 1, 0));
-  const contentHeight = grouped.length * ITEM_HEIGHT;
+  const contentHeight = rowMeta.length > 0
+    ? rowMeta[rowMeta.length - 1].offsetY + rowMeta[rowMeta.length - 1].height
+    : 0;
+
+  // Visibility window with overscan — no uniform-height assumption needed
+  const visibleRows = useMemo(() => {
+    const top = scrollTop - OVERSCAN_PX;
+    const bottom = scrollTop + CONTAINER_HEIGHT + OVERSCAN_PX;
+    return grouped
+      .map((row, i) => ({ row, ...rowMeta[i] }))
+      .filter(({ offsetY, height }) => offsetY + height > top && offsetY < bottom);
+  }, [grouped, rowMeta, scrollTop]);
 
   const showJump = shouldShowJumpToLatest({
     isLive,
@@ -120,32 +138,33 @@ export default function GameLog({ entries, isLive = false, onJumpToLatest, defau
           <div className="p-4 text-sm text-muted-foreground">No {emptyLabel} yet.</div>
         ) : (
           <div style={{ height: contentHeight, position: "relative" }}>
-            <div style={{ transform: `translateY(${range.offsetY}px)` }}>
-              {visibleRows.map((row, idx) => {
-                if (row.kind === "header") {
-                  return (
-                    <div
-                      key={`hdr-${String(row.quarter)}-${idx}`}
-                      className="sticky top-0 z-10 h-[30px] bg-muted px-3 py-1 text-xs font-semibold border-b flex items-center justify-between"
-                      style={{ height: HEADER_HEIGHT }}
-                    >
-                      <span>{quarterLabel(row.quarter)}</span>
-                      {row.score ? <span className="text-muted-foreground">{row.score}</span> : null}
-                    </div>
-                  );
-                }
-
+            {visibleRows.map(({ row, offsetY, height }) => {
+              if (row.kind === "header") {
                 return (
-                  <div key={row.entry.id} className={`h-[76px] p-2 text-sm ${rowClass(row.entry.type)}`}>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline">{quarterLabel(row.entry.quarter)}</Badge>
-                      {row.entry.personnelPackage ? <Badge variant="secondary">{row.entry.personnelPackage}</Badge> : null}
-                    </div>
-                    <div className="truncate">{row.entry.description}</div>
+                  <div
+                    key={`hdr-${String(row.quarter)}`}
+                    className="z-10 bg-muted px-3 py-1 text-xs font-semibold border-b flex items-center"
+                    style={{ position: "absolute", top: offsetY, height, width: "100%" }}
+                  >
+                    <span>{quarterLabel(row.quarter)}</span>
                   </div>
                 );
-              })}
-            </div>
+              }
+
+              return (
+                <div
+                  key={row.entry.id}
+                  className={`p-2 text-sm ${rowClass(row.entry.type)}`}
+                  style={{ position: "absolute", top: offsetY, height, width: "100%", boxSizing: "border-box" }}
+                >
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline">{quarterLabel(row.entry.quarter)}</Badge>
+                    {row.entry.personnelPackage ? <Badge variant="secondary">{row.entry.personnelPackage}</Badge> : null}
+                  </div>
+                  <div className="truncate">{row.entry.description}</div>
+                </div>
+              );
+            })}
           </div>
         )}
 

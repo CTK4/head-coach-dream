@@ -290,6 +290,16 @@ function FieldPreview({ ballOn, distance, selectedPlay, defensiveLook }: { ballO
   );
 }
 
+function buildPlayerPositionMap(g: GameSim): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const side of ["HOME", "AWAY"] as const) {
+    for (const [pos, playerId] of Object.entries(g.trackedPlayers[side] ?? {})) {
+      if (playerId) map[playerId] = pos;
+    }
+  }
+  return map;
+}
+
 function PostgamePanel({ g, homeName, awayName, fatigueById }: { g: GameSim; homeName: string; awayName: string; fatigueById: Record<string, { fatigue: number; last3SnapLoads: number[] }> }) {
   const h = g.stats.home;
   const a = g.stats.away;
@@ -340,13 +350,15 @@ function PostgamePanel({ g, homeName, awayName, fatigueById }: { g: GameSim; hom
             <p className="text-xs text-muted-foreground">No warning badges.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {Object.entries(g.snapLoadThisGame).map(([playerId, snaps]) => {
-                const fatigue = g.playerFatigue[playerId] ?? 50;
-                if (fatigue <= HIGH_WORKLOAD_THRESHOLD) return null;
-                const last3 = fatigueById[playerId]?.last3SnapLoads ?? [];
-                const avg = last3.length ? Math.round(last3.reduce((s, n) => s + n, 0) / last3.length) : 0;
-                return <Badge key={playerId} variant="destructive" title={`Snaps: ${snaps} | Rolling avg: ${avg}`}>High Workload</Badge>;
-              })}
+              {(() => {
+                const posMap = buildPlayerPositionMap(g);
+                return Object.entries(g.snapLoadThisGame).map(([playerId, snaps]) => {
+                  const fatigue = g.playerFatigue[playerId] ?? 50;
+                  if (fatigue <= HIGH_WORKLOAD_THRESHOLD) return null;
+                  const pos = posMap[playerId] ?? "?";
+                  return <Badge key={playerId} variant="destructive">{pos} – {snaps} snaps</Badge>;
+                });
+              })()}
             </div>
           )}
         </div>
@@ -522,9 +534,9 @@ const Playcall = () => {
           <Card className="border-slate-700/70 bg-slate-950/80 text-slate-100 backdrop-blur">
             <CardContent className="py-2 px-4">
               <div className="flex flex-wrap items-center gap-2 text-base font-medium">
-                <span>{g.homeTeamId} {g.homeScore}</span>
+                <span>{homeName} {g.homeScore}</span>
                 <span className="text-slate-400">|</span>
-                <span>{g.awayTeamId} {g.awayScore}</span>
+                <span>{awayName} {g.awayScore}</span>
                 <span className="text-slate-400">|</span>
                 <span>{g.clock.quarter}Q {fmtClock(g.clock.timeRemainingSec)}</span>
                 <span className="text-slate-400">|</span>
@@ -563,7 +575,7 @@ const Playcall = () => {
             </div>
 
             {/* Last result + tags */}
-            <PlayRibbon latestPlay={g.lastPlayResult} />
+            <PlayRibbon latestPlay={g.lastPlayResult} playType={g.driveLog.length > 0 ? g.driveLog[g.driveLog.length - 1].playType : undefined} />
 
             {g.lastResult && (
               <div className="pt-1 space-y-1">
@@ -713,9 +725,10 @@ const Playcall = () => {
                   const isSelected = selectedPlayId === play.id;
                   const lock = evaluation.score >= 0.62;
                   const variance = evaluation.risk >= 0.45;
+                  const userSide = g.homeTeamId === teamId ? "home" : "away";
                   const todayStat = play.id === "INSIDE_ZONE" || play.id === "OUTSIDE_ZONE" || play.id === "POWER"
-                    ? `${g.stats.home.rushYards} rush yds`
-                    : `${g.stats.home.passYards} pass yds`;
+                    ? `${g.stats[userSide].rushYards} rush yds`
+                    : `${g.stats[userSide].passYards} pass yds`;
                   return (
                     <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => { setSelectedPlayId(play.id); dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType: play.id } }); }}>
                     <Card
