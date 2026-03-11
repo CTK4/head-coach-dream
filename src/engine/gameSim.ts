@@ -715,7 +715,6 @@ export function computeDefensiveLook(sim: GameSim, rng: () => number): Defensive
 
 /** Generate 1-2 result tags explaining the outcome. */
 function buildResultTags(
-  sim: GameSim,
   playType: PlayType,
   look: DefensiveLook,
   pasComponents: { pas: number; cvl: number; me: number; sf: number },
