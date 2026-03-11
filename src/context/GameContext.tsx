@@ -50,7 +50,7 @@ import { generateOffers } from "@/engine/offers";
 import { genFreeAgents } from "@/engine/offseasonGen";
 import { CORE_ATTRIBUTE_KEYS, calculateProgressionDelta, defaultDevelopmentTrait, type DevelopmentProfile, type SeasonStats, type SnapCounts } from "@/engine/snapBasedProgression";
 import { accumulateSeasonStats, finalizeCareerStats, updateCoachCareerRecord } from "@/engine/seasonEnd";
-import { defaultLeagueRecords, updateLeagueRecords, type LeagueRecords } from "@/engine/leagueRecords";
+import { defaultLeagueRecords, updateFranchiseRecordsAtRollover, updateLeagueRecords, type FranchiseRecords, type LeagueRecords } from "@/engine/leagueRecords";
 import { ENABLE_TAMPERING_STEP, OFFSEASON_STEPS, type OffseasonStepId } from "@/engine/offseason";
 import { OffseasonStepEnum, StateMachine } from "@/lib/stateMachine";
 import { advancePlayoffRound, buildPlayoffBracket, buildPostseasonResults, getPlayoffRoundGames, simulateCpuPlayoffGamesForRound } from "@/engine/playoffsSim";
@@ -1103,6 +1103,7 @@ export type GameState = {
   playerSeasonStatsById: Record<string, PlayerSeasonStats[]>;
   playerCareerStatsById: Record<string, import("@/types/stats").PlayerCareerStats>;
   leagueRecords: LeagueRecords;
+  franchiseRecordsByTeamId: Record<string, FranchiseRecords>;
   draft: DraftState;
   upcomingDraftClass: import("@/engine/draftSim").Prospect[];
   futureClasses: Partial<Record<ClassYear, GeneratedPlayer[]>>;
@@ -1886,6 +1887,7 @@ function createInitialState(saveIdInput?: string): GameState {
     playerSeasonStatsById: {},
     playerCareerStatsById: {},
     leagueRecords: defaultLeagueRecords(),
+    franchiseRecordsByTeamId: {},
     draft: createInitialDraftState(draftContext),
     upcomingDraftClass: generateDraftClass({ year: season, count: 224, leagueSeed: saveSeed, saveSlotId: 0 }),
     futureClasses: {},
@@ -8647,15 +8649,17 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       out = applySeasonMilestoneAwards(out);
       const rosterForStats = getEffectivePlayersByTeam(out, String(out.acceptedOffer?.teamId ?? ""));
       const seasonStats = accumulateSeasonStats(out.gameHistory ?? [], rosterForStats);
+      const normalizedSeasonStats = seasonStats.map((ps) => ({ ...ps, teamId: String(ps.teamId ?? "") || String(out.acceptedOffer?.teamId ?? "") }));
+      const nameById = Object.fromEntries(getEffectivePlayers(out).map((p: any) => [String(p.playerId ?? ""), String(p.fullName ?? p.playerId ?? "Unknown Player")]));
       const nextSeasonStatsById = { ...(out.playerSeasonStatsById ?? {}) };
-      for (const ps of seasonStats) {
+      for (const ps of normalizedSeasonStats) {
         const pid = String((ps as any).playerId ?? "");
         if (!pid) continue;
         nextSeasonStatsById[pid] = [...(nextSeasonStatsById[pid] ?? []), ps];
       }
       const coachWithCareer = updateCoachCareerRecord(out.coach, out.lastSeasonSummary ?? computeSeasonSummary(out));
       const careerById = { ...(out.playerCareerStatsById ?? {}) };
-      for (const ps of seasonStats) {
+      for (const ps of normalizedSeasonStats) {
         const pid = String((ps as any).playerId ?? "");
         if (!pid) continue;
         const cur = { playerId: pid, careerStats: careerById[pid] };
@@ -8698,6 +8702,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         activeSeason: Number(out.season ?? 2026),
       });
       out = applySeasonUnicorns(applySeasonBadges({ ...out, playerSeasonStatsById: nextSeasonStatsById }));
+      const nextLeagueRecords = updateLeagueRecords(out.leagueRecords, normalizedSeasonStats, coachWithCareer.careerRecord, { playerNameById: nameById });
+      const nextFranchiseRecordsByTeamId = updateFranchiseRecordsAtRollover(out.franchiseRecordsByTeamId ?? {}, normalizedSeasonStats, careerById, { playerNameById: nameById });
+      const userTeamIdForRecords = String(out.acceptedOffer?.teamId ?? "");
+      const prevFranchiseRecords = out.franchiseRecordsByTeamId?.[userTeamIdForRecords];
+      const nextFranchiseRecords = nextFranchiseRecordsByTeamId[userTeamIdForRecords];
+      const earnedRecordMilestones = [
+        ["FRANCHISE_RECORD_PASS_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonPassingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonPassingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_RUSH_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonRushingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonRushingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_REC_YARDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonReceivingYards.value ?? 0), Number(nextFranchiseRecords?.singleSeasonReceivingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_TDS_SINGLE", Number(prevFranchiseRecords?.singleSeasonTDs.value ?? 0), Number(nextFranchiseRecords?.singleSeasonTDs.value ?? 0)],
+        ["FRANCHISE_RECORD_SACKS_SINGLE", Number(prevFranchiseRecords?.singleSeasonSacks.value ?? 0), Number(nextFranchiseRecords?.singleSeasonSacks.value ?? 0)],
+        ["FRANCHISE_RECORD_PASS_YARDS_CAREER", Number(prevFranchiseRecords?.careerPassingYards.value ?? 0), Number(nextFranchiseRecords?.careerPassingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_RUSH_YARDS_CAREER", Number(prevFranchiseRecords?.careerRushingYards.value ?? 0), Number(nextFranchiseRecords?.careerRushingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_REC_YARDS_CAREER", Number(prevFranchiseRecords?.careerReceivingYards.value ?? 0), Number(nextFranchiseRecords?.careerReceivingYards.value ?? 0)],
+        ["FRANCHISE_RECORD_TDS_CAREER", Number(prevFranchiseRecords?.careerTDs.value ?? 0), Number(nextFranchiseRecords?.careerTDs.value ?? 0)],
+        ["FRANCHISE_RECORD_SACKS_CAREER", Number(prevFranchiseRecords?.careerSacks.value ?? 0), Number(nextFranchiseRecords?.careerSacks.value ?? 0)],
+      ].filter(([, prev, next]) => next > prev).map(([id]) => String(id));
       let completed: GameState = {
         ...championNewsAlloc.state,
         coach: coachWithCareer,
@@ -8705,7 +8726,9 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         playerProgressionSeasonStatsById: progressionSeasonStatsById,
         playerSnapCountsById: snapCountsById,
         playerCareerStatsById: careerById,
-        leagueRecords: updateLeagueRecords(out.leagueRecords, seasonStats, coachWithCareer.careerRecord),
+        leagueRecords: nextLeagueRecords,
+        franchiseRecordsByTeamId: nextFranchiseRecordsByTeamId,
+        earnedMilestoneIds: Array.from(new Set([...(out.earnedMilestoneIds ?? []), ...earnedRecordMilestones])),
         season: nextSeason,
         week: 0,
         // P3 FIX: compact per-season ephemeral data on rollover.
