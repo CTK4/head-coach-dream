@@ -28,7 +28,7 @@ import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSa
 import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
-import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession } from "@/engine/gameSim";
+import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PlaySelectionFn } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
@@ -5025,6 +5025,36 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   return gameReducerMonolith(state, action);
 }
 
+
+function isOffensePausePoint(sim: GameSim, userTeamId: string): boolean {
+  if ((sim.possession === "HOME" && sim.homeTeamId !== userTeamId) || (sim.possession === "AWAY" && sim.awayTeamId !== userTeamId)) return false;
+  return sim.down === 3
+    || sim.down === 4
+    || sim.ballOn >= 80
+    || ((sim.clock.quarter === 4 || sim.clock.quarter === "OT") && sim.clock.timeRemainingSec <= 120);
+}
+
+function getRestOfGamePlaySelectionFn(state: GameState): PlaySelectionFn {
+  const mode = state.game.offenseUserMode ?? "FULL_AUTO";
+  const userTeamId = state.acceptedOffer?.teamId;
+  if (!userTeamId) return autoPickPlay;
+
+  return (sim) => {
+    const userOnOffense = (sim.possession === "HOME" && sim.homeTeamId === userTeamId) || (sim.possession === "AWAY" && sim.awayTeamId === userTeamId);
+    if (!userOnOffense) return autoPickPlay(sim);
+    switch (mode) {
+      case "FULL_AUTO":
+        return autoPickPlay(sim);
+      case "KEY_SITUATIONS":
+        return autoPickPlay(sim);
+      case "FULL_PLAYCALLING":
+        return autoPickPlay(sim);
+      default:
+        return autoPickPlay(sim);
+    }
+  };
+}
+
 export function gameReducerMonolith(state: GameState, action: GameAction): GameState {
   const recoveryState = reduceRecoveryCases(state, action, {
     buildMigrationEvents,
@@ -9015,9 +9045,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "SIMULATE_REST_OF_GAME": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
       let sim = state.game;
+      const playSelectionFn = getRestOfGamePlaySelectionFn(state);
       let safety = 0;
       while (!(sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0)) {
-        const stepped = stepPlay(sim, autoPickPlay(sim));
+        const userOnOffense = (sim.possession === "HOME" && sim.homeTeamId === state.acceptedOffer.teamId)
+          || (sim.possession === "AWAY" && sim.awayTeamId === state.acceptedOffer.teamId);
+        if (state.game.offenseUserMode === "FULL_PLAYCALLING" && userOnOffense) break;
+        if (state.game.offenseUserMode === "KEY_SITUATIONS" && isOffensePausePoint(sim, state.acceptedOffer.teamId) && userOnOffense) break;
+        const stepped = stepPlay(sim, playSelectionFn(sim));
         sim = stepped.sim;
         safety++;
         if (safety > 6000) break;
