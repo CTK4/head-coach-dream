@@ -198,35 +198,41 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
     id: "trade-ai",
     title: "Trade AI decision model",
     description:
-      "Trade acceptance weighs package value, roster needs, cap stress, team window, redundancy, and relationship signals before sampling acceptance probability.",
+      "Trade responses blend package valuation, team-context multipliers, and deterministic acceptance rolls, so equal raw value can still produce different outcomes by team situation.",
     factors: [
       {
-        label: "Core package delta",
+        label: "Package value uses player + pick valuation paths",
         weight: "High",
-        description: "Outgoing and incoming package values form the base score, including pick-specific values and player age-adjusted valuation.",
+        description:
+          "Players are scored through `playerTradeValue` (which calls `calculateTradeValue`), while drafted assets use `draftPickTradeValue(round, year, season)` with round baselines and future-year discounting.",
       },
       {
-        label: "Need and loss multipliers",
+        label: "Need score and loss pressure reshape equal offers",
         weight: "High",
-        description: "Incoming players at need positions get boosted, while losing needed positions is penalized more heavily.",
+        description:
+          "Incoming assets at priority positions get a need multiplier, while outgoing assets at weak spots get a loss multiplier, so balanced headline value can still grade negatively for thin rosters.",
       },
       {
-        label: "Cap and age pressure",
+        label: "Cap stress penalizes veteran incoming contracts",
         weight: "Medium",
-        description: "Veteran incoming value is penalized under high cap stress, reducing acceptance for expensive additions.",
+        description:
+          "Incoming veterans (age 29+) add cap-penalty risk that scales with cap stress. Under tight cap conditions, this can suppress acceptance even when nominal value looks fair.",
       },
       {
-        label: "Team window philosophy",
+        label: "GM mode and team window change preference",
         weight: "Medium",
-        description: "Rebuild mode values picks more and may prefer moving veteran value; contender windows reward immediate impact talent.",
+        description:
+          "Rebuild mode boosts pick preference and tolerance for moving older talent, while stronger contender window score increases win-now impact weighting from incoming high-OVR players.",
       },
       {
-        label: "Hard reject and auto-accept rails",
+        label: "Acceptance probability uses deterministic randomness",
         weight: "Rule",
-        description: "Large deficits are instantly rejected, clearly favorable surplus can auto-accept, and all other offers pass through probabilistic scoring.",
+        description:
+          "After hard reject/auto-accept rails, the model normalizes trade score into an acceptance probability and compares it to a seeded hash roll. Same save + same package stays reproducible.",
       },
     ],
-    example: "Even if total value is close, a cap-strapped contender may reject a veteran-heavy return while a rebuilding club might accept the same framework for picks.",
+    example:
+      "Example: a package can look 'Fair' on total points, but if the AI team is cap-stressed, already deep at that position, and in rebuild mode prioritizing picks, it may still decline or counter for a future pick instead.",
   },
   "fa-market": {
     id: "fa-market",

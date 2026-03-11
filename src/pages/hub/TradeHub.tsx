@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { getTeams } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam, normalizePos } from "@/engine/rosterOverlay";
@@ -25,6 +27,27 @@ function valuationTone(delta: number) {
   if (Math.abs(delta) <= 5) return { text: "Fair", cls: "text-slate-300" };
   if (delta > 5) return { text: `+${delta} in yours`, cls: "text-emerald-400" };
   return { text: `+${Math.abs(delta)} in theirs`, cls: "text-red-400" };
+}
+
+function TradeAiInfoTrigger({ className }: { className?: string }) {
+  const card = MODEL_CARDS["trade-ai"];
+  return (
+    <ExplainerDrawer
+      title={card.title}
+      description={card.description}
+      factors={card.factors}
+      example={card.example}
+      triggerAriaLabel="Open Trade AI explainer"
+      trigger={
+        <button
+          type="button"
+          className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 text-xs font-semibold text-muted-foreground transition hover:bg-muted/70 ${className ?? ""}`}
+        >
+          ⓘ
+        </button>
+      }
+    />
+  );
 }
 
 export default function TradeHub() {
@@ -201,7 +224,10 @@ export default function TradeHub() {
               })}
             </div>
             <div className="text-sm">Their offer: <span className="font-semibold">{theirValue} pts</span></div>
-            <div className={`text-sm font-semibold ${tone.cls}`}>Value delta: {tone.text}</div>
+            <div className="flex items-center gap-2">
+              <div className={`text-sm font-semibold ${tone.cls}`}>Value delta: {tone.text}</div>
+              <TradeAiInfoTrigger />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -220,7 +246,10 @@ export default function TradeHub() {
             <DialogTitle>{result?.decision === "ACCEPT" ? "Trade Accepted" : result?.decision === "COUNTER" ? "Counter Proposal" : "Trade Rejected"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="text-sm">{result?.message}</div>
+            <div className="flex items-start gap-2">
+              <div className="text-sm">{result?.message}</div>
+              <TradeAiInfoTrigger className="mt-0.5" />
+            </div>
             {result?.decision === "ACCEPT" && lastProposal ? <Button onClick={() => applyAccepted(lastProposal)}>Confirm & Execute</Button> : null}
             {result?.decision === "COUNTER" && result.counterProposal ? (
               <div className="space-y-2">
