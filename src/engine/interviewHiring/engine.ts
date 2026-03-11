@@ -1,5 +1,5 @@
 import { evaluateFormula } from "./formula";
-import { XorShift32 } from "./rng";
+import { mulberry32 } from "@/engine/rng";
 import type { InterviewOutcome, InterviewQuestion, InterviewScoreResult, InterviewSession, QuestionOption, SelectedQuestion, TeamConfig } from "./types";
 import { weightedNoReplacement } from "./weightedSampler";
 
@@ -66,7 +66,7 @@ export function createInterviewSeed(
 }
 
 export function generateInterview(teamConfig: TeamConfig, seed: number): InterviewSession {
-  const rng = new XorShift32(seed);
+  const rng = mulberry32(seed);
   const contextRules = teamConfig.interview_flow.mix_rules.contextual_questions;
   const teamRules = teamConfig.interview_flow.mix_rules.team_pool_questions;
 
@@ -192,7 +192,7 @@ export function scoreInterview(
   answers: Record<string, string>,
   seed: number,
 ): InterviewScoreResult {
-  const rng = new XorShift32(seed);
+  const rng = mulberry32(seed);
   const metrics: Record<string, number> = {};
   const flags: string[] = [...((teamConfig.scoring.init.flags as string[]) ?? [])];
 
@@ -289,13 +289,13 @@ export function scoreInterview(
   const gatePass = gateReasons.length === 0;
   const hireScoreBase = evaluateFormula(teamConfig.scoring.hire_score.formula, getHireFormulaVars(teamConfig, metrics));
 
-  for (const _ of selectedQuestions) rng.nextUint32();
+  for (const _ of selectedQuestions) rng();
 
   let chemistryDelta = 0;
   const chemistryConfig = teamConfig.scoring.hire_score.chemistry_roll;
   if (chemistryConfig?.enabled_if_gates_pass && gatePass) {
     const [min, max] = chemistryConfig.delta_range;
-    chemistryDelta = min + Math.floor(rng.nextFloat01() * (max - min + 1));
+    chemistryDelta = min + Math.floor(rng() * (max - min + 1));
   }
 
   const hireScore = hireScoreBase + chemistryDelta;
@@ -304,7 +304,7 @@ export function scoreInterview(
   let borderlineCoinflip: InterviewScoreResult["borderlineCoinflip"];
   if (gatePass && band === "BORDERLINE" && teamConfig.scoring.hire_score.borderline_resolution?.method === "WEIGHTED_COIN_FLIP") {
     const threshold = parseBorderlineThreshold(teamConfig, metrics);
-    const roll = rng.nextFloat01();
+    const roll = rng();
     const hired = roll < threshold;
     borderlineCoinflip = { used: true, threshold, roll, hired };
     band = hired ? "HIRED" : "REJECTED";

@@ -1,10 +1,8 @@
-import { XorShift32 } from "./rng";
-
 export function weightedNoReplacement<T>(
   items: T[],
   weightFn: (item: T) => number,
   count: number,
-  rng: XorShift32,
+  rng: () => number,
 ): T[] {
   const pool = [...items];
   const out: T[] = [];
@@ -16,9 +14,9 @@ export function weightedNoReplacement<T>(
 
     let idx = 0;
     if (total <= 0) {
-      idx = Math.floor(rng.nextFloat01() * pool.length);
+      idx = Math.floor(rng() * pool.length);
     } else {
-      const r = rng.nextFloat01() * total;
+      const r = rng() * total;
       let cumulative = 0;
       for (let i = 0; i < pool.length; i += 1) {
         cumulative += weights[i];
