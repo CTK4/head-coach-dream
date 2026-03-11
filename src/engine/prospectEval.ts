@@ -40,6 +40,23 @@ function computeSignals(detRand: (key: string) => number, prospect: Prospect) {
   };
 }
 
+
+
+export type ProspectEvalUncertaintyOptions = {
+  completeness?: "FULL" | "PARTIAL";
+  missingSignals?: Array<"COMBINE" | "INTERVIEW">;
+  confidencePenalty?: number;
+  bandPenalty?: 0 | 1 | 2;
+};
+
+function uncertaintySigmaMultiplier(options?: ProspectEvalUncertaintyOptions): number {
+  if (!options || options.completeness !== "PARTIAL") return 1;
+  const confidencePenalty = Math.max(0, Number(options.confidencePenalty ?? 0));
+  const missingSignalsPenalty = Math.max(0, options.missingSignals?.length ?? 0) * 0.15;
+  const bandPenalty = Math.max(0, Number(options.bandPenalty ?? 0)) * 0.1;
+  return 1 + confidencePenalty + missingSignalsPenalty + bandPenalty;
+}
+
 export function evalProspectForGm(args: {
   prospect: Prospect;
   gm: GmScoutTraits;
@@ -48,6 +65,7 @@ export function evalProspectForGm(args: {
   teamNeedAtPos01: number;
   detRand?: (key: string) => number;
   intel?: PlayerIntel | ProspectScoutProfile;
+  uncertainty?: ProspectEvalUncertaintyOptions;
 }) {
   const { prospect, gm, seedRand, spentPoints, teamNeedAtPos01 } = args;
   const det = args.detRand ?? ((k: string) => seedRand() + (k.length % 7) * 0.001);
@@ -73,11 +91,12 @@ export function evalProspectForGm(args: {
   sigma_base += gm.urgency_bias * 0.015;
   const sigma = clamp(sigma_base, 2.5, 9.0);
   const sigma_effective = sigma * Math.exp(-spentPoints / (35 + gm.film_process * 0.3));
+  const sigma_with_uncertainty = sigma_effective * uncertaintySigmaMultiplier(args.uncertainty);
 
   const u1 = Math.max(1e-9, seedRand());
   const u2 = Math.max(1e-9, seedRand());
   const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  const value = clamp(Math.round(V_true + bias + z * sigma_effective), 0, 100);
+  const value = clamp(Math.round(V_true + bias + z * sigma_with_uncertainty), 0, 100);
 
-  return { value, roundBand: valueToRoundBand(value), sigma: sigma_effective, bias } satisfies ProspectEval;
+  return { value, roundBand: valueToRoundBand(value), sigma: sigma_with_uncertainty, bias } satisfies ProspectEval;
 }
