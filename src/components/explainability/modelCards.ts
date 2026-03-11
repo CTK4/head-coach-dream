@@ -164,35 +164,40 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
     id: "draft-ai",
     title: "Draft AI pick logic",
     description:
-      "CPU drafting blends board strength, GM bias profile, team need pressure, and seeded noise so decisions feel coherent but not perfectly predictable.",
+      "Each CPU team scores available prospects from rank-derived value, roster need pressure, GM-specific bias, and seeded variance, then picks the highest final score.",
     factors: [
       {
-        label: "Rank-based true value anchors the board",
+        label: "Team-need weighting comes from bucket shortages",
         weight: "High",
-        description: "Prospect rank converts to a baseline value curve, so high-ranked players start with a structural advantage.",
+        description:
+          "Need index is computed from position-bucket roster minimums, then the current bucket need boosts pick score (need × 3.5) and also amplifies urgency-bias impact.",
       },
       {
-        label: "GM traits add positional/archetype bias",
+        label: "GM traits and biases reshape evaluations",
         weight: "High",
-        description: "Bias knobs (star chasing, athleticism, trenches, defense, aggression, urgency) adjust how each team interprets the same class.",
+        description:
+          "Star, athleticism, trenches, defense, aggression, urgency, and discipline traits add or subtract prospect-specific bias terms before final ranking.",
       },
       {
-        label: "Need index pushes scarce positions",
+        label: "Prospect value starts with rank signal",
         weight: "High",
-        description: "Roster minimums convert into need scores per bucket and add pick pressure where depth is thin.",
+        description:
+          "A true-value curve derived from class rank anchors every board, then elite/ceiling flags, trench/defense tags, and athletic proxy signals modify preference through GM bias.",
       },
       {
-        label: "Scouting uncertainty varies by GM",
-        weight: "Medium",
-        description: "GM quality controls sigma: better analytics/film/intel lowers noise while urgency can increase volatility.",
-      },
-      {
-        label: "Deterministic random tie-breakers",
+        label: "Deterministic RNG adds controlled variance",
         weight: "Rule",
-        description: "Seeded noise and tie rolls keep results reproducible for a save while still creating variation between teams.",
+        description:
+          "Seeded noise per team-prospect pair is added with GM-dependent sigma, and seeded tie-break rolls resolve exact score ties while keeping identical saves reproducible.",
+      },
+      {
+        label: "Bias-value slider provides small global offset",
+        weight: "Medium",
+        description: "The final score includes a lightweight bias_value offset, nudging conservative value boards without overpowering need/bias/value core terms.",
       },
     ],
-    example: "A rebuilding team with trenches bias and high OL need may select a slightly lower-ranked tackle over a similarly graded receiver.",
+    example:
+      "With the same board, a GM high on trenches and urgency with OL need can prefer an OT ranked 14th over a WR ranked 10th, while a star-chasing skill-position GM with lower OL need can take the WR.",
   },
   "trade-ai": {
     id: "trade-ai",
