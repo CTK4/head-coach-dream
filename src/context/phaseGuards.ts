@@ -92,3 +92,14 @@ export function assertActionPhase(state: GameState, action: AnyGameAction): void
   }
   console.warn(JSON.stringify({ level: "warn", event: "phase_guard.blocked", action: action.type, reason, careerStage: state.careerStage }));
 }
+
+export function shouldForcePreseasonCutdownTransition(state: GameState, action: AnyGameAction): boolean {
+  if (action.type !== "ADVANCE_WEEK") return false;
+  if (state.careerStage !== "PRESEASON") return false;
+
+  const preseasonWeek = Number(state.hub?.preseasonWeek ?? 1);
+  const preseasonWeeks = Number(state.hub?.schedule?.preseasonWeeks?.length ?? 0);
+  if (preseasonWeeks <= 0) return false;
+
+  return preseasonWeek >= preseasonWeeks;
+}
