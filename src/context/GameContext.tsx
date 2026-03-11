@@ -2447,7 +2447,66 @@ function closeAllOffers(offers: FreeAgencyOffer[], acceptedOfferId?: string) {
   });
 }
 
+function appendLegacyTransaction(state: GameState, tx: Transaction): GameState {
+  return { ...state, transactions: [...(state.transactions ?? []), tx] };
+}
+
+function buildTradeLegacyTransaction(state: GameState, args: { playerId: string; fromTeamId: string; toTeamId: string; deadlineWeek: number; currentWeek: number }): Transaction {
+  const { playerId, fromTeamId, toTeamId, deadlineWeek, currentWeek } = args;
+  const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
+  const tag = currentWeek <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)";
+  return {
+    id: `TRADE_${state.season}_${currentWeek}_${playerId}`,
+    type: "TRADE",
+    playerId,
+    playerName: name,
+    playerPos: String(getPlayers().find((p: any) => String(p.playerId) === playerId)?.pos ?? "UNK"),
+    fromTeamId: String(fromTeamId),
+    toTeamId: String(toTeamId),
+    season: state.season,
+    week: currentWeek,
+    june1Designation: "NONE",
+    notes: `${tag} Deadline W${deadlineWeek}`,
+    deadCapThisYear: 0,
+    deadCapNextYear: 0,
+    remainingProration: 0,
+  };
+}
+
+function buildCutLegacyTransaction(state: GameState, args: { playerId: string; teamId: string; designation: "POST_JUNE_1" | "PRE_JUNE_1"; deadThisYear: number; deadNextYear: number; remainingProration: number; cutOverride?: PlayerContractOverride }): Transaction {
+  const cutPlayer = getEffectivePlayersByTeam(state, args.teamId).find((p: any) => String(p.playerId) === String(args.playerId));
+  return {
+    id: `${state.season}_${args.playerId}_CUT`,
+    type: "CUT",
+    playerId: args.playerId,
+    playerName: String(cutPlayer?.fullName ?? cutPlayer?.name ?? "Unknown"),
+    playerPos: String(cutPlayer?.pos ?? "UNK"),
+    fromTeamId: args.teamId,
+    season: state.season,
+    week: state.week,
+    june1Designation: args.designation,
+    notes: args.designation === "POST_JUNE_1"
+      ? `Post–June 1 cut. $${Math.round(args.deadThisYear / 1_000_000)}M accelerated this year, $${Math.round(args.deadNextYear / 1_000_000)}M next year.`
+      : args.deadThisYear > 0 ? `Pre–June 1 cut. $${Math.round(args.deadThisYear / 1_000_000)}M dead cap.` : "Cut with no dead cap.",
+    deadCapThisYear: args.deadThisYear,
+    deadCapNextYear: args.deadNextYear,
+    remainingProration: args.remainingProration,
+    contractSnapshot: args.cutOverride ? {
+      startSeason: args.cutOverride.startSeason,
+      endSeason: args.cutOverride.endSeason,
+      signingBonus: args.cutOverride.signingBonus,
+      salaries: [...args.cutOverride.salaries],
+    } : undefined,
+  };
+}
+
 function signFromOffer(state: GameState, playerId: string, offer: FreeAgencyOffer, signingTeamId: string, reason = "Top offer") {
+  const effectivePlayer = getEffectivePlayers(state).find((p: any) => String(p.playerId) === String(playerId));
+  const currentTeamId = String((effectivePlayer as any)?.teamId ?? "FREE_AGENT");
+  if (currentTeamId && currentTeamId !== "FREE_AGENT") {
+    return faPush(state, "Signing blocked: player is no longer in free agency.", String(playerId));
+  }
+
   const years = Math.max(1, offer.years);
   const totalCash = offer.aav * years;
   const signingBonus = asMoney(totalCash * 0.22);
@@ -7344,6 +7403,88 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, freeAgency: upsertOffers(state, pid, offers.filter((o) => !(o.isUser && o.status === "PENDING"))) };
     }
 
+    case "FA_WITHDRAW":
+    case "FA_WITHDRAW_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const pid = String(action.payload.playerId);
+      const offerId = String(action.payload.offerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const target = offers.find((o) => String(o.offerId) === offerId);
+      if (!target) return state;
+      if (!["PENDING", "COUNTERED"].includes(String(target.status))) return state;
+
+      const next = {
+        ...state,
+        freeAgency: {
+          ...state.freeAgency,
+          offersByPlayerId: {
+            ...state.freeAgency.offersByPlayerId,
+            [pid]: offers.map((o) => o.offerId === offerId ? { ...o, status: "WITHDRAWN" as const, decisionReason: "Offer withdrawn" } : o),
+          },
+          pendingCounterTeamByPlayerId: {
+            ...state.freeAgency.pendingCounterTeamByPlayerId,
+            [pid]: String(state.freeAgency.pendingCounterTeamByPlayerId?.[pid] ?? "") === String(target.teamId) ? null : state.freeAgency.pendingCounterTeamByPlayerId?.[pid] ?? null,
+          },
+        },
+      };
+      return faPush(next, "Offer withdrawn.", pid);
+    }
+
+    case "FA_ACCEPT_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const pid = String(action.payload.playerId);
+      if (state.freeAgency.signingsByPlayerId[pid]) return state;
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const target = offers.find((o) => String(o.offerId) === String(action.payload.offerId));
+      if (!target) return state;
+      if (target.status !== "PENDING" && target.status !== "COUNTERED") return state;
+
+      const next = {
+        ...state,
+        freeAgency: {
+          ...state.freeAgency,
+          offersByPlayerId: {
+            ...state.freeAgency.offersByPlayerId,
+            [pid]: closeAllOffers(offers.map((o) => o.offerId === target.offerId ? { ...o, status: "ACCEPTED" as const } : o), target.offerId),
+          },
+          signingsByPlayerId: {
+            ...state.freeAgency.signingsByPlayerId,
+            [pid]: { teamId: target.teamId, years: target.years, aav: target.aav, signingBonus: 0 },
+          },
+          pendingCounterTeamByPlayerId: {
+            ...state.freeAgency.pendingCounterTeamByPlayerId,
+            [pid]: null,
+          },
+        },
+      };
+      return signFromOffer(next, pid, target, String(target.teamId), target.decisionReason ?? "Offer accepted");
+    }
+
+    case "FA_REJECT_OFFER": {
+      if (state.careerStage !== "FREE_AGENCY") return state;
+      const pid = String(action.payload.playerId);
+      const offerId = String(action.payload.offerId);
+      const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
+      const target = offers.find((o) => String(o.offerId) === offerId);
+      if (!target) return state;
+      if (target.status !== "PENDING" && target.status !== "COUNTERED") return state;
+      const next = {
+        ...state,
+        freeAgency: {
+          ...state.freeAgency,
+          offersByPlayerId: {
+            ...state.freeAgency.offersByPlayerId,
+            [pid]: offers.map((o) => o.offerId === offerId ? { ...o, status: "REJECTED" as const, decisionReason: "Offer rejected" } : o),
+          },
+          pendingCounterTeamByPlayerId: {
+            ...state.freeAgency.pendingCounterTeamByPlayerId,
+            [pid]: String(state.freeAgency.pendingCounterTeamByPlayerId?.[pid] ?? "") === String(target.teamId) ? null : state.freeAgency.pendingCounterTeamByPlayerId?.[pid] ?? null,
+          },
+        },
+      };
+      return faPush(next, "Offer rejected.", pid);
+    }
+
     case "FA_RESPOND_COUNTER": {
       if (state.careerStage !== "FREE_AGENCY") return state;
       const { playerId, accept } = action.payload as { playerId: string; accept: boolean };
@@ -7659,23 +7800,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const next = applyFinances(nextState);
       const name = getPlayers().find((p: any) => String(p.playerId) === playerId)?.fullName ?? "Player";
       const tag = currentWeek <= deadlineWeek ? "(Pre-deadline)" : "(Post-deadline)";
-      const tx = {
-        id: `TRADE_${state.season}_${currentWeek}_${playerId}`,
-        type: "TRADE" as const,
-        playerId,
-        playerName: name,
-        playerPos: String(getPlayers().find((p: any) => String(p.playerId) === playerId)?.pos ?? "UNK"),
-        fromTeamId: String(teamId),
-        toTeamId,
-        season: state.season,
-        week: currentWeek,
-        june1Designation: "NONE" as const,
-        notes: `${tag} Deadline W${deadlineWeek}`,
-        deadCapThisYear: 0,
-        deadCapNextYear: 0,
-        remainingProration: 0,
-      };
-      return pushNews({ ...next, transactions: [...(next.transactions ?? []), tx] }, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value. ${tag}`);
+      const withLegacyTx = appendLegacyTransaction(next, buildTradeLegacyTransaction(next, { playerId, fromTeamId: String(teamId), toTeamId, deadlineWeek, currentWeek }));
+      return pushNews(withLegacyTx, `Trade completed: ${name} sent to ${toTeamId} for ${String(action.payload.valueTier)} value. ${tag}`);
     }
 
     case "CUT_APPLY": {
@@ -7698,31 +7824,16 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const deadThisYear = designation === "POST_JUNE_1" ? Math.round((deadTotal * 0.5) / 50_000) * 50_000 : deadTotal;
       const deadNextYear = designation === "POST_JUNE_1" ? Math.max(0, deadTotal - deadThisYear) : 0;
 
-      const cutPlayer = getEffectivePlayersByTeam(state, teamId).find((p: any) => String(p.playerId) === String(playerId));
       const cutOverride = state.playerContractOverrides[playerId];
-      const cutTransaction: Transaction = {
-        id: `${state.season}_${playerId}_CUT`,
-        type: "CUT",
+      const cutTransaction = buildCutLegacyTransaction(state, {
         playerId,
-        playerName: String(cutPlayer?.fullName ?? cutPlayer?.name ?? "Unknown"),
-        playerPos: String(cutPlayer?.pos ?? "UNK"),
-        fromTeamId: teamId,
-        season: state.season,
-        week: state.week,
-        june1Designation: designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1",
-        notes: designation === "POST_JUNE_1"
-          ? `Post–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M accelerated this year, $${Math.round(deadNextYear / 1_000_000)}M next year.`
-          : deadThisYear > 0 ? `Pre–June 1 cut. $${Math.round(deadThisYear / 1_000_000)}M dead cap.` : "Cut with no dead cap.",
-        deadCapThisYear: deadThisYear,
-        deadCapNextYear: deadNextYear,
+        teamId,
+        designation: designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1",
+        deadThisYear,
+        deadNextYear,
         remainingProration: summary?.deadCapIfCutNow ?? 0,
-        contractSnapshot: cutOverride ? {
-          startSeason: cutOverride.startSeason,
-          endSeason: cutOverride.endSeason,
-          signingBonus: cutOverride.signingBonus,
-          salaries: [...cutOverride.salaries],
-        } : undefined,
-      };
+        cutOverride,
+      });
 
       const txState = applyCanonicalTx(state, Tx.cut(String(teamId), String(playerId), designation === "POST_JUNE_1" ? "POST_JUNE_1" : "PRE_JUNE_1"));
 
@@ -7740,7 +7851,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           deadCapThisYear: (txState.finances.deadCapThisYear ?? 0) + deadThisYear,
           deadCapNextYear: (txState.finances.deadCapNextYear ?? 0) + deadNextYear,
         },
-        transactions: [...(txState.transactions ?? []), cutTransaction],
+        transactions: appendLegacyTransaction(txState, cutTransaction).transactions,
       });
 
       const nextLockedBySlot = { ...(patched.depthChart.lockedBySlot ?? {}) };
@@ -9516,10 +9627,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       }
       return fresh;
     }
-    case "FA_WITHDRAW":
-    case "FA_WITHDRAW_OFFER":
-    case "FA_ACCEPT_OFFER":
-    case "FA_REJECT_OFFER":
     case "DRAFT_SIM_NEXT":
     case "DRAFT_SIM_TO_USER":
     case "DRAFT_SIM_ALL":
