@@ -45,6 +45,10 @@ export function buildContractIndex(state: GameState): ContractIndex {
   const events = sortTransactionEvents(getTransactionState(state).events ?? []);
   for (const event of events) {
     const contract = event.details?.contract;
+    if (event.kind === "CUT" || event.kind === "RELEASE") {
+      for (const playerId of event.playerIds) delete out[String(playerId)];
+      continue;
+    }
     if (event.kind === "MIGRATION" && event.details?.contract) {
       out[String(event.playerIds[0])] = normalizeContract(event.details.contract, Number(state.season ?? 1));
       continue;
