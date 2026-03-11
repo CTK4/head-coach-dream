@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { readSettings, writeSettings, type UserSettings } from "@/lib/settings";
+import { readSettings, writeSettings, type OffensePlaycallingMode, type UserSettings } from "@/lib/settings";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId, DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   showTooltips: true,
   difficultyPreset: DEFAULT_SIM_TUNING.difficultyPreset,
   realismPreset: DEFAULT_SIM_TUNING.realismPreset,
+  offensePlaycallingMode: "FULL_AUTO",
 };
 
 const APP_STORAGE_PREFIXES = [
@@ -254,6 +255,25 @@ export default function SettingsPage() {
                       {Object.values(REALISM_PRESETS).map((preset) => (
                         <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                }
+              />
+
+
+              <SettingRow
+                icon={<UtilityIcon name="Settings" className="h-5 w-5" />}
+                title="Offense Playcalling"
+                description="Choose how often you manually call offensive plays in live games."
+                right={
+                  <Select value={settings.offensePlaycallingMode ?? "FULL_AUTO"} onValueChange={(v) => update({ offensePlaycallingMode: v as OffensePlaycallingMode })}>
+                    <SelectTrigger className="h-9 w-[190px] border-slate-300/15 bg-slate-950/30 text-slate-100">
+                      <SelectValue placeholder="Select mode" />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                      <SelectItem value="FULL_AUTO">Full Auto</SelectItem>
+                      <SelectItem value="KEY_SITUATIONS">Key Situations</SelectItem>
+                      <SelectItem value="FULL_PLAYCALLING">Full Playcalling</SelectItem>
                     </SelectContent>
                   </Select>
                 }

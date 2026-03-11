@@ -167,6 +167,7 @@ import { DEFAULT_SIM_TUNING, type SimTuningSettings } from "@/config/simTuning";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
+import { readSettings, type OffensePlaycallingMode } from "@/lib/settings";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
@@ -1243,6 +1244,7 @@ export type GameAction =
   | { type: "ADVANCE_CAREER_STAGE" }
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
+  | { type: "SET_OFFENSE_USER_MODE"; payload: { mode: OffensePlaycallingMode } }
   | { type: "ENSURE_GAME_WEATHER"; payload: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
@@ -8810,6 +8812,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const weekType = (gameType ?? "REGULAR_SEASON") as "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
       const weekNumber = Number(action.payload.weekNumber ?? action.payload.week ?? 0);
       const persistedWeather = resolvePersistedWeather(base, { weekType, weekNumber, homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId });
+      const persistedSettings = readSettings();
+      const offenseUserMode = base.game.offenseUserMode ?? persistedSettings.offensePlaycallingMode ?? "FULL_AUTO";
       let started: GameState = {
         ...base,
         league: { ...base.league, phase: gameType === "REGULAR_SEASON" ? "REGULAR_SEASON_GAME" : base.league.phase },
@@ -8837,10 +8841,14 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           awayGameplan: base.teamGameplans?.[action.payload.opponentTeamId],
           playerUnicorns: base.playerUnicorns,
           playerBadges: base.playerBadges,
+          offenseUserMode,
         }),
       };
       started = gameReducer(started, { type: "LIVEGAME_INIT", payload: { gameId: `${started.season}-${gameType}-${action.payload.weekNumber ?? action.payload.week ?? 0}-${teamId}`, weekKey: toWeekKey(started.season, Number(action.payload.weekNumber ?? action.payload.week ?? started.hub.regularSeasonWeek)), homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId, userTeamId: teamId } });
       return started;
+    }
+    case "SET_OFFENSE_USER_MODE": {
+      return { ...state, game: { ...state.game, offenseUserMode: action.payload.mode } };
     }
     case "SET_DEFENSE_USER_MODE": {
       return { ...state, game: { ...state.game, defenseUserMode: action.payload.mode } };
