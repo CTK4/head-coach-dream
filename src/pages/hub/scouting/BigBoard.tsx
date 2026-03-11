@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { CircleHelp } from "lucide-react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
 import { buildProspectScoutingViewSet } from "@/engine/scouting/viewModel";
@@ -63,6 +66,7 @@ export default function BigBoard() {
 
   const rendered = boardMode === "MY" ? myOrdered : scoutOrdered;
   const canDrag = boardMode === "MY" && !isCoarsePointer;
+  const scoutingConfidenceCard = MODEL_CARDS["scouting-confidence"];
 
   const onDrop = (targetId: string) => {
     if (!canDrag || !draggedId || draggedId === targetId) return;
@@ -74,7 +78,22 @@ export default function BigBoard() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20">
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4">
-        <h1 className="text-xl font-bold">Big Board</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">Big Board</h1>
+          <ExplainerDrawer
+            title={scoutingConfidenceCard.title}
+            description={scoutingConfidenceCard.description}
+            factors={scoutingConfidenceCard.factors}
+            example={scoutingConfidenceCard.example}
+            triggerAriaLabel="Explain scouting confidence and reveal logic"
+            trigger={
+              <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 text-slate-300 transition hover:bg-white/10 hover:text-white">
+                <CircleHelp className="h-4 w-4" />
+                <span className="sr-only">Scouting confidence and reveal logic help</span>
+              </button>
+            }
+          />
+        </div>
         {scoutingViewSet.missingScoutProfileCount > 0 ? (
           <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
             {scoutingViewSet.missingScoutProfileCount} of {scoutingViewSet.totalCanonicalProspects} canonical prospects are excluded because scout profiles are missing.

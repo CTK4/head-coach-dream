@@ -1,5 +1,8 @@
+import { CircleHelp } from "lucide-react";
 import type { PlayerIntel } from "@/engine/scoutingCapacity";
 import type { ProspectScoutProfile, ScoutingState } from "@/engine/scouting/types";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SCOUTING_FEATURES } from "@/engine/scouting/config";
@@ -92,6 +95,24 @@ export function ProspectProfileModal({
     ...(SCOUTING_FEATURES.showRAS ? [{ label: "RAS", value: fmt(firstValue(source, ["ras"])) }] : []),
   ].filter((row) => Boolean(row.value));
 
+  const scoutingConfidenceCard = MODEL_CARDS["scouting-confidence"];
+
+  const scoutingExplainerTrigger = (label: string) => (
+    <ExplainerDrawer
+      title={scoutingConfidenceCard.title}
+      description={scoutingConfidenceCard.description}
+      factors={scoutingConfidenceCard.factors}
+      example={scoutingConfidenceCard.example}
+      triggerAriaLabel={`Explain ${label.toLowerCase()} and reveal logic`}
+      trigger={
+        <button type="button" className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-500/70 text-slate-300 transition hover:bg-slate-700/70 hover:text-white">
+          <CircleHelp className="h-3 w-3" />
+          <span className="sr-only">{`Explain ${label} and reveal logic`}</span>
+        </button>
+      }
+    />
+  );
+
   const ratingsRows = Object.entries(source)
     .filter(([key, value]) => {
       if (value === undefined || value === null || String(value).trim() === "") return false;
@@ -150,7 +171,15 @@ export function ProspectProfileModal({
           <div className="mt-4">
             <div className="text-xs uppercase tracking-wide text-slate-400">Ratings / Intel</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-              {intelRows.map((row) => <div key={row.label}><span className="text-slate-400">{row.label}:</span> <span>{row.value}</span></div>)}
+              {intelRows.map((row) => (
+                <div key={row.label}>
+                  <span className="text-slate-400">
+                    {row.label}:
+                    {row.label === "Scout Band" || row.label === "Scout Confidence" ? scoutingExplainerTrigger(row.label) : null}
+                  </span>{" "}
+                  <span>{row.value}</span>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
