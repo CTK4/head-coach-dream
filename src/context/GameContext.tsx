@@ -28,6 +28,7 @@ import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSa
 import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
+import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PendingOffensiveCall } from "@/engine/gameSim";
 import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PlaySelectionFn } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
@@ -1245,6 +1246,8 @@ export type GameAction =
   | { type: "SET_CAREER_STAGE"; payload: CareerStage }
   | { type: "START_GAME"; payload: { opponentTeamId: string; weekType?: GameType | "PLAYOFFS"; weekNumber?: number; gameType?: GameType | "PLAYOFFS"; week?: number; playoffGameId?: string } }
   | { type: "SET_OFFENSE_USER_MODE"; payload: { mode: OffensePlaycallingMode } }
+  | { type: "SET_PENDING_OFFENSIVE_CALL"; payload: PendingOffensiveCall }
+  | { type: "CLEAR_PENDING_OFFENSIVE_CALL" }
   | { type: "ENSURE_GAME_WEATHER"; payload: { weekType: "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS"; weekNumber: number; homeTeamId: string; awayTeamId: string } }
   | { type: "RESOLVE_PLAY"; payload: { playType: PlayType; personnelPackage?: PersonnelPackage; aggression?: AggressionLevel; tempo?: TempoMode } }
   | { type: "SET_DEFENSE_USER_MODE"; payload: { mode: "OFF" | "KEY_DOWNS" | "ALWAYS" } }
@@ -8880,6 +8883,12 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "SET_OFFENSE_USER_MODE": {
       return { ...state, game: { ...state.game, offenseUserMode: action.payload.mode } };
     }
+    case "SET_PENDING_OFFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingOffensiveCall: { ...(state.game.pendingOffensiveCall ?? {}), ...action.payload } } };
+    }
+    case "CLEAR_PENDING_OFFENSIVE_CALL": {
+      return { ...state, game: { ...state.game, pendingOffensiveCall: undefined } };
+    }
     case "SET_DEFENSE_USER_MODE": {
       return { ...state, game: { ...state.game, defenseUserMode: action.payload.mode } };
     }
@@ -8891,20 +8900,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
     case "RESOLVE_PLAY": {
       if (!state.acceptedOffer?.teamId || !state.game.awayTeamId || state.game.homeTeamId === "HOME") return state;
+      const pendingCall = state.game.pendingOffensiveCall;
+      const resolvedAggression = action.payload.aggression ?? pendingCall?.aggression ?? state.game.aggression;
+      const resolvedTempo = action.payload.tempo ?? pendingCall?.tempo ?? state.game.tempo;
       const gameWithToggles = {
         ...state.game,
-        aggression: action.payload.aggression ?? state.game.aggression,
-        tempo: action.payload.tempo ?? state.game.tempo,
+        aggression: resolvedAggression,
+        tempo: resolvedTempo,
       };
-      const personnelPackage = action.payload.personnelPackage ?? "11";
-      if (!action.payload.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
+      const personnelPackage = action.payload.personnelPackage ?? pendingCall?.personnelPackage ?? "11";
+      if (!action.payload.personnelPackage && !pendingCall?.personnelPackage) console.warn(JSON.stringify({ level: "warn", event: "personnel.default_applied", default: "11" }));
       const stepped = stepPlay(gameWithToggles, action.payload.playType, personnelPackage, {
         userControlsDefense: gameWithToggles.possession !== "HOME",
       });
       if ((stepped.sim.driveNumber ?? 0) !== (state.game.driveNumber ?? 0) || (stepped.sim.playNumberInDrive ?? 0) <= 1) {
         logInfo("game.sim.snap.resolved", { phase: state.phase, season: state.season, week: state.week, driveIndex: stepped.sim.driveNumber, playIndex: stepped.sim.playNumberInDrive, saveId: getActiveSaveId(), meta: { ended: stepped.ended, playType: action.payload.playType } });
       }
-      const next = upsertGameFatigueState({ ...state, game: stepped.sim }, stepped.sim);
+      const next = upsertGameFatigueState({ ...state, game: { ...stepped.sim, pendingOffensiveCall: undefined } }, stepped.sim);
       if (!stepped.ended) return next;
       const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}), qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(stepped.sim.qbRunContactsByPlayerId ?? {}) } };
       let nextWithPractice = nextWithRecovery;
