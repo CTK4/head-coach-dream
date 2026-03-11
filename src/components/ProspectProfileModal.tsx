@@ -2,6 +2,7 @@ import type { PlayerIntel } from "@/engine/scoutingCapacity";
 import type { ProspectScoutProfile, ScoutingState } from "@/engine/scouting/types";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { SCOUTING_FEATURES } from "@/engine/scouting/config";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type ProspectRecord = Record<string, unknown>;
@@ -88,7 +89,7 @@ export function ProspectProfileModal({
     { label: "Shuttle", value: fmt(firstValue(source, ["shuttle", "Shuttle"])) },
     { label: "3 Cone", value: fmt(firstValue(source, ["threeCone", "ThreeCone"])) },
     { label: "Broad", value: fmt(firstValue(source, ["broad", "Broad"])) },
-    { label: "RAS", value: fmt(firstValue(source, ["ras", "grade"])) },
+    ...(SCOUTING_FEATURES.showRAS ? [{ label: "RAS", value: fmt(firstValue(source, ["ras"])) }] : []),
   ].filter((row) => Boolean(row.value));
 
   const ratingsRows = Object.entries(source)

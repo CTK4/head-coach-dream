@@ -7,8 +7,11 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useGame } from "@/context/GameContext";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
-import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
+import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
+import { getDrillCompositeScore } from "@/engine/scouting/drillComposite";
 import { getScoutViewProspect } from "@/engine/scouting/scoutView";
+import { getLegacyCombineProspectsView } from "@/engine/scouting/legacyBridge";
+import { getCanonicalCombineResult, getCanonicalInterviewResult, getCanonicalMedicalResult, getCanonicalScoutProfile } from "@/engine/scouting/selectors";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
 function normalizeCombinePosGroup(pos: string): string {
@@ -37,47 +40,44 @@ export default function Combine() {
     dispatch({ type: "OFFSEASON_SET_STEP", payload: { stepId: "COMBINE" } });
   }, [dispatch]);
 
-  const prospects: any[] = useMemo(() => {
-    if (Array.isArray(combine.prospects) && combine.prospects.length > 0) return combine.prospects;
-
-    const resultIds = new Set(Object.keys(combine.results ?? {}));
-    const board = (state.offseasonData.draft.board.length ? state.offseasonData.draft.board : state.offseasonData.preDraft.board) as any[];
-    if (!board.length) return [];
-    return resultIds.size ? board.filter((p) => resultIds.has(String(p.id ?? p.playerId ?? ""))) : board;
-  }, [combine.prospects, combine.results, state.offseasonData.draft.board, state.offseasonData.preDraft.board]);
+  const prospects = useMemo(() => getLegacyCombineProspectsView(state), [state]);
 
   const percentileMap = useMemo(() => {
-    const byGroup: Record<string, Array<{ id: string; ras: number }>> = {};
+    const byGroup: Record<string, Array<{ id: string; score: number }>> = {};
     for (const p of prospects) {
-      const id = String(p.id ?? p.playerId ?? "");
-      const result = combine.results?.[id] ?? {};
-      const ras = Number(result.ras ?? p.ras ?? 0);
+      const id = String(p.id);
+      const result = getCanonicalCombineResult(state, id);
+      const forty = Number(result.forty ?? p.forty ?? 4.9);
+      const vert = Number(result.vert ?? p.vert ?? 30);
+      const shuttle = Number(result.shuttle ?? p.shuttle ?? 4.4);
+      const bench = Number(result.bench ?? p.bench ?? 18);
+      const score = getDrillCompositeScore({ forty, vert, shuttle, bench });
       const grp = normalizeCombinePosGroup(String(p.pos ?? ""));
-      (byGroup[grp] ??= []).push({ id, ras });
+      (byGroup[grp] ??= []).push({ id, score });
     }
     const out: Record<string, number> = {};
     for (const group of Object.values(byGroup)) {
-      const sorted = group.slice().sort((a, b) => a.ras - b.ras);
+      const sorted = group.slice().sort((a, b) => a.score - b.score);
       const n = sorted.length;
       sorted.forEach(({ id }, rank) => {
         out[id] = n > 1 ? Math.round((rank / (n - 1)) * 100) : 100;
       });
     }
     return out;
-  }, [prospects, combine.results]);
+  }, [prospects, state]);
 
   const filtered = useMemo(() => {
     const list = prospects
-      .map((p) => ({ ...p, ...(combine.results?.[String(p.id ?? p.playerId ?? "")] ?? {}) }))
-      .sort((a, b) => Number(b.ras ?? -1) - Number(a.ras ?? -1));
+      .map((p) => ({ ...p, ...getCanonicalCombineResult(state, p.id) }))
+      .sort((a, b) => getDrillCompositeScore({ forty: Number(b.forty), vert: Number(b.vert), shuttle: Number(b.shuttle), bench: Number(b.bench) }) - getDrillCompositeScore({ forty: Number(a.forty), vert: Number(a.vert), shuttle: Number(a.shuttle), bench: Number(a.bench) }));
     if (posFilter === "ALL") return list;
     return list.filter((p) => normalizeCombinePosGroup(String(p.pos ?? "")) === posFilter);
-  }, [prospects, posFilter, combine.results]);
+  }, [prospects, posFilter, state]);
 
-  const isCombineReady = combine.generated && prospects.length > 0 && Object.keys(combine.results ?? {}).length > 0;
+  const isCombineReady = combine.generated && prospects.length > 0;
   const top = filtered.slice(0, 80);
 
-  const shortlist = (combine as any).shortlist ?? {};
+  const shortlist = (combine as { shortlist?: Record<string, boolean> }).shortlist ?? {};
 
   function completeStep() {
     dispatch({ type: "OFFSEASON_COMPLETE_STEP", payload: { stepId: "COMBINE" } });
@@ -88,7 +88,7 @@ export default function Combine() {
   }
 
   const viewProspect = viewId
-    ? top.find((p) => String(p.id ?? p.playerId ?? "") === viewId) ?? null
+    ? top.find((p) => String(p.id) === viewId) ?? null
     : null;
 
   return (
@@ -130,18 +130,25 @@ export default function Combine() {
               <div className="text-sm text-slate-200/70">No combine prospects found for this position group.</div>
             ) : (
               top.map((p, idx) => {
-                const id = String(p.id ?? p.playerId ?? `${idx}`);
-                const name = String(p.name ?? p.fullName ?? "Prospect");
+                const id = String(p.id ?? `${idx}`);
+                const name = String(p.name ?? "Prospect");
                 const pos = String(p.pos ?? "UNK");
                 const forty = p.forty != null ? String(p.forty) : "—";
                 const vert = p.vert != null ? String(p.vert) : "—";
                 const bench = p.bench != null ? String(p.bench) : "—";
-                const combineScore10 = computeCombineScore(p as Record<string, unknown>).combineScore10;
-                const ras = p.ras != null ? Number(p.ras).toFixed(1) : "—";
+                const athleticSummary = getAthleticSummary({
+                  forty: Number(p.forty),
+                  vert: Number(p.vert),
+                  shuttle: Number(p.shuttle),
+                  threeCone: Number(p.threeCone),
+                  bench: Number(p.bench),
+                });
                 const pct = percentileMap[id];
                 const tier = pct != null ? pctToTier(pct) : null;
                 const topPct = pct != null ? 100 - pct : null;
                 const isShortlisted = !!shortlist[id];
+                const medicalTier = (getCanonicalMedicalResult(state, id) as { riskTier?: string } | null)?.riskTier ?? "—";
+                const interviewScore = (getCanonicalInterviewResult(state, id) as Array<{ score?: number }> | null)?.slice(-1)?.[0]?.score;
 
                 return (
                   <div
@@ -157,7 +164,7 @@ export default function Combine() {
                         <span className="text-slate-200/70">({pos})</span>
                       </div>
                       <div className="truncate text-xs text-slate-200/70">
-                        40 {forty} · Vert {vert} · Bench {bench} · CS {formatCombineScore10(combineScore10)} · RAS {ras}
+                        40 {forty} · Vert {vert} · Shuttle {p.shuttle ?? "—"} · Bench {bench} · {athleticSummary.overallLabel} · Interview {interviewScore ?? p.interview ?? "—"} · Medical {medicalTier}
                         {tier ? <span className="ml-1 font-medium text-sky-300">{tier}{topPct != null ? ` (Top ${topPct}%)` : ""}</span> : null}
                       </div>
                     </div>
@@ -166,7 +173,7 @@ export default function Combine() {
                         size="sm"
                         variant={isShortlisted ? "default" : "outline"}
                         className="min-h-11"
-                        onClick={() => dispatch({ type: "COMBINE_TOGGLE_SHORTLIST" as any, payload: { prospectId: id } })}
+                        onClick={() => dispatch({ type: "COMBINE_TOGGLE_SHORTLIST", payload: { prospectId: id } })}
                       >
                         {isShortlisted ? "★ Listed" : "☆ Pin"}
                       </Button>
@@ -186,17 +193,18 @@ export default function Combine() {
       <Sheet open={!!viewProspect} onOpenChange={(open) => { if (!open) setViewId(null); }}>
         <SheetContent side="right" className="w-full max-w-sm overflow-y-auto bg-slate-950 text-slate-100">
           {viewProspect ? (() => {
-            const id = String(viewProspect.id ?? viewProspect.playerId ?? "");
+            const id = String(viewProspect.id);
             const pct = percentileMap[id];
             const tier = pct != null ? pctToTier(pct) : "—";
             const topPct = pct != null ? 100 - pct : null;
-            const combineScore10 = computeCombineScore(viewProspect as Record<string, unknown>).combineScore10;
+            const athleticSummary = getAthleticSummary({ forty: Number(viewProspect.forty), vert: Number(viewProspect.vert), shuttle: Number(viewProspect.shuttle), bench: Number(viewProspect.bench) });
             const scoutView = getScoutViewProspect(state, id);
+            const canonicalProfile = getCanonicalScoutProfile(state, id);
             return (
               <>
                 <SheetHeader className="mb-4">
                   <SheetTitle className="text-slate-100">
-                    {viewProspect.name ?? viewProspect.fullName ?? "Prospect"}{" "}
+                    {viewProspect.name ?? "Prospect"}{" "}
                     <span className="text-slate-400">({viewProspect.pos ?? "UNK"})</span>
                   </SheetTitle>
                 </SheetHeader>
@@ -211,35 +219,42 @@ export default function Combine() {
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-300/15 bg-slate-900/40 p-3 space-y-2">
-                    <div className="font-semibold text-slate-200">Scores</div>
+                    <div className="font-semibold text-slate-200">Athletic Summary</div>
                     <div className="grid grid-cols-2 gap-1 text-slate-300">
-                      <span className="text-slate-400">RAS</span>
-                      <span className="font-medium">{viewProspect.ras != null ? Number(viewProspect.ras).toFixed(2) : "—"}</span>
-                      <span className="text-slate-400">Combine Score</span>
-                      <span>{formatCombineScore10(combineScore10)}</span>
+                      <span className="text-slate-400">Overall Label</span>
+                      <span className="font-medium">{athleticSummary.overallLabel}</span>
+                      <span className="text-slate-400">Speed</span>
+                      <span>{athleticSummary.speed}</span>
+                      <span className="text-slate-400">Explosiveness</span>
+                      <span>{athleticSummary.explosiveness}</span>
+                      <span className="text-slate-400">Agility</span>
+                      <span>{athleticSummary.agility}</span>
+                      <span className="text-slate-400">Power</span>
+                      <span>{athleticSummary.power}</span>
                       <span className="text-slate-400">Tier</span>
                       <span className="font-medium text-sky-300">{tier}{topPct != null ? ` (Top ${topPct}%)` : ""}</span>
                     </div>
                   </div>
-                  {scoutView ? (
+                  {scoutView || canonicalProfile ? (
                     <div className="rounded-lg border border-slate-300/15 bg-slate-900/40 p-3 space-y-1">
                       <div className="font-semibold text-slate-200">Scout View</div>
-                      <div className="text-slate-300">Est OVR {scoutView.estOverallRange[0]}–{scoutView.estOverallRange[1]} ({scoutView.confidence}% confidence)</div>
+                      <div className="text-slate-300">Est OVR {scoutView?.estOverallRange?.[0] ?? Math.round(canonicalProfile?.estLow ?? 65)}–{scoutView?.estOverallRange?.[1] ?? Math.round(canonicalProfile?.estHigh ?? 85)} ({scoutView?.confidence ?? Math.round(canonicalProfile?.confidence ?? 0)}% confidence)</div>
                     </div>
                   ) : null}
                   <div className="rounded-lg border border-slate-300/15 bg-slate-900/40 p-3 space-y-1">
                     <div className="font-semibold text-slate-200">Info</div>
                     <div className="grid grid-cols-2 gap-1 text-slate-300">
                       <span className="text-slate-400">Archetype</span><span>{viewProspect.archetype ?? "—"}</span>
-                      <span className="text-slate-400">Interview</span><span>{viewProspect.interview ?? "—"}</span>
+                      <span className="text-slate-400">Interview</span><span>{(getCanonicalInterviewResult(state, id) as Array<{ score?: number }> | null)?.slice(-1)?.[0]?.score ?? viewProspect.interview ?? "—"}</span>
+                      <span className="text-slate-400">Medical</span><span>{state.scoutingState?.medical?.resultsByProspectId?.[id]?.riskTier ?? "—"}</span>
                     </div>
                   </div>
                   <Button
                     className="w-full min-h-11"
-                    variant={(combine as any).shortlist?.[id] ? "default" : "outline"}
-                    onClick={() => dispatch({ type: "COMBINE_TOGGLE_SHORTLIST" as any, payload: { prospectId: id } })}
+                    variant={shortlist[id] ? "default" : "outline"}
+                    onClick={() => dispatch({ type: "COMBINE_TOGGLE_SHORTLIST", payload: { prospectId: id } })}
                   >
-                    {(combine as any).shortlist?.[id] ? "★ Remove from My Board" : "☆ Add to My Board"}
+                    {shortlist[id] ? "★ Remove from My Board" : "☆ Add to My Board"}
                   </Button>
                 </div>
               </>

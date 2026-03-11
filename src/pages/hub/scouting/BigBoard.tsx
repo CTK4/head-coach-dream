@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
-import { getDraftClass, useGame } from "@/context/GameContext";
+import { useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
-import { computeCombineScore } from "@/engine/scouting/combineScore";
+import { buildProspectScoutingViews } from "@/engine/scouting/viewModel";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
-import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
 const POSITION_PILLS = ["QB", "WR", "TE", "RB", "OT", "IOL", "CB", "S", "DT", "EDGE", "LB", "K", "P", "ALL"];
 
@@ -25,31 +24,15 @@ export default function BigBoard() {
     if (!scouting) dispatch({ type: "SCOUT_INIT" });
   }, [scouting, dispatch]);
 
-  const draftClass = getDraftClass() as Record<string, unknown>[];
-  const normalizedProspects = useMemo<Prospect[]>(
-    () =>
-      draftClass.map((p, i) => ({
-        id: String(p.id ?? p.prospectId ?? p["Player ID"] ?? `p-${i}`),
-        name: String(p.name ?? p["Name"] ?? "Unknown Prospect"),
-        pos: normalizeProspectPosition(String(p.pos ?? p["POS"] ?? "ATH"), "SCOUTING"),
-        school: String(p.school ?? p["School"] ?? "Unknown"),
-        estLow: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.estLow as number) ?? 65),
-        estHigh: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.estHigh as number) ?? 85),
-        confidence: Number((scouting?.scoutProfiles[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence as number) ?? 0),
-        height: String(p.height ?? "—"),
-        weight: String(p.weight ?? "—"),
-        combineScore10: computeCombineScore({
-          ...(p as Record<string, unknown>),
-          ...(state.scoutingState?.combine.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
-          ...(state.offseasonData.combine.results?.[String(p.id ?? p.prospectId ?? p["Player ID"])] ?? {}),
-        }).combineScore10,
-        unicornConfidence: Number(state.playerUnicorns?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.confidence ?? 0),
-        interviewScore: state.scoutingState?.interviews?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.slice(-1)?.[0]?.score,
-        medicalRiskTier: state.scoutingState?.medical?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]?.riskTier,
-        workoutDone: Boolean(state.scoutingState?.workouts?.resultsByProspectId?.[String(p.id ?? p.prospectId ?? p["Player ID"])]),
-      })),
-    [draftClass, scouting?.scoutProfiles, state.offseasonData.combine.results, state.scoutingState?.combine.resultsByProspectId, state.scoutingState?.interviews?.resultsByProspectId, state.scoutingState?.medical?.resultsByProspectId, state.scoutingState?.workouts?.resultsByProspectId]
-  );
+  const normalizedProspects = useMemo<Prospect[]>(() => {
+    return buildProspectScoutingViews(state).map((prospect) => {
+      const id = prospect.id;
+      return {
+        ...prospect,
+        unicornConfidence: Number(state.playerUnicorns?.[id]?.confidence ?? 0),
+      };
+    });
+  }, [state]);
 
   useEffect(() => {
     if (!normalizedProspects.length) return;
@@ -104,30 +87,31 @@ export default function BigBoard() {
 
         <div className="space-y-2">
           {rendered.map((p, i) => {
-            const report = scouting.scoutProfiles[p.id]?.confidence > 20 ? generateScoutingReport({ id: p.id, pos: p.pos, name: p.name }, true) : undefined;
+            const id = p.id;
+            const report = scouting.scoutProfiles[id]?.confidence > 20 ? generateScoutingReport({ id, pos: p.pos, name: p.name }, true) : undefined;
             return (
               <ProspectRow
-                key={p.id}
+                key={id}
                 prospect={p}
                 rank={i + 1}
-                isExpanded={openId === p.id}
-                onToggle={() => setOpenId((v) => (v === p.id ? null : p.id))}
+                isExpanded={openId === id}
+                onToggle={() => setOpenId((v) => (v === id ? null : id))}
                 onDragStart={(e) => {
                   if (!canDrag) return;
                   e.dataTransfer.effectAllowed = "move";
-                  setDraggedId(p.id);
+                  setDraggedId(id);
                 }}
                 onDragOver={(e) => {
                   if (!canDrag) return;
                   e.preventDefault();
-                  setDragOverId(p.id);
+                  setDragOverId(id);
                 }}
-                onDrop={() => onDrop(p.id)}
+                onDrop={() => onDrop(id)}
                 draggable={canDrag}
-                isDragging={draggedId === p.id}
-                isDragOver={dragOverId === p.id}
+                isDragging={draggedId === id}
+                isDragOver={dragOverId === id}
                 report={report}
-                unicornCandidate={p.unicornConfidence > 0.5 ? p.unicornConfidence : undefined}
+                unicornCandidate={p.unicornConfidence && p.unicornConfidence > 0.5 ? p.unicornConfidence : undefined}
                 onOpenProfile={openProspectProfile}
               />
             );

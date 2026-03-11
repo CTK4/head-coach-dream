@@ -1,4 +1,6 @@
 import type { GameState } from "@/context/GameContext";
+import { SCOUTING_FEATURES } from "@/engine/scouting/config";
+import { getCanonicalCombineResult, getCanonicalProspectById } from "@/engine/scouting/selectors";
 
 export type ScoutViewProspect = {
   id: string;
@@ -13,6 +15,10 @@ export type ScoutViewProspect = {
   intelligencePct?: number;
 };
 
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function getScoutViewProspect(state: GameState, prospectId: string): ScoutViewProspect | null {
   const scouting = state.scoutingState;
   if (!scouting) return null;
@@ -20,8 +26,8 @@ export function getScoutViewProspect(state: GameState, prospectId: string): Scou
   const profile = scouting.scoutProfiles[prospectId];
   if (!profile) return null;
 
-  const draft = state.upcomingDraftClass.find((p) => String(p.prospectId) === prospectId);
-  const combine = scouting.combine.resultsByProspectId?.[prospectId] ?? {};
+  const draft = getCanonicalProspectById(state, prospectId);
+  const combine = getCanonicalCombineResult(state, prospectId);
   const interview = scouting.combine.interviewResultsByProspectId?.[prospectId] ?? {};
 
   return {
@@ -29,11 +35,11 @@ export function getScoutViewProspect(state: GameState, prospectId: string): Scou
     name: draft?.name ?? prospectId,
     pos: draft?.pos ?? "UNK",
     measurables: {
-      forty: combine.forty,
-      shuttle: combine.shuttle,
-      vert: combine.vert,
-      bench: combine.bench,
-      ras: combine.ras,
+      forty: asNumber(combine.forty),
+      shuttle: asNumber(combine.shuttle),
+      vert: asNumber(combine.vert),
+      bench: asNumber(combine.bench),
+      ...(SCOUTING_FEATURES.showRAS ? { ras: asNumber(combine.ras) } : {}),
     },
     estOverallRange: [Math.round(profile.estLow), Math.round(profile.estHigh)],
     confidence: Math.round(profile.confidence),

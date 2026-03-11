@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import { getUserProspectEval, useGame, type PriorityPos } from "@/context/GameContext";
-import type { Prospect } from "@/engine/offseasonData";
+import type { NormalizedDraftProspect } from "@/engine/scouting/normalizeProspect";
 import { PREDRAFT_MAX_SLOTS } from "@/engine/offseasonConstants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
-import { computeCombineScore, formatCombineScore10 } from "@/engine/scouting/combineScore";
+import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
+import { getDrillCompositeScore } from "@/engine/scouting/drillComposite";
+import { getLegacyPreDraftBoardView } from "@/engine/scouting/legacyBridge";
+import { getCanonicalCombineResult, getCanonicalInterviewResult, getCanonicalMedicalResult, getCanonicalScoutProfile } from "@/engine/scouting/selectors";
+import { buildProspectForGmEval } from "@/engine/scouting/gmEvalAdapter";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
 
 const POS_FILTER_ALL = "ALL";
@@ -69,46 +73,49 @@ export default function PreDraft() {
   const [tabMode, setTabMode] = useState<TabMode>("BOARD");
 
   const combine = state.offseasonData.combine;
-  const shortlist = (combine as any).shortlist ?? {};
+  const shortlist = useMemo(() => (combine as { shortlist?: Record<string, boolean> }).shortlist ?? {}, [combine]);
   const intelByProspectId = state.offseasonData.preDraft.intelByProspectId ?? {};
 
   const board = useMemo(() => {
-    const base = state.offseasonData.preDraft.board.length ? state.offseasonData.preDraft.board : state.offseasonData.draft.board;
-    const ranked: Prospect[] = (base.length ? base : []).slice();
+    const ranked = getLegacyPreDraftBoardView(state);
     if (viewMode !== "TEAM") return ranked.slice(0, 90);
 
     return ranked
       .map((p) => {
-        const rank = Number((p as any).rank ?? (p as any).Rank ?? 9999);
+        const rank = Number(p.rank ?? 9999);
         const grade = Number(p.grade ?? 0);
         const score = -rank + priorityWeight(priorities, String(p.pos ?? "")) * 25 + grade * 0.01;
         return { ...p, __score: score };
       })
       .sort((a, b) => (b.__score ?? 0) - (a.__score ?? 0))
       .slice(0, 90);
-  }, [state.offseasonData.preDraft.board, state.offseasonData.draft.board, viewMode, priorities]);
+  }, [state, viewMode, priorities]);
 
-  // Compute percentiles from combine data (same logic as Combine page)
+  // Compute percentiles from combine drill data
   const percentileMap = useMemo(() => {
-    const allProspects = combine.prospects.length ? combine.prospects : board;
-    const byGroup: Record<string, Array<{ id: string; ras: number }>> = {};
+    const allProspects = board;
+    const byGroup: Record<string, Array<{ id: string; score: number }>> = {};
     for (const p of allProspects) {
-      const id = String((p as any).id ?? (p as any).playerId ?? "");
-      const result = combine.results?.[id] ?? {};
-      const ras = Number(result.ras ?? (p as any).ras ?? 0);
-      const grp = normalizeCombinePosGroup(String((p as any).pos ?? ""));
-      (byGroup[grp] ??= []).push({ id, ras });
+      const id = String(p.id ?? "");
+      const result = getCanonicalCombineResult(state, id);
+      const forty = Number(result.forty ?? p.forty ?? 4.9);
+      const vert = Number(result.vert ?? p.vert ?? 30);
+      const shuttle = Number(result.shuttle ?? p.shuttle ?? 4.4);
+      const bench = Number(result.bench ?? p.bench ?? 18);
+      const drillScore = getDrillCompositeScore({ forty, vert, shuttle, bench });
+      const grp = normalizeCombinePosGroup(String(p.pos ?? ""));
+      (byGroup[grp] ??= []).push({ id, score: drillScore });
     }
     const out: Record<string, number> = {};
     for (const group of Object.values(byGroup)) {
-      const sorted = group.slice().sort((a, b) => a.ras - b.ras);
+      const sorted = group.slice().sort((a, b) => a.score - b.score);
       const n = sorted.length;
       sorted.forEach(({ id }, rank) => {
         out[id] = n > 1 ? Math.round((rank / (n - 1)) * 100) : 100;
       });
     }
     return out;
-  }, [combine.prospects, combine.results, board]);
+  }, [board, state]);
 
   const visits = state.offseasonData.preDraft.visits;
   const workouts = state.offseasonData.preDraft.workouts;
@@ -129,7 +136,7 @@ export default function PreDraft() {
     return board.filter((p) => String(p.pos ?? "UNK").toUpperCase() === posFilter);
   }, [board, posFilter]);
 
-  const myBoard = useMemo(() => board.filter((p) => !!shortlist[p.id]), [board, shortlist]);
+  const myBoard = useMemo(() => board.filter((p) => Boolean(shortlist[p.id])), [board, shortlist]);
 
   const toggleVisit = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_VISIT", payload: { prospectId: id } });
   const toggleWorkout = (id: string) => dispatch({ type: "PREDRAFT_TOGGLE_WORKOUT", payload: { prospectId: id } });
@@ -144,7 +151,7 @@ export default function PreDraft() {
     if (nextOpen) setPosFilter(POS_FILTER_ALL);
   };
 
-  function renderProspectRow(p: Prospect, idx: number) {
+  function renderProspectRow(p: NormalizedDraftProspect & { __score?: number }, idx: number) {
     const id = p.id;
     const v = !!visits[id];
     const w = !!workouts[id];
@@ -153,19 +160,22 @@ export default function PreDraft() {
     const disableWorkoutAdd = (!w && allSlotsUsed) || v;
 
     const intel = intelByProspectId[id] ?? 0;
-    const gmEval = viewMode === "GM" ? getUserProspectEval(state, p) : null;
-    const combineResult = combine.results?.[id] ?? {};
-    const combineScore10 = computeCombineScore({
-      ...(p as Record<string, unknown>),
-      ...combineResult,
-    }).combineScore10;
+    const evalProspect = buildProspectForGmEval(state, id);
+    const gmEval = viewMode === "GM" && evalProspect ? getUserProspectEval(state, evalProspect) : null;
+    const combineResult = getCanonicalCombineResult(state, id);
+    const athleticSummary = getAthleticSummary({
+      forty: Number(combineResult.forty ?? p.forty),
+      vert: Number(combineResult.vert ?? p.vert),
+      shuttle: Number(combineResult.shuttle ?? p.shuttle),
+      threeCone: Number(combineResult.threeCone ?? p.threeCone),
+      bench: Number(combineResult.bench ?? p.bench),
+    });
 
-    const ras = combineResult.ras ?? (p as any).ras;
     const pct = percentileMap[id];
     const tier = pct != null ? pctToTier(pct) : null;
     const topPct = pct != null ? 100 - pct : null;
 
-    const blurbSeed = simpleHash(id + String((p as any).archetype ?? "") + String(state.saveSeed ?? 0));
+    const blurbSeed = simpleHash(id + String(p.archetype ?? "") + String(state.saveSeed ?? 0));
     const blurb = SCOUT_BLURBS[blurbSeed % SCOUT_BLURBS.length];
 
     return (
@@ -178,23 +188,23 @@ export default function PreDraft() {
                 {p.name}
               </button>{" "}
               <span className="text-muted-foreground">({getPositionLabel(p.pos)})</span>
-              {!!shortlist[id] ? <span className="ml-1 text-amber-400 text-xs">★ Pinned</span> : null}
+              {shortlist[id] ? <span className="ml-1 text-amber-400 text-xs">★ Pinned</span> : null}
             </div>
 
             {viewMode === "CONSENSUS" ? (
               <div className="text-xs text-muted-foreground">
-                CS {formatCombineScore10(combineScore10)} · Interview {(p as any).interview} · {(p as any).archetype}
+                40 {String(combineResult.forty ?? p.forty ?? "—")} · Vert {String(combineResult.vert ?? p.vert ?? "—")} · Shuttle {String(combineResult.shuttle ?? p.shuttle ?? "—")} · Bench {String(combineResult.bench ?? p.bench ?? "—")} · {String(p.archetype ?? "Prospect")}
               </div>
             ) : (
               <div className="text-xs text-muted-foreground">
-                GM Grade {gmEval?.roundBand} <span className="text-muted-foreground">({gmEval?.value})</span> · Consensus {(p as any).grade} · CS {formatCombineScore10(combineScore10)}
+                GM Grade {gmEval ? gmEval.roundBand : "—"} <span className="text-muted-foreground">({gmEval ? gmEval.value : "Pending"})</span> · Consensus {p.grade ?? "—"} · {athleticSummary.overallLabel}
               </div>
             )}
 
             {/* Intel-gated info */}
-            {intel >= 1 && ras != null ? (
+            {intel >= 1 ? (
               <div className="text-xs text-sky-300">
-                RAS {Number(ras).toFixed(1)}{tier ? ` · ${tier}${topPct != null ? ` (Top ${topPct}%)` : ""}` : ""}
+                Athletic {athleticSummary.overallLabel}{tier ? ` · ${tier}${topPct != null ? ` (Top ${topPct}%)` : ""}` : ""} · Interview {(getCanonicalInterviewResult(state, id) as Array<{ score?: number }> | null)?.slice(-1)?.[0]?.score ?? p.interview ?? "—"} · Medical {(getCanonicalMedicalResult(state, id) as { riskTier?: string } | null)?.riskTier ?? "—"} · Scout Conf {Math.round(getCanonicalScoutProfile(state, id)?.confidence ?? 0)}%
               </div>
             ) : intel === 0 ? (
               <div className="text-xs text-slate-500">Schedule a visit or workout to unlock scouting intel.</div>

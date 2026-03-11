@@ -4875,18 +4875,24 @@ function buildCombineFeedEntry(args: {
   prospectId: string;
   name: string;
   pos: string;
-  ras: number;
   forty: number;
+  vert: number;
+  shuttle: number;
+  bench: number;
   medicalTier?: string;
 }): { id: string; day: number; text: string; prospectId: string; category: CombineFeedCategory } {
-  const { saveSeed, day, prospectId, name, pos, ras, forty, medicalTier } = args;
+  const { saveSeed, day, prospectId, name, pos, forty, vert, shuttle, bench, medicalTier } = args;
   let category: CombineFeedCategory;
 
+  const eliteDrill = forty <= 4.42 || vert >= 38 || shuttle <= 4.05 || bench >= 30;
+  const strongDrill = forty <= 4.56 || vert >= 34 || shuttle <= 4.25 || bench >= 24;
+  const poorDrill = forty >= 4.88 || vert <= 29 || shuttle >= 4.58 || bench <= 13;
+
   if (medicalTier === "RED" || medicalTier === "BLACK") category = "INJURY";
-  else if (ras >= 9.2 || forty <= 4.42) category = "STANDOUT";
-  else if (ras >= 8.2) category = "SOLID";
-  else if (ras >= 6.2) category = "AVERAGE";
-  else category = "POOR";
+  else if (eliteDrill) category = "STANDOUT";
+  else if (strongDrill) category = "SOLID";
+  else if (poorDrill) category = "POOR";
+  else category = "AVERAGE";
 
   const correctionRoll = detRand2(saveSeed, `combine-feed-correction:${day}:${prospectId}`);
   if (category === "AVERAGE" && correctionRoll < 0.18) category = "BUZZ_CORRECTION";
@@ -6459,8 +6465,10 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
           prospectId: id,
           name: draftProspect.name,
           pos: draftProspect.pos,
-          ras,
           forty,
+          vert,
+          shuttle,
+          bench,
           medicalTier: s.trueProfiles[id]?.trueMedical?.tier,
         });
         feed.push({ id: entry.id, day: entry.day, text: entry.text, prospectId: id });
