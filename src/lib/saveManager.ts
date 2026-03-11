@@ -234,7 +234,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
   }
 
   function pickLegacyRecoverySaveId(legacySaveId?: string): string {
-    if (legacySaveId && isPersistableSaveId(legacySaveId)) {
+    if (legacySaveId && isPersistableSaveId(legacySaveId) && !safeGetItem(getStorageKey(legacySaveId))) {
       return legacySaveId;
     }
 
@@ -260,15 +260,28 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     const legacySaveId = isPersistableSaveId((parsed as Partial<GameState>).saveId)
       ? String((parsed as Partial<GameState>).saveId)
       : undefined;
-    const preferredId = pickLegacyRecoverySaveId(legacySaveId);
 
+    if (legacySaveId) {
+      const existingSlotState = readAndValidateState(safeGetItem(getStorageKey(legacySaveId)), legacySaveId);
+      if (existingSlotState.state) {
+        const row: SaveIndexRow = { ...toMetadata(legacySaveId, existingSlotState.state), storageKey: getStorageKey(legacySaveId) };
+        commitAtomic(LEGACY_KEY, JSON.stringify(existingSlotState.state));
+        writeIndex([row]);
+        setActiveSaveId(legacySaveId);
+        return [row];
+      }
+    }
+
+    const preferredId = pickLegacyRecoverySaveId(legacySaveId);
     const migrated = migrateSaveSchema(parsed, preferredId);
     const migratedMeta = toMetadata(migrated.saveId ?? preferredId, migrated);
     const storageKey = getStorageKey(migratedMeta.saveId);
     const row: SaveIndexRow = { ...migratedMeta, storageKey };
 
     // Keep legacy key for backward compatibility, but seed slot-based storage/index.
-    commitAtomic(storageKey, JSON.stringify(migrated));
+    const serialized = JSON.stringify(migrated);
+    commitAtomic(storageKey, serialized);
+    commitAtomic(LEGACY_KEY, serialized);
     writeIndex([row]);
     // Legacy recovery is authoritative here because we had no valid indexed saves.
     setActiveSaveId(migratedMeta.saveId);
@@ -556,6 +569,8 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     if (remainingRows.length === 0) {
       safeRemoveItem(SAVE_ACTIVE_ID_KEY);
       safeRemoveItem(LEGACY_KEY);
+      safeRemoveItem(getBackupKey(LEGACY_KEY));
+      safeRemoveItem(getTempKey(LEGACY_KEY));
       return;
     }
 

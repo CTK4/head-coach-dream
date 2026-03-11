@@ -371,11 +371,31 @@ describe("saveManager", () => {
     expect(existing?.season).toBe(2035);
   });
 
+
+  it("legacy payload saveId collision does not clobber existing slot", () => {
+    storage.setItem("hc_career_saves_index", "{not-json");
+    storage.setItem("hc_career_save__career-7", JSON.stringify({ ...baseState, season: 2040, saveId: "career-7", schemaVersion: 2 }));
+    storage.setItem("hc_career_save", JSON.stringify({ ...baseState, schemaVersion: 1, saveId: "career-7" }));
+
+    const saves = saveManager.listSaves();
+    expect(saves).toHaveLength(1);
+    expect(saves[0].saveId).toBe("career-7");
+
+    const existing = JSON.parse(storage.getItem("hc_career_save__career-7") ?? "null");
+    expect(existing?.season).toBe(2040);
+  });
+
   it("delete last save does not resurrect from legacy mirror", () => {
     saveManager.syncCurrentSave({ ...baseState, schemaVersion: 1, saveId: "career-1" } as any, "career-1");
-    saveManager.deleteSave("career-1");
+    expect(storage.getItem("hc_career_save__bak")).toBeTruthy();
+
+    const activeId = saveManager.getActiveSaveId();
+    expect(activeId).toBeTruthy();
+    saveManager.deleteSave(activeId!);
 
     expect(storage.getItem("hc_career_save")).toBeNull();
+    expect(storage.getItem("hc_career_save__bak")).toBeNull();
+    expect(storage.getItem("hc_career_save__tmp")).toBeNull();
     expect(storage.getItem("hc_career_active_save_id")).toBeNull();
     expect(saveManager.listSaves()).toHaveLength(0);
   });
@@ -400,6 +420,18 @@ describe("saveManager", () => {
     expect(saves).toHaveLength(1);
     expect(saves[0].saveId).toBe("career-7");
     expect(storage.getItem("hc_career_active_save_id")).toBe("career-7");
+  });
+
+
+  it("legacy recovery rewrites legacy mirror to migrated state", () => {
+    storage.setItem("hc_career_saves_index", "[]");
+    storage.setItem("hc_career_save", JSON.stringify({ ...baseState, schemaVersion: 1 }));
+
+    saveManager.listSaves();
+
+    const legacy = JSON.parse(storage.getItem("hc_career_save") ?? "null");
+    expect(legacy?.schemaVersion).toBe(LATEST_SAVE_SCHEMA_VERSION);
+    expect(legacy?.saveId).toMatch(/^career-\d+$/);
   });
 
   function expectNoFailedImportWrites() {
@@ -649,6 +681,17 @@ describe("saveManager", () => {
 
   it("syncCurrentSave prefers state.saveId over active save id", () => {
     storage.setItem("hc_career_active_save_id", "career-1");
+    storage.setItem("hc_career_saves_index", JSON.stringify([{
+      saveId: "career-1",
+      storageKey: "hc_career_save__career-1",
+      coachName: "Coach Existing",
+      teamName: "Milwaukee Northshore",
+      season: 2025,
+      week: 10,
+      record: { wins: 7, losses: 3 },
+      lastPlayed: 100,
+      careerStage: "REGULAR_SEASON",
+    }]));
     const state = { ...baseState, schemaVersion: 1, saveId: "career-2", season: 2030 } as any;
 
     saveManager.syncCurrentSave(state);
