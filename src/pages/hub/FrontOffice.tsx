@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useTeamRatings } from "@/hooks/useTeamRatings";
 import { formatOverallRecordWLT } from "@/lib/teamRatings";
+import { interviewProfiles } from "@/data/interviewProfiles";
 
 const ownerBadgeClasses: Record<string, string> = {
   PATIENT: "bg-emerald-500/20 text-emerald-100",
@@ -24,9 +25,30 @@ export default function FrontOffice() {
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
   const team = getTeamById(String(teamId));
   const { index: teamRatingsIndex } = useTeamRatings();
-  const ownerConfidence = Number(state.owner.approval ?? 50);
+  const ownerConfidence = Number(state.ownerState?.approval ?? state.owner.approval ?? 50);
   const gmRelationship = Number(state.coach.gmRelationship ?? 50);
   const prestige = Math.round(Number(state.coach.reputation?.leaguePrestige ?? state.owner.approval ?? 55));
+
+  const ownerPersonality = useMemo(() => {
+    const tags = interviewProfiles[String(teamId)]?.ownerPersonalityTags ?? [];
+    const joined = tags.join(" ");
+    if (/ambitious|aggressive/.test(joined)) return "DEMANDING";
+    if (/traditional|accountability/.test(joined)) return "MEDDLESOME";
+    if (/measured-risk|legacy-focused|hands-off/.test(joined)) return "PATIENT";
+    return "HANDS_OFF";
+  }, [teamId]);
+
+  const ownerPriorities = useMemo(() => {
+    const goals = state.ownerState?.currentGoals;
+    if (!goals) return ["WINNING"];
+    const out: string[] = [];
+    if ((goals.minWins ?? 0) >= 10 || goals.playoffRoundTarget !== "MISS") out.push("WINNING");
+    if (goals.financeTarget) out.push("REVENUE");
+    if (goals.topUnitTarget?.unit === "OFFENSE") out.push("OFFENSE");
+    else if (goals.topUnitTarget?.unit === "DEFENSE") out.push("DEFENSE");
+    if (out.length === 0) out.push("WINNING");
+    return out;
+  }, [state.ownerState]);
   const personnel = getPersonnel().filter((p) => String(p.teamId) === String(teamId));
   const gm = personnel.find((p) => String(p.role ?? "").toUpperCase() === "GM");
   const owner = personnel.find((p) => String(p.role ?? "").toUpperCase() === "OWNER");
@@ -90,12 +112,10 @@ export default function FrontOffice() {
         <Card className="border-white/10 bg-[#13131A]">
           <CardHeader><CardTitle>Owner Profile</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            <div className="flex items-center justify-between"><div className="font-semibold">{owner?.fullName ?? "Team Owner"}</div><Badge className={ownerBadgeClasses.HANDS_OFF}>HANDS_OFF</Badge></div>
+            <div className="flex items-center justify-between"><div className="font-semibold">{owner?.fullName ?? "Team Owner"}</div><Badge className={ownerBadgeClasses[ownerPersonality] ?? ownerBadgeClasses.HANDS_OFF}>{ownerPersonality}</Badge></div>
             <div className="text-xs">Confidence in Coaching Staff: {ownerConfidence}</div>
             <div className="h-2 rounded bg-[#252535]"><div className={`h-2 rounded ${meterColor(ownerConfidence)}`} style={{ width: `${ownerConfidence}%` }} /></div>
-            <div className="flex gap-2"><Badge variant="secondary">WINNING</Badge><Badge variant="secondary">REVENUE</Badge><Badge variant="secondary">YOUTH</Badge></div>
-            <p className="text-xs text-muted-foreground">A steady stakeholder focused on long-term value and sustained contention windows.</p>
-            <details className="text-xs"><summary className="cursor-pointer text-blue-400">What they're watching</summary><p className="mt-1 text-muted-foreground">Ownership expects a playoff push and is monitoring weekly momentum.</p></details>
+            <div className="flex gap-2 flex-wrap">{ownerPriorities.map((p) => <Badge key={p} variant="secondary">{p}</Badge>)}</div>
           </CardContent>
         </Card>
 

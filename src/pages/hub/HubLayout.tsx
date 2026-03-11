@@ -17,6 +17,10 @@ const TITLES: Record<string, string> = {
   "/hub/tag-center": "TAG CENTER",
   "/hub/cap-baseline": "CAP BASELINE",
   "/hub/dead-money": "DEAD MONEY",
+  "/hub/owner-relations": "OWNER RELATIONS",
+  "/hub/front-office": "FRONT OFFICE",
+  "/hub/firing-meter": "JOB SECURITY",
+  "/hub/power-rankings": "POWER RANKINGS",
 };
 
 export default function HubLayout() {
