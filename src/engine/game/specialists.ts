@@ -14,6 +14,8 @@ function bestAvailableForSlot(state: GameState, teamId: string, pos: "K" | "P", 
   const roster = getEffectivePlayersByTeam(state, teamId)
     .filter((p: any) => String(p.pos ?? "").toUpperCase() === pos)
     .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+  // Active-roster constraints are soft in fallback mode: if no active specialist exists
+  // we still resolve a deterministic K/P from the effective team roster.
   const constrained = activePlayerIds?.size ? roster.filter((p: any) => activePlayerIds.has(String(p.playerId))) : roster;
   const top = (constrained[0] ?? roster[0]) as any;
   return top ? String(top.playerId) : undefined;

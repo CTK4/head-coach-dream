@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
-import { resolveSpecialistsBySide as resolveMigrationSpecialists } from "@/context/boot/migrateSave";
+import { resolveMigratedSpecialistsBySide } from "@/context/boot/migrateSave";
 import { getPlayers } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { resolveSpecialistsBySide } from "@/engine/game/specialists";
@@ -82,11 +82,28 @@ describe("specialist resolver", () => {
       homeActivePlayerIds: new Set(Object.keys(raw.rosterMgmt.active ?? {})),
     });
 
-    const migrationResolved = resolveMigrationSpecialists(raw, raw.game as any);
+    const migrationResolved = resolveMigratedSpecialistsBySide(raw, raw.game as any);
 
     expect(migrationResolved).toEqual(runtimeResolved);
 
     const migrated = migrateSave(raw) as GameState;
     expect(migrated.game.specialistsBySide).toEqual(runtimeResolved);
+  });
+
+  it("uses soft active-roster fallback when no active specialist exists", () => {
+    const base = initState();
+    const homeTeamId = String(base.acceptedOffer?.teamId ?? "");
+    const awayTeamId = String(getPlayers().find((p: any) => String(p.teamId) !== homeTeamId)?.teamId ?? "");
+    const topHomeK = getEffectivePlayersByTeam(base, homeTeamId)
+      .filter((p: any) => String(p.pos ?? "").toUpperCase() === "K")
+      .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0] as any;
+
+    const resolved = resolveSpecialistsBySide(base, {
+      homeTeamId,
+      awayTeamId,
+      homeActivePlayerIds: new Set([String(base.trackedPlayersByTeam?.[homeTeamId]?.QB ?? "__none__")]),
+    });
+
+    expect(String(resolved.HOME.K ?? "")).toBe(String(topHomeK?.playerId ?? ""));
   });
 });

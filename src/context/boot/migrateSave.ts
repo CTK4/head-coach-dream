@@ -59,7 +59,7 @@ function inferLegacyCareerStage(oldState: Partial<GameState>): CareerStage {
 
 
 
-export function resolveSpecialistsBySide(state: Partial<GameState>, game: Partial<GameSim> | undefined): Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>> {
+export function resolveMigratedSpecialistsBySide(state: Partial<GameState>, game: Partial<GameSim> | undefined): Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>> {
   const homeTeamId = String((game as any)?.homeTeamId ?? "");
   const awayTeamId = String((game as any)?.awayTeamId ?? "");
   if (!homeTeamId && !awayTeamId) return { HOME: {}, AWAY: {} };
@@ -149,7 +149,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
           driveLog: (oldState.game as any).driveLog ?? [],
           playerBadges: { ...((oldState.game as any).playerBadges ?? oldState.playerBadges ?? {}) },
           playerUnicorns: { ...((oldState.game as any).playerUnicorns ?? oldState.playerUnicorns ?? {}) },
-          specialistsBySide: resolveSpecialistsBySide(oldState, oldState.game as Partial<GameSim>),
+          specialistsBySide: resolveMigratedSpecialistsBySide(oldState, oldState.game as Partial<GameSim>),
         } as GameSim)
       : initGameSim({
           homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",

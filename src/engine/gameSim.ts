@@ -1007,7 +1007,8 @@ function resolveWithPAS(
           highPoint: playType === "DROPBACK",
           contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
           surface: "DRY",
-          // Single-path PAS application: passive/perk/badge PAS deltas only enter pass resolution via QB catch-point accuracy.
+          // Single-path PAS application: passive/perk/badge PAS deltas only enter pass resolution
+          // through catch-resolver QB inputs (accuracy/decision), never via generic yards conversion.
           throwQualityAdj: ballistics.throwQualityAdj - (rushOutcome.pressured ? 0.14 : 0),
           deepVarianceMult: ballistics.deepVarianceMult,
           wobbleChance: ballistics.wobbleChance,
