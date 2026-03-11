@@ -353,37 +353,37 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
   },
   "contract-market": {
     id: "contract-market",
-    title: "Contract market decision thresholds",
+    title: "Contract market model",
     description:
-      "Contract acceptance compares total offer strength against player-specific thresholds that increase for top overall players or low-interest situations.",
+      "Offer decisions start from a position/overall/age market baseline, then compare your AAV and term to player-specific acceptance thresholds and contextual preference modifiers.",
     factors: [
       {
-        label: "Player ask baseline",
+        label: "Player value baseline (position, OVR, age)",
         weight: "High",
-        description: "Ask AAV is derived from projected market APY by position, age, and overall, then used as the anchor for offer ratio scoring.",
+        description: "Ask AAV is anchored to projected market APY from position multipliers, overall banding, and age-adjusted peak curves before any team-specific modifiers are applied.",
       },
       {
-        label: "Term preference by role",
-        weight: "Medium",
-        description: "Preferred years vary by position and talent tier, and term mismatch adds a measurable penalty.",
-      },
-      {
-        label: "Context quality stack",
-        weight: "Medium",
-        description: "Scheme fit, projected role, contender status, location preference, and guarantees can each nudge acceptance score up or down.",
-      },
-      {
-        label: "Dynamic threshold for elite talent",
+        label: "Offer competitiveness vs market",
         weight: "High",
-        description: "High-OVR players and low-interest states raise acceptance thresholds, requiring stronger offers to close.",
+        description: "Acceptance score is driven by your AAV-to-ask ratio, with aggressive penalties on lowball offers and only rare exceptions when interest and term fit are both strong.",
       },
       {
-        label: "Lowball floor behavior",
+        label: "Term fit by role archetype",
+        weight: "Medium",
+        description: "Preferred years are role-dependent (for example QB/elite profiles often prefer longer windows), and year-gap mismatch creates a direct score penalty.",
+      },
+      {
+        label: "Preference and context modifiers",
+        weight: "Medium",
+        description: "Scheme fit, projected role, contender status, location preference, guarantee structure, and current interest level each nudge acceptance probability.",
+      },
+      {
+        label: "Threshold pressure for elite / low-interest cases",
         weight: "Rule",
-        description: "Offers far below market are effectively capped to near-zero acceptance unless interest and term fit are exceptionally favorable.",
+        description: "Higher-OVR players and low-interest situations raise the acceptance threshold, so near-market offers may still miss without stronger structure or context fit.",
       },
     ],
-    example: "An 88 OVR EDGE with low interest may reject a market-level offer that a mid-tier player would accept, because the threshold curve is steeper at the top end.",
+    example: "A near-market 3y AAV bid can still be rejected when a veteran starter prefers a shorter term, projects a smaller role on your roster, and views your team context as a weaker contender fit.",
   },
 };
 

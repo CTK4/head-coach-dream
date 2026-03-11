@@ -38,6 +38,7 @@ import { getQbSchemeFitMultiplier, getQbSchemeFitSignal } from "@/engine/qb/qbSc
 import { BADGE_DEFINITIONS } from "@/engine/badges/engine";
 import { UNICORN_DEFINITIONS } from "@/engine/unicorns/engine";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ContractMarketInfoTrigger } from "@/components/explainability/ContractMarketInfoTrigger";
 import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
 import { MODEL_CARDS } from "@/components/explainability/modelCards";
 
@@ -473,7 +474,10 @@ export default function PlayerProfile() {
             {!accepted ? (
               <Card className="rounded-2xl">
                 <CardContent className="p-4 space-y-3">
-                  <div className="font-semibold">Make Offer</div>
+                  <div className="flex items-center gap-1">
+                    <div className="font-semibold">Make Offer</div>
+                    <ContractMarketInfoTrigger className="h-5 w-5 text-muted-foreground" />
+                  </div>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <div className="text-xs text-muted-foreground mb-1">

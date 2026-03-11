@@ -3,6 +3,7 @@ import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
 import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
+import { ContractMarketInfoTrigger } from "@/components/explainability/ContractMarketInfoTrigger";
 
 export function selectFreeAgencyPool(state: any) {
   const ids = new Set((state.freeAgency.boardPlayerIds ?? []).map((id: string) => String(id)));
@@ -86,7 +87,10 @@ export default function FreeAgency() {
         </div>
 
         <div className="border rounded p-3 space-y-2 h-fit">
-          <h2 className="font-semibold">Offer Drawer</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="font-semibold">Offer Drawer</h2>
+            <ContractMarketInfoTrigger className="h-5 w-5 text-muted-foreground" />
+          </div>
           {!selectedPlayer ? <div className="text-sm opacity-70">Select a player to create/edit an offer.</div> : (
             <>
               <div className="text-sm">{selectedPlayer.name} ({selectedPlayer.pos})</div>
