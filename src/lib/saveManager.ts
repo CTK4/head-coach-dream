@@ -16,11 +16,24 @@ export interface SaveMetadata {
   season: number;
   week: number;
   record: { wins: number; losses: number };
+  updatedAt: number;
   lastPlayed: number;
   careerStage: string;
+  version: number;
 }
 
-type SaveIndexRow = SaveMetadata & { storageKey: string };
+type SaveIndexRow = Omit<SaveMetadata, "updatedAt" | "version"> & {
+  updatedAt?: number;
+  version?: number;
+  storageKey: string;
+};
+
+type SaveExportEnvelope = {
+  format: "hc_save_export_v1";
+  exportedAt: number;
+  metadata: SaveMetadata;
+  state: GameState;
+};
 
 const LEGACY_KEY = "hc_career_save";
 const SAVE_INDEX_KEY = "hc_career_saves_index";
@@ -93,10 +106,23 @@ function assertStorageWrite(result: StorageWriteResult, operation: "set" | "remo
 function parseSave(raw: string | null): GameState | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as GameState;
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) ? (parsed as GameState) : null;
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function looksLikeRawSavePayload(value: unknown): value is Partial<GameState> {
+  if (!isRecord(value)) return false;
+  const hasPhase = typeof value.phase === "string";
+  const hasSeason = Number.isFinite(Number((value as any).season));
+  const hasCoach = isRecord((value as any).coach) && typeof ((value as any).coach as Record<string, unknown>).name === "string";
+  return hasPhase || hasSeason || hasCoach;
 }
 
 function readAndValidateState(raw: string | null, saveId: string): { state: GameState | null; validationCode?: SaveValidationErrorCode } {
@@ -160,6 +186,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
   }
 
   function toMetadata(saveId: string, state: GameState): SaveMetadata {
+    const now = Date.now();
     const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
     const teamName = (getTeamById(teamId)?.name ?? teamId) || "Unassigned Team";
     const standing = (state.currentStandings ?? []).find((s) => s.teamId === teamId);
@@ -173,23 +200,99 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
         wins: Number(standing?.wins ?? 0),
         losses: Number(standing?.losses ?? 0),
       },
-      lastPlayed: Date.now(),
+      updatedAt: now,
+      lastPlayed: now,
       careerStage: String(state.careerStage ?? "PRE_SEASON"),
+      version: Number((state as any).schemaVersion ?? LATEST_SAVE_SCHEMA_VERSION),
     };
   }
 
-  function readIndex(): SaveIndexRow[] {
-    try {
-      const parsed = JSON.parse(safeGetItem(SAVE_INDEX_KEY) ?? "[]") as SaveIndexRow[];
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // no-op
+  function normalizeIndexRow(row: SaveIndexRow): SaveIndexRow {
+    const normalizedUpdatedAt = Number(row.updatedAt ?? row.lastPlayed ?? Date.now());
+    const normalizedVersion = Number.isFinite(Number(row.version)) ? Number(row.version) : LATEST_SAVE_SCHEMA_VERSION;
+    return {
+      ...row,
+      updatedAt: normalizedUpdatedAt,
+      lastPlayed: Number(row.lastPlayed ?? normalizedUpdatedAt),
+      version: normalizedVersion,
+    };
+  }
+
+  function isValidIndexRow(row: unknown): row is SaveIndexRow {
+    if (!isRecord(row)) return false;
+    if (!isPersistableSaveId(row.saveId)) return false;
+    if (typeof row.storageKey !== "string" || row.storageKey.length === 0) return false;
+    if (typeof row.coachName !== "string" || row.coachName.length === 0) return false;
+    if (typeof row.teamName !== "string" || row.teamName.length === 0) return false;
+    if (!Number.isFinite(Number(row.season))) return false;
+    if (!Number.isFinite(Number(row.week))) return false;
+    if (!isRecord(row.record)) return false;
+    if (!Number.isFinite(Number(row.record.wins)) || !Number.isFinite(Number(row.record.losses))) return false;
+    if (typeof row.careerStage !== "string" || row.careerStage.length === 0) return false;
+    if (!Number.isFinite(Number(row.lastPlayed))) return false;
+    return true;
+  }
+
+  function pickLegacyRecoverySaveId(legacySaveId?: string): string {
+    if (legacySaveId && isPersistableSaveId(legacySaveId)) {
+      return legacySaveId;
     }
 
-    const legacy = parseSave(safeGetItem(LEGACY_KEY));
-    if (!legacy) return [];
-    const saveId = "legacy-default";
-    return [{ ...toMetadata(saveId, migrateSaveSchema(legacy, saveId)), storageKey: LEGACY_KEY }];
+    let suffix = 1;
+    while (suffix < 1_000_000) {
+      const candidate = `career-${suffix}`;
+      if (!safeGetItem(getStorageKey(candidate))) {
+        return candidate;
+      }
+      suffix += 1;
+    }
+
+    return `career-${Date.now()}`;
+  }
+
+  function ensureLegacySlotMigration(): SaveIndexRow[] {
+    const legacyRaw = safeGetItem(LEGACY_KEY);
+    if (!legacyRaw) return [];
+
+    const parsed = parseSave(legacyRaw);
+    if (!parsed) return [];
+
+    const legacySaveId = isPersistableSaveId((parsed as Partial<GameState>).saveId)
+      ? String((parsed as Partial<GameState>).saveId)
+      : undefined;
+    const preferredId = pickLegacyRecoverySaveId(legacySaveId);
+
+    const migrated = migrateSaveSchema(parsed, preferredId);
+    const migratedMeta = toMetadata(migrated.saveId ?? preferredId, migrated);
+    const storageKey = getStorageKey(migratedMeta.saveId);
+    const row: SaveIndexRow = { ...migratedMeta, storageKey };
+
+    // Keep legacy key for backward compatibility, but seed slot-based storage/index.
+    commitAtomic(storageKey, JSON.stringify(migrated));
+    writeIndex([row]);
+    // Legacy recovery is authoritative here because we had no valid indexed saves.
+    setActiveSaveId(migratedMeta.saveId);
+    return [row];
+  }
+
+  function readIndex(): SaveIndexRow[] {
+    const rawIndex = safeGetItem(SAVE_INDEX_KEY);
+    let parsedRows: SaveIndexRow[] = [];
+
+    try {
+      const parsed = JSON.parse(rawIndex ?? "[]") as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        parsedRows = parsed.filter(isValidIndexRow).map(normalizeIndexRow);
+      }
+    } catch {
+      parsedRows = [];
+    }
+
+    if (parsedRows.length > 0) return parsedRows;
+
+    const migrated = ensureLegacySlotMigration();
+    if (migrated.length > 0) return migrated;
+    return [];
   }
 
   function writeIndex(rows: SaveIndexRow[]) {
@@ -281,7 +384,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
 
       const rows = readIndex().filter((row) => row.saveId !== id);
       rows.push({ ...toMetadata(id, nextState), storageKey });
-      writeIndex(rows.sort((a, b) => b.lastPlayed - a.lastPlayed));
+      writeIndex(rows.sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed)));
       setActiveSaveId(id);
       logInfo("save.sync.success", { saveId: id, phase: state.phase, season: state.season, week: state.week });
     } catch (error) {
@@ -292,8 +395,12 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
 
   function listSaves(): SaveMetadata[] {
     return readIndex()
-      .sort((a, b) => b.lastPlayed - a.lastPlayed)
-      .map(({ storageKey: _storageKey, ...meta }) => meta);
+      .sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed))
+      .map(({ storageKey: _storageKey, ...meta }) => ({
+        ...meta,
+        updatedAt: Number(meta.updatedAt ?? meta.lastPlayed),
+        version: Number(meta.version ?? LATEST_SAVE_SCHEMA_VERSION),
+      }));
   }
 
   function loadSaveResult(saveId: string): LoadSaveResult {
@@ -340,16 +447,26 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     const result = readSaveState(saveId);
     if (!result.ok) return null;
     const state = migrateSaveSchema(result.state, saveId);
-    const payload = JSON.stringify(state, null, 2);
+    const payload: SaveExportEnvelope = {
+      format: "hc_save_export_v1",
+      exportedAt: Date.now(),
+      metadata: toMetadata(saveId, state),
+      state,
+    };
     return {
-      blob: new Blob([payload], { type: "application/json" }),
+      blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
       fileName: `head-coach-dream-${saveId}-v${LATEST_SAVE_SCHEMA_VERSION}.json`,
     };
   }
 
   function importSave(json: string): LoadSaveResult {
-    const parsed = parseSave(json);
-    if (!parsed) {
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || typeof parsed !== "object") {
       return {
         ok: false,
         code: "CORRUPT_SAVE",
@@ -359,20 +476,67 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
       };
     }
 
-    const saveId = `import-${Date.now()}`;
-    const migrated = migrateSaveSchema(parsed, saveId);
-    const validation = validateCriticalSaveState(migrated);
+    let importedState: Partial<GameState> | null = null;
+    if ((parsed as Partial<SaveExportEnvelope>).format === "hc_save_export_v1") {
+      if (!isRecord(parsed)) {
+        return {
+          ok: false,
+          code: "INVALID_SAVE",
+          saveId: "",
+          restoredFromBackup: false,
+          message: "Imported save envelope is malformed.",
+        };
+      }
+      const envelopeState = (parsed as Partial<SaveExportEnvelope>).state;
+      if (!isRecord(envelopeState) || !looksLikeRawSavePayload(envelopeState)) {
+        return {
+          ok: false,
+          code: "INVALID_SAVE",
+          saveId: "",
+          restoredFromBackup: false,
+          message: "Imported save envelope is malformed.",
+        };
+      }
+      importedState = envelopeState as Partial<GameState>;
+    } else {
+      if (!looksLikeRawSavePayload(parsed)) {
+        return {
+          ok: false,
+          code: "INVALID_SAVE",
+          saveId: "",
+          restoredFromBackup: false,
+          message: "Imported save payload is not a valid save object.",
+        };
+      }
+      importedState = parsed as Partial<GameState>;
+    }
+
+    const incomingVersion = Number((importedState as any)?.schemaVersion ?? 0);
+    if (incomingVersion > LATEST_SAVE_SCHEMA_VERSION) {
+      return {
+        ok: false,
+        code: "INVALID_SAVE",
+        saveId: "",
+        restoredFromBackup: false,
+        message: `Imported save schema version ${incomingVersion} is newer than supported version ${LATEST_SAVE_SCHEMA_VERSION}.`,
+      };
+    }
+
+    const preview = migrateSaveSchema(importedState, "import-preview");
+    const validation = validateCriticalSaveState(preview);
     if (!validation.ok && "code" in validation) {
       return {
         ok: false,
         code: "INVALID_SAVE",
         validationCode: validation.code,
-        saveId,
+        saveId: "",
         restoredFromBackup: false,
         message: validation.message,
       };
     }
 
+    const saveId = allocateSaveId("import");
+    const migrated = migrateSaveSchema(importedState, saveId);
     syncCurrentSave(migrated, saveId);
     return { ok: true, state: migrated };
   }
@@ -384,9 +548,25 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     safeRemoveItem(storageKey);
     safeRemoveItem(getBackupKey(storageKey));
     safeRemoveItem(getTempKey(storageKey));
-    writeIndex(rows.filter((s) => s.saveId !== saveId));
-    if (getActiveSaveId() === saveId) {
+
+    const remainingRows = rows.filter((s) => s.saveId !== saveId);
+    writeIndex(remainingRows);
+
+    const activeId = getActiveSaveId();
+    if (remainingRows.length === 0) {
       safeRemoveItem(SAVE_ACTIVE_ID_KEY);
+      safeRemoveItem(LEGACY_KEY);
+      return;
+    }
+
+    if (activeId === saveId) {
+      const survivor = [...remainingRows].sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed))[0];
+      if (!survivor) return;
+      const loadedSurvivor = readSaveState(survivor.saveId);
+      if (!loadedSurvivor.ok) return;
+      const serialized = JSON.stringify(loadedSurvivor.state);
+      commitAtomic(LEGACY_KEY, serialized);
+      setActiveSaveId(survivor.saveId);
     }
   }
 
