@@ -1,6 +1,7 @@
 import type { GameState } from "@/context/GameContext";
 import { resolveCurrentUserTeamId } from "@/lib/userTeam";
 import { DEFAULT_CALIBRATION_PACK_ID, DEFAULT_CONFIG_VERSION } from "@/engine/config/configRegistry";
+import { DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { loadConfigRegistry } from "@/engine/config/loadConfig";
 import { validateConfigPins } from "@/engine/config/validateConfig";
 import type { CareerStage } from "@/types/careerStage";
@@ -174,6 +175,10 @@ function migrateV1toV2(state: Partial<GameState>): Partial<GameState> {
   const next = { ...state };
   (next as any).configVersion = String((next as any).configVersion ?? DEFAULT_CONFIG_VERSION);
   (next as any).calibrationPackId = String((next as any).calibrationPackId ?? DEFAULT_CALIBRATION_PACK_ID);
+  (next as any).simTuningSettings = {
+    difficultyPreset: String((next as any).simTuningSettings?.difficultyPreset ?? DEFAULT_SIM_TUNING.difficultyPreset),
+    realismPreset: String((next as any).simTuningSettings?.realismPreset ?? DEFAULT_SIM_TUNING.realismPreset),
+  };
   return { ...next, schemaVersion: 2 };
 }
 
@@ -210,6 +215,10 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   }
 
   (next as any).schemaVersion = LATEST_SAVE_SCHEMA_VERSION;
+  (next as any).simTuningSettings = {
+    difficultyPreset: String((next as any).simTuningSettings?.difficultyPreset ?? DEFAULT_SIM_TUNING.difficultyPreset),
+    realismPreset: String((next as any).simTuningSettings?.realismPreset ?? DEFAULT_SIM_TUNING.realismPreset),
+  };
 
   next = hardenPhaseFields(next);
 

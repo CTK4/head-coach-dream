@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { readSettings, writeSettings } from "@/lib/settings";
+import { readSettings, writeSettings, type UserSettings } from "@/lib/settings";
+import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId, DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logInfo } from "@/lib/logger";
@@ -17,16 +18,6 @@ import { logInfo } from "@/lib/logger";
 type SimSpeed = "SLOW" | "NORMAL" | "FAST";
 type Theme = "DARK" | "OLED" | "SYSTEM" | "LIGHT";
 
-type UserSettings = {
-  simSpeed: SimSpeed;
-  injuryNotifications: boolean;
-  messagePopups: boolean;
-  confirmAutoAdvance: boolean;
-  reduceMotion: boolean;
-  theme: Theme;
-  useTop51CapRule: boolean;
-  showTooltips: boolean;
-};
 
 const DEFAULT_SETTINGS: UserSettings = {
   simSpeed: "NORMAL",
@@ -37,6 +28,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   theme: "DARK",
   useTop51CapRule: false,
   showTooltips: true,
+  difficultyPreset: DEFAULT_SIM_TUNING.difficultyPreset,
+  realismPreset: DEFAULT_SIM_TUNING.realismPreset,
 };
 
 const APP_STORAGE_PREFIXES = [
@@ -126,6 +119,7 @@ export default function SettingsPage() {
   function resetToDefaults() {
     setSettings(DEFAULT_SETTINGS);
     writeSettings(DEFAULT_SETTINGS);
+    (dispatch as any)({ type: "SET_SIM_TUNING", payload: { ...DEFAULT_SIM_TUNING } });
   }
 
   function onResetConfirmed() {
@@ -216,6 +210,50 @@ export default function SettingsPage() {
                       <SelectItem value="SLOW">Slow</SelectItem>
                       <SelectItem value="NORMAL">Normal</SelectItem>
                       <SelectItem value="FAST">Fast</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+              />
+
+              <SettingRow
+                icon={<UtilityIcon name="Settings" className="h-5 w-5" />}
+                title="Difficulty"
+                description="Applies safe, preset-driven economic pressure tuning."
+                right={
+                  <Select value={settings.difficultyPreset ?? DEFAULT_SIM_TUNING.difficultyPreset} onValueChange={(v) => {
+                    const nextPreset = v as DifficultyPresetId;
+                    update({ difficultyPreset: nextPreset });
+                    (dispatch as any)({ type: "SET_SIM_TUNING", payload: { difficultyPreset: nextPreset } });
+                  }}>
+                    <SelectTrigger className="h-9 w-[170px] border-slate-300/15 bg-slate-950/30 text-slate-100">
+                      <SelectValue placeholder="Select preset" />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                      {Object.values(DIFFICULTY_PRESETS).map((preset) => (
+                        <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                }
+              />
+
+              <SettingRow
+                icon={<UtilityIcon name="Settings" className="h-5 w-5" />}
+                title="Simulation Realism"
+                description="Controls recovery/injury realism using existing calibration tunables."
+                right={
+                  <Select value={settings.realismPreset ?? DEFAULT_SIM_TUNING.realismPreset} onValueChange={(v) => {
+                    const nextPreset = v as RealismPresetId;
+                    update({ realismPreset: nextPreset });
+                    (dispatch as any)({ type: "SET_SIM_TUNING", payload: { realismPreset: nextPreset } });
+                  }}>
+                    <SelectTrigger className="h-9 w-[170px] border-slate-300/15 bg-slate-950/30 text-slate-100">
+                      <SelectValue placeholder="Select realism" />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                      {Object.values(REALISM_PRESETS).map((preset) => (
+                        <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 }

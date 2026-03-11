@@ -6,11 +6,16 @@ import { useGame } from "@/context/GameContext";
 import { useNavigate } from "react-router-dom";
 import { useTeamRatings } from "@/hooks/useTeamRatings";
 import { ROUTES } from "@/routes/appRoutes";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
+import { readSettings, writeSettings } from "@/lib/settings";
 
 export default function FreePlaySetup() {
   const teams = useMemo(() => getTeams(), []);
   const [query, setQuery] = useState("");
   const { dispatch } = useGame();
+  const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => readSettings().difficultyPreset ?? "STANDARD");
+  const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettings().realismPreset ?? "BALANCED");
   const navigate = useNavigate();
   const { index: ratingsIndex } = useTeamRatings();
 
@@ -35,6 +40,34 @@ export default function FreePlaySetup() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <div className="text-sm font-semibold">Difficulty</div>
+            <Select value={difficultyPreset} onValueChange={(value) => setDifficultyPreset(value as DifficultyPresetId)}>
+              <SelectTrigger><SelectValue placeholder="Select difficulty" /></SelectTrigger>
+              <SelectContent>
+                {Object.values(DIFFICULTY_PRESETS).map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <div className="text-sm font-semibold">Simulation Realism</div>
+            <Select value={realismPreset} onValueChange={(value) => setRealismPreset(value as RealismPresetId)}>
+              <SelectTrigger><SelectValue placeholder="Select realism" /></SelectTrigger>
+              <SelectContent>
+                {Object.values(REALISM_PRESETS).map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         {rows.map((team) => {
           const ratingRow = ratingsIndex[team.teamId];
@@ -52,11 +85,16 @@ export default function FreePlaySetup() {
                   data-test={`team-select-${team.teamId}`}
                   onClick={() => {
                     if (!window.confirm(`Start your career with ${team.name}?`)) return;
+                    writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
                     dispatch({
                       type: "INIT_FREE_PLAY_CAREER",
                       payload: {
                         teamId: team.teamId,
                         teamName: team.name,
+                        simTuningSettings: {
+                          difficultyPreset,
+                          realismPreset,
+                        },
                       },
                     });
                     navigate(ROUTES.hub);

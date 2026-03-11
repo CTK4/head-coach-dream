@@ -54,6 +54,7 @@ describe("saveManager round trip at golden checkpoints", () => {
       expect(stableIntegrityHash(loadedAgain)).toBe(stableIntegrityHash(loaded));
       expect(loaded.configVersion).toBe(state.configVersion);
       expect(loaded.calibrationPackId).toBe(state.calibrationPackId);
+      expect(loaded.simTuningSettings).toEqual(state.simTuningSettings);
     }
 
     expect(Number(midState.hub.regularSeasonWeek ?? midState.week ?? 0)).toBeGreaterThanOrEqual(9);
