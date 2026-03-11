@@ -854,7 +854,7 @@ function resolveWithPAS(
     specialistIds: { K: sim.specialistsBySide[sim.possession]?.K, P: sim.specialistsBySide[sim.possession]?.P },
   });
 
-  const pas = pasComp.pas + passivePas + perkPas + badgeMods.pasDelta;
+  const passAccuracyDelta = passivePas + perkPas + badgeMods.pasDelta;
 
   let yards = 0;
   let turnover = false;
@@ -995,9 +995,9 @@ function resolveWithPAS(
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
-      const badgeCompShift = Math.max(-10, Math.min(10, Math.round(badgeMods.pasDelta * 80)));
+      const passCompShift = Math.max(-10, Math.min(10, Math.round(passAccuracyDelta * 80)));
       const catchInput: CatchInput = {
-        qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit) + badgeCompShift, arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
+        qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit) + passCompShift, arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt) + passCompShift, pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
         wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
         cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
         context: {
@@ -1007,6 +1007,7 @@ function resolveWithPAS(
           highPoint: playType === "DROPBACK",
           contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
           surface: "DRY",
+          // Single-path PAS application: passive/perk/badge PAS deltas only enter pass resolution via QB catch-point accuracy.
           throwQualityAdj: ballistics.throwQualityAdj - (rushOutcome.pressured ? 0.14 : 0),
           deepVarianceMult: ballistics.deepVarianceMult,
           wobbleChance: ballistics.wobbleChance,
@@ -1017,11 +1018,6 @@ function resolveWithPAS(
       incomplete = !catchOutcome.completed;
       turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
-      // Badge PAS impacts completion quality in deterministic pass-resolution (without generic PAS->yards conversion).
-      if (catchOutcome.completed && badgeMods.pasDelta <= -0.02 && yards <= 20) {
-        incomplete = true;
-        yards = 0;
-      }
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
       if (qbUnicorn && (qbMods.armStrength || qbMods.throwOnMove || qbMods.weatherPenaltyMitigation)) {

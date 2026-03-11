@@ -1,6 +1,6 @@
 import draftClassJson from "@/data/draftClass.json";
 import { getTeams } from "@/data/leagueDb";
-import { resolveSpecialistsBySide } from "@/engine/game/specialists";
+import { resolveSpecialistsBySide as resolveGameSpecialistsBySide } from "@/engine/game/specialists";
 import { initGameSim, type GameSim } from "@/engine/gameSim";
 import { initLeagueState, type LeagueState } from "@/engine/leagueSim";
 import { OFFSEASON_STEPS } from "@/engine/offseason";
@@ -59,7 +59,7 @@ function inferLegacyCareerStage(oldState: Partial<GameState>): CareerStage {
 
 
 
-function normalizeMigratedSpecialists(state: Partial<GameState>, game: Partial<GameSim> | undefined): Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>> {
+export function resolveSpecialistsBySide(state: Partial<GameState>, game: Partial<GameSim> | undefined): Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>> {
   const homeTeamId = String((game as any)?.homeTeamId ?? "");
   const awayTeamId = String((game as any)?.awayTeamId ?? "");
   if (!homeTeamId && !awayTeamId) return { HOME: {}, AWAY: {} };
@@ -74,7 +74,7 @@ function normalizeMigratedSpecialists(state: Partial<GameState>, game: Partial<G
   const awayDepth = awayTeamId === userTeamId ? (state as any)?.depthChart : (state as any)?.leagueDepthCharts?.[awayTeamId];
   const userActiveIds = new Set(Object.keys((state as any)?.rosterMgmt?.active ?? {}));
 
-  return resolveSpecialistsBySide(state as GameState, {
+  return resolveGameSpecialistsBySide(state as GameState, {
     homeTeamId,
     awayTeamId,
     existingBySide,
@@ -149,7 +149,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
           driveLog: (oldState.game as any).driveLog ?? [],
           playerBadges: { ...((oldState.game as any).playerBadges ?? oldState.playerBadges ?? {}) },
           playerUnicorns: { ...((oldState.game as any).playerUnicorns ?? oldState.playerUnicorns ?? {}) },
-          specialistsBySide: normalizeMigratedSpecialists(oldState, oldState.game as Partial<GameSim>),
+          specialistsBySide: resolveSpecialistsBySide(oldState, oldState.game as Partial<GameSim>),
         } as GameSim)
       : initGameSim({
           homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",

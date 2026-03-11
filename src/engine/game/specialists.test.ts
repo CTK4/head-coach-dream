@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
+import { resolveSpecialistsBySide as resolveMigrationSpecialists } from "@/context/boot/migrateSave";
 import { getPlayers } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { resolveSpecialistsBySide } from "@/engine/game/specialists";
@@ -56,31 +57,36 @@ describe("specialist resolver", () => {
     expect(String(resolved.AWAY.K ?? "")).not.toBe(String(invalidAwayK?.playerId ?? ""));
   });
 
-  it("runtime and migration resolve specialists consistently for same save-state input", () => {
+  it("runtime and migration specialist resolvers stay aligned from the same raw state input", () => {
     const base = initState();
     const homeTeamId = String(base.acceptedOffer?.teamId ?? "");
     const awayTeamId = String(getPlayers().find((p: any) => String(p.teamId) !== homeTeamId)?.teamId ?? "");
 
-    const migrated = migrateSave({
+    const raw = {
       ...base,
       game: { ...base.game, homeTeamId, awayTeamId, specialistsBySide: { HOME: {}, AWAY: {} } } as any,
-    }) as GameState;
+    } as GameState;
 
-    const runtimeResolved = resolveSpecialistsBySide(migrated, {
+    const runtimeResolved = resolveSpecialistsBySide(raw, {
       homeTeamId,
       awayTeamId,
-      existingBySide: migrated.game.specialistsBySide as any,
+      existingBySide: raw.game.specialistsBySide as any,
       homeDepthStarterIds: {
-        K: String(migrated.depthChart?.startersByPos?.K ?? ""),
-        P: String(migrated.depthChart?.startersByPos?.P ?? ""),
+        K: String(raw.depthChart?.startersByPos?.K ?? ""),
+        P: String(raw.depthChart?.startersByPos?.P ?? ""),
       },
       awayDepthStarterIds: {
-        K: String(migrated.leagueDepthCharts?.[awayTeamId]?.startersByPos?.K ?? ""),
-        P: String(migrated.leagueDepthCharts?.[awayTeamId]?.startersByPos?.P ?? ""),
+        K: String(raw.leagueDepthCharts?.[awayTeamId]?.startersByPos?.K ?? ""),
+        P: String(raw.leagueDepthCharts?.[awayTeamId]?.startersByPos?.P ?? ""),
       },
-      homeActivePlayerIds: new Set(Object.keys(migrated.rosterMgmt.active ?? {})),
+      homeActivePlayerIds: new Set(Object.keys(raw.rosterMgmt.active ?? {})),
     });
 
+    const migrationResolved = resolveMigrationSpecialists(raw, raw.game as any);
+
+    expect(migrationResolved).toEqual(runtimeResolved);
+
+    const migrated = migrateSave(raw) as GameState;
     expect(migrated.game.specialistsBySide).toEqual(runtimeResolved);
   });
 });

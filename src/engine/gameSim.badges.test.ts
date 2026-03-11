@@ -68,10 +68,12 @@ describe("game sim badge integration", () => {
     expect(withBadgeRushYards).toBeGreaterThan(noBadgeRushYards);
   });
 
-  it("does not translate non-badge perk PAS changes into generic pass-yards bonuses", () => {
+  it("does not translate non-badge perk PAS changes into explicit per-completion yard bonuses", () => {
     const tracked = { HOME: { QB: "qb", WR: "wr", RB: "rb", TE: "te", OL: "ol" }, AWAY: { DB: "db", DL: "dl", LB: "lb", OL: "ol2" } } as any;
-    let baseline = 0;
-    let perkOnly = 0;
+    let baselineYards = 0;
+    let baselineCompletions = 0;
+    let perkYards = 0;
+    let perkCompletions = 0;
     for (let seed = 3100; seed < 3140; seed += 1) {
       const base = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed, trackedPlayers: tracked });
       const withPerk = initGameSim({
@@ -81,10 +83,16 @@ describe("game sim badge integration", () => {
         trackedPlayers: tracked,
         coachUnlockedPerkIds: ["arc_self_scout"],
       });
-      baseline += runForcedSnaps(base, "DROPBACK", 60).stats.home.passYards;
-      perkOnly += runForcedSnaps(withPerk, "DROPBACK", 60).stats.home.passYards;
+      const baseOut = runForcedSnaps(base, "DROPBACK", 60).stats.home;
+      const perkOut = runForcedSnaps(withPerk, "DROPBACK", 60).stats.home;
+      baselineYards += baseOut.passYards;
+      baselineCompletions += baseOut.completions;
+      perkYards += perkOut.passYards;
+      perkCompletions += perkOut.completions;
     }
-    expect(Math.abs(perkOnly - baseline)).toBeLessThan(120);
+    const baselineYpc = baselineYards / Math.max(1, baselineCompletions);
+    const perkYpc = perkYards / Math.max(1, perkCompletions);
+    expect(Math.abs(perkYpc - baselineYpc)).toBeLessThan(0.2);
   });
 
 
@@ -119,17 +127,47 @@ describe("game sim badge integration", () => {
     expect(upliftPerCompletion).toBeLessThan(2.5);
   });
 
-  it("reads defensive pass badges in live pass resolution", () => {
+  it("PAS-only badge does not add an explicit hidden completion-yard bump", () => {
     const tracked = { HOME: { QB: "qb", WR: "wr", RB: "rb", TE: "te", OL: "ol" }, AWAY: { DB: "db", DL: "dl", LB: "lb", OL: "ol2" } } as any;
-    let offenseBoostedTotal = 0;
-    let defendedTotal = 0;
-    for (let seed = 501; seed < 541; seed += 1) {
-      const offenseBoosted = initGameSim({
+    let baseYards = 0;
+    let baseCompletions = 0;
+    let ironmanYards = 0;
+    let ironmanCompletions = 0;
+
+    for (let seed = 4500; seed < 4540; seed += 1) {
+      const base = initGameSim({ homeTeamId: "A", awayTeamId: "B", seed, trackedPlayers: tracked });
+      const ironman = initGameSim({
         homeTeamId: "A",
         awayTeamId: "B",
         seed,
         trackedPlayers: tracked,
-        playerBadges: { qb: [{ badgeId: "GUNSLINGER", awardedSeason: 1 }], wr: [{ badgeId: "CHAIN_MOVER", awardedSeason: 1 }] },
+        playerBadges: { qb: [{ badgeId: "IRONMAN", awardedSeason: 1 }] },
+      });
+      const baseOut = runForcedSnaps(base, "DROPBACK", 70).stats.home;
+      const ironmanOut = runForcedSnaps(ironman, "DROPBACK", 70).stats.home;
+      baseYards += baseOut.passYards;
+      baseCompletions += baseOut.completions;
+      ironmanYards += ironmanOut.passYards;
+      ironmanCompletions += ironmanOut.completions;
+    }
+
+    const baseYpc = baseYards / Math.max(1, baseCompletions);
+    const ironmanYpc = ironmanYards / Math.max(1, ironmanCompletions);
+    expect(Math.abs(ironmanYpc - baseYpc)).toBeLessThan(0.25);
+  });
+
+  it("reads defensive pass badges in live pass completion outcomes", () => {
+    const tracked = { HOME: { QB: "qb", WR: "wr", RB: "rb", TE: "te", OL: "ol" }, AWAY: { DB: "db", DL: "dl", LB: "lb", OL: "ol2" } } as any;
+    let baselineCompletions = 0;
+    let defendedCompletions = 0;
+    let baselineYards = 0;
+    let defendedYards = 0;
+    for (let seed = 501; seed < 541; seed += 1) {
+      const baseline = initGameSim({
+        homeTeamId: "A",
+        awayTeamId: "B",
+        seed,
+        trackedPlayers: tracked,
       });
       const defended = initGameSim({
         homeTeamId: "A",
@@ -137,16 +175,20 @@ describe("game sim badge integration", () => {
         seed,
         trackedPlayers: tracked,
         playerBadges: {
-          qb: [{ badgeId: "GUNSLINGER", awardedSeason: 1 }],
-          wr: [{ badgeId: "CHAIN_MOVER", awardedSeason: 1 }],
           db: [{ badgeId: "LOCKDOWN", awardedSeason: 1 }, { badgeId: "SHUTDOWN_CORNER", awardedSeason: 1 }, { badgeId: "BALLHAWK", awardedSeason: 1 }],
           dl: [{ badgeId: "SACK_ARTIST", awardedSeason: 1 }],
         },
       });
-      offenseBoostedTotal += runForcedSnaps(offenseBoosted, "DROPBACK", 120).stats.home.passYards;
-      defendedTotal += runForcedSnaps(defended, "DROPBACK", 120).stats.home.passYards;
+      const baseOut = runForcedSnaps(baseline, "DROPBACK", 120).stats.home;
+      const defendedOut = runForcedSnaps(defended, "DROPBACK", 120).stats.home;
+      baselineCompletions += baseOut.completions;
+      defendedCompletions += defendedOut.completions;
+      baselineYards += baseOut.passYards;
+      defendedYards += defendedOut.passYards;
     }
-    expect(defendedTotal).toBeLessThan(offenseBoostedTotal);
+    expect(defendedCompletions).toBeLessThanOrEqual(baselineCompletions);
+    expect(defendedYards).toBeLessThanOrEqual(baselineYards);
+    expect(defendedCompletions < baselineCompletions || defendedYards < baselineYards).toBe(true);
   });
 
   it("reads active kicker badge in live FG path only for resolved specialist", () => {
