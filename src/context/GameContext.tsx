@@ -178,6 +178,7 @@ import { draftReducer } from "@/context/draftReducer";
 import { seasonReducer } from "@/context/seasonReducer";
 import { freeAgencyReducer } from "@/context/freeAgencyReducer";
 import { staffingReducer, isStaffingAction } from "@/context/reducers/staffingReducer";
+import { isOffseasonTransactionAction, offseasonTransactionReducer } from "@/context/reducers/offseasonTransactionReducer";
 import { buildCpuTeamContext } from "@/engine/cpuContext";
 import { buildCpuDraftBoard, cpuResignPlayers, rankFreeAgencyTargets } from "@/systems/cpuOffseasonAI";
 import { getWeekSeed, mulberry32 } from "@/engine/rng";
@@ -2212,6 +2213,98 @@ function resolveDeterministicExtensionSubmission(state: GameState, playerId: str
   }
 
   const ovr = contractOverrideFromExtensionOffer(state, String(playerId), normalizedOffer);
+  const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
+  const decisions = { ...state.offseasonData.resigning.decisions } as any;
+  delete decisions[String(playerId)];
+
+  const morale = { ...(state.playerMorale ?? {}) };
+  const curMorale = Number(morale[String(playerId)] ?? 60);
+  morale[String(playerId)] = Math.max(0, Math.min(100, curMorale + 5));
+
+  let next = applyFinances({
+    ...modalAlloc.state,
+    playerContractOverrides,
+    playerMorale: morale,
+    offseasonData: { ...state.offseasonData, resigning: { decisions } },
+    contracts: { playerTeamInterestById: contractsByPlayer },
+    resign,
+    ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+  });
+
+  if (isNewsworthyRecommit(p)) {
+    next = pushNews(next, `Star re-commits early: ${String(p?.fullName ?? "Player")} agrees to an extension.`);
+  }
+  return next;
+}
+
+function resolveDeterministicResignSubmission(state: GameState, playerId: string, offer: ResignOffer): GameState {
+  const normalizedOffer = sanitizeResignOffer(offer);
+  if (!normalizedOffer) return state;
+  const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId;
+  if (!teamId) return state;
+  const p: any = getPlayers().find((x: any) => String(x.playerId) === String(playerId));
+  if (!p) return state;
+
+  const interestMap = { ...(state.contracts.playerTeamInterestById[String(playerId)] ?? {}) };
+  const interestBefore = Number(interestMap[String(teamId)] ?? 55);
+  const priorOfferAav = state.resign.lastOfferAavByPlayerId[String(playerId)];
+  const rejectionCount = Number(state.resign.rejectionCountByPlayerId[String(playerId)] ?? 0);
+  const decision = evaluateContractOffer({
+    player: {
+      id: String(playerId),
+      age: Number(p.age ?? 26),
+      overall: Number(p.overall ?? p.ovr ?? 60),
+      position: String(p.pos ?? "UNK"),
+    },
+    offer: {
+      years: Number(normalizedOffer.years),
+      aav: Number(normalizedOffer.apy),
+      guarantees: Number(normalizedOffer.guaranteesPct ?? 0),
+    },
+    context: {
+      saveSeed: Number(state.saveSeed ?? 1),
+      season: Number(state.season ?? 2026),
+      week: Number(state.week ?? 1),
+      teamId: String(teamId),
+      phase: "RESIGN",
+      schemeFit: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
+      roleProjection: resolveRoleProjection(state, p),
+      contenderStatus: resolveContenderStatus(state, String(teamId)),
+      locationPreference: resolveLocationPreference(state, String(teamId), p),
+      desiredGuaranteeRatio: normalizePos(String(p?.pos ?? "UNK")) === "QB" ? 0.62 : 0.52,
+    },
+    interest: interestBefore,
+    priorOfferAav,
+    rejectionCount,
+  });
+
+  const contractsByPlayer = { ...state.contracts.playerTeamInterestById };
+  contractsByPlayer[String(playerId)] = { ...interestMap, [String(teamId)]: decision.interestAfter };
+
+  const resign = {
+    lastOfferAavByPlayerId: { ...state.resign.lastOfferAavByPlayerId, [String(playerId)]: decision.offerAav },
+    rejectionCountByPlayerId: {
+      ...state.resign.rejectionCountByPlayerId,
+      [String(playerId)]: decision.accepted ? 0 : rejectionCount + 1,
+    },
+  };
+
+  const modalAlloc = buildOfferResultModal(state, {
+    title: decision.accepted ? "Offer Accepted" : "Offer Rejected",
+    message: decision.reason,
+    variant: decision.accepted ? "success" : "danger",
+  });
+
+  if (!decision.accepted) {
+    return {
+      ...modalAlloc.state,
+      contracts: { playerTeamInterestById: contractsByPlayer },
+      resign,
+      ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
+    };
+  }
+
+  const ovr = contractOverrideFromOffer(state, normalizedOffer);
   const playerContractOverrides = { ...state.playerContractOverrides, [String(playerId)]: ovr };
   const decisions = { ...state.offseasonData.resigning.decisions } as any;
   delete decisions[String(playerId)];
@@ -5080,6 +5173,28 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     });
     if (delegated) return delegated;
   }
+  if (isOffseasonTransactionAction(action)) {
+    const delegated = offseasonTransactionReducer(state, action, {
+      gameReducer,
+      applyCanonicalTx,
+      applyFinances,
+      pushNews,
+      buildCpuTeamContext,
+      cpuResignPlayers,
+      getAllTeamIds,
+      contractOverrideFromOffer,
+      hasPendingFreeAgencyOffers,
+      expireRemainingFreeAgencyOffers,
+      buildResignOffer,
+      sanitizeResignOffer,
+      isNewsworthyRecommit,
+      applyFranchiseTag,
+      moneyRound,
+      expireExpiringContractsToFreeAgency,
+      resolveDeterministicResignSubmission,
+    });
+    if (delegated) return delegated;
+  }
   return gameReducerMonolith(state, action);
 }
 
@@ -5123,6 +5238,29 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     const delegated = staffingReducer(state, action, {
       addMemoryEvent,
       gameReducer,
+    });
+    if (delegated) return delegated;
+  }
+
+  if (isOffseasonTransactionAction(action)) {
+    const delegated = offseasonTransactionReducer(state, action, {
+      gameReducer,
+      applyCanonicalTx,
+      applyFinances,
+      pushNews,
+      buildCpuTeamContext,
+      cpuResignPlayers,
+      getAllTeamIds,
+      contractOverrideFromOffer,
+      hasPendingFreeAgencyOffers,
+      expireRemainingFreeAgencyOffers,
+      buildResignOffer,
+      sanitizeResignOffer,
+      isNewsworthyRecommit,
+      applyFranchiseTag,
+      moneyRound,
+      expireExpiringContractsToFreeAgency,
+      resolveDeterministicResignSubmission,
     });
     if (delegated) return delegated;
   }
