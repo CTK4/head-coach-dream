@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { getDraftClass, useGame } from "@/context/GameContext";
-import { COMBINE_DEFAULT_INTERVIEW_TOKENS, COMBINE_FOCUS_HOURS_COST, COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY } from "@/engine/scouting/combineConstants";
+import { useGame } from "@/context/GameContext";
+import { COMBINE_DAY_POSITION_BUCKETS, COMBINE_DEFAULT_INTERVIEW_TOKENS, COMBINE_FOCUS_HOURS_COST, COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY } from "@/engine/scouting/combineConstants";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
+import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
+import { getLegacyCombineProspectsView } from "@/engine/scouting/legacyBridge";
+import { getCanonicalCombineResult, getCanonicalScoutProfile } from "@/engine/scouting/selectors";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -14,19 +17,18 @@ const DAYS = [
 type TabId = "ALL" | "SHORTLIST" | "NOTES";
 type CombineProspectState = { notes: string };
 
-type DraftProspectLite = {
-  id: string;
-  name: string;
-  pos: string;
-  school: string;
-  age: string;
+const DAY_BUCKET_LABELS: Record<1 | 2 | 3 | 4, string> = {
+  1: "Specialists / Front Seven",
+  2: "Secondary / Tight Ends",
+  3: "Skill / Quarterbacks",
+  4: "Offensive Line",
 };
 
-const DAY_BUCKETS: Record<number, { label: string; positions: string[] }> = {
-  1: { label: "Backfield", positions: ["QB", "RB", "FB"] },
-  2: { label: "TE / Secondary", positions: ["TE", "WR", "CB", "FS", "SS", "S", "DB"] },
-  3: { label: "Trenches", positions: ["OT", "OG", "C", "OL", "DE", "DT", "NT", "DL", "EDGE", "MLB", "ILB", "OLB", "LB"] },
-  4: { label: "Specialists", positions: ["K", "P", "LS", "ATH", "UNK"] },
+const DAY_POSITION_SETS: Record<1 | 2 | 3 | 4, Set<string>> = {
+  1: new Set(COMBINE_DAY_POSITION_BUCKETS[1].positions as readonly string[]),
+  2: new Set(COMBINE_DAY_POSITION_BUCKETS[2].positions as readonly string[]),
+  3: new Set(COMBINE_DAY_POSITION_BUCKETS[3].positions as readonly string[]),
+  4: new Set(COMBINE_DAY_POSITION_BUCKETS[4].positions as readonly string[]),
 };
 
 const TABS: { id: TabId; label: string }[] = [
@@ -45,10 +47,11 @@ const medicalToneByTier: Record<string, string> = {
 
 function getDayBucketForPos(pos: string): 1 | 2 | 3 | 4 {
   const normalized = String(pos ?? "UNK").toUpperCase();
-  if (DAY_BUCKETS[1].positions.includes(normalized)) return 1;
-  if (DAY_BUCKETS[2].positions.includes(normalized)) return 2;
-  if (DAY_BUCKETS[3].positions.includes(normalized)) return 3;
-  return 4;
+  if (DAY_POSITION_SETS[1].has(normalized)) return 1;
+  if (DAY_POSITION_SETS[2].has(normalized)) return 2;
+  if (DAY_POSITION_SETS[3].has(normalized)) return 3;
+  if (DAY_POSITION_SETS[4].has(normalized)) return 4;
+  return 2;
 }
 
 function barTone(value: number) {
@@ -83,20 +86,7 @@ export default function ScoutingCombine() {
     globalThis.localStorage?.setItem(`combine-notes:${state.saveSeed}`, JSON.stringify(notesByProspect));
   }, [notesByProspect, state.saveSeed]);
 
-  const draftClass = useMemo(
-    (): DraftProspectLite[] =>
-      (getDraftClass() as any[]).map((row, i) => ({
-        id: row.id ?? row.prospectId ?? row["Player ID"] ?? `DC_${i + 1}`,
-        name: row.name ?? row["Name"] ?? "Unknown",
-        pos: String(row.pos ?? row["POS"] ?? "UNK").toUpperCase(),
-        school: row.school ?? row.college ?? row["School"] ?? row["College"] ?? "Unknown School",
-        age: String(row.age ?? row["Age"] ?? "—"),
-      })),
-    [],
-  );
-
-  const draftById = useMemo(() => new Map(draftClass.map((row) => [row.id, row])), [draftClass]);
-
+  const draftClass = useMemo(() => getLegacyCombineProspectsView(state), [state]);
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
 
   const day = scouting.combine.day;
@@ -118,12 +108,12 @@ export default function ScoutingCombine() {
   const currentDay = Math.min(scouting.combine.day, 4);
   const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
 
-  const allProspects = Object.keys(scouting.scoutProfiles)
-    .map((id, index) => {
-      const draft = draftById.get(id);
-      const profile = scouting.scoutProfiles[id];
-      const metrics = scouting.combine.resultsByProspectId[id];
-      if (!draft || !profile) return null;
+  const allProspects = draftClass
+    .map((draft, index) => {
+      const id = draft.id;
+      const profile = getCanonicalScoutProfile(state, id);
+      const metrics = getCanonicalCombineResult(state, id);
+      if (!profile) return null;
       return {
         id,
         draft,
@@ -160,7 +150,7 @@ export default function ScoutingCombine() {
 
   const urgencyText = interviewsRemaining <= 0 ? "OUT" : interviewsRemaining <= 1 ? "CRITICAL" : interviewsRemaining <= 3 ? "LOW" : "STABLE";
   const urgencyTone = interviewsRemaining <= 0 ? "text-rose-200" : interviewsRemaining <= 1 ? "text-rose-300" : interviewsRemaining <= 3 ? "text-amber-200" : "text-emerald-200";
-  const bucketLabel = DAY_BUCKETS[currentDay].label;
+  const bucketLabel = DAY_BUCKET_LABELS[currentDay as 1 | 2 | 3 | 4];
   const interviewsEnabled = currentDay === 4;
   const selectedForRun = scouting.combine.selectedByDay?.[currentDay]?.IQ ?? [];
   const canRunSelectedInterviews = interviewsEnabled && interviewsRemaining > 0 && selectedForRun.length > 0;
@@ -222,21 +212,21 @@ export default function ScoutingCombine() {
                     </div>
                     <div className="text-xs opacity-75">{draft.school} · Age {draft.age}</div>
                   </div>
-                  <div className="text-xs opacity-70">Current range: {profile.estLow}-{profile.estHigh}</div>
+                  <div className="text-xs opacity-70">Current range: {profile.estLow}-{profile.estHigh} · Scout Conf {profile.confidence}%</div>
                 </div>
 
                 <div className="mt-3 rounded border border-white/10 bg-black/20 p-2 text-xs">
                   <div className="font-semibold">Drill Metrics</div>
                   <div className="mt-1 flex flex-wrap gap-3 opacity-85">
-                    <span>40: {metrics?.forty ?? "—"}</span>
-                    <span>Vert: {metrics?.vert ?? "—"}</span>
-                    <span>RAS: {metrics?.ras ?? "—"}</span>
+                    <span>40: {String(metrics?.forty ?? "—")}</span>
+                    <span>Vert: {String(metrics?.vert ?? "—")}</span>
+                    <span>Athletic: {getAthleticSummary({ forty: Number(metrics?.forty), vert: Number(metrics?.vert), shuttle: Number(metrics?.shuttle), bench: Number(metrics?.bench) }).overallLabel}</span>
                   </div>
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sky-200">Expand full set</summary>
                     <div className="mt-2 flex flex-wrap gap-3 opacity-80">
-                      <span>Shuttle: {metrics?.shuttle ?? "—"}</span>
-                      <span>Bench: {metrics?.bench ?? "—"}</span>
+                      <span>Shuttle: {String(metrics?.shuttle ?? "—")}</span>
+                      <span>Bench: {String(metrics?.bench ?? "—")}</span>
                     </div>
                   </details>
                 </div>

@@ -2,7 +2,6 @@ import type { DragEvent } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ScoutingReport } from "@/types/scouting";
-import { formatCombineScore10 } from "@/engine/scouting/combineScore";
 
 export interface Prospect {
   id: string;
@@ -15,8 +14,11 @@ export interface Prospect {
   height?: string;
   weight?: string;
   forty?: string;
+  vert?: string;
+  shuttle?: string;
+  bench?: string;
+  athleticLabel?: "EXPLOSIVE" | "FLUID" | "POWER" | "BALANCED" | "LIMITED";
   positionRank?: string;
-  combineScore10?: number | null;
   unicornConfidence?: number;
   interviewScore?: number;
   medicalRiskTier?: "GREEN" | "YELLOW" | "ORANGE" | "RED" | "BLACK";
@@ -39,15 +41,6 @@ interface ProspectRowProps {
   unicornCandidate?: number;
 }
 
-const scoreClass = (score: number | null | undefined) => {
-  if (!Number.isFinite(score)) return "bg-slate-500/20 text-slate-200 border-slate-400/30";
-  if ((score as number) >= 9) return "bg-amber-500/20 text-amber-200 border-amber-400/30";
-  if ((score as number) >= 8) return "bg-blue-500/20 text-blue-200 border-blue-400/30";
-  if ((score as number) >= 7) return "bg-emerald-500/20 text-emerald-200 border-emerald-400/30";
-  if ((score as number) >= 6) return "bg-amber-500/20 text-amber-100 border-amber-400/30";
-  return "bg-slate-500/20 text-slate-200 border-slate-400/30";
-};
-
 const rankBg = (rank: number) => {
   if (rank <= 10) return "from-amber-400/70 to-amber-700/70";
   if (rank <= 32) return "from-blue-500/70 to-blue-700/70";
@@ -55,7 +48,6 @@ const rankBg = (rank: number) => {
 };
 
 export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDragStart, onDragOver, onDrop, draggable = true, isDragging, isDragOver, report, onOpenProfile, unicornCandidate }: ProspectRowProps) {
-  const estCenter = Math.round((prospect.estLow + prospect.estHigh) / 2);
   return (
     <div className="relative">
       {isDragOver ? <div className="absolute left-0 right-0 top-0 z-10 h-0.5 bg-blue-500" /> : null}
@@ -89,10 +81,9 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
             </div>
             <div className="text-xs text-slate-400">{prospect.pos} · {prospect.school ?? "Unknown School"}</div>
             <div className="mt-2 flex items-center gap-2">
-              <span className={cn("rounded border px-2 py-0.5 text-[11px]", scoreClass(prospect.combineScore10))}>
-                CS {formatCombineScore10(prospect.combineScore10)}
-              </span>
-              {prospect.confidence ? <span className="text-[11px] text-slate-400">Conf {prospect.confidence}%</span> : null}
+              {prospect.athleticLabel ? <span className="rounded border border-violet-300/40 bg-violet-500/15 px-2 py-0.5 text-[11px] text-violet-100">🏃 {prospect.athleticLabel}</span> : null}
+              <span className="text-[11px] text-slate-300">Est {prospect.estLow}-{prospect.estHigh}</span>
+              {prospect.confidence ? <span className="text-[11px] text-slate-400">Scout Conf {prospect.confidence}%</span> : null}
               {typeof prospect.interviewScore === "number" ? <span className="rounded border border-sky-300/40 bg-sky-500/15 px-2 py-0.5 text-[11px] text-sky-100">🎤 {prospect.interviewScore}</span> : null}
               {prospect.medicalRiskTier ? <span className="rounded border border-rose-300/40 bg-rose-500/15 px-2 py-0.5 text-[11px] text-rose-100">🩺 {prospect.medicalRiskTier}</span> : null}
               {prospect.workoutDone ? <span className="rounded border border-emerald-300/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-100">🏋️ workout</span> : null}
@@ -107,7 +98,7 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
             <div className="space-y-3 p-3 text-xs">
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Physical Attributes</div>
-                <div className="text-slate-300">{prospect.height ?? "—"} · {prospect.weight ?? "—"} · 40: {prospect.forty ?? "—"} · Pos Rank: {prospect.positionRank ?? "—"}</div>
+                <div className="text-slate-300">{prospect.height ?? "—"} · {prospect.weight ?? "—"} · 40: {prospect.forty ?? "—"} · Vert: {prospect.vert ?? "—"} · Shuttle: {prospect.shuttle ?? "—"} · Bench: {prospect.bench ?? "—"} · Pos Rank: {prospect.positionRank ?? "—"}</div>
               </div>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Scouting Report</div>

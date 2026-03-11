@@ -1,3 +1,5 @@
+import { SCOUTING_FEATURES } from "@/engine/scouting/config";
+
 const DRILL_WEIGHTS = {
   R40: 0.35,
   RVert: 0.15,
@@ -71,6 +73,7 @@ export function computeCombineScore(source: Record<string, unknown> | null | und
 }
 
 export function formatCombineScore10(value: number | null | undefined): string {
+  if (!SCOUTING_FEATURES.showCombineScore) return "—";
   if (!Number.isFinite(value)) return "—";
   return Number(value).toFixed(2);
 }
