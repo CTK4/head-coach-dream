@@ -575,13 +575,22 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     }
 
     if (activeId === saveId) {
-      const survivor = [...remainingRows].sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed))[0];
-      if (!survivor) return;
-      const loadedSurvivor = readSaveState(survivor.saveId);
-      if (!loadedSurvivor.ok) return;
-      const serialized = JSON.stringify(loadedSurvivor.state);
+      const orderedSurvivors = [...remainingRows].sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed));
+      const survivorEntry = orderedSurvivors
+        .map((candidate) => ({ candidate, loaded: readSaveState(candidate.saveId) }))
+        .find((entry) => entry.loaded.ok);
+
+      if (!survivorEntry) {
+        safeRemoveItem(SAVE_ACTIVE_ID_KEY);
+        safeRemoveItem(LEGACY_KEY);
+        safeRemoveItem(getBackupKey(LEGACY_KEY));
+        safeRemoveItem(getTempKey(LEGACY_KEY));
+        return;
+      }
+
+      const serialized = JSON.stringify(survivorEntry.loaded.state);
       commitAtomic(LEGACY_KEY, serialized);
-      setActiveSaveId(survivor.saveId);
+      setActiveSaveId(survivorEntry.candidate.saveId);
     }
   }
 

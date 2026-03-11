@@ -529,6 +529,50 @@ describe("saveManager", () => {
     expect(legacy?.saveId).toBe("career-1");
   });
 
+
+  it("deleting active save with no loadable survivors clears active and legacy mirror", () => {
+    const now = Date.now();
+    storage.setItem("hc_career_saves_index", JSON.stringify([
+      {
+        saveId: "career-1",
+        storageKey: "hc_career_save__career-1",
+        coachName: "Coach 1",
+        teamName: "Milwaukee Northshore",
+        season: 2026,
+        week: 5,
+        record: { wins: 3, losses: 2 },
+        lastPlayed: now + 10,
+        updatedAt: now + 10,
+        careerStage: "REGULAR_SEASON",
+      },
+      {
+        saveId: "career-2",
+        storageKey: "hc_career_save__career-2",
+        coachName: "Coach 2",
+        teamName: "Milwaukee Northshore",
+        season: 2027,
+        week: 6,
+        record: { wins: 4, losses: 2 },
+        lastPlayed: now,
+        updatedAt: now,
+        careerStage: "REGULAR_SEASON",
+      },
+    ]));
+    storage.setItem("hc_career_active_save_id", "career-1");
+    storage.setItem("hc_career_save__career-1", JSON.stringify({ ...baseState, schemaVersion: 2, saveId: "career-1", season: 2026 }));
+    storage.setItem("hc_career_save__career-2", "{broken-json");
+    storage.setItem("hc_career_save", JSON.stringify({ ...baseState, schemaVersion: 2, saveId: "career-1" }));
+
+    saveManager.deleteSave("career-1");
+
+    expect(storage.getItem("hc_career_active_save_id")).toBeNull();
+    expect(storage.getItem("hc_career_save")).toBeNull();
+    expect(storage.getItem("hc_career_save__bak")).toBeNull();
+    expect(storage.getItem("hc_career_save__tmp")).toBeNull();
+    expect(storage.getItem("hc_career_save__career-1")).toBeNull();
+    expect(storage.getItem("hc_career_save__career-2")).toBe("{broken-json");
+  });
+
   it("commitAtomic_throws_and_does_not_mutate_index_on_failure", () => {
     const saveId = "slot-a";
     const storageKey = `hc_career_save__${saveId}`;
