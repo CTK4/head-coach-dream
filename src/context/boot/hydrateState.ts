@@ -145,7 +145,6 @@ export function hydrateLoadedState(
           combine: { ...initial.offseasonData.combine, ...migrated.offseasonData?.combine },
           scouting: { ...initial.offseasonData.scouting, ...migrated.offseasonData?.scouting },
           tampering: { ...initial.offseasonData.tampering, ...migrated.offseasonData?.tampering },
-          freeAgency: { ...initial.offseasonData.freeAgency, ...migrated.offseasonData?.freeAgency },
           preDraft: { ...initial.offseasonData.preDraft, ...migrated.offseasonData?.preDraft },
           draft: { ...initial.offseasonData.draft, ...migrated.offseasonData?.draft },
           camp: { ...initial.offseasonData.camp, ...migrated.offseasonData?.camp },

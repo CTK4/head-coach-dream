@@ -1321,7 +1321,6 @@ export type GameAction =
   | { type: "TAMPERING_AUTO_SHORTLIST"; payload: { tab: string } }
   | { type: "TAMPERING_SET_SOFT_OFFER"; payload: { playerId: string; years: number; aav: number } }
   | { type: "TAMPERING_CLEAR_SOFT_OFFER"; payload: { playerId: string } }
-  | { type: "FA_INIT_OFFERS" }
   | { type: "FA_ENTER_MARKET" }
   | { type: "FA_CREATE_DRAFT"; payload: { playerId: string } }
   | { type: "FA_UPDATE_DRAFT"; payload: { playerId: string; patch: Partial<{ years: number; apy: number }> } }
@@ -1333,9 +1332,7 @@ export type GameAction =
   | { type: "FA_INIT_READY" }
   | { type: "FA_INIT_ERROR" }
   | { type: "FA_INIT_RESET" }
-  | { type: "FA_REJECT"; payload: { playerId: string } }
   | { type: "FA_WITHDRAW"; payload: { offerId: string } }
-  | { type: "FA_SIGN"; payload: { offerId: string; years?: number; apy?: number } }
   | { type: "FA_OPEN_PLAYER"; payload: { playerId: string } }
   | { type: "FA_OPEN_MY_OFFERS" }
   | { type: "FA_CLOSE_MODAL" }
@@ -1462,7 +1459,6 @@ type ReducerMutatingAction = Extract<GameAction["type"], ValidPhaseActions>;
 type CentralPhaseGuardAction = ReducerMutatingAction | "DRAFT_CPU_ADVANCE" | "EXECUTE_TRADE";
 
 const MUTATING_FRANCHISE_ACTIONS = new Set<ReducerMutatingAction>([
-  "FA_SIGN",
   "FA_SUBMIT_OFFER",
   "FA_WITHDRAW_OFFER",
   "FA_BOOTSTRAP_FROM_TAMPERING",
@@ -7232,97 +7228,6 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
 
     case "FA_INIT_RESET":
       return { ...state, freeAgency: { ...state.freeAgency, initStatus: "idle", isResolving: false } };
-    case "FA_INIT_OFFERS": {
-      const existing = state.offseasonData.freeAgency.offers;
-      if (existing.length) return state;
-      const offers: FreeAgentOffer[] = getEffectiveFreeAgents(state)
-        .slice(0, 80)
-        .map((p: any, idx: number) => {
-          const apy = Math.round(Math.max(800_000, projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 60), Number(p.age ?? 26))));
-          const years = Math.max(1, Math.min(4, Number(p.age ?? 26) <= 26 ? 3 : 2));
-          return {
-            id: `OFF_FA_${state.season}_${idx}_${String(p.playerId)}`,
-            playerId: String(p.playerId),
-            name: String(p.fullName ?? `Player ${p.playerId}`),
-            pos: String(p.pos ?? "UNK"),
-            years,
-            apy,
-            interest: clamp01(computeFaInterest(state, p)),
-            schemeFitScore: clamp100(Math.round((computeFaInterest(state, p) - 0.35) / 0.75 * 100)),
-          } as FreeAgentOffer;
-        });
-      return {
-        ...state,
-        offseasonData: {
-          ...state.offseasonData,
-          freeAgency: { ...state.offseasonData.freeAgency, offers, decisionReasonByPlayerId: {} },
-        },
-      };
-    }
-
-    case "FA_REJECT": {
-      const playerId = String(action.payload.playerId);
-      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.playerId) === playerId);
-      const reason = offer ? (offer.interest >= 0.65 ? "Role projection" : "AAV vs market") : "Offer declined";
-      const modalAlloc = buildOfferResultModal(state, { title: "Offer Rejected", message: reason, variant: "danger" });
-      return {
-        ...modalAlloc.state,
-        offseasonData: {
-          ...modalAlloc.state.offseasonData,
-          freeAgency: {
-            ...modalAlloc.state.offseasonData.freeAgency,
-            rejected: { ...modalAlloc.state.offseasonData.freeAgency.rejected, [playerId]: true },
-            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
-          },
-        },
-        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
-      };
-    }
-
-    case "FA_SIGN": {
-      const offerId = String(action.payload.offerId);
-      const offer = state.offseasonData.freeAgency.offers.find((o) => String(o.id) === offerId);
-      if (!offer) return state;
-      const teamId = String(state.acceptedOffer?.teamId ?? "");
-      if (!teamId) return state;
-      const playerId = String(offer.playerId);
-      const years = Math.max(1, Math.min(5, Number(action.payload.years ?? offer.years ?? 2)));
-      const apy = Math.max(500_000, Number(action.payload.apy ?? offer.apy ?? 0));
-      const reason = offer.interest >= 0.55 ? "AAV vs market" : "Contender status";
-      const capUsed = state.offseasonData.freeAgency.capUsed + apy;
-
-      // Create a real contract override and apply via canonical transaction
-      const contractOverride = createContractOverride({
-        startSeason: state.season,
-        years,
-        salary: apy,
-        guarantees: 0,
-        type: "STANDARD",
-      });
-      let next: GameState;
-      try {
-        next = applyCanonicalTx(state, Tx.signFA(teamId, playerId, contractOverride));
-      } catch {
-        next = state;
-      }
-
-      const modalAlloc = buildOfferResultModal(next, { title: "Offer Accepted", message: reason, variant: "success" });
-      return {
-        ...modalAlloc.state,
-        offseasonData: {
-          ...modalAlloc.state.offseasonData,
-          freeAgency: {
-            ...modalAlloc.state.offseasonData.freeAgency,
-            signings: Array.from(new Set([playerId, ...modalAlloc.state.offseasonData.freeAgency.signings])),
-            capUsed,
-            capHitsByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.capHitsByPlayerId, [playerId]: apy },
-            decisionReasonByPlayerId: { ...modalAlloc.state.offseasonData.freeAgency.decisionReasonByPlayerId, [playerId]: reason },
-          },
-        },
-        ui: { ...modalAlloc.state.ui, offerResultModal: modalAlloc.modal },
-      };
-    }
-
     case "FA_OPEN_PLAYER":
       return { ...state, freeAgency: { ...state.freeAgency, ui: { mode: "PLAYER", playerId: action.payload.playerId } } };
 

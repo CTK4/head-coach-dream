@@ -4,14 +4,11 @@ import { computeCapLedger } from "@/engine/capLedger";
 import { projectedMarketApy } from "@/engine/marketModel";
 
 const LEGACY_FREE_AGENCY_ACTIONS = new Set<GameAction["type"]>([
-  "FA_INIT_OFFERS",
   "FA_INIT_START",
   "FA_INIT_READY",
   "FA_INIT_ERROR",
   "FA_INIT_RESET",
-  "FA_REJECT",
   "FA_WITHDRAW",
-  "FA_SIGN",
   "FA_OPEN_PLAYER",
   "FA_OPEN_MY_OFFERS",
   "FA_CLOSE_MODAL",

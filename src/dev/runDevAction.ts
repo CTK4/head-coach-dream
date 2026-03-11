@@ -64,17 +64,7 @@ function spawnFreeAgents(state: GameState, payload?: Record<string, unknown>): G
     if (!pid) continue;
     overrides[pid] = "";
   }
-  const offseasonFA = state.offseasonData.freeAgency ?? {
-    offers: [],
-    signings: [],
-    rejected: {},
-    withdrawn: {},
-    capTotal: 0,
-    capUsed: 0,
-    capHitsByPlayerId: {},
-    decisionReasonByPlayerId: {},
-  };
-  return { ...state, playerTeamOverrides: overrides, offseasonData: { ...state.offseasonData, freeAgency: offseasonFA } };
+  return { ...state, playerTeamOverrides: overrides };
 }
 
 function fillRosterNeeds(state: GameState, payload?: Record<string, unknown>): GameState {

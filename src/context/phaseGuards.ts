@@ -3,7 +3,6 @@ import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils"
 import { resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 
 export type ValidPhaseActions =
-  | "FA_SIGN"
   | "FA_SUBMIT_OFFER"
   | "FA_WITHDRAW_OFFER"
   | "FA_BOOTSTRAP_FROM_TAMPERING"
@@ -22,7 +21,6 @@ export type ValidPhaseActions =
   | "TAG_APPLY";
 
 const FREE_AGENCY_ONLY = new Set<ValidPhaseActions>([
-  "FA_SIGN",
   "FA_SUBMIT_OFFER",
   "FA_WITHDRAW_OFFER",
   "FA_BOOTSTRAP_FROM_TAMPERING",
