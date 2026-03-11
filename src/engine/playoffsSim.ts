@@ -1,16 +1,8 @@
 import { getTeamById } from "@/data/leagueDb";
 import { simulateFullGame } from "@/engine/gameSim";
+import { hashStr } from "@/engine/rng";
 import type { LeagueState } from "@/engine/leagueSim";
 import type { PlayoffGame, PlayoffRound, PlayoffsBracket, PlayoffsState, PostseasonState, PostseasonTeamResult } from "@/engine/postseason";
-
-function fnv1a32(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 function sortIdsByStanding(league: LeagueState): string[] {
   return Object.keys(league.standings ?? {}).sort((a, b) => {
@@ -65,7 +57,7 @@ export function buildPlayoffBracket(params: { league: LeagueState; season: numbe
 }
 
 function simulateGame(seed: number, game: PlayoffGame) {
-  const h = fnv1a32(`${game.gameId}:${game.homeTeamId}:${game.awayTeamId}`);
+  const h = hashStr(`${game.gameId}:${game.homeTeamId}:${game.awayTeamId}`);
   const result = simulateFullGame({ homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, seed: seed ^ h });
   const winnerTeamId = result.homeScore >= result.awayScore ? game.homeTeamId : game.awayTeamId;
   return { homeScore: result.homeScore, awayScore: result.awayScore, winnerTeamId };

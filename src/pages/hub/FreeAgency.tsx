@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
+import { ContractMarketInfoTrigger } from "@/components/explainability/ContractMarketInfoTrigger";
 
 export function selectFreeAgencyPool(state: any) {
   const ids = new Set((state.freeAgency.boardPlayerIds ?? []).map((id: string) => String(id)));
@@ -21,6 +24,7 @@ export function selectFreeAgencyPool(state: any) {
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const faModelCard = MODEL_CARDS["fa-market"];
 
   const pool = useMemo(() => selectFreeAgencyPool(state).sort((a, b) => b.ovr - a.ovr), [state]);
   const pendingUserOffers = Object.values(state.freeAgency.offersByPlayerId ?? {}).flat().filter((offer: any) => offer.isUser && offer.status === "PENDING").length;
@@ -42,7 +46,17 @@ export default function FreeAgency() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">FREE AGENCY</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">FREE AGENCY</h1>
+          <ExplainerDrawer
+            title={faModelCard.title}
+            description={faModelCard.description}
+            factors={faModelCard.factors}
+            example={faModelCard.example}
+            trigger={<button className="rounded border px-2 py-0.5 text-sm" type="button">ⓘ</button>}
+            triggerAriaLabel="Open free-agency market model explainer"
+          />
+        </div>
         <div className="flex items-center gap-2 text-sm">
           <span>Cap Space: ${Math.round(Number(state.finances.capSpace ?? 0) / 1_000_000)}M</span>
           <span>Pending Offers: {pendingUserOffers}</span>
@@ -73,7 +87,10 @@ export default function FreeAgency() {
         </div>
 
         <div className="border rounded p-3 space-y-2 h-fit">
-          <h2 className="font-semibold">Offer Drawer</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="font-semibold">Offer Drawer</h2>
+            <ContractMarketInfoTrigger className="h-5 w-5 text-muted-foreground" />
+          </div>
           {!selectedPlayer ? <div className="text-sm opacity-70">Select a player to create/edit an offer.</div> : (
             <>
               <div className="text-sm">{selectedPlayer.name} ({selectedPlayer.pos})</div>

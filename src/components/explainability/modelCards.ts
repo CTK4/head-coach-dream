@@ -9,7 +9,8 @@ export type ModelCardConfig = {
     | "draft-ai"
     | "trade-ai"
     | "fa-market"
-    | "injury-recurrence-concussion"
+    | "injury-recurrence-model"
+    | "concussion-model"
     | "contract-market";
   title: string;
   description: string;
@@ -60,71 +61,77 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
   },
   badges: {
     id: "badges",
-    title: "Season badge engine",
+    title: "Badge triggers",
     description:
-      "Badges are awarded by hard stat thresholds plus position eligibility, with special handling for mixed touchdown roles and rarity-based news.",
+      "Season badges evaluate explicit eligibility and stat thresholds from the badge engine, including role-specific exceptions and one-time award filtering.",
     factors: [
       {
-        label: "Threshold checks are deterministic",
+        label: "Eligibility rules gate badge checks first",
         weight: "High",
-        description: "Each badge requires specific stat cutoffs (for example sacks, passing yards, or field-goal percentage) and grants only when all required tests pass.",
+        description:
+          "Each badge can define allowed positions; if the player role is not eligible (for example K-only or DB groups), threshold checks are skipped.",
       },
       {
-        label: "Position gates prevent mismatched awards",
+        label: "Threshold comparisons use ge/le operators",
         weight: "High",
-        description: "Many badges only evaluate eligible positions, so a player cannot trigger badges outside their role group.",
+        description:
+          "Every threshold is a deterministic stat comparison: ge means value ≥ cutoff and le means value ≤ cutoff, with all listed thresholds required unless special-cased.",
       },
       {
-        label: "Red Zone Reaper accepts multiple paths",
+        label: "Red Zone Reaper has a multi-stat trigger path",
         weight: "Medium",
-        description: "This badge can trigger from passing, rushing, or receiving touchdown production, rather than requiring one single stat profile.",
+        description:
+          "RED_ZONE_REAPER is evaluated by alternate touchdown routes, passing with a higher bar (40+) or rushing/receiving with lower bars (10+), so one lane can qualify the badge.",
       },
       {
-        label: "No duplicate badge re-awards",
+        label: "Badges are awarded once per player",
         weight: "Rule",
-        description: "Previously earned badge IDs are filtered out before evaluation, so players only receive each badge once.",
+        description:
+          "The engine builds a prior badge-ID set and filters those out before evaluating the season, preventing duplicate re-awards of the same badge.",
       },
       {
-        label: "Rare+ badges create league news",
+        label: "Rare and above badges generate news",
         weight: "Rule",
-        description: "Only RARE, EPIC, and LEGENDARY outcomes generate news feed entries, highlighting high-impact achievements.",
+        description:
+          "After award resolution, RARE/EPIC/LEGENDARY badges publish league news while COMMON badges remain in player history only.",
       },
     ],
-    example: "A corner with 20 pass breakups and 7 interceptions can hit Shutdown Corner, while a similar stat line at WR is never eligible.",
+    example: "A CB can hit Shutdown Corner only if position-eligible and both pass-deflection and interception thresholds pass; once awarded, that badge ID is never re-granted.",
   },
   "scouting-confidence": {
     id: "scouting-confidence",
-    title: "Scouting confidence",
+    title: "Scouting confidence & reveal logic",
     description:
-      "Confidence is tied to estimate width: narrower projected OVR bands mean higher confidence, while baseline uncertainty depends on position and GM traits.",
+      "Board ranges, confidence, and detail reveals all flow from the same scouting progression: actions tighten estimate width, mutate center/stock direction, and unlock clearer intel bands.",
     factors: [
       {
-        label: "Position sets starting uncertainty",
+        label: "Position baseline sets opening band",
         weight: "High",
-        description: "Each position starts with a default width (for example QB wider than RB/WR), which defines initial confidence before extra scouting.",
+        description: "Initial estimate width starts from a position default (for example QB wider than RB/WR), so confidence begins lower for harder-eval profiles.",
       },
       {
-        label: "GM film and analytics tighten faster",
+        label: "Scouting actions tighten width and can move center",
         weight: "High",
-        description: "Tightening efficiency scales with film process and analytics orientation, reducing band width more effectively per scouting action.",
+        description: "Each tighten pass reduces estWidth with GM film/analytics efficiency and can shift estCenter, which drives stock arrows between snapshots.",
       },
       {
-        label: "Diminishing returns near narrow bands",
+        label: "Confidence is derived directly from width",
         weight: "Medium",
-        description: "As a profile gets tighter, additional actions remove less width, preventing near-perfect certainty too early.",
+        description: "Displayed confidence is computed from estimate width (100 - width×4, clamped), so every narrowing pass raises confidence in visible steps.",
       },
       {
-        label: "Center estimate can drift",
+        label: "Reveal percent controls attribute estimate spread",
         weight: "Medium",
-        description: "Each tighten action can shift estimated center up or down slightly, driving stock arrows between windows.",
+        description: "Attribute reveal ranges shrink linearly with revealPct around the true score and collapse to exact values at 100% reveal.",
       },
       {
-        label: "Confidence formula is direct",
+        label: "Board/report visibility respects confidence gates",
         weight: "Rule",
-        description: "Displayed confidence is computed from width (approximately 100 minus width×4, clamped), so every width reduction is visible to the user.",
+        description: "Big Board report generation is gated until scout confidence clears the threshold (>20), so low-confidence profiles keep broad bands and limited narrative output.",
       },
     ],
-    example: "Two identical prospects can show different confidence if one GM has stronger film/analytics traits and spends more high-efficiency scouting points.",
+    example:
+      "A QB might open around 72-90 (~28% confidence). After multiple scouting actions, width narrows to roughly 78-88 (~60% confidence), and continued work can reach 81-86 (~76% confidence) while reveal ranges tighten toward exact values.",
   },
   "scouting-reveal": {
     id: "scouting-reveal",
@@ -164,171 +171,219 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
     id: "draft-ai",
     title: "Draft AI pick logic",
     description:
-      "CPU drafting blends board strength, GM bias profile, team need pressure, and seeded noise so decisions feel coherent but not perfectly predictable.",
+      "Each CPU team scores available prospects from rank-derived value, roster need pressure, GM-specific bias, and seeded variance, then picks the highest final score.",
     factors: [
       {
-        label: "Rank-based true value anchors the board",
+        label: "Team-need weighting comes from bucket shortages",
         weight: "High",
-        description: "Prospect rank converts to a baseline value curve, so high-ranked players start with a structural advantage.",
+        description:
+          "Need index is computed from position-bucket roster minimums, then the current bucket need boosts pick score (need × 3.5) and also amplifies urgency-bias impact.",
       },
       {
-        label: "GM traits add positional/archetype bias",
+        label: "GM traits and biases reshape evaluations",
         weight: "High",
-        description: "Bias knobs (star chasing, athleticism, trenches, defense, aggression, urgency) adjust how each team interprets the same class.",
+        description:
+          "Star, athleticism, trenches, defense, aggression, urgency, and discipline traits add or subtract prospect-specific bias terms before final ranking.",
       },
       {
-        label: "Need index pushes scarce positions",
+        label: "Prospect value starts with rank signal",
         weight: "High",
-        description: "Roster minimums convert into need scores per bucket and add pick pressure where depth is thin.",
+        description:
+          "A true-value curve derived from class rank anchors every board, then elite/ceiling flags, trench/defense tags, and athletic proxy signals modify preference through GM bias.",
       },
       {
-        label: "Scouting uncertainty varies by GM",
-        weight: "Medium",
-        description: "GM quality controls sigma: better analytics/film/intel lowers noise while urgency can increase volatility.",
-      },
-      {
-        label: "Deterministic random tie-breakers",
+        label: "Deterministic RNG adds controlled variance",
         weight: "Rule",
-        description: "Seeded noise and tie rolls keep results reproducible for a save while still creating variation between teams.",
+        description:
+          "Seeded noise per team-prospect pair is added with GM-dependent sigma, and seeded tie-break rolls resolve exact score ties while keeping identical saves reproducible.",
+      },
+      {
+        label: "Bias-value slider provides small global offset",
+        weight: "Medium",
+        description: "The final score includes a lightweight bias_value offset, nudging conservative value boards without overpowering need/bias/value core terms.",
       },
     ],
-    example: "A rebuilding team with trenches bias and high OL need may select a slightly lower-ranked tackle over a similarly graded receiver.",
+    example:
+      "With the same board, a GM high on trenches and urgency with OL need can prefer an OT ranked 14th over a WR ranked 10th, while a star-chasing skill-position GM with lower OL need can take the WR.",
   },
   "trade-ai": {
     id: "trade-ai",
     title: "Trade AI decision model",
     description:
-      "Trade acceptance weighs package value, roster needs, cap stress, team window, redundancy, and relationship signals before sampling acceptance probability.",
+      "Trade responses blend package valuation, team-context multipliers, and deterministic acceptance rolls, so equal raw value can still produce different outcomes by team situation.",
     factors: [
       {
-        label: "Core package delta",
+        label: "Package value uses player + pick valuation paths",
         weight: "High",
-        description: "Outgoing and incoming package values form the base score, including pick-specific values and player age-adjusted valuation.",
+        description:
+          "Players are scored through `playerTradeValue` (which calls `calculateTradeValue`), while drafted assets use `draftPickTradeValue(round, year, season)` with round baselines and future-year discounting.",
       },
       {
-        label: "Need and loss multipliers",
+        label: "Need score and loss pressure reshape equal offers",
         weight: "High",
-        description: "Incoming players at need positions get boosted, while losing needed positions is penalized more heavily.",
+        description:
+          "Incoming assets at priority positions get a need multiplier, while outgoing assets at weak spots get a loss multiplier, so balanced headline value can still grade negatively for thin rosters.",
       },
       {
-        label: "Cap and age pressure",
+        label: "Cap stress penalizes veteran incoming contracts",
         weight: "Medium",
-        description: "Veteran incoming value is penalized under high cap stress, reducing acceptance for expensive additions.",
+        description:
+          "Incoming veterans (age 29+) add cap-penalty risk that scales with cap stress. Under tight cap conditions, this can suppress acceptance even when nominal value looks fair.",
       },
       {
-        label: "Team window philosophy",
+        label: "GM mode and team window change preference",
         weight: "Medium",
-        description: "Rebuild mode values picks more and may prefer moving veteran value; contender windows reward immediate impact talent.",
+        description:
+          "Rebuild mode boosts pick preference and tolerance for moving older talent, while stronger contender window score increases win-now impact weighting from incoming high-OVR players.",
       },
       {
-        label: "Hard reject and auto-accept rails",
+        label: "Acceptance probability uses deterministic randomness",
         weight: "Rule",
-        description: "Large deficits are instantly rejected, clearly favorable surplus can auto-accept, and all other offers pass through probabilistic scoring.",
+        description:
+          "After hard reject/auto-accept rails, the model normalizes trade score into an acceptance probability and compares it to a seeded hash roll. Same save + same package stays reproducible.",
       },
     ],
-    example: "Even if total value is close, a cap-strapped contender may reject a veteran-heavy return while a rebuilding club might accept the same framework for picks.",
+    example:
+      "Example: a package can look 'Fair' on total points, but if the AI team is cap-stressed, already deep at that position, and in rebuild mode prioritizing picks, it may still decline or counter for a future pick instead.",
   },
   "fa-market": {
     id: "fa-market",
     title: "Free-agency market pricing",
     description:
-      "Free-agent APY projections come from position multipliers, overall rating, and age curve, then contract decisions compare offer AAV and fit to player thresholds.",
+      "Free-agent APY projections start in the market model, while acceptance odds combine offer quality, interest, contextual fit, and FA lifecycle transitions during resolve rounds.",
     factors: [
       {
-        label: "Position multipliers set market tier",
+        label: "Projected APY is anchored by position, OVR, and age",
         weight: "High",
-        description: "Premium positions (especially QB, EDGE, WR, CB) apply higher multipliers to the baseline salary curve.",
+        description: "The market model applies a position multiplier to a base salary curve, scales by OVR, and applies post-peak age decay before rounding to market bands.",
       },
       {
-        label: "Overall rating drives main growth",
+        label: "AAV ratio to ask drives the largest acceptance swing",
         weight: "High",
-        description: "OVR is transformed into an APY adjustment band, making talent level the strongest price determinant.",
+        description: "Offer decision scoring uses a steep sigmoid around market ask (offerAAV/askAAV), so sub-market bids fall off quickly while over-market bids rise sharply.",
       },
       {
-        label: "Age peak discount",
+        label: "Interest and context apply additive fit pressure",
         weight: "Medium",
-        description: "Past the position peak age, annual value is reduced by a decay factor to reflect declining market appetite.",
+        description: "Team interest plus scheme fit, projected role, contender status, and location each nudge acceptance score; role and contender are explicit context axes.",
       },
       {
-        label: "Offer quality vs ask",
-        weight: "High",
-        description: "Acceptance score heavily depends on offer AAV ratio versus the computed ask, with steep penalties below market.",
-      },
-      {
-        label: "Fit context and negotiation memory",
+        label: "Thresholds and lowball rails gate elite decisions",
         weight: "Rule",
-        description: "Scheme/role/contender/location context nudges decisions, and rejected low offers can reduce interest unless materially improved later.",
+        description: "Higher-OVR players and low-interest situations raise the acceptance threshold; offers below 85% of ask are effectively capped unless interest and term fit are exceptional.",
+      },
+      {
+        label: "FA state transitions shape who can still sign",
+        weight: "Rule",
+        description: "FA actions bootstrap from tampering, submit/update/withdraw offers, run CPU ticks and resolve rounds, generate counters, and can expire pending offers at resolve cap.",
       },
     ],
-    example: "A strong over-market offer with good scheme fit can still lose if contract length is far from preferred years and interest has already cratered from prior lowballs.",
+    example:
+      "Example: if market ask is $12M APY, a $12M offer with neutral context can sit near coin-flip. Keeping APY at $12M but moving contenderStatus and roleProjection from 40 to 80 can push acceptance odds up, while dropping to $10M often still fails despite strong contender/role fit.",
   },
-  "injury-recurrence-concussion": {
-    id: "injury-recurrence-concussion",
-    title: "Injury, recurrence, and concussion risk",
+  "injury-recurrence-model": {
+    id: "injury-recurrence-model",
+    title: "Injury and recurrence model",
     description:
-      "Weekly injuries are generated from base rates, severity distributions, recurrence multipliers, and context modifiers such as QB contact exposure.",
+      "Weekly injury generation starts from a base chance and applies recurrence plus context modifiers before a hard clamp keeps probabilities bounded.",
     factors: [
       {
         label: "Base weekly injury chance",
         weight: "High",
-        description: "Injury generation starts from a base probability and is clamped to a bounded range to avoid extreme outcomes.",
+        description: "Injury generation starts from a base rate (default 0.035) and applies risk modifiers from neglect/practice context before rolling.",
       },
       {
-        label: "Severity roll controls downtime",
+        label: "Recurrence multiplier window",
         weight: "High",
-        description: "Severity buckets map to statuses and week ranges, with season-ending outcomes forcing long-term IR-style loss.",
+        description: "Same-type prior injuries inside the recurrence window (default 8 weeks) apply a recurrence multiplier (default 1.3), increasing new-injury odds.",
       },
       {
-        label: "Recurrence window multiplier",
+        label: "Soft-tissue chronic pressure",
         weight: "Medium",
-        description: "Recent same-type injuries within the recurrence window increase risk, and repeat soft-tissue patterns can add chronic pressure.",
+        description: "Two or more prior soft-tissue injuries add a chronic boost in recurrence logic, and new soft-tissue injuries after prior history are flagged chronic.",
       },
       {
-        label: "Concussion profile is explicit",
+        label: "QB exposure and risk clamp",
         weight: "Medium",
-        description: "Concussions are part of the injury definition pool with head body area and dedicated base/severe recovery ranges.",
+        description: "QB run-contact exposure can switch to a QB-specific base injury rate adjusted by slide behavior, then clamped to safe tuning bounds.",
       },
       {
-        label: "QB run contact exposure",
+        label: "Final probability clamp",
         weight: "Rule",
-        description: "QB injury base rate can be elevated by run-contact exposure and slide behavior, then constrained by tuning bounds.",
+        description: "After recurrence and modifiers, final injury probability is clamped to 0.5%–16% so outcomes remain realistic and stable.",
       },
     ],
-    example: "A QB with repeated run contact and poor sliding can carry elevated weekly injury risk, while a second hamstring issue in-window increases recurrence odds.",
+    example:
+      "If a player strains a hamstring again within 8 weeks, the recurrence multiplier raises risk; if that player already has repeated soft-tissue history, chronic logic pushes risk higher again.",
+  },
+  "concussion-model": {
+    id: "concussion-model",
+    title: "Concussion severity and return model",
+    description:
+      "Concussions are explicit injury definitions, then severity rolls and duration ranges determine expected return timing and status progression.",
+    factors: [
+      {
+        label: "Dedicated concussion definition",
+        weight: "High",
+        description: "Concussion exists as its own injury definition with HEAD body area and distinct base (1–2 weeks) vs severe (3–5 weeks) duration ranges.",
+      },
+      {
+        label: "Severity roll pipeline",
+        weight: "High",
+        description: "Severity is rolled through weighted buckets (MINOR, MODERATE, SEVERE, SEASON_ENDING), which then drive status and return timing.",
+      },
+      {
+        label: "Duration from severity",
+        weight: "Medium",
+        description: "MINOR/MODERATE pull from base weeks, SEVERE pulls from severe weeks, and SEASON_ENDING forces long-term loss without expected return.",
+      },
+      {
+        label: "Expected return + status mapping",
+        weight: "Medium",
+        description: "Expected return week is current week plus duration, while severity maps to status (for example severe/moderate to OUT, season-ending to IR).",
+      },
+      {
+        label: "Practice defaults",
+        weight: "Rule",
+        description: "New injuries default to LIMITED practice for minor cases and DNP for higher severities, reinforcing return-to-play pacing.",
+      },
+    ],
+    example:
+      "A minor concussion can project a 1–2 week return, while a severe concussion projects 3–5 weeks and usually lands as OUT longer before the player reaches return-to-play stages.",
   },
   "contract-market": {
     id: "contract-market",
-    title: "Contract market decision thresholds",
+    title: "Contract market model",
     description:
-      "Contract acceptance compares total offer strength against player-specific thresholds that increase for top overall players or low-interest situations.",
+      "Offer decisions start from a position/overall/age market baseline, then compare your AAV and term to player-specific acceptance thresholds and contextual preference modifiers.",
     factors: [
       {
-        label: "Player ask baseline",
+        label: "Player value baseline (position, OVR, age)",
         weight: "High",
-        description: "Ask AAV is derived from projected market APY by position, age, and overall, then used as the anchor for offer ratio scoring.",
+        description: "Ask AAV is anchored to projected market APY from position multipliers, overall banding, and age-adjusted peak curves before any team-specific modifiers are applied.",
       },
       {
-        label: "Term preference by role",
-        weight: "Medium",
-        description: "Preferred years vary by position and talent tier, and term mismatch adds a measurable penalty.",
-      },
-      {
-        label: "Context quality stack",
-        weight: "Medium",
-        description: "Scheme fit, projected role, contender status, location preference, and guarantees can each nudge acceptance score up or down.",
-      },
-      {
-        label: "Dynamic threshold for elite talent",
+        label: "Offer competitiveness vs market",
         weight: "High",
-        description: "High-OVR players and low-interest states raise acceptance thresholds, requiring stronger offers to close.",
+        description: "Acceptance score is driven by your AAV-to-ask ratio, with aggressive penalties on lowball offers and only rare exceptions when interest and term fit are both strong.",
       },
       {
-        label: "Lowball floor behavior",
+        label: "Term fit by role archetype",
+        weight: "Medium",
+        description: "Preferred years are role-dependent (for example QB/elite profiles often prefer longer windows), and year-gap mismatch creates a direct score penalty.",
+      },
+      {
+        label: "Preference and context modifiers",
+        weight: "Medium",
+        description: "Scheme fit, projected role, contender status, location preference, guarantee structure, and current interest level each nudge acceptance probability.",
+      },
+      {
+        label: "Threshold pressure for elite / low-interest cases",
         weight: "Rule",
-        description: "Offers far below market are effectively capped to near-zero acceptance unless interest and term fit are exceptionally favorable.",
+        description: "Higher-OVR players and low-interest situations raise the acceptance threshold, so near-market offers may still miss without stronger structure or context fit.",
       },
     ],
-    example: "An 88 OVR EDGE with low interest may reject a market-level offer that a mid-tier player would accept, because the threshold curve is steeper at the top end.",
+    example: "A near-market 3y AAV bid can still be rejected when a veteran starter prefers a shorter term, projects a smaller role on your roster, and views your team context as a weaker contender fit.",
   },
 };
 

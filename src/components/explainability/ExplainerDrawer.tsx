@@ -22,6 +22,8 @@ export type ExplainerDrawerProps = {
   example?: string;
   trigger: React.ReactNode;
   triggerAriaLabel: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function ExplainerDrawer({
@@ -31,9 +33,11 @@ export function ExplainerDrawer({
   example,
   trigger,
   triggerAriaLabel,
+  open,
+  onOpenChange,
 }: ExplainerDrawerProps) {
   return (
-    <Drawer>
+    <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerTrigger asChild aria-label={triggerAriaLabel}>
         {trigger}
       </DrawerTrigger>
