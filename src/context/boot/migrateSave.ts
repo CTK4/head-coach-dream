@@ -1,4 +1,4 @@
-import draftClassJson from "@/data/draftClass.json";
+import remapFile from "@/data/migrations/draftClassIdRemap_v1.json";
 import { getTeams } from "@/data/leagueDb";
 import { initGameSim, type GameSim } from "@/engine/gameSim";
 import { initLeagueState, type LeagueState } from "@/engine/leagueSim";
@@ -22,6 +22,63 @@ const OFFSEASON_STEP_TO_STAGE: Partial<Record<OffseasonState["stepId"], CareerSt
   PRESEASON: "PRESEASON",
   CUT_DOWNS: "OFFSEASON_HUB",
 };
+
+
+
+const DRAFT_CLASS_ID_REMAP: Record<string, string> = Object.fromEntries(Object.entries((remapFile as { remap?: Record<string, string> }).remap ?? {}).map(([from, to]) => [String(from), String(to)]));
+
+function remapDraftProspectId(id: unknown): string {
+  const normalized = String(id ?? "");
+  return DRAFT_CLASS_ID_REMAP[normalized] ?? normalized;
+}
+
+function isEmptyMigrationPayload(value: unknown): boolean {
+  if (value == null) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "string") return value.trim().length === 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length === 0;
+  return false;
+}
+
+function mergeRemappedKeyedMap<T>(args: { canonicalMap?: Record<string, T>; legacyMap?: Record<string, T>; validIds: Set<string> }): Record<string, T> {
+  const { canonicalMap, legacyMap, validIds } = args;
+  const out: Record<string, T> = {};
+
+  for (const [rawId, value] of Object.entries(canonicalMap ?? {})) {
+    const id = remapDraftProspectId(rawId);
+    if (!validIds.has(id)) continue;
+    out[id] = value;
+  }
+
+  for (const [rawId, value] of Object.entries(legacyMap ?? {})) {
+    const id = remapDraftProspectId(rawId);
+    if (!validIds.has(id)) continue;
+    if (!(id in out) || (isEmptyMigrationPayload(out[id]) && !isEmptyMigrationPayload(value))) out[id] = value;
+  }
+
+  return out;
+}
+
+function isMigratedScaffoldScoutProfile(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const snapshotWindow = (value as { lastSnapshot?: { windowKey?: unknown } }).lastSnapshot?.windowKey;
+  return String(snapshotWindow ?? "") === "migrated";
+}
+
+function mergeRemappedBoardOrder(args: { canonicalOrder?: string[]; legacyOrder?: string[]; validIds: Set<string> }): string[] {
+  const { canonicalOrder, legacyOrder, validIds } = args;
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const rawId of [...(canonicalOrder ?? []), ...(legacyOrder ?? [])]) {
+    const id = remapDraftProspectId(rawId);
+    if (!validIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+
+  return out;
+}
 
 const OFFSEASON_STAGE_SET = new Set<CareerStage>([
   "OFFSEASON_HUB",
@@ -94,7 +151,7 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
   const teams = getTeams().filter((t) => t.isActive).map((t) => t.teamId);
   // Preserve the existing saveSeed to ensure deterministic simulation replay.
   // If missing, derive one from persisted legacy fields.
-  const saveSeed = deriveSaveSeedFromState(oldState);
+  const saveSeed = deriveSaveSeedFromState(oldState as Parameters<typeof deriveSaveSeedFromState>[0]);
   const league = oldState.league ?? initLeagueState(teams, Number(oldState.season ?? 2026));
   const schedule = oldState.hub?.schedule ?? deps.createSchedule(saveSeed);
   const now = Number(oldState.season ?? 2026) * 1_000_000 + Number(oldState.week ?? 1) * 10_000;
@@ -380,7 +437,45 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
     delete scoutingState.combine.hoursRemaining;
   }
 
+  const canonicalProspectIds = ((s as any).upcomingDraftClass ?? []).map((row: any, i: number) => String(row?.id ?? row?.prospectId ?? row?.["Player ID"] ?? `DC_${i + 1}`));
+  const defaultScoutProfiles = Object.fromEntries(canonicalProspectIds.map((id: string) => {
+    const row = ((s as any).upcomingDraftClass ?? []).find((p: any) => String(p?.id ?? p?.prospectId ?? p?.["Player ID"]) === id) ?? {};
+    const grade = Number(row?.grade ?? row?.ovr ?? row?.["Grade"] ?? 75);
+    const estCenter = Number.isFinite(grade) ? Math.max(40, Math.min(99, Math.round(grade))) : 75;
+    return [id, {
+      prospectId: id,
+      estCenter,
+      estWidth: 20,
+      estLow: Math.max(40, estCenter - 10),
+      estHigh: Math.min(99, estCenter + 10),
+      confidence: 20,
+      clarity: { TALENT: 0, MED: 0, CHAR: 0, FIT: 0 },
+      revealed: {},
+      lastSnapshot: { windowKey: "migrated", estCenter },
+      stockArrow: "FLAT",
+      notes: {},
+    }];
+  }));
+
   if (scoutingState) {
+    scoutingState.scoutProfiles = {
+      ...(canonicalProspectIds.length ? defaultScoutProfiles : {}),
+      ...(scoutingState.scoutProfiles ?? {}),
+    };
+    scoutingState.myBoardOrder = Array.isArray(scoutingState.myBoardOrder) && scoutingState.myBoardOrder.length
+      ? scoutingState.myBoardOrder
+      : canonicalProspectIds;
+    scoutingState.combine = {
+      generated: Boolean(scoutingState.combine?.generated),
+      day: deps.clamp(Number(scoutingState.combine?.day ?? 1), 1, deps.COMBINE_DAY_COUNT),
+      selectedByDay: scoutingState.combine?.selectedByDay ?? {},
+      interviewResultsByProspectId: scoutingState.combine?.interviewResultsByProspectId ?? {},
+      days: scoutingState.combine?.days ?? deps.defaultCombineDays(),
+      prospects: scoutingState.combine?.prospects ?? {},
+      resultsByProspectId: scoutingState.combine?.resultsByProspectId ?? {},
+      feed: scoutingState.combine?.feed ?? [],
+      recapByDay: scoutingState.combine?.recapByDay ?? {},
+    };
     scoutingState.interviews = {
       interviewsRemaining: Number(scoutingState.interviews?.interviewsRemaining ?? deps.COMBINE_DEFAULT_INTERVIEW_TOKENS),
       history: scoutingState.interviews?.history ?? {},
@@ -396,14 +491,107 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
     };
   }
 
-  // Ensure scoutingState has at minimum a myBoardOrder so migrations can validate IDs
+  // Canonical scouting invariant after hydration: required scouting containers always exist; keyed records are aligned to canonical draft IDs in a post-migration pass.
   if (!s.scoutingState) {
-    const boardOrder = (draftClassJson as any[]).map((row: any, i: number) => String(row["Player ID"] ?? `DC_${i + 1}`));
-    s = { ...s, scoutingState: { myBoardOrder: boardOrder } as any };
+    s = {
+      ...s,
+      scoutingState: {
+        myBoardOrder: canonicalProspectIds,
+        scoutProfiles: defaultScoutProfiles,
+        combine: { generated: false, day: 1, selectedByDay: {}, interviewResultsByProspectId: {}, days: deps.defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} },
+        interviews: { interviewsRemaining: deps.COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {}, resultsByProspectId: {} },
+        medical: { requests: {}, resultsByProspectId: {} },
+        workouts: { resultsByProspectId: {} },
+      } as any,
+    };
   }
+
+  const sourceScoutingState = (oldState as any).scoutingState;
+  const scoutingBeforeIdMigration = sourceScoutingState
+    ? {
+      myBoardOrder: Array.isArray(sourceScoutingState.myBoardOrder) ? [...sourceScoutingState.myBoardOrder] : [],
+      scoutProfiles: { ...(sourceScoutingState.scoutProfiles ?? {}) },
+      combineProspects: { ...(sourceScoutingState.combine?.prospects ?? {}) },
+      combineResultsByProspectId: { ...(sourceScoutingState.combine?.resultsByProspectId ?? {}) },
+      combineInterviewResultsByProspectId: { ...(sourceScoutingState.combine?.interviewResultsByProspectId ?? {}) },
+      interviewHistory: { ...(sourceScoutingState.interviews?.history ?? {}) },
+      interviewRevealByProspectId: { ...(sourceScoutingState.interviews?.modelARevealByProspectId ?? {}) },
+      interviewResultsByProspectId: { ...(sourceScoutingState.interviews?.resultsByProspectId ?? {}) },
+      medicalRequests: { ...(sourceScoutingState.medical?.requests ?? {}) },
+      medicalResultsByProspectId: { ...(sourceScoutingState.medical?.resultsByProspectId ?? {}) },
+      workoutResultsByProspectId: { ...(sourceScoutingState.workouts?.resultsByProspectId ?? {}) },
+    }
+    : null;
 
   s = deps.ensureOffseasonCombineData(s as GameState);
   s = migrateDraftClassIdsInSave(s);
+
+  const postMigrationProspectIds = ((s as any).upcomingDraftClass ?? []).map((row: any, i: number) => String(row?.id ?? row?.prospectId ?? row?.["Player ID"] ?? `DC_${i + 1}`));
+  const postMigrationProspectIdSet = new Set<string>(postMigrationProspectIds);
+
+  const scoutingAfterIdMigration = (s as any).scoutingState ?? {};
+  const existingProfiles = scoutingAfterIdMigration.scoutProfiles ?? {};
+  if (postMigrationProspectIds.length > 0) {
+    const remappedLegacyScoutProfiles = mergeRemappedKeyedMap({
+      canonicalMap: {},
+      legacyMap: scoutingBeforeIdMigration?.scoutProfiles,
+      validIds: postMigrationProspectIdSet,
+    });
+    scoutingAfterIdMigration.scoutProfiles = Object.fromEntries(postMigrationProspectIds.map((id: string) => {
+      const canonicalProfile = existingProfiles[id];
+      const legacyProfile = remappedLegacyScoutProfiles[id];
+      const selectedProfile =
+        canonicalProfile == null
+          ? legacyProfile
+          : isMigratedScaffoldScoutProfile(canonicalProfile) && !isEmptyMigrationPayload(legacyProfile)
+            ? legacyProfile
+            : isEmptyMigrationPayload(canonicalProfile) && !isEmptyMigrationPayload(legacyProfile)
+              ? legacyProfile
+              : canonicalProfile;
+
+      return [id, selectedProfile ?? {
+        prospectId: id,
+        estCenter: 75,
+        estWidth: 20,
+        estLow: 65,
+        estHigh: 85,
+        confidence: 20,
+        clarity: { TALENT: 0, MED: 0, CHAR: 0, FIT: 0 },
+        revealed: {},
+        lastSnapshot: { windowKey: "migrated", estCenter: 75 },
+        stockArrow: "FLAT",
+        notes: {},
+      }];
+    }));
+    scoutingAfterIdMigration.myBoardOrder = mergeRemappedBoardOrder({
+      canonicalOrder: Array.isArray(scoutingAfterIdMigration.myBoardOrder) ? scoutingAfterIdMigration.myBoardOrder : postMigrationProspectIds,
+      legacyOrder: scoutingBeforeIdMigration?.myBoardOrder,
+      validIds: postMigrationProspectIdSet,
+    });
+    scoutingAfterIdMigration.combine = {
+      ...(scoutingAfterIdMigration.combine ?? { generated: false, day: 1, selectedByDay: {}, interviewResultsByProspectId: {}, days: deps.defaultCombineDays(), prospects: {}, resultsByProspectId: {}, feed: [], recapByDay: {} }),
+      prospects: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.combine?.prospects, legacyMap: scoutingBeforeIdMigration?.combineProspects, validIds: postMigrationProspectIdSet }),
+      resultsByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.combine?.resultsByProspectId, legacyMap: scoutingBeforeIdMigration?.combineResultsByProspectId, validIds: postMigrationProspectIdSet }),
+      interviewResultsByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.combine?.interviewResultsByProspectId, legacyMap: scoutingBeforeIdMigration?.combineInterviewResultsByProspectId, validIds: postMigrationProspectIdSet }),
+    };
+    scoutingAfterIdMigration.interviews = {
+      ...(scoutingAfterIdMigration.interviews ?? { interviewsRemaining: deps.COMBINE_DEFAULT_INTERVIEW_TOKENS, history: {}, modelARevealByProspectId: {}, resultsByProspectId: {} }),
+      history: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.interviews?.history, legacyMap: scoutingBeforeIdMigration?.interviewHistory, validIds: postMigrationProspectIdSet }),
+      modelARevealByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.interviews?.modelARevealByProspectId, legacyMap: scoutingBeforeIdMigration?.interviewRevealByProspectId, validIds: postMigrationProspectIdSet }),
+      resultsByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.interviews?.resultsByProspectId, legacyMap: scoutingBeforeIdMigration?.interviewResultsByProspectId, validIds: postMigrationProspectIdSet }),
+    };
+    scoutingAfterIdMigration.medical = {
+      ...(scoutingAfterIdMigration.medical ?? { requests: {}, resultsByProspectId: {} }),
+      requests: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.medical?.requests, legacyMap: scoutingBeforeIdMigration?.medicalRequests, validIds: postMigrationProspectIdSet }),
+      resultsByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.medical?.resultsByProspectId, legacyMap: scoutingBeforeIdMigration?.medicalResultsByProspectId, validIds: postMigrationProspectIdSet }),
+    };
+    scoutingAfterIdMigration.workouts = {
+      ...(scoutingAfterIdMigration.workouts ?? { resultsByProspectId: {} }),
+      resultsByProspectId: mergeRemappedKeyedMap({ canonicalMap: scoutingAfterIdMigration.workouts?.resultsByProspectId, legacyMap: scoutingBeforeIdMigration?.workoutResultsByProspectId, validIds: postMigrationProspectIdSet }),
+    };
+    s = { ...(s as any), scoutingState: scoutingAfterIdMigration };
+  }
+
   s = deps.ensureAccolades(deps.bootstrapAccolades(s as GameState));
   return ensureLeagueGmMap(s as GameState);
 }

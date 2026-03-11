@@ -1,6 +1,6 @@
 import type { GameState } from "@/context/GameContext";
 import { SCOUTING_FEATURES } from "@/engine/scouting/config";
-import { getCanonicalCombineResult, getCanonicalProspectById } from "@/engine/scouting/selectors";
+import { getCanonicalCombineResult, getCanonicalInterviewReveal, getCanonicalProspectById, parseCanonicalMetric } from "@/engine/scouting/selectors";
 
 export type ScoutViewProspect = {
   id: string;
@@ -16,7 +16,7 @@ export type ScoutViewProspect = {
 };
 
 function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return parseCanonicalMetric(value) ?? undefined;
 }
 
 export function getScoutViewProspect(state: GameState, prospectId: string): ScoutViewProspect | null {
@@ -27,13 +27,15 @@ export function getScoutViewProspect(state: GameState, prospectId: string): Scou
   if (!profile) return null;
 
   const draft = getCanonicalProspectById(state, prospectId);
+  if (!draft) return null;
+
   const combine = getCanonicalCombineResult(state, prospectId);
-  const interview = scouting.combine.interviewResultsByProspectId?.[prospectId] ?? {};
+  const interview = getCanonicalInterviewReveal(state, prospectId);
 
   return {
     id: prospectId,
-    name: draft?.name ?? prospectId,
-    pos: draft?.pos ?? "UNK",
+    name: draft.name,
+    pos: draft.pos,
     measurables: {
       forty: asNumber(combine.forty),
       shuttle: asNumber(combine.shuttle),
@@ -45,7 +47,7 @@ export function getScoutViewProspect(state: GameState, prospectId: string): Scou
     confidence: Math.round(profile.confidence),
     knownTraits: profile.revealed?.leadershipTag ? [`Leadership: ${profile.revealed.leadershipTag}`] : [],
     medicalFlags: profile.revealed?.medicalTier ? [profile.revealed.medicalTier] : [],
-    characterPct: interview.characterPct,
-    intelligencePct: interview.intelligencePct,
+    characterPct: interview?.characterRevealPct,
+    intelligencePct: interview?.intelligenceRevealPct,
   };
 }

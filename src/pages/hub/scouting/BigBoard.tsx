@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
 import { useGame } from "@/context/GameContext";
 import { generateScoutingReport } from "@/engine/scouting/reportGenerator";
-import { buildProspectScoutingViews } from "@/engine/scouting/viewModel";
+import { buildProspectScoutingViewSet } from "@/engine/scouting/viewModel";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
 
@@ -24,15 +24,16 @@ export default function BigBoard() {
     if (!scouting) dispatch({ type: "SCOUT_INIT" });
   }, [scouting, dispatch]);
 
+  const scoutingViewSet = useMemo(() => buildProspectScoutingViewSet(state), [state]);
   const normalizedProspects = useMemo<Prospect[]>(() => {
-    return buildProspectScoutingViews(state).map((prospect) => {
+    return scoutingViewSet.views.map((prospect) => {
       const id = prospect.id;
       return {
         ...prospect,
         unicornConfidence: Number(state.playerUnicorns?.[id]?.confidence ?? 0),
       };
     });
-  }, [state]);
+  }, [scoutingViewSet.views, state.playerUnicorns]);
 
   useEffect(() => {
     if (!normalizedProspects.length) return;
@@ -49,6 +50,9 @@ export default function BigBoard() {
   }, []);
 
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
+  if (!normalizedProspects.length) {
+    return <div className="p-4 opacity-70">{scoutingViewSet.totalCanonicalProspects ? "No canonical scout profiles available." : "No canonical draft prospects are available."}</div>;
+  }
 
   const filtered = normalizedProspects.filter((p) => activePos === "ALL" || p.pos === activePos);
   const scoutOrdered = [...filtered].sort((a, b) => (ascending ? a.estHigh - b.estHigh : b.estHigh - a.estHigh));
@@ -71,6 +75,11 @@ export default function BigBoard() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20">
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4">
         <h1 className="text-xl font-bold">Big Board</h1>
+        {scoutingViewSet.missingScoutProfileCount > 0 ? (
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            {scoutingViewSet.missingScoutProfileCount} of {scoutingViewSet.totalCanonicalProspects} canonical prospects are excluded because scout profiles are missing.
+          </div>
+        ) : null}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
           {POSITION_PILLS.map((p) => (
             <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{getPositionLabel(p)}</button>

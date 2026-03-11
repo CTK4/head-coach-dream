@@ -69,7 +69,7 @@ import { applyFullStaffImpact, coachesForPosition } from "@/engine/coachImpact";
 import { computeCapLedger } from "@/engine/capLedger";
 import { computeTerminationRisk, shouldFireDeterministic } from "@/engine/termination";
 import { getGmTraits } from "@/engine/gmScouting";
-import { evalProspectForGm } from "@/engine/prospectEval";
+import { evalProspectForGm, type ProspectEvalUncertaintyOptions } from "@/engine/prospectEval";
 import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers, type PlayerIntel, type ScoutAction, type ScoutingWindowId } from "@/engine/scoutingCapacity";
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
@@ -109,6 +109,7 @@ import {
   COMBINE_FOCUS_HOURS_COST,
   COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY,
 } from "@/engine/scouting/combineConstants";
+import { combineDayForPosition } from "@/engine/scouting/combineDay";
 import type {
   CampSettings,
   CutDecision,
@@ -1966,14 +1967,14 @@ function prospectEvalDetRand(saveSeed: number, key: string) {
   return mulberry32(saveSeed ^ hashStr(key));
 }
 
-export function getUserProspectEval(state: GameState, prospect: Prospect) {
+export function getUserProspectEval(state: GameState, prospect: Prospect, options?: ProspectEvalUncertaintyOptions) {
   const userTeamId = resolveCurrentUserTeamId(state) ?? "";
   const gmPersonId = state.league.gmByTeamId[userTeamId];
   const gm = getGmTraits(gmPersonId);
   const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
   const spent = prospectSpentProxyForUser(state, prospect.id);
   const need = userTeamId ? teamNeedAtPos01(state, userTeamId, prospect.pos) : 0;
-  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need, uncertainty: options });
 }
 
 export function getCpuProspectEval(state: GameState, teamId: string, prospect: Prospect) {
@@ -1982,7 +1983,8 @@ export function getCpuProspectEval(state: GameState, teamId: string, prospect: P
   const r = prospectEvalDetRand(state.saveSeed, `gm_eval:${gmPersonId}:${prospect.id}`);
   const spent = prospectSpentProxyForCpu(gmPersonId);
   const need = teamNeedAtPos01(state, teamId, prospect.pos);
-  return evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  const evalResult = evalProspectForGm({ prospect, gm, seedRand: r, spentPoints: spent, teamNeedAtPos01: need });
+  return evalResult;
 }
 
 function makeOfferId(state: GameState) {
@@ -4808,25 +4810,6 @@ function posToGroup(pos: string) {
 
 
 type CombineFeedCategory = keyof typeof COMBINE_FEED_TEMPLATES;
-
-function normalizeCombinePosition(pos: string): string {
-  const p = String(pos || "").toUpperCase();
-  if (["DE", "OLB"].includes(p)) return "EDGE";
-  if (["DT", "NT"].includes(p)) return "DT";
-  if (["ILB", "MLB"].includes(p)) return "LB";
-  if (["FS", "SS"].includes(p)) return "S";
-  if (["G"].includes(p)) return "OG";
-  if (["T"].includes(p)) return "OT";
-  return p;
-}
-
-function combineDayForPosition(pos: string): 1 | 2 | 3 | 4 {
-  const normalized = normalizeCombinePosition(pos);
-  for (const [day, bucket] of Object.entries(COMBINE_DAY_POSITION_BUCKETS)) {
-    if ((bucket.positions as readonly string[]).includes(normalized)) return Number(day) as 1 | 2 | 3 | 4;
-  }
-  return 2;
-}
 
 function defaultCombineDays() {
   return {
@@ -9514,7 +9497,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "RECOVERY_SET_ERRORS":
       throw new Error(`Unhandled delegated action in gameReducerMonolith: ${action.type}`);
     default:
-      return assertNever(action);
+      return assertNever(action as never);
   }
 }
 

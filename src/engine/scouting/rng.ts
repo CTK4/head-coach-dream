@@ -1,4 +1,6 @@
-export { mulberry32 } from "../rng";
+import { mulberry32 } from "../rng";
+
+export { mulberry32 };
 
 export function hashStr(s: string) {
   let h = 2166136261;

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
-import { COMBINE_DAY_POSITION_BUCKETS, COMBINE_DEFAULT_INTERVIEW_TOKENS, COMBINE_FOCUS_HOURS_COST, COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY } from "@/engine/scouting/combineConstants";
+import { COMBINE_DEFAULT_INTERVIEW_TOKENS, COMBINE_FOCUS_HOURS_COST, COMBINE_INTERVIEW_ATTRIBUTE_BY_CATEGORY } from "@/engine/scouting/combineConstants";
+import { combineDayForPosition } from "@/engine/scouting/combineDay";
 import { useProspectProfileModal } from "@/hooks/useProspectProfileModal";
 import { getPositionLabel } from "@/lib/displayLabels";
-import { getDeterministicRevealRange } from "@/engine/scouting/revealRange";
 import { getAthleticSummary } from "@/engine/scouting/athleticSummary";
-import { getLegacyCombineProspectsView } from "@/engine/scouting/legacyBridge";
-import { getCanonicalCombineResult, getCanonicalScoutProfile } from "@/engine/scouting/selectors";
+import { getCanonicalCombineResult, getCanonicalDraftProspects, getCanonicalInterviewReveal, getCanonicalInterviewRevealRanges, getCanonicalScoutProfile, hasEnoughAthleticDataForSummary, parseCanonicalMetric } from "@/engine/scouting/selectors";
 
 const DAYS = [
   { day: 1 as const, label: "Day 1" },
@@ -24,13 +23,6 @@ const DAY_BUCKET_LABELS: Record<1 | 2 | 3 | 4, string> = {
   4: "Offensive Line",
 };
 
-const DAY_POSITION_SETS: Record<1 | 2 | 3 | 4, Set<string>> = {
-  1: new Set(COMBINE_DAY_POSITION_BUCKETS[1].positions as readonly string[]),
-  2: new Set(COMBINE_DAY_POSITION_BUCKETS[2].positions as readonly string[]),
-  3: new Set(COMBINE_DAY_POSITION_BUCKETS[3].positions as readonly string[]),
-  4: new Set(COMBINE_DAY_POSITION_BUCKETS[4].positions as readonly string[]),
-};
-
 const TABS: { id: TabId; label: string }[] = [
   { id: "ALL", label: "All Prospects" },
   { id: "SHORTLIST", label: "Interview Shortlist" },
@@ -44,15 +36,6 @@ const medicalToneByTier: Record<string, string> = {
   RED: "text-rose-200 border-rose-500/40",
   BLACK: "text-rose-100 border-rose-600/60",
 };
-
-function getDayBucketForPos(pos: string): 1 | 2 | 3 | 4 {
-  const normalized = String(pos ?? "UNK").toUpperCase();
-  if (DAY_POSITION_SETS[1].has(normalized)) return 1;
-  if (DAY_POSITION_SETS[2].has(normalized)) return 2;
-  if (DAY_POSITION_SETS[3].has(normalized)) return 3;
-  if (DAY_POSITION_SETS[4].has(normalized)) return 4;
-  return 2;
-}
 
 function barTone(value: number) {
   if (value >= 70) return "bg-emerald-400";
@@ -86,8 +69,9 @@ export default function ScoutingCombine() {
     globalThis.localStorage?.setItem(`combine-notes:${state.saveSeed}`, JSON.stringify(notesByProspect));
   }, [notesByProspect, state.saveSeed]);
 
-  const draftClass = useMemo(() => getLegacyCombineProspectsView(state), [state]);
+  const draftClass = useMemo(() => getCanonicalDraftProspects(state), [state]);
   if (!scouting) return <div className="p-4 opacity-70">Loading…</div>;
+  if (!draftClass.length) return <div className="p-4 opacity-70">No canonical draft prospects are available.</div>;
 
   const day = scouting.combine.day;
   const focusEnabled = day === 2 || day === 3;
@@ -108,6 +92,8 @@ export default function ScoutingCombine() {
   const currentDay = Math.min(scouting.combine.day, 4);
   const interviewsRemaining = Math.max(0, scouting.interviews.interviewsRemaining ?? COMBINE_DEFAULT_INTERVIEW_TOKENS);
 
+  const prospectsMissingProfile = draftClass.filter((draft) => !getCanonicalScoutProfile(state, draft.id)).length;
+
   const allProspects = draftClass
     .map((draft, index) => {
       const id = draft.id;
@@ -119,7 +105,7 @@ export default function ScoutingCombine() {
         draft,
         profile,
         metrics,
-        dayBucket: getDayBucketForPos(draft.pos),
+        dayBucket: combineDayForPosition(draft.pos),
         interviewCount: scouting.interviews.history[id]?.length ?? 0,
         order: index,
       };
@@ -154,10 +140,6 @@ export default function ScoutingCombine() {
   const interviewsEnabled = currentDay === 4;
   const selectedForRun = scouting.combine.selectedByDay?.[currentDay]?.IQ ?? [];
   const canRunSelectedInterviews = interviewsEnabled && interviewsRemaining > 0 && selectedForRun.length > 0;
-  const formatRange = (trueScore: number, revealPct: number) => {
-    const [low, high] = getDeterministicRevealRange({ trueScore, revealPct });
-    return low === high ? `${low}` : `${low}–${high}`;
-  };
 
   return (
     <div className="space-y-3 p-3 pb-24 sm:p-4">
@@ -190,6 +172,12 @@ export default function ScoutingCombine() {
             <div className="mt-1 text-xs opacity-80">Select from today&apos;s {bucketLabel} bucket. Interviews reveal partial Character and IQ grades.</div>
           </div>
 
+          {prospectsMissingProfile > 0 ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+              {prospectsMissingProfile} canonical prospects are missing scout profiles and are excluded from scouting combine views.
+            </div>
+          ) : null}
+
           {dayProspects.map(({ id, draft, profile, metrics }) => {
             const charReveal = profile.clarity.CHAR ?? 0;
             const iqReveal = profile.clarity.FIT ?? 0;
@@ -220,7 +208,7 @@ export default function ScoutingCombine() {
                   <div className="mt-1 flex flex-wrap gap-3 opacity-85">
                     <span>40: {String(metrics?.forty ?? "—")}</span>
                     <span>Vert: {String(metrics?.vert ?? "—")}</span>
-                    <span>Athletic: {getAthleticSummary({ forty: Number(metrics?.forty), vert: Number(metrics?.vert), shuttle: Number(metrics?.shuttle), bench: Number(metrics?.bench) }).overallLabel}</span>
+                    <span>Athletic: {hasEnoughAthleticDataForSummary(metrics) ? getAthleticSummary({ forty: parseCanonicalMetric(metrics?.forty) ?? undefined, vert: parseCanonicalMetric(metrics?.vert) ?? undefined, shuttle: parseCanonicalMetric(metrics?.shuttle) ?? undefined, threeCone: parseCanonicalMetric(metrics?.threeCone) ?? undefined, bench: parseCanonicalMetric(metrics?.bench) ?? undefined }).overallLabel : "No combine data"}</span>
                   </div>
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sky-200">Expand full set</summary>
@@ -278,9 +266,10 @@ export default function ScoutingCombine() {
         <div className="space-y-2">
           {shortlist.map((prospect) => {
             const combinedReveal = Math.max(prospect.profile.clarity.CHAR ?? 0, prospect.profile.clarity.FIT ?? 0);
-            const reveal = scouting.interviews.modelARevealByProspectId?.[prospect.id] ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
-            const charRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.characterRevealPct });
-            const iqRange = getDeterministicRevealRange({ trueScore: 65, revealPct: reveal.intelligenceRevealPct });
+            const reveal = getCanonicalInterviewReveal(state, prospect.id) ?? { characterRevealPct: 0, intelligenceRevealPct: 0 };
+            const revealRanges = getCanonicalInterviewRevealRanges(state, prospect.id);
+            const characterRange = revealRanges?.characterRange ?? null;
+            const intelligenceRange = revealRanges?.intelligenceRange ?? null;
             return (
               <div key={prospect.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
                 <div className="min-w-0">
@@ -298,7 +287,7 @@ export default function ScoutingCombine() {
                     <div className="h-1.5 w-full overflow-hidden rounded bg-white/10"><div className="h-full bg-sky-400" style={{ width: `${reveal.intelligenceRevealPct}%` }} /></div>
                   </div>
                   <div className="mt-1 text-xs opacity-70">
-                    Character: {charRange[0]}-{charRange[1]} • Football IQ: {iqRange[0]}-{iqRange[1]} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
+                    Character: {characterRange ? `${characterRange[0]}-${characterRange[1]}` : "—"} • Football IQ: {intelligenceRange ? `${intelligenceRange[0]}-${intelligenceRange[1]}` : "—"} • Leadership: {prospect.profile.revealed.leadershipTag ?? "—"}
                   </div>
                   <div className="text-xs text-sky-200">Reveal {combinedReveal}%</div>
                 </div>
