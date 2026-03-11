@@ -60,37 +60,42 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
   },
   badges: {
     id: "badges",
-    title: "Season badge engine",
+    title: "Badge triggers",
     description:
-      "Badges are awarded by hard stat thresholds plus position eligibility, with special handling for mixed touchdown roles and rarity-based news.",
+      "Season badges evaluate explicit eligibility and stat thresholds from the badge engine, including role-specific exceptions and one-time award filtering.",
     factors: [
       {
-        label: "Threshold checks are deterministic",
+        label: "Eligibility rules gate badge checks first",
         weight: "High",
-        description: "Each badge requires specific stat cutoffs (for example sacks, passing yards, or field-goal percentage) and grants only when all required tests pass.",
+        description:
+          "Each badge can define allowed positions; if the player role is not eligible (for example K-only or DB groups), threshold checks are skipped.",
       },
       {
-        label: "Position gates prevent mismatched awards",
+        label: "Threshold comparisons use ge/le operators",
         weight: "High",
-        description: "Many badges only evaluate eligible positions, so a player cannot trigger badges outside their role group.",
+        description:
+          "Every threshold is a deterministic stat comparison: ge means value ≥ cutoff and le means value ≤ cutoff, with all listed thresholds required unless special-cased.",
       },
       {
-        label: "Red Zone Reaper accepts multiple paths",
+        label: "Red Zone Reaper has a multi-stat trigger path",
         weight: "Medium",
-        description: "This badge can trigger from passing, rushing, or receiving touchdown production, rather than requiring one single stat profile.",
+        description:
+          "RED_ZONE_REAPER is evaluated by alternate touchdown routes, passing with a higher bar (40+) or rushing/receiving with lower bars (10+), so one lane can qualify the badge.",
       },
       {
-        label: "No duplicate badge re-awards",
+        label: "Badges are awarded once per player",
         weight: "Rule",
-        description: "Previously earned badge IDs are filtered out before evaluation, so players only receive each badge once.",
+        description:
+          "The engine builds a prior badge-ID set and filters those out before evaluating the season, preventing duplicate re-awards of the same badge.",
       },
       {
-        label: "Rare+ badges create league news",
+        label: "Rare and above badges generate news",
         weight: "Rule",
-        description: "Only RARE, EPIC, and LEGENDARY outcomes generate news feed entries, highlighting high-impact achievements.",
+        description:
+          "After award resolution, RARE/EPIC/LEGENDARY badges publish league news while COMMON badges remain in player history only.",
       },
     ],
-    example: "A corner with 20 pass breakups and 7 interceptions can hit Shutdown Corner, while a similar stat line at WR is never eligible.",
+    example: "A CB can hit Shutdown Corner only if position-eligible and both pass-deflection and interception thresholds pass; once awarded, that badge ID is never re-granted.",
   },
   "scouting-confidence": {
     id: "scouting-confidence",
