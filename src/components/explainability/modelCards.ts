@@ -99,37 +99,38 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
   },
   "scouting-confidence": {
     id: "scouting-confidence",
-    title: "Scouting confidence",
+    title: "Scouting confidence & reveal logic",
     description:
-      "Confidence is tied to estimate width: narrower projected OVR bands mean higher confidence, while baseline uncertainty depends on position and GM traits.",
+      "Board ranges, confidence, and detail reveals all flow from the same scouting progression: actions tighten estimate width, mutate center/stock direction, and unlock clearer intel bands.",
     factors: [
       {
-        label: "Position sets starting uncertainty",
+        label: "Position baseline sets opening band",
         weight: "High",
-        description: "Each position starts with a default width (for example QB wider than RB/WR), which defines initial confidence before extra scouting.",
+        description: "Initial estimate width starts from a position default (for example QB wider than RB/WR), so confidence begins lower for harder-eval profiles.",
       },
       {
-        label: "GM film and analytics tighten faster",
+        label: "Scouting actions tighten width and can move center",
         weight: "High",
-        description: "Tightening efficiency scales with film process and analytics orientation, reducing band width more effectively per scouting action.",
+        description: "Each tighten pass reduces estWidth with GM film/analytics efficiency and can shift estCenter, which drives stock arrows between snapshots.",
       },
       {
-        label: "Diminishing returns near narrow bands",
+        label: "Confidence is derived directly from width",
         weight: "Medium",
-        description: "As a profile gets tighter, additional actions remove less width, preventing near-perfect certainty too early.",
+        description: "Displayed confidence is computed from estimate width (100 - width×4, clamped), so every narrowing pass raises confidence in visible steps.",
       },
       {
-        label: "Center estimate can drift",
+        label: "Reveal percent controls attribute estimate spread",
         weight: "Medium",
-        description: "Each tighten action can shift estimated center up or down slightly, driving stock arrows between windows.",
+        description: "Attribute reveal ranges shrink linearly with revealPct around the true score and collapse to exact values at 100% reveal.",
       },
       {
-        label: "Confidence formula is direct",
+        label: "Board/report visibility respects confidence gates",
         weight: "Rule",
-        description: "Displayed confidence is computed from width (approximately 100 minus width×4, clamped), so every width reduction is visible to the user.",
+        description: "Big Board report generation is gated until scout confidence clears the threshold (>20), so low-confidence profiles keep broad bands and limited narrative output.",
       },
     ],
-    example: "Two identical prospects can show different confidence if one GM has stronger film/analytics traits and spends more high-efficiency scouting points.",
+    example:
+      "A QB might open around 72-90 (~28% confidence). After multiple scouting actions, width narrows to roughly 78-88 (~60% confidence), and continued work can reach 81-86 (~76% confidence) while reveal ranges tighten toward exact values.",
   },
   "scouting-reveal": {
     id: "scouting-reveal",
