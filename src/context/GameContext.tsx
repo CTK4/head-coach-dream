@@ -75,7 +75,7 @@ import { computeWindowBudget, freshIntel, applyScoutAction, updateRevealedTiers,
 import { FATIGUE_DEFAULT, clampFatigue, getRecoveryRate, pushLast3SnapLoad, recoverFatigue } from "@/engine/fatigue";
 import type { PersonnelPackage } from "@/engine/personnel";
 import { TRADE_DEADLINE_DEFAULT_WEEK, cancelPendingTradesAtDeadline, isTradeAllowed, resolveTradeDeadlineWeek, type TradeDeadlineError } from "@/engine/tradeDeadline";
-import { isActionAllowedInCurrentPhase, type ValidPhaseActions } from "@/context/phaseGuards";
+import { isActionAllowedInCurrentPhase, shouldForcePreseasonCutdownTransition, type ValidPhaseActions } from "@/context/phaseGuards";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_EXEC_SCALE,
@@ -9205,6 +9205,23 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
             stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
           },
           hub: { ...out.hub, preseasonWeek: PRESEASON_WEEKS, regularSeasonWeek: 1 },
+        };
+      }
+
+      if (shouldForcePreseasonCutdownTransition(state, action) && out.careerStage === "PRESEASON") {
+        out = {
+          ...out,
+          careerStage: "CUTDOWNS",
+          offseason: {
+            ...out.offseason,
+            stepId: "CUT_DOWNS",
+            stepsComplete: { ...out.offseason.stepsComplete, PRESEASON: true },
+          },
+          hub: {
+            ...out.hub,
+            preseasonWeek: Math.min(PRESEASON_WEEKS, out.hub.preseasonWeek),
+            regularSeasonWeek: 1,
+          },
         };
       }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialStateForTests, gameReducer, type GameAction } from "@/context/GameContext";
-import { isActionAllowedInCurrentPhase } from "@/context/phaseGuards";
+import { isActionAllowedInCurrentPhase, shouldForcePreseasonCutdownTransition } from "@/context/phaseGuards";
 import { migrateSaveSchema } from "@/lib/migrations/saveSchema";
 import { TRADE_DEADLINE_DEFAULT_WEEK } from "@/engine/tradeDeadline";
 
@@ -74,6 +74,21 @@ describe("phaseGuards", () => {
     const state = { ...base, league: { ...base.league, week: 12, tradeDeadlineWeek: 10 } };
     const out = gameReducer(state, { type: "TRADE_ACCEPT", payload: { playerId: "PLY_1", toTeamId: "T2", valueTier: "2nd" } });
     expect(out.tradeError?.code).toBe("TRADE_DEADLINE_PASSED");
+  });
+
+
+  it("flags forced transition on final preseason ADVANCE_WEEK", () => {
+    const base = withCareerStage("PRESEASON");
+    const finalWeekState = { ...base, hub: { ...base.hub, preseasonWeek: base.hub.schedule.preseasonWeeks.length } };
+
+    expect(shouldForcePreseasonCutdownTransition(finalWeekState, { type: "ADVANCE_WEEK" } as GameAction)).toBe(true);
+  });
+
+  it("does not force transition during mid-preseason ADVANCE_WEEK", () => {
+    const base = withCareerStage("PRESEASON");
+    const midWeekState = { ...base, hub: { ...base.hub, preseasonWeek: 1 } };
+
+    expect(shouldForcePreseasonCutdownTransition(midWeekState, { type: "ADVANCE_WEEK" } as GameAction)).toBe(false);
   });
 
   it("migration hardens missing phase fields and deadline values", () => {
