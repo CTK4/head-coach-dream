@@ -26,6 +26,8 @@ import type { WeeklyGameplan } from "@/engine/gameplan";
 import type { GameWeather } from "@/engine/weather/generateGameWeather";
 import type { PlayerUnicorn, UnicornArchetypeId } from "@/engine/unicorns/types";
 import { describeUnicornBoost, resolveUnicornModifiers } from "@/engine/unicorns/effects";
+import { resolveBadgeSimModifiers } from "@/engine/badges/effects";
+import type { PlayerBadge } from "@/engine/badges/types";
 import type { OffenseSchemeId } from "@/lib/schemeLabels";
 
 // ─── Play types ────────────────────────────────────────────────────────────
@@ -276,6 +278,7 @@ export type GameSim = {
   snapLoadThisGame: Record<string, number>;
   /** Tracked participant mapping by side */
   trackedPlayers: Record<Possession, Partial<Record<FatigueTrackedPosition, string>>>;
+  specialistsBySide: Record<Possession, Partial<Record<"K" | "P", string>>>;
   currentPersonnelPackage: PersonnelPackage;
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
   selectedDefensivePackage?: DefensivePackage;
@@ -293,6 +296,7 @@ export type GameSim = {
   awayGameplan?: WeeklyGameplan;
   weather?: GameWeather;
   playerUnicorns: Record<string, PlayerUnicorn>;
+  playerBadges: Record<string, PlayerBadge[]>;
   unicornImpactLog: Array<{ playId: string; side: Possession; playerId: string; archetypeId: UnicornArchetypeId; description: string }>;
   lastPlayResult?: PlayResult;
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
@@ -484,11 +488,6 @@ function callVsLook(playType: PlayType, look: DefensiveLook): number {
 function matchupEdge(playType: PlayType, off: TeamGameRatings, def: TeamGameRatings, sim: GameSim): number {
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
-  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
-  const qbId = sim.trackedPlayers[sim.possession]?.QB;
-  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
-  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
 
   if (isRun) {
     const olVsRunDef = (off.olPassBlock - def.runStop) / 15; // OL run-block vs DL run-stop
@@ -726,11 +725,6 @@ function buildResultTags(
   const { shell, box, blitz } = look;
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
-  const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
-  const qbId = sim.trackedPlayers[sim.possession]?.QB;
-  const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
-  const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
-  const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
 
   // Pick the largest contributing factor
   const factors: { key: string; val: number }[] = [
@@ -811,6 +805,7 @@ function currentWeatherLabel(sim: GameSim): string {
   return String(sim.weather?.condition ?? "CLEAR").toUpperCase();
 }
 
+
 function getUnicornForPlayer(sim: GameSim, playerId: string | undefined): PlayerUnicorn | undefined {
   if (!playerId) return undefined;
   return sim.playerUnicorns?.[String(playerId)];
@@ -837,7 +832,6 @@ function resolveWithPAS(
     { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear, unlockedPerkIds: sim.coachUnlockedPerkIds },
     { playType, aggression, quarter: Number(sim.clock.quarter ?? 1), timeRemainingSec: sim.clock.timeRemainingSec }
   );
-  const pas = pasComp.pas + passivePas + perkPas;
 
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
@@ -852,6 +846,15 @@ function resolveWithPAS(
   const rbUnicorn = getUnicornForPlayer(sim, rbId);
   const edgeId = sim.trackedPlayers[otherSide(sim.possession)]?.DL ?? sim.trackedPlayers[otherSide(sim.possession)]?.LB;
   const edgeUnicorn = getUnicornForPlayer(sim, edgeId);
+  const badgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, {
+    playType,
+    ballOn: sim.ballOn,
+    offenseIds: { QB: qbId, RB: rbId, WR: sim.trackedPlayers[sim.possession]?.WR, TE: sim.trackedPlayers[sim.possession]?.TE },
+    defenseIds: { DL: sim.trackedPlayers[otherSide(sim.possession)]?.DL, LB: sim.trackedPlayers[otherSide(sim.possession)]?.LB, DB: sim.trackedPlayers[otherSide(sim.possession)]?.DB },
+    specialistIds: { K: sim.specialistsBySide[sim.possession]?.K, P: sim.specialistsBySide[sim.possession]?.P },
+  });
+
+  const pas = pasComp.pas + passivePas + perkPas + badgeMods.pasDelta;
 
   let yards = 0;
   let turnover = false;
@@ -862,7 +865,7 @@ function resolveWithPAS(
   let diag: PassPlayDiag | undefined;
   let unicornImpact: { playerId: string; archetypeId: UnicornArchetypeId; description: string } | undefined;
 
-  const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
+  const baseTags = buildResultTags(playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
   const callFx = applyDefensiveCallMultipliers(defensiveCall);
   if (callFx.debug.length) resolverTags.push({ kind: "SITUATION", text: `DEF_CALL:${callFx.debug.join(",")}` });
@@ -906,6 +909,7 @@ function resolveWithPAS(
       const rbFatigueLevel = rbPlayerId ? clampFatigue(sim.playerFatigue[rbPlayerId] ?? 50) : 50;
       yards = Math.max(-8, yards - Math.floor(Math.max(0, rbFatigueLevel - 40) * 0.04));
     }
+    if (badgeMods.runYardsDelta !== 0) yards = Math.max(-8, yards + badgeMods.runYardsDelta);
     const runFumble = resolveFumble(
       {
         carrier: { balanceZ: ratingZ(contactInput.ballcarrier.balance), strengthZ: ratingZ(contactInput.ballcarrier.strength), fatigue01: contactInput.ballcarrier.fatigue01 },
@@ -991,8 +995,9 @@ function resolveWithPAS(
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
+      const badgeCompShift = Math.max(-10, Math.min(10, Math.round(badgeMods.pasDelta * 80)));
       const catchInput: CatchInput = {
-        qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit), arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
+        qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit) + badgeCompShift, arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt), pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
         wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
         cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
         context: {
@@ -1012,6 +1017,11 @@ function resolveWithPAS(
       incomplete = !catchOutcome.completed;
       turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
+      // Badge PAS impacts completion quality in deterministic pass-resolution (without generic PAS->yards conversion).
+      if (catchOutcome.completed && badgeMods.pasDelta <= -0.02 && yards <= 20) {
+        incomplete = true;
+        yards = 0;
+      }
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
       if (qbUnicorn && (qbMods.armStrength || qbMods.throwOnMove || qbMods.weatherPenaltyMitigation)) {
@@ -1030,6 +1040,10 @@ function resolveWithPAS(
     : "SUCCESS";
 
   const tags: ResultTag[] = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
+
+  if (isPass && !sack && !incomplete && !turnover && badgeMods.passYardsDelta !== 0) {
+    yards += badgeMods.passYardsDelta;
+  }
 
   if (sim.ballOn + yards >= 100 && !turnover) {
     td = true;
@@ -1211,7 +1225,14 @@ function punt(sim: GameSim, rng: () => number): GameSim {
   let clock = applyTime(sim.clock, adminTime(rng, "PUNT_SETUP"));
   const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
   const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-punt");
-  const puntOutcome = resolvePunt({ power: 78, accuracy: 73, hang: 76, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
+  const puntBadgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, {
+    playType: "PUNT",
+    ballOn: sim.ballOn,
+    offenseIds: {},
+    defenseIds: {},
+    specialistIds: { P: sim.specialistsBySide[sim.possession]?.P },
+  });
+  const puntOutcome = resolvePunt({ power: 78 + puntBadgeMods.puntPowerDelta, accuracy: 73, hang: 76 + puntBadgeMods.puntHangDelta, spin: 74 }, { distanceYds: 100 - sim.ballOn, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
   const returned = puntOutcome.returnable;
   clock = applyTime(clock, liveTime(rng, returned ? "PUNT_RETURN" : "PUNT_FAIR"));
   return turnover({ ...sim, clock, lastResult: `Punt ${puntOutcome.netYds}y${puntOutcome.inside20 ? " (inside 20)" : ""}.`, lastResultTags: puntOutcome.resultTags, currentDrive: { ...sim.currentDrive, result: "PUNT" } }, rng);
@@ -1229,7 +1250,14 @@ function fgAttempt(sim: GameSim, rng: () => number): GameSim {
   const kickYards = 100 - sim.ballOn + 17;
   const gameKey = `${sim.homeTeamId}:${sim.awayTeamId}:${sim.weekType ?? "REGULAR_SEASON"}:${sim.weekNumber ?? 0}`;
   const kickRng = contextualRng(hashSeed(sim.seed, gameKey, sim.playNumberInDrive + 1), "kick-fg");
-  const fgOutcome = resolveFieldGoal({ power: 79, accuracy: 77, spin: 74 }, { distanceYds: kickYards, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
+  const fgBadgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, {
+    playType: "FG",
+    ballOn: sim.ballOn,
+    offenseIds: {},
+    defenseIds: {},
+    specialistIds: { K: sim.specialistsBySide[sim.possession]?.K },
+  });
+  const fgOutcome = resolveFieldGoal({ power: 79 + fgBadgeMods.fgPowerDelta, accuracy: 77 + fgBadgeMods.fgAccuracyDelta, spin: 74 }, { distanceYds: kickYards, windTier: sim.weather?.windTier ?? "LOW", precipTier: sim.weather?.precipTier ?? "NONE", surface: sim.weather?.surface ?? "DRY" }, kickRng);
 
   if (fgOutcome.made) {
     const off = scoreRef(sim);
@@ -1525,6 +1553,7 @@ export function initGameSim(params: {
   awayRatings?: TeamGameRatings;
   controlMode?: GameSim["controlMode"];
   trackedPlayers?: GameSim["trackedPlayers"];
+  specialistsBySide?: GameSim["specialistsBySide"];
   playerFatigue?: Record<string, number>;
   currentPersonnelPackage?: PersonnelPackage;
   practiceExecutionBonus?: number;
@@ -1536,6 +1565,7 @@ export function initGameSim(params: {
   awayGameplan?: WeeklyGameplan;
   weather?: GameWeather;
   playerUnicorns?: Record<string, PlayerUnicorn>;
+  playerBadges?: Record<string, PlayerBadge[]>;
 }): GameSim {
   return {
     homeTeamId: params.homeTeamId,
@@ -1564,6 +1594,7 @@ export function initGameSim(params: {
     playerFatigue: { ...(params.playerFatigue ?? {}) },
     snapLoadThisGame: {},
     trackedPlayers: params.trackedPlayers ?? { HOME: {}, AWAY: {} },
+    specialistsBySide: params.specialistsBySide ?? { HOME: {}, AWAY: {} },
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
     defensiveCallRecords: [],
@@ -1580,6 +1611,7 @@ export function initGameSim(params: {
     awayGameplan: params.awayGameplan,
     weather: params.weather,
     playerUnicorns: { ...(params.playerUnicorns ?? {}) },
+    playerBadges: { ...(params.playerBadges ?? {}) },
     unicornImpactLog: [],
     defenseUserMode: "KEY_DOWNS",
     needsDefensiveCall: false,

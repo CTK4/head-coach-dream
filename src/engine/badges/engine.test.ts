@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
 import { getPlayers } from "@/data/leagueDb";
 import { applySeasonBadges, evaluatePlayerBadges } from "@/engine/badges/engine";
+import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 
 function initState(teamId = "MILWAUKEE_NORTHSHORE"): GameState {
   const seeded = gameReducer({} as GameState, {
@@ -100,6 +101,69 @@ describe("badges engine", () => {
     const next = applySeasonBadges(state);
     expect((next.hub.news ?? []).some((n) => String(n.title).includes("Gunslinger"))).toBe(true);
   });
+
+
+  it("migration backfills specialists from save-state effective roster, not base DB", () => {
+    const base = initState();
+    const userTeamId = String(base.acceptedOffer?.teamId ?? "");
+    const movedK = getPlayers()
+      .filter((p: any) => String(p.teamId) !== userTeamId && String(p.pos ?? "").toUpperCase() === "K")
+      .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0] as any;
+    expect(movedK).toBeTruthy();
+
+    const migrated = migrateSave({
+      ...base,
+      playerTeamOverrides: { ...(base.playerTeamOverrides ?? {}), [String(movedK.playerId)]: userTeamId },
+      game: {
+        ...base.game,
+        homeTeamId: userTeamId,
+        awayTeamId: String(base.game.awayTeamId ?? ""),
+        specialistsBySide: undefined,
+      } as any,
+    }) as GameState;
+
+    const effectiveHome = getEffectivePlayersByTeam(migrated, userTeamId)
+      .filter((p: any) => String(p.pos ?? "").toUpperCase() === "K")
+      .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0));
+    const expectedHomeK = String((effectiveHome[0] as any)?.playerId ?? "");
+
+    expect(String(migrated.game.specialistsBySide?.HOME?.K ?? "")).toBe(expectedHomeK);
+  });
+
+  it("migration backfills missing specialist slots independently and preserves valid slots", () => {
+    const base = initState();
+    const userTeamId = String(base.acceptedOffer?.teamId ?? "");
+    const awayTeamId = String(getPlayers().find((p: any) => String(p.teamId) !== userTeamId)?.teamId ?? "");
+
+    const topByPos = (teamId: string, pos: "K" | "P") =>
+      getEffectivePlayersByTeam(base, teamId)
+        .filter((p: any) => String(p.pos ?? "").toUpperCase() === pos)
+        .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0] as any;
+
+    const preservedHomeK = String(topByPos(userTeamId, "K")?.playerId ?? "");
+    const expectedHomeP = String(topByPos(userTeamId, "P")?.playerId ?? "");
+    const preservedAwayP = String(topByPos(awayTeamId, "P")?.playerId ?? "");
+    const expectedAwayK = String(topByPos(awayTeamId, "K")?.playerId ?? "");
+
+    const migrated = migrateSave({
+      ...base,
+      game: {
+        ...base.game,
+        homeTeamId: userTeamId,
+        awayTeamId,
+        specialistsBySide: {
+          HOME: { K: preservedHomeK },
+          AWAY: { P: preservedAwayP },
+        },
+      } as any,
+    }) as GameState;
+
+    expect(String(migrated.game.specialistsBySide?.HOME?.K ?? "")).toBe(preservedHomeK);
+    expect(String(migrated.game.specialistsBySide?.HOME?.P ?? "")).toBe(expectedHomeP);
+    expect(String(migrated.game.specialistsBySide?.AWAY?.P ?? "")).toBe(preservedAwayP);
+    expect(String(migrated.game.specialistsBySide?.AWAY?.K ?? "")).toBe(expectedAwayK);
+  });
+
 
   it("save migration adds empty playerBadges map", () => {
     const base = initState();

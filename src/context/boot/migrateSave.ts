@@ -1,5 +1,6 @@
 import draftClassJson from "@/data/draftClass.json";
 import { getTeams } from "@/data/leagueDb";
+import { resolveSpecialistsBySide } from "@/engine/game/specialists";
 import { initGameSim, type GameSim } from "@/engine/gameSim";
 import { initLeagueState, type LeagueState } from "@/engine/leagueSim";
 import { OFFSEASON_STEPS } from "@/engine/offseason";
@@ -54,6 +55,40 @@ function inferLegacyCareerStage(oldState: Partial<GameState>): CareerStage {
   }
 
   return "OFFSEASON_HUB";
+}
+
+
+
+function normalizeMigratedSpecialists(state: Partial<GameState>, game: Partial<GameSim> | undefined): Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>> {
+  const homeTeamId = String((game as any)?.homeTeamId ?? "");
+  const awayTeamId = String((game as any)?.awayTeamId ?? "");
+  if (!homeTeamId && !awayTeamId) return { HOME: {}, AWAY: {} };
+
+  const existingBySide = {
+    HOME: { ...((game as any)?.specialistsBySide?.HOME ?? {}) },
+    AWAY: { ...((game as any)?.specialistsBySide?.AWAY ?? {}) },
+  } as Record<"HOME" | "AWAY", Partial<Record<"K" | "P", string>>>;
+
+  const userTeamId = String((state as any)?.acceptedOffer?.teamId ?? "");
+  const homeDepth = homeTeamId === userTeamId ? (state as any)?.depthChart : (state as any)?.leagueDepthCharts?.[homeTeamId];
+  const awayDepth = awayTeamId === userTeamId ? (state as any)?.depthChart : (state as any)?.leagueDepthCharts?.[awayTeamId];
+  const userActiveIds = new Set(Object.keys((state as any)?.rosterMgmt?.active ?? {}));
+
+  return resolveSpecialistsBySide(state as GameState, {
+    homeTeamId,
+    awayTeamId,
+    existingBySide,
+    homeDepthStarterIds: {
+      K: String(homeDepth?.startersByPos?.K ?? ""),
+      P: String(homeDepth?.startersByPos?.P ?? ""),
+    },
+    awayDepthStarterIds: {
+      K: String(awayDepth?.startersByPos?.K ?? ""),
+      P: String(awayDepth?.startersByPos?.P ?? ""),
+    },
+    ...(userTeamId === homeTeamId ? { homeActivePlayerIds: userActiveIds } : {}),
+    ...(userTeamId === awayTeamId ? { awayActivePlayerIds: userActiveIds } : {}),
+  });
 }
 
 interface MigrateSaveDependencies {
@@ -112,6 +147,9 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
           driveNumber: (oldState.game as any).driveNumber ?? 1,
           playNumberInDrive: (oldState.game as any).playNumberInDrive ?? 0,
           driveLog: (oldState.game as any).driveLog ?? [],
+          playerBadges: { ...((oldState.game as any).playerBadges ?? oldState.playerBadges ?? {}) },
+          playerUnicorns: { ...((oldState.game as any).playerUnicorns ?? oldState.playerUnicorns ?? {}) },
+          specialistsBySide: normalizeMigratedSpecialists(oldState, oldState.game as Partial<GameSim>),
         } as GameSim)
       : initGameSim({
           homeTeamId: oldState.acceptedOffer?.teamId ?? "HOME",
@@ -119,6 +157,9 @@ export function migrateSave(oldState: Partial<GameState>, deps: MigrateSaveDepen
           seed: saveSeed,
           coachArchetypeId: oldState.coach?.archetypeId,
           coachTenureYear: oldState.coach?.tenureYear,
+          playerBadges: { ...(oldState.playerBadges ?? {}) },
+          playerUnicorns: { ...(oldState.playerUnicorns ?? {}) },
+          specialistsBySide: { HOME: {}, AWAY: {} },
         });
 
   const nextDepthChart = {
