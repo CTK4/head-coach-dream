@@ -1,10 +1,272 @@
 {
   "id": "calibration-pack-v1",
   "configVersion": "1.0.0",
-  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "generatedAt": "2026-03-11T00:00:00.000Z",
   "tunables": {
     "fatigueRecoveryRate": 1,
     "injuryDurationMultiplier": 1,
     "contractDemandMultiplier": 1
+  },
+  "injury_baselines": {
+    "starter_definition": {
+      "slots_per_team": {
+        "QB": 1,
+        "RB": 1,
+        "WR": 2,
+        "TE": 1,
+        "OT": 2,
+        "IOL": 3,
+        "EDGE": 2,
+        "IDL": 2,
+        "LB": 2,
+        "CB": 2,
+        "S": 2,
+        "K": 1,
+        "P": 1
+      }
+    },
+    "season_week_multipliers": [
+      { "season_phase": "weeks_1_4", "multiplier": 1.0 },
+      { "season_phase": "weeks_5_9", "multiplier": 1.15 },
+      { "season_phase": "weeks_10_13", "multiplier": 1.17 },
+      { "season_phase": "weeks_14_17", "multiplier": 1.25 },
+      { "season_phase": "playoffs", "multiplier": 1.15 }
+    ],
+    "position_rates": {
+      "QB":   { "out_rate_weekly": 0.025, "limited_rate_weekly": 0.010, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "RB":   { "out_rate_weekly": 0.052, "limited_rate_weekly": 0.030, "season_ending_rate_season": 0.090, "evidence_flag": "evidence+derived" },
+      "WR":   { "out_rate_weekly": 0.045, "limited_rate_weekly": 0.025, "season_ending_rate_season": 0.080, "evidence_flag": "evidence+derived" },
+      "TE":   { "out_rate_weekly": 0.049, "limited_rate_weekly": 0.025, "season_ending_rate_season": 0.080, "evidence_flag": "evidence+derived" },
+      "OT":   { "out_rate_weekly": 0.034, "limited_rate_weekly": 0.015, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "IOL":  { "out_rate_weekly": 0.034, "limited_rate_weekly": 0.015, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "EDGE": { "out_rate_weekly": 0.039, "limited_rate_weekly": 0.018, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "IDL":  { "out_rate_weekly": 0.043, "limited_rate_weekly": 0.018, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "LB":   { "out_rate_weekly": 0.043, "limited_rate_weekly": 0.020, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "CB":   { "out_rate_weekly": 0.044, "limited_rate_weekly": 0.020, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "S":    { "out_rate_weekly": 0.047, "limited_rate_weekly": 0.020, "season_ending_rate_season": 0.060, "evidence_flag": "evidence+derived" },
+      "K":    { "out_rate_weekly": 0.006, "limited_rate_weekly": 0.003, "season_ending_rate_season": 0.020, "evidence_flag": "derived" },
+      "P":    { "out_rate_weekly": 0.006, "limited_rate_weekly": 0.003, "season_ending_rate_season": 0.020, "evidence_flag": "derived" }
+    }
+  },
+  "reinjury_multipliers": {
+    "model_form": "base_injury_risk * mult_days_since_return[injury_type](days) * (prior_count_multiplier[injury_type] ** prior_count)",
+    "tiers_days": [0, 14, 60, 180, 9999],
+    "injury_type_params": {
+      "hamstring": {
+        "mult_by_days": { "0_14": 2.0, "15_60": 1.5, "61_180": 1.2, "181_plus": 1.05 },
+        "prior_count_multiplier_each_addl": 1.25
+      },
+      "calf": {
+        "mult_by_days": { "0_14": 1.6, "15_60": 1.3, "61_180": 1.15, "181_plus": 1.05 },
+        "prior_count_multiplier_each_addl": 1.15
+      },
+      "mcl_grade_ii_iii": {
+        "mult_by_days": { "0_14": 1.3, "15_60": 1.15, "61_180": 1.08, "181_plus": 1.03 },
+        "prior_count_multiplier_each_addl": 1.10
+      },
+      "acl_reconstruction": {
+        "mult_by_days": { "0_14": 1.8, "15_60": 1.5, "61_180": 1.25, "181_plus": 1.10 },
+        "prior_count_multiplier_each_addl": 1.20
+      },
+      "shoulder_instability_post_stabilization": {
+        "mult_by_days": { "0_14": 1.6, "15_60": 1.3, "61_180": 1.15, "181_plus": 1.05 },
+        "prior_count_multiplier_each_addl": 1.15
+      },
+      "concussion": {
+        "mult_by_days": { "0_14": 1.8, "15_60": 1.4, "61_180": 1.2, "181_plus": 1.05 },
+        "prior_count_multiplier_each_addl": 1.25
+      }
+    }
+  },
+  "concussion_model": {
+    "candidate_models": {
+      "rowson_2011_rot_accel": {
+        "form": "p = 1/(1+exp(-(-12.531 + 0.002*alpha_rad_s2)))",
+        "inputs": ["alpha_rad_s2"]
+      },
+      "rowson_2013_combined_probability": {
+        "form": "CP = 1/(1+exp(-(b0 + b1*a_g + b2*alpha_rad_s2 + b3*a_g*alpha_rad_s2)))",
+        "coefficients": { "b0": -10.2, "b1": 0.0433, "b2": 0.000873, "b3": -9.2e-7 },
+        "inputs": ["a_g", "alpha_rad_s2"]
+      }
+    },
+    "recommended_proxy": {
+      "severity_score_S_range": [0.0, 1.0],
+      "kinematics_mapping": {
+        "a_g": "clamp(20 + 120*S, 0, 200)",
+        "alpha_rad_s2": "clamp(800 + 7000*S, 0, 12000)"
+      },
+      "base_model": "rowson_2013_combined_probability",
+      "modifiers": {
+        "prior_concussions_logodds_scale": 0.15,
+        "acute_window_days": 45,
+        "acute_window_prob_multiplier": 1.4
+      }
+    },
+    "rtp_time_loss_targets": {
+      "median_days_missed": 9,
+      "mean_days_missed": 15.0,
+      "pct_miss_1plus_games": 0.59
+    }
+  },
+  "situational_turnovers": {
+    "note": "Two-layer model: base rates calibrated to season totals; situation multipliers are priors to be tuned with play-by-play splits later.",
+    "base_params": {
+      "p_to_pass": 0.03,
+      "p_to_run": 0.01,
+      "p_sack": 0.07
+    },
+    "multipliers": [
+      { "situation": "3rd_short_1_3",     "play_type": "pass", "turnover_mult": 0.90, "sack_mult": 0.85 },
+      { "situation": "3rd_short_1_3",     "play_type": "run",  "turnover_mult": 0.70, "sack_mult": null },
+      { "situation": "3rd_medium_4_6",    "play_type": "pass", "turnover_mult": 1.10, "sack_mult": 1.05 },
+      { "situation": "3rd_medium_4_6",    "play_type": "run",  "turnover_mult": 0.85, "sack_mult": null },
+      { "situation": "3rd_long_7_plus",   "play_type": "pass", "turnover_mult": 1.35, "sack_mult": 1.25 },
+      { "situation": "3rd_long_7_plus",   "play_type": "run",  "turnover_mult": 1.05, "sack_mult": null },
+      { "situation": "red_zone_20_11",    "play_type": "pass", "turnover_mult": 1.05, "sack_mult": 1.05 },
+      { "situation": "red_zone_20_11",    "play_type": "run",  "turnover_mult": 0.95, "sack_mult": null },
+      { "situation": "red_zone_10_goal",  "play_type": "pass", "turnover_mult": 1.10, "sack_mult": 1.10 },
+      { "situation": "red_zone_10_goal",  "play_type": "run",  "turnover_mult": 0.95, "sack_mult": null },
+      { "situation": "goal_to_go_inside_10", "play_type": "pass", "turnover_mult": 1.15, "sack_mult": 1.10 },
+      { "situation": "goal_to_go_inside_10", "play_type": "run",  "turnover_mult": 0.90, "sack_mult": null },
+      { "situation": "two_minute",        "play_type": "pass", "turnover_mult": 1.25, "sack_mult": 1.15 },
+      { "situation": "two_minute",        "play_type": "run",  "turnover_mult": 1.05, "sack_mult": null }
+    ]
+  },
+  "coverage_usage": {
+    "league_baselines": {
+      "coverage_by_season_2018_2023": {
+        "2018": { "two_deep": 0.337, "single_high": 0.626, "man": 0.353, "zone": 0.647, "cover1": 0.289, "cover2": 0.126, "cover3": 0.336, "cover4": 0.113, "cover6": 0.067 },
+        "2019": { "two_deep": 0.353, "single_high": 0.602, "man": 0.373, "zone": 0.627, "cover1": 0.304, "cover2": 0.133, "cover3": 0.298, "cover4": 0.125, "cover6": 0.067 },
+        "2020": { "two_deep": 0.359, "single_high": 0.592, "man": 0.346, "zone": 0.654, "cover1": 0.275, "cover2": 0.130, "cover3": 0.317, "cover4": 0.132, "cover6": 0.071 },
+        "2021": { "two_deep": 0.389, "single_high": 0.565, "man": 0.306, "zone": 0.694, "cover1": 0.240, "cover2": 0.136, "cover3": 0.325, "cover4": 0.144, "cover6": 0.085 },
+        "2022": { "two_deep": 0.409, "single_high": 0.550, "man": 0.291, "zone": 0.709, "cover1": 0.232, "cover2": 0.139, "cover3": 0.318, "cover4": 0.159, "cover6": 0.087 },
+        "2023": { "two_deep": 0.421, "single_high": 0.534, "man": 0.284, "zone": 0.716, "cover1": 0.222, "cover2": 0.127, "cover3": 0.311, "cover4": 0.175, "cover6": 0.098 }
+      },
+      "disguise_rate": { "2023": 0.233, "2024": 0.304 },
+      "blitz_rate": { "2024_5plus": 0.268, "2024_6plus": 0.066 },
+      "multi_year_blitz_percent": { "2022": 0.279, "2023": 0.283, "2024": 0.283 }
+    },
+    "style_modifiers": {
+      "fangio_two_high":     { "two_high_mult": 1.25, "disguise_mult": 1.10, "blitz_mult": 0.80, "sim_pressure_mult": 1.10 },
+      "cover_3_single_high": { "two_high_mult": 0.80, "disguise_mult": 0.95, "blitz_mult": 0.95, "sim_pressure_mult": 1.00 },
+      "tampa_2":             { "two_high_mult": 1.05, "disguise_mult": 0.90, "blitz_mult": 0.85, "sim_pressure_mult": 0.90 },
+      "quarters_match":      { "two_high_mult": 1.15, "disguise_mult": 1.10, "blitz_mult": 0.90, "sim_pressure_mult": 1.05 },
+      "lebeau_zone_blitz":   { "two_high_mult": 0.85, "disguise_mult": 1.05, "blitz_mult": 1.20, "sim_pressure_mult": 0.95 },
+      "buddy_ryan_pressure": { "two_high_mult": 0.70, "disguise_mult": 0.95, "blitz_mult": 1.35, "sim_pressure_mult": 0.85 },
+      "multiple_hybrid":     { "two_high_mult": 1.00, "disguise_mult": 1.00, "blitz_mult": 1.00, "sim_pressure_mult": 1.00 }
+    }
+  },
+  "coaching_hazard_priors": {
+    "anchors": {
+      "avg_current_hc_tenure_years": 3.9,
+      "fired_within_3_years_last_5_years": 20,
+      "fired_within_2_years_last_5_years": 12
+    },
+    "hazard_model": {
+      "midseason": {
+        "form": "logit(p) = b0 + b1*expectation_gap + b2*neg_point_diff + b3*scandal - b4*qb_dev",
+        "coefficients": { "b0": -4.0, "b1": 0.35, "b2": 0.10, "b3": 0.40, "b4": 0.25 }
+      },
+      "postseason": {
+        "form": "logit(p) = b0 + b1*expectation_gap + b2*neg_point_diff + b3*no_top10_off + b4*scandal - b5*qb_dev",
+        "coefficients": { "b0": -2.2, "b1": 0.45, "b2": 0.12, "b3": 0.25, "b4": 0.50, "b5": 0.35 }
+      }
+    },
+    "interim_conversion": {
+      "base_rate": 0.364,
+      "evidence_snapshot": { "interims": 22, "converted": 8, "interim_win_pct": 0.372 },
+      "modifiers": {
+        "win_pct_delta_per_0_100": 0.60,
+        "point_diff_improvement_per_td": 0.08,
+        "qb_dev_bonus": 0.10
+      }
+    },
+    "coordinator_churn_priors": {
+      "elite_top_5_off_or_def": { "oc_departure_prob_year": 0.30, "dc_departure_prob_year": 0.30 },
+      "playoff_tier":           { "oc_departure_prob_year": 0.22, "dc_departure_prob_year": 0.22 },
+      "middle":                 { "oc_departure_prob_year": 0.15, "dc_departure_prob_year": 0.15 },
+      "bottom_10":              { "oc_departure_prob_year": 0.10, "dc_departure_prob_year": 0.10 }
+    }
+  },
+  "trade_ai_priors": {
+    "draft_value_chart": "fitzgerald_spielberger_or_harvard_sac_recommended",
+    "future_pick_discount": [
+      { "dy_years": 0, "factor": 1.00 },
+      { "dy_years": 1, "factor": 0.85 },
+      { "dy_years": 2, "factor": 0.75 },
+      { "dy_years": 3, "factor": 0.65 }
+    ],
+    "gm_archetype_thresholds": {
+      "rebuilder":  1.05,
+      "neutral":    1.15,
+      "contender":  1.25
+    },
+    "need_modifier": {
+      "major_need_at_QB":    1.15,
+      "major_need_non_QB":   1.05
+    },
+    "owner_pressure_modifier": {
+      "hot_seat_owner": 1.10,
+      "stable_owner":   1.00
+    },
+    "rivalry_modifier": {
+      "division_rival": 1.05,
+      "non_rival":      1.00
+    }
+  },
+  "contract_market_priors": {
+    "cap_history_2011_2024_millions": {
+      "2011": 120.375,
+      "2012": 120.6,
+      "2013": 123.0,
+      "2014": 133.0,
+      "2015": 143.28,
+      "2016": 155.27,
+      "2017": 167.0,
+      "2018": 177.2,
+      "2019": 188.2,
+      "2020": 198.2,
+      "2021": 182.5,
+      "2022": 208.2,
+      "2023": 224.8,
+      "2024": 255.4
+    },
+    "franchise_tag_anchors_2024_millions": {
+      "QB":  38.301,
+      "RB":  11.951,
+      "WR":  21.816,
+      "TE":  12.693,
+      "OL":  20.985,
+      "DE":  21.324,
+      "DT":  22.102,
+      "LB":  24.007,
+      "CB":  19.802,
+      "S":   17.123,
+      "K_P": 5.984
+    },
+    "top_qb_cap_share_examples": [
+      { "apy_millions": 55.0, "avg_pct_cap": 0.245 },
+      { "apy_millions": 55.0, "avg_pct_cap": 0.215 },
+      { "apy_millions": 52.0, "avg_pct_cap": 0.231 }
+    ],
+    "structure_templates": {
+      "default_practical_out_after_year": 2,
+      "void_year_usage_rate": { "cap_contender": 0.45, "rebuilder": 0.15 }
+    },
+    "guarantee_pct_priors": {
+      "QB_top_tier":           { "median": 0.60, "iqr": [0.45, 0.75] },
+      "premium_non_qb_top_tier": { "median": 0.45, "iqr": [0.30, 0.60] },
+      "mid_tier":              { "median": 0.30, "iqr": [0.20, 0.45] }
+    }
+  },
+  "future_pick_discount": {
+    "curve": [
+      { "dy_years": 0, "D": 1.00 },
+      { "dy_years": 1, "D": 0.85 },
+      { "dy_years": 2, "D": 0.75 },
+      { "dy_years": 3, "D": 0.65 }
+    ],
+    "notes": "Apply to draft chart points; optionally also regress future pick to expected landing bucket."
   }
 }

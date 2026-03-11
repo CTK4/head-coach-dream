@@ -340,6 +340,7 @@ function buildPlayExplanation(sim: GameSim, playType: PlayType, outcome: "SUCCES
 }
 
 export type PlayResolution = { sim: GameSim; ended: boolean };
+export type PlaySelectionFn = (sim: GameSim) => PlayType;
 
 function getSituationBucket(sim: Pick<GameSim, "down" | "distance" | "ballOn">): SituationBucket {
   if (sim.ballOn >= 80) return "RED_ZONE";
@@ -1848,13 +1849,40 @@ export function autoPickPlay(sim: GameSim): PlayType {
   return offensePlan?.offensiveFocus === "RUN_HEAVY" ? "INSIDE_ZONE" : "DROPBACK";
 }
 
-export function simulateFullGame(params: { homeTeamId: string; awayTeamId: string; seed: number; homeGameplan?: WeeklyGameplan; awayGameplan?: WeeklyGameplan; includePlayLog?: boolean }) {
-  let sim = initGameSim({ ...params });
+export function simulateDriveUntilChangeOrEnd(sim: GameSim, playSelectionFn: PlaySelectionFn = autoPickPlay): PlayResolution {
+  const startDrive = sim.driveNumber;
+  const startPossession = sim.possession;
+
+  let next = sim;
+  let safety = 0;
+  while (!(next.clock.quarter === 4 && next.clock.timeRemainingSec === 0) && next.driveNumber === startDrive && next.possession === startPossession) {
+    // Selector should be pure with respect to sim state so seeded RNG timelines stay deterministic.
+    const stepped = stepPlay(next, playSelectionFn(next));
+    next = stepped.sim;
+    safety += 1;
+    if (safety > 300) break;
+  }
+
+  return { sim: next, ended: next.clock.quarter === 4 && next.clock.timeRemainingSec === 0 };
+}
+
+export function simulateFullGame(params: {
+  homeTeamId: string;
+  awayTeamId: string;
+  seed: number;
+  homeGameplan?: WeeklyGameplan;
+  awayGameplan?: WeeklyGameplan;
+  includePlayLog?: boolean;
+  playSelectionFn?: PlaySelectionFn;
+}) {
+  const { playSelectionFn = autoPickPlay, ...initParams } = params;
+  let sim = initGameSim(initParams);
   sim = { ...sim, clock: { ...sim.clock, clockRunning: false, restartMode: "SNAP" } };
 
   let safety = 0;
   while (!(sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0)) {
-    const stepped = stepPlay(sim, autoPickPlay(sim));
+    // Selector should be pure with respect to sim state so seeded RNG timelines stay deterministic.
+    const stepped = stepPlay(sim, playSelectionFn(sim));
     sim = stepped.sim;
     safety += 1;
     if (safety > 6000) break;
