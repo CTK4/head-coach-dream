@@ -1,3 +1,5 @@
+import { mulberry32 } from "@/engine/rng";
+
 export type OwnerAxes = Partial<Record<
   | "stability"
   | "aggression"
@@ -47,16 +49,6 @@ function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), 1 | t);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 export function deterministicRoll(saveSeed: number, key: string): number {

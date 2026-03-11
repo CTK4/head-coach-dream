@@ -121,9 +121,6 @@ export default function Finances() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => dispatch({ type: "TRADE_PLAYER", payload: { playerId: r.id } })}>
-                    Trade
-                  </Button>
                   <Button size="sm" variant="destructive" onClick={() => dispatch({
                     type: "CUT_APPLY",
                     payload: {

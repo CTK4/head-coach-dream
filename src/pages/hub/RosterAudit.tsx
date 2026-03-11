@@ -2,6 +2,7 @@ import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { getEffectivePlayersByTeam, normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getLeague } from "@/data/leagueDb";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,8 @@ const POS_DEPTH_SLOTS: Record<string, number> = {
 };
 const POS_ORDER = ["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S"];
 
-const SALARY_CAP = 224_800_000;
-
 export default function RosterAudit() {
+  const SALARY_CAP = getLeague().salaryCap;
   const { state } = useGame();
   const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
 
