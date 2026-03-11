@@ -1,6 +1,7 @@
 import type { TradeProposal, TradeResponse } from "@/types/trades";
 import { calculateTradeValue } from "@/systems/tradeValuation";
 import { inferRebuildStage } from "@/models/teamProfile";
+import { hashStr } from "@/engine/rng";
 
 /**
  * Trade engine audit summary:
@@ -62,17 +63,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function hash32(str: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
 function rand01(key: string): number {
-  const h = hash32(key);
+  const h = hashStr(key);
   return (h & 0xffffff) / 0x1000000;
 }
 

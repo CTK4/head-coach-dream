@@ -1,4 +1,4 @@
-import { mulberry32 } from "@/engine/rng";
+import { mulberry32, hashStr } from "@/engine/rng";
 
 export type PositionGroup = "QB" | "RB" | "WR" | "TE" | "OL" | "DL" | "LB" | "CB" | "S" | "K" | "P";
 
@@ -53,14 +53,6 @@ function normalizePos(pos: string | undefined): PositionGroup {
   return "WR";
 }
 
-function hash32(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 function gaussian(rand: () => number): number {
   const u = Math.max(1e-9, rand());
@@ -73,7 +65,7 @@ export function getSeasonalAgingDelta(player: AgingPlayer): number {
   const peak = PEAK_AGE[pos];
   const onset = DECLINE_ONSET[pos];
   const age = Number(player.age ?? 0);
-  const rand = mulberry32(hash32(`${player.playerId}|${age}|aging`));
+  const rand = mulberry32(hashStr(`${player.playerId}|${age}|aging`));
   const noise = gaussian(rand);
 
   if (age < peak) {
@@ -102,7 +94,7 @@ export function shouldRetire(player: AgingPlayer): boolean {
 
   if (age >= 34) {
     const p = age >= 37 ? 0.1 : 0.03;
-    const rand = mulberry32(hash32(`${player.playerId}|${age}|retire`));
+    const rand = mulberry32(hashStr(`${player.playerId}|${age}|retire`));
     return rand() < p;
   }
   return false;
