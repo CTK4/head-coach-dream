@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
+import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ type OfferEdit = { years: string; apy: string };
 
 export default function FreeAgency() {
   const { state, dispatch } = useGame();
+  const faModelCard = MODEL_CARDS["fa-market"];
 
   useEffect(() => {
     dispatch({ type: "FA_INIT_OFFERS" });
@@ -59,7 +62,17 @@ export default function FreeAgency() {
       <Card>
         <CardContent className="p-6 flex items-center justify-between">
           <div className="space-y-1">
-            <div className="text-xl font-bold">Free Agency</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xl font-bold">Free Agency</div>
+              <ExplainerDrawer
+                title={faModelCard.title}
+                description={faModelCard.description}
+                factors={faModelCard.factors}
+                example={faModelCard.example}
+                trigger={<button className="rounded border px-2 py-0.5 text-sm" type="button">ⓘ</button>}
+                triggerAriaLabel="Open free-agency market model explainer"
+              />
+            </div>
             <div className="text-sm text-muted-foreground">Submit offers to UFAs. Edit years/APY before signing.</div>
           </div>
           <div className="flex items-center gap-2">

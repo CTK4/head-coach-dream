@@ -249,35 +249,36 @@ export const MODEL_CARDS: Record<ModelCardConfig["id"], ModelCardConfig> = {
     id: "fa-market",
     title: "Free-agency market pricing",
     description:
-      "Free-agent APY projections come from position multipliers, overall rating, and age curve, then contract decisions compare offer AAV and fit to player thresholds.",
+      "Free-agent APY projections start in the market model, while acceptance odds combine offer quality, interest, contextual fit, and FA lifecycle transitions during resolve rounds.",
     factors: [
       {
-        label: "Position multipliers set market tier",
+        label: "Projected APY is anchored by position, OVR, and age",
         weight: "High",
-        description: "Premium positions (especially QB, EDGE, WR, CB) apply higher multipliers to the baseline salary curve.",
+        description: "The market model applies a position multiplier to a base salary curve, scales by OVR, and applies post-peak age decay before rounding to market bands.",
       },
       {
-        label: "Overall rating drives main growth",
+        label: "AAV ratio to ask drives the largest acceptance swing",
         weight: "High",
-        description: "OVR is transformed into an APY adjustment band, making talent level the strongest price determinant.",
+        description: "Offer decision scoring uses a steep sigmoid around market ask (offerAAV/askAAV), so sub-market bids fall off quickly while over-market bids rise sharply.",
       },
       {
-        label: "Age peak discount",
+        label: "Interest and context apply additive fit pressure",
         weight: "Medium",
-        description: "Past the position peak age, annual value is reduced by a decay factor to reflect declining market appetite.",
+        description: "Team interest plus scheme fit, projected role, contender status, and location each nudge acceptance score; role and contender are explicit context axes.",
       },
       {
-        label: "Offer quality vs ask",
-        weight: "High",
-        description: "Acceptance score heavily depends on offer AAV ratio versus the computed ask, with steep penalties below market.",
-      },
-      {
-        label: "Fit context and negotiation memory",
+        label: "Thresholds and lowball rails gate elite decisions",
         weight: "Rule",
-        description: "Scheme/role/contender/location context nudges decisions, and rejected low offers can reduce interest unless materially improved later.",
+        description: "Higher-OVR players and low-interest situations raise the acceptance threshold; offers below 85% of ask are effectively capped unless interest and term fit are exceptional.",
+      },
+      {
+        label: "FA state transitions shape who can still sign",
+        weight: "Rule",
+        description: "FA actions bootstrap from tampering, submit/update/withdraw offers, run CPU ticks and resolve rounds, generate counters, and can expire pending offers at resolve cap.",
       },
     ],
-    example: "A strong over-market offer with good scheme fit can still lose if contract length is far from preferred years and interest has already cratered from prior lowballs.",
+    example:
+      "Example: if market ask is $12M APY, a $12M offer with neutral context can sit near coin-flip. Keeping APY at $12M but moving contenderStatus and roleProjection from 40 to 80 can push acceptance odds up, while dropping to $10M often still fails despite strong contender/role fit.",
   },
   "injury-recurrence-concussion": {
     id: "injury-recurrence-concussion",
