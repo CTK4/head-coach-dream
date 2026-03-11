@@ -7,6 +7,7 @@ import { validateConfigPins } from "@/engine/config/validateConfig";
 import type { CareerStage } from "@/types/careerStage";
 import { TRADE_DEADLINE_DEFAULT_WEEK, resolveTradeDeadlineWeek } from "@/engine/tradeDeadline";
 import { logInfo } from "@/lib/logger";
+import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 
 export const LATEST_SAVE_SCHEMA_VERSION = 2;
 
@@ -19,7 +20,8 @@ export type SaveValidationErrorCode =
   | "INVALID_WEEK"
   | "INVALID_TEAM"
   | "INVALID_COACH"
-  | "INVALID_CONFIG_PIN";
+  | "INVALID_CONFIG_PIN"
+  | "MISSING_PLAYER_CONTRACT_OVERRIDE";
 
 export type SaveValidationResult =
   | { ok: true }
@@ -257,6 +259,21 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   const week = toNum((state as any).hub?.regularSeasonWeek ?? (state as any).week ?? 1);
   if (!Number.isFinite(week) || week < 0) {
     return { ok: false, code: "INVALID_WEEK", message: "Week value is invalid." };
+  }
+
+
+  const rosterIndex = buildRosterIndex(state as GameState);
+  const rosteredPlayerIds = Object.entries(rosterIndex.playerToTeam ?? {})
+    .filter(([, teamId]) => String(teamId ?? "").toUpperCase() !== "FREE_AGENT")
+    .map(([playerId]) => String(playerId));
+  const playerContractOverrides = ((state as any).playerContractOverrides ?? {}) as Record<string, unknown>;
+  const missingOverridePlayerId = rosteredPlayerIds.find((playerId) => !playerContractOverrides[playerId]);
+  if (missingOverridePlayerId) {
+    return {
+      ok: false,
+      code: "MISSING_PLAYER_CONTRACT_OVERRIDE",
+      message: `Missing playerContractOverrides entry for rostered player '${missingOverridePlayerId}'.`,
+    };
   }
 
   // Keep a single declaration here; duplicate declarations break esbuild in production builds.

@@ -4,7 +4,7 @@ import { useGame } from "@/context/GameContext";
 import { ScreenHeader } from "@/components/layout/ScreenHeader";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { getTeamRosterPlayers, getContractById } from "@/data/leagueDb";
+import { getTeamRosterPlayers } from "@/data/leagueDb";
 import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 
@@ -24,11 +24,9 @@ export default function PlayerContracts() {
     if (!teamId) return [];
     return getTeamRosterPlayers(String(teamId))
       .map((p: any) => {
-        const contractId = String(p.contractId ?? "");
-        const c = contractId ? getContractById(contractId) : null;
         const summary = getContractSummaryForPlayer(state, String(p.playerId));
-        const capHit = Number(summary?.capHit ?? c?.capHit ?? c?.aav ?? 0);
-        const yearsLeft = Number(summary?.yearsRemaining ?? c?.yearsRemaining ?? 0);
+        const capHit = Number(summary?.capHit ?? 0);
+        const yearsLeft = Number(summary?.yearsRemaining ?? 0);
         return {
           playerId: String(p.playerId),
           name: String(p.fullName),

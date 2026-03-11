@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useGame, type TagType } from "@/context/GameContext";
-import { getContracts, getPlayers } from "@/data/leagueDb";
+import { getPlayers } from "@/data/leagueDb";
 import { normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { projectedMarketApy } from "@/engine/marketModel";
@@ -85,7 +85,6 @@ export default function TagCenter() {
   const hasOfferFor = (playerId: string) => decisions?.[playerId]?.action === "RESIGN";
 
   const eligible = useMemo(() => {
-    const contracts = getContracts();
     const ps = getPlayers();
     const rosterIndex = buildRosterIndex(state);
     const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
@@ -93,19 +92,18 @@ export default function TagCenter() {
     return ps
       .filter((p: any) => onTeam.has(String(p.playerId)))
       .map((p: any) => {
-        const c = contracts.find((x: any) => x.contractId === p.contractId);
-        const end = Number(c?.endSeason ?? state.season);
-        return { p, end };
+        const id = String(p.playerId);
+        const summary = getContractSummaryForPlayer(state, id);
+        const end = Number(summary?.endSeason ?? state.season);
+        return { p, end, id, summary };
       })
       .filter((r) => r.end <= state.season)
-      .map(({ p }) => {
-        const id = String(p.playerId);
+      .map(({ p, id, summary: s }) => {
         const ovr = Number(p.overall ?? 0);
         const age = Number(p.age ?? 26);
         const pos = normalizePos(String(p.pos ?? "UNK"));
         const marketApy = projectedMarketApy(pos, ovr, age);
 
-        const s = getContractSummaryForPlayer(state, id);
         const priorSeason = state.season - 1;
         const priorSalary = round50k(Number(s?.capHitBySeason?.[priorSeason] ?? 0));
 

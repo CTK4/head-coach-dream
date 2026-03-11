@@ -77,4 +77,28 @@ describe("recordbook rollover", () => {
     expect(typeof hydrated.franchiseRecordsByTeamId).toBe("object");
     expect(hydrated.leagueRecords.singleSeasonPassingYards.value).toBeGreaterThanOrEqual(0);
   });
+
+
+  it("hydrateLoadedState backfills contract overrides from base contracts for rostered players", () => {
+    const initial = createInitialStateForTests();
+    const hydrated = hydrateLoadedState(
+      initial,
+      { playerContractOverrides: {} } as any,
+      initial.saveVersion,
+      initial.deterministicCounters,
+      {
+        normalizePriorityList: () => [],
+        defaultLeagueRecords,
+        clampFatigue: (n) => n,
+        FATIGUE_DEFAULT: 50,
+        migratePracticePlan: (plan) => (plan as any) ?? initial.practicePlan,
+        DEFAULT_PRACTICE_PLAN: { neglectWeeks: {} },
+      },
+    );
+
+    const rosteredPlayer = getEffectivePlayersByTeam(hydrated, String(hydrated.userTeamId ?? hydrated.teamId))[0] as any;
+    expect(rosteredPlayer).toBeTruthy();
+    expect(hydrated.playerContractOverrides[String(rosteredPlayer.playerId)]).toBeTruthy();
+  });
+
 });
