@@ -717,7 +717,10 @@ export function createSaveManager({ storage, adapter }: { storage?: StorageLike;
   };
 }
 
-const defaultSaveManager = createSaveManager();
+const localSaveManager = createSaveManager();
+const defaultSaveManager = isApiSaveModeEnabled(import.meta.env)
+  ? createApiSaveManager(getSaveApiBaseUrl(import.meta.env), localSaveManager)
+  : localSaveManager;
 
 export const exportSave = defaultSaveManager.exportSave;
 export const importSave = defaultSaveManager.importSave;
