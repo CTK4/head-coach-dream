@@ -9,6 +9,7 @@ import {
   type SaveStorageAdapter,
   type StorageLike,
 } from "@/lib/saveStorageAdapter";
+import { createApiSaveManager, getSaveApiBaseUrl, isApiSaveModeEnabled } from "@/lib/saveApiManager";
 
 export interface SaveMetadata {
   saveId: string;
@@ -696,7 +697,7 @@ export function createSaveManager({ storage, adapter }: { storage?: StorageLike;
         return;
       }
 
-      const serialized = JSON.stringify(survivorEntry.loaded.state);
+      const serialized = JSON.stringify((survivorEntry.loaded as Extract<typeof survivorEntry.loaded, { ok: true }>).state);
       commitAtomic(LEGACY_KEY, serialized);
       setActiveSaveId(survivorEntry.candidate.saveId);
     }

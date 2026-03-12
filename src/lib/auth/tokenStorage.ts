@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-
 const ACCESS_KEY = 'hc.auth.accessToken';
 const REFRESH_KEY = 'hc.auth.refreshToken';
 
@@ -14,14 +12,30 @@ type SecureStoragePlugin = {
   remove: (options: { key: string }) => Promise<void>;
 };
 
+type CapacitorGlobal = {
+  isNativePlatform: () => boolean;
+  getPlatform: () => string;
+  Plugins?: Record<string, unknown>;
+};
+
+function getCapacitor(): CapacitorGlobal | null {
+  const candidate = (globalThis as { Capacitor?: unknown }).Capacitor;
+  if (!candidate || typeof candidate !== 'object') return null;
+
+  const typed = candidate as Partial<CapacitorGlobal>;
+  if (typeof typed.isNativePlatform !== 'function' || typeof typed.getPlatform !== 'function') return null;
+  return typed as CapacitorGlobal;
+}
+
 function secureStoragePlugin(): SecureStoragePlugin | null {
-  const plugins = (Capacitor as unknown as { Plugins?: Record<string, unknown> }).Plugins;
-  const plugin = plugins?.SecureStoragePlugin as SecureStoragePlugin | undefined;
+  const capacitor = getCapacitor();
+  const plugin = capacitor?.Plugins?.SecureStoragePlugin as SecureStoragePlugin | undefined;
   return plugin ?? null;
 }
 
 function isIosNative() {
-  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+  const capacitor = getCapacitor();
+  return Boolean(capacitor?.isNativePlatform() && capacitor.getPlatform() === 'ios');
 }
 
 export async function persistAuthTokens(tokens: TokenPair) {

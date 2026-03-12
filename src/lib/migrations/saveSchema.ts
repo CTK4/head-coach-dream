@@ -262,18 +262,20 @@ export function validateCriticalSaveState(state: Partial<GameState>): SaveValida
   }
 
 
-  const rosterIndex = buildRosterIndex(state as GameState);
-  const rosteredPlayerIds = Object.entries(rosterIndex.playerToTeam ?? {})
-    .filter(([, teamId]) => String(teamId ?? "").toUpperCase() !== "FREE_AGENT")
-    .map(([playerId]) => String(playerId));
   const playerContractOverrides = ((state as any).playerContractOverrides ?? {}) as Record<string, unknown>;
-  const missingOverridePlayerId = rosteredPlayerIds.find((playerId) => !playerContractOverrides[playerId]);
-  if (missingOverridePlayerId) {
-    return {
-      ok: false,
-      code: "MISSING_PLAYER_CONTRACT_OVERRIDE",
-      message: `Missing playerContractOverrides entry for rostered player '${missingOverridePlayerId}'.`,
-    };
+  if (Object.keys(playerContractOverrides).length > 0) {
+    const rosterIndex = buildRosterIndex(state as GameState);
+    const rosteredPlayerIds = Object.entries(rosterIndex.playerToTeam ?? {})
+      .filter(([, teamId]) => String(teamId ?? "").toUpperCase() !== "FREE_AGENT")
+      .map(([playerId]) => String(playerId));
+    const missingOverridePlayerId = rosteredPlayerIds.find((playerId) => !playerContractOverrides[playerId]);
+    if (missingOverridePlayerId) {
+      return {
+        ok: false,
+        code: "MISSING_PLAYER_CONTRACT_OVERRIDE",
+        message: `Missing playerContractOverrides entry for rostered player '${missingOverridePlayerId}'.`,
+      };
+    }
   }
 
   // Keep a single declaration here; duplicate declarations break esbuild in production builds.
