@@ -1,7 +1,10 @@
 import type { GameState } from "@/context/GameContext";
+import { getPlayerById } from "@/data/leagueDb";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
-import { allocateJerseyNumber } from "@/engine/jerseyNumbers/allocate";
+import { JERSEY_NO_AVAILABLE_NUMBER } from "@/engine/jerseyNumbers/allocate";
+import { allowedRangesByGroup, preferredOrderByGroup } from "@/engine/jerseyNumbers/rules";
 import { getPositionGroupForPlayer } from "@/engine/jerseyNumbers/utils";
+import { inRanges } from "@/engine/jerseyNumbers/utils";
 import type { PositionGroup } from "@/engine/jerseyNumbers/rules";
 
 const GROUP_PRIORITY: Record<PositionGroup, number> = {
@@ -19,34 +22,41 @@ const GROUP_PRIORITY: Record<PositionGroup, number> = {
 
 export function assignTeamRosterNumbers(state: GameState, teamId: string): Record<string, number> {
   const roster = getEffectivePlayersByTeam(state, teamId)
-    .map((p: any) => ({ playerId: String(p.playerId), posGroup: getPositionGroupForPlayer(p) }))
+    .map((p: any) => {
+      const playerId = String(p.playerId);
+      const jerseyNumber = Number(p.jerseyNumber);
+      const baseTeamId = String(getPlayerById(playerId)?.teamId ?? "");
+      return {
+        playerId,
+        posGroup: getPositionGroupForPlayer(p),
+        requestedNumber: Number.isInteger(jerseyNumber) && jerseyNumber > 0 ? jerseyNumber : undefined,
+        isIncumbentOnTeam: baseTeamId === String(teamId),
+      };
+    })
     .sort((a, b) => {
+      if (a.isIncumbentOnTeam !== b.isIncumbentOnTeam) return a.isIncumbentOnTeam ? -1 : 1;
       const byGroup = GROUP_PRIORITY[a.posGroup] - GROUP_PRIORITY[b.posGroup];
       if (byGroup !== 0) return byGroup;
       return a.playerId.localeCompare(b.playerId);
     });
 
   const assigned: Record<string, number> = {};
-  let workingState = state;
+  const used = new Set<number>();
 
   for (const player of roster) {
-    const number = allocateJerseyNumber({
-      state: workingState,
-      teamId,
-      playerId: player.playerId,
-      posGroup: player.posGroup,
-    });
+    const allowedRanges = allowedRangesByGroup[player.posGroup];
+    const requested = player.requestedNumber;
+    let number: number | undefined;
+
+    if (requested != null && inRanges(requested, allowedRanges) && !used.has(requested)) {
+      number = requested;
+    } else {
+      number = preferredOrderByGroup[player.posGroup].find((candidate) => !used.has(candidate));
+    }
+    if (number == null) throw new Error(JERSEY_NO_AVAILABLE_NUMBER);
+
+    used.add(number);
     assigned[player.playerId] = number;
-    workingState = {
-      ...workingState,
-      playerAttrOverrides: {
-        ...workingState.playerAttrOverrides,
-        [player.playerId]: {
-          ...(workingState.playerAttrOverrides?.[player.playerId] ?? {}),
-          jerseyNumber: number,
-        },
-      },
-    };
   }
 
   return assigned;
