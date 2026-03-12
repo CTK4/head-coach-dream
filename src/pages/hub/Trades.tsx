@@ -259,7 +259,7 @@ export default function TradesPage() {
       </div>
 
       <Dialog open={resultOpen} onOpenChange={setResultOpen}>
-        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+        <DialogContent className="border-slate-300/15 bg-background text-slate-100">
           <DialogHeader>
             <DialogTitle>{result?.accepted ? "Trade Accepted" : "Trade Rejected"}</DialogTitle>
             <DialogDescription className="text-slate-200/70">{result?.reason ?? ""}</DialogDescription>

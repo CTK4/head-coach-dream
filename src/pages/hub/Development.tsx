@@ -192,12 +192,12 @@ export default function Development() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-background text-slate-100">
       <ScreenHeader title="DEVELOPMENT" subtitle="Player growth &amp; training" />
 
       <Tabs defaultValue="overview" className="w-full">
         {/* ── Tab strip ─────────────────────────────────── */}
-        <TabsList className="w-full rounded-none border-b border-white/10 bg-slate-950 p-0 h-auto">
+        <TabsList className="w-full rounded-none border-b border-white/10 bg-background p-0 h-auto">
           {(["overview", "focus", "progress"] as const).map((t) => (
             <TabsTrigger
               key={t}
@@ -352,7 +352,7 @@ export default function Development() {
       >
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl border-white/10 bg-slate-900 text-slate-100 max-h-[80vh] overflow-y-auto"
+          className="rounded-t-2xl border-white/10 bg-card text-slate-100 max-h-[80vh] overflow-y-auto"
         >
           {selectedPlayer ? (
             <>

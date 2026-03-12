@@ -371,7 +371,7 @@ export default function Draft() {
           </button>
           <button
             type="button"
-            className="min-h-11 rounded border bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="min-h-11 rounded border bg-card px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
             disabled={!draftStepComplete}
             onClick={() => dispatch({ type: "OFFSEASON_ADVANCE_STEP" })}
           >

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleHelp } from "lucide-react";
 import ProspectRow, { type Prospect } from "@/components/draft/ProspectRow";
+import { PageScreen } from "@/components/layout/PageScreen";
+import { FilterPill } from "@/components/common/FilterPill";
 import { ExplainerDrawer } from "@/components/explainability/ExplainerDrawer";
 import { MODEL_CARDS } from "@/components/explainability/modelCards";
 import { useGame } from "@/context/GameContext";
@@ -76,7 +78,7 @@ export default function BigBoard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] pb-20">
+    <PageScreen>
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">Big Board</h1>
@@ -101,14 +103,16 @@ export default function BigBoard() {
         ) : null}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
           {POSITION_PILLS.map((p) => (
-            <button key={p} className={`min-h-[44px] rounded-full px-3 text-xs ${activePos === p ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-400"}`} onClick={() => setActivePos(p)}>{getPositionLabel(p)}</button>
+            <FilterPill key={p} active={activePos === p} onClick={() => setActivePos(p)} className="rounded-full">
+              {getPositionLabel(p)}
+            </FilterPill>
           ))}
         </div>
 
         <div className="flex items-center justify-between text-xs">
           <div className="flex gap-2">
-            <button className={`min-h-[44px] rounded px-3 ${boardMode === "MY" ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-300"}`} onClick={() => setBoardMode("MY")}>MY BOARD</button>
-            <button className={`min-h-[44px] rounded px-3 ${boardMode === "SCOUT" ? "bg-blue-500 text-white" : "bg-[#1C1C27] text-slate-300"}`} onClick={() => setBoardMode("SCOUT")}>SCOUT BOARD</button>
+            <FilterPill active={boardMode === "MY"} onClick={() => setBoardMode("MY")}>MY BOARD</FilterPill>
+            <FilterPill active={boardMode === "SCOUT"} onClick={() => setBoardMode("SCOUT")}>SCOUT BOARD</FilterPill>
           </div>
           <button className="min-h-[44px] rounded border border-white/10 px-3" onClick={() => setAscending((v) => !v)}>MY BOARD RANK {ascending ? "▲" : "▼"}</button>
         </div>
@@ -147,6 +151,6 @@ export default function BigBoard() {
         </div>
       </div>
       {modal}
-    </div>
+    </PageScreen>
   );
 }

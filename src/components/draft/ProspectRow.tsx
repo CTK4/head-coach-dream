@@ -56,7 +56,7 @@ export default function ProspectRow({ prospect, rank, isExpanded, onToggle, onDr
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDrop={onDrop}
-        className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#13131A] transition touch-pan-y", isDragging && "opacity-50")}
+        className={cn("overflow-hidden rounded-xl border border-white/10 bg-surface-1 transition touch-pan-y", isDragging && "opacity-50")}
       >
         <button onClick={onToggle} className="flex min-h-[44px] w-full items-stretch text-left">
           <div className={cn("flex w-[72px] items-center justify-center bg-gradient-to-b", rankBg(rank))}>

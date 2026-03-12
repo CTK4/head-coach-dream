@@ -130,7 +130,7 @@ export default function Hub() {
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+        <DialogContent className="border-slate-300/15 bg-background text-slate-100">
           <DialogHeader>
             <DialogTitle>Advance?</DialogTitle>
             <DialogDescription className="text-slate-200/70">Next: {nextLabel}.</DialogDescription>

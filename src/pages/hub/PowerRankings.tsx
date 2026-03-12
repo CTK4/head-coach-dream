@@ -3,6 +3,7 @@ import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { computeWeeklyPowerRankings } from "@/systems/powerRankings";
 import type { TeamWeeklyPerformance } from "@/systems/powerRankings";
+import { PageScreen } from "@/components/layout/PageScreen";
 
 export default function PowerRankings() {
   const { state } = useGame();
@@ -29,7 +30,7 @@ export default function PowerRankings() {
   }, [state.currentStandings]);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] pb-20">
+    <PageScreen>
       <div className="mx-auto max-w-screen-sm space-y-2 px-4 pt-4 text-sm">
         <h1 className="text-xl font-bold">Power Rankings</h1>
         <p className="text-xs text-muted-foreground">Based on record, point differential, recent form, and unit efficiency.</p>
@@ -43,7 +44,7 @@ export default function PowerRankings() {
             return (
               <div
                 key={row.teamId}
-                className={`flex items-center gap-3 rounded border px-3 py-2 ${isUser ? "border-blue-500/60 bg-blue-950/30" : "border-white/10 bg-[#13131A]"}`}
+                className={`flex items-center gap-3 rounded border px-3 py-2 ${isUser ? "border-blue-500/60 bg-blue-950/30" : "border-white/10 bg-surface-1"}`}
               >
                 <span className={`w-6 text-center text-base font-bold tabular-nums ${row.rank <= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
                   {row.rank}
@@ -64,6 +65,6 @@ export default function PowerRankings() {
           )}
         </div>
       </div>
-    </div>
+    </PageScreen>
   );
 }

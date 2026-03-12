@@ -73,7 +73,7 @@ function SummaryCards({ proj }: { proj: YearProjection }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {cards.map((c) => (
-        <div key={c.label} className="rounded-xl border border-white/10 bg-slate-900 p-3">
+        <div key={c.label} className="rounded-xl border border-white/10 bg-card p-3">
           <div className="text-xs text-slate-400 mb-1">{c.label}</div>
           <div
             className={`text-base font-bold tabular-nums leading-none ${
@@ -97,7 +97,7 @@ function CapBreakdownChart({ proj }: { proj: YearProjection }) {
     { name: 'Space', value: Math.round(proj.availableCapSpace / 1_000_000) },
   ];
   return (
-    <Card className="bg-slate-900 border-white/10">
+    <Card className="bg-card border-white/10">
       <CardHeader className="pb-2"><CardTitle className="text-sm text-slate-300">Cap Breakdown ({proj.year})</CardTitle></CardHeader>
       <CardContent>
         <ChartContainer
@@ -127,14 +127,14 @@ function TopHitsList({
 }) {
   if (proj.topHits.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-slate-900 p-4 text-sm text-slate-400 text-center">
+      <div className="rounded-xl border border-white/10 bg-card p-4 text-sm text-slate-400 text-center">
         No committed contracts for {proj.year}.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-900 overflow-hidden">
+    <div className="rounded-xl border border-white/10 bg-card overflow-hidden">
       <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
         Top Cap Hits — {proj.year}
       </div>
@@ -193,7 +193,7 @@ function PlayerDrawer({
 
   return (
     <Drawer open={!!playerId} onOpenChange={(o) => !o && onClose()}>
-      <DrawerContent className="bg-slate-950 border-white/10">
+      <DrawerContent className="bg-background border-white/10">
         <DrawerHeader>
           <DrawerTitle className="text-slate-100">Contract Detail</DrawerTitle>
         </DrawerHeader>
@@ -229,13 +229,13 @@ function PlayerDrawer({
               {player.s ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-3">
+                    <div className="rounded-xl border border-white/10 bg-card p-3">
                       <div className="text-xs text-slate-400">APY</div>
                       <div className="text-base font-bold text-slate-100 tabular-nums">
                         {money(player.s.apy ?? 0)}
                       </div>
                     </div>
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-3">
+                    <div className="rounded-xl border border-white/10 bg-card p-3">
                       <div className="text-xs text-slate-400">Years Left</div>
                       <div className="text-base font-bold text-slate-100 tabular-nums">
                         {player.s.yearsRemaining}
@@ -243,7 +243,7 @@ function PlayerDrawer({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-slate-900 overflow-hidden">
+                  <div className="rounded-xl border border-white/10 bg-card overflow-hidden">
                     <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                       Cap by Season
                     </div>
@@ -363,14 +363,14 @@ function AddExtensionForm({
         Add Expected Extension
       </div>
       <input
-        className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-full rounded-lg border border-white/10 bg-card px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         placeholder="Player / description"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
         maxLength={60}
       />
       <input
-        className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="w-full rounded-lg border border-white/10 bg-card px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         placeholder="Cap hit (millions, e.g. 32.5)"
         value={capHitStr}
         onChange={(e) => setCapHitStr(e.target.value)}
@@ -462,7 +462,7 @@ export default function CapProjection() {
 
       <div className="p-4 space-y-4">
         {/* ── Toggles ── */}
-        <div className="rounded-xl border border-white/10 bg-slate-900 divide-y divide-white/5">
+        <div className="rounded-xl border border-white/10 bg-card divide-y divide-white/5">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-slate-100">
@@ -495,7 +495,7 @@ export default function CapProjection() {
 
         {/* ── Extensions list + add form ── */}
         {includeExtensions && (
-          <div className="rounded-xl border border-white/10 bg-slate-900 overflow-hidden">
+          <div className="rounded-xl border border-white/10 bg-card overflow-hidden">
             {extensions.length > 0 && (
               <div className="divide-y divide-white/5">
                 {extensions.map((ext) => (
@@ -515,12 +515,12 @@ export default function CapProjection() {
 
         {/* ── Year tabs ── */}
         {projections.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-slate-900 p-6 text-center text-sm text-slate-400">
+          <div className="rounded-xl border border-white/10 bg-card p-6 text-center text-sm text-slate-400">
             Loading projection data…
           </div>
         ) : (
           <Tabs value={activeYear} onValueChange={setActiveYear}>
-            <TabsList className="grid grid-cols-3 w-full bg-slate-900 border border-white/10">
+            <TabsList className="grid grid-cols-3 w-full bg-card border border-white/10">
               {yearKeys.map((yr) => (
                 <TabsTrigger
                   key={yr}
@@ -543,7 +543,7 @@ export default function CapProjection() {
 
                 {/* ── Dead money note ── */}
                 {proj.deadMoney > 0 && (
-                  <Card className="bg-slate-900 border-white/10">
+                  <Card className="bg-card border-white/10">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm text-slate-300">
                         Dead Cap — {proj.year}

@@ -239,7 +239,7 @@ export default function RosterAudit() {
       </HubPageCard>
 
       <Dialog open={restructureOpen} onOpenChange={setRestructureOpen}>
-        <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+        <DialogContent className="border-slate-300/15 bg-background text-slate-100">
           <DialogHeader>
             <DialogTitle>Restructure</DialogTitle>
           </DialogHeader>

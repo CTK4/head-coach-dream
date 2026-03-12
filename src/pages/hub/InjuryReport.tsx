@@ -311,7 +311,7 @@ function InjuryDrawer({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="bottom"
-        className="border-t border-slate-300/15 bg-slate-950 text-slate-100 max-h-[85vh] overflow-y-auto rounded-t-2xl"
+        className="border-t border-slate-300/15 bg-background text-slate-100 max-h-[85vh] overflow-y-auto rounded-t-2xl"
         aria-label={`Injury details for ${player.name}`}
       >
         <SheetHeader className="mb-3">
@@ -593,7 +593,7 @@ export default function InjuryReport() {
                 <Users className="h-3 w-3 mr-1 text-slate-400" aria-hidden="true" />
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+              <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                 <SelectItem value="MY_TEAM">My Team</SelectItem>
                 <SelectItem value="LEAGUE">League</SelectItem>
               </SelectContent>
@@ -604,7 +604,7 @@ export default function InjuryReport() {
               <SelectTrigger className="h-8 text-xs border-slate-300/20 bg-slate-900/50 text-slate-100" aria-label="Filter by status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+              <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                 <SelectItem value="ALL">All Statuses</SelectItem>
                 {STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
@@ -617,7 +617,7 @@ export default function InjuryReport() {
               <SelectTrigger className="h-8 text-xs border-slate-300/20 bg-slate-900/50 text-slate-100" aria-label="Filter by body area">
                 <SelectValue placeholder="Body Part" />
               </SelectTrigger>
-              <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+              <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                 <SelectItem value="ALL">All Body Parts</SelectItem>
                 {BODY_AREAS.map((a) => (
                   <SelectItem key={a} value={a}>{formatBodyArea(a)}</SelectItem>
@@ -633,7 +633,7 @@ export default function InjuryReport() {
               <SelectTrigger className="h-8 text-xs border-slate-300/20 bg-slate-900/50 text-slate-100" aria-label="Filter by week">
                 <SelectValue placeholder="Week" />
               </SelectTrigger>
-              <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+              <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                 <SelectItem value="ALL">All Weeks</SelectItem>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
                   <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>

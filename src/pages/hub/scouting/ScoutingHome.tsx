@@ -98,7 +98,7 @@ export default function ScoutingHome() {
           onClick={() => setLockedSheet(null)}
         >
           <div
-            className="w-full rounded-t-2xl border border-white/10 bg-slate-950 p-5"
+            className="w-full rounded-t-2xl border border-white/10 bg-background p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">

@@ -115,7 +115,7 @@ export default function SkillTree() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
+    <div className="min-h-screen bg-background text-slate-100 p-4 md:p-6">
       <header className="mb-4 flex items-center justify-between gap-4 border-b border-slate-800 pb-3">
         <div>
           <div className="text-lg font-semibold">{coach.name || "Unnamed Coach"} · {ARCHETYPE_LABELS[coach.archetypeId] ?? safeLabel(coach.archetypeId)}</div>
@@ -126,7 +126,7 @@ export default function SkillTree() {
             <PopoverTrigger asChild>
               <Button variant="outline" className="border-indigo-400/50 text-indigo-200">⬡ {perkPoints} Points Available</Button>
             </PopoverTrigger>
-            <PopoverContent className="bg-slate-900 border-slate-700 text-slate-100 w-72">
+            <PopoverContent className="bg-card border-slate-700 text-slate-100 w-72">
               <p className="text-sm font-semibold mb-2">Perk point sources</p>
               {(coach.perkPointLog ?? []).length ? (
                 <ul className="space-y-1 text-xs">
@@ -194,7 +194,7 @@ export default function SkillTree() {
           </svg>
         </div>
 
-        <Card className="bg-slate-900 border-slate-700 h-fit sticky top-4">
+        <Card className="bg-card border-slate-700 h-fit sticky top-4">
           <CardHeader><CardTitle className="text-base">{selectedNode?.label ?? "Select a node"}</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p className="text-slate-300">{selectedNode?.description}</p>

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageScreen } from "@/components/layout/PageScreen";
 
 function Meter({ value, color }: { value: number; color: string }) {
   return (
-    <div className="h-2 rounded bg-[#252535] overflow-hidden">
+    <div className="h-2 rounded bg-surface-3 overflow-hidden">
       <div className={`h-2 rounded ${color}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
@@ -55,12 +56,12 @@ export default function OwnerRelations() {
   const activeUltimatums = (ownerState?.ultimatums ?? []).filter((u) => !u.resolved);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] pb-20">
+    <PageScreen>
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4 text-sm">
         <h1 className="text-xl font-bold">Owner Relations</h1>
 
         {/* Job Security */}
-        <Card className={`border ${toneClass} bg-[#13131A]`}>
+        <Card className={`border ${toneClass} bg-surface-1`}>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>Job Security</span>
@@ -103,7 +104,7 @@ export default function OwnerRelations() {
         </Card>
 
         {/* Owner Sentiment */}
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader>
             <CardTitle>Owner Sentiment</CardTitle>
           </CardHeader>
@@ -130,7 +131,7 @@ export default function OwnerRelations() {
               <Meter value={ownerState?.trust ?? 55} color={meterColor(ownerState?.trust ?? 55)} />
             </div>
             {ownerState?.lastEvaluation && (
-              <div className="rounded border border-white/10 bg-[#1a1a28] p-2 text-xs text-muted-foreground">
+              <div className="rounded border border-white/10 bg-surface-2 p-2 text-xs text-muted-foreground">
                 <span className="font-medium text-white">Last evaluation (Year {ownerState.lastEvaluation.year}): </span>
                 {ownerState.lastEvaluation.summary}
                 <span className={ownerState.lastEvaluation.delta >= 0 ? " text-emerald-400" : " text-red-400"}>
@@ -142,7 +143,7 @@ export default function OwnerRelations() {
         </Card>
 
         {/* Season Goals */}
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader>
             <CardTitle>Season Goals</CardTitle>
           </CardHeader>
@@ -169,7 +170,7 @@ export default function OwnerRelations() {
         </Card>
 
         {/* Active Ultimatums */}
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span>Ultimatums</span>
@@ -194,6 +195,6 @@ export default function OwnerRelations() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageScreen>
   );
 }

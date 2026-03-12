@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useGame } from "@/context/GameContext";
 import { getPersonnel, getTeamById } from "@/data/leagueDb";
+import { PageScreen } from "@/components/layout/PageScreen";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useTeamRatings } from "@/hooks/useTeamRatings";
@@ -87,13 +88,13 @@ export default function FrontOffice() {
   const teamOvrText = teamRating?.rosterRating ?? "—";
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] pb-20">
+    <PageScreen>
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4 text-sm">
         <h1 className="text-xl font-bold">Front Office</h1>
         {teamRatingsError ? (
           <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200">{teamRatingsError}</div>
         ) : null}
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader><CardTitle>Franchise Overview</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
@@ -106,34 +107,34 @@ export default function FrontOffice() {
             <div className="text-xs text-muted-foreground">All-Time {allTimeRecordText} • OVR {teamOvrText} • Championships 0</div>
             <div>
               <div className="mb-1 text-xs">Franchise Prestige</div>
-              <div className="h-2 rounded bg-[#252535]"><div className="h-2 rounded bg-blue-500" style={{ width: `${prestige}%` }} /></div>
+              <div className="h-2 rounded bg-surface-3"><div className="h-2 rounded bg-blue-500" style={{ width: `${prestige}%` }} /></div>
             </div>
             <div className="text-xs text-muted-foreground">Current season: {record} • Streak: {streakText}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader><CardTitle>Owner Profile</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between"><div className="font-semibold">{owner?.fullName ?? "Team Owner"}</div><Badge className={ownerBadgeClasses[ownerPersonality] ?? ownerBadgeClasses.HANDS_OFF}>{ownerPersonality}</Badge></div>
             <div className="text-xs">Confidence in Coaching Staff: {ownerConfidence}</div>
-            <div className="h-2 rounded bg-[#252535]"><div className={`h-2 rounded ${meterColor(ownerConfidence)}`} style={{ width: `${ownerConfidence}%` }} /></div>
+            <div className="h-2 rounded bg-surface-3"><div className={`h-2 rounded ${meterColor(ownerConfidence)}`} style={{ width: `${ownerConfidence}%` }} /></div>
             <div className="flex gap-2 flex-wrap">{ownerPriorities.map((p) => <Badge key={p} variant="secondary">{p}</Badge>)}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-white/10 bg-[#13131A]">
+        <Card className="border-white/10 bg-surface-1">
           <CardHeader><CardTitle>GM Profile</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between"><div className="font-semibold">{gm?.fullName ?? "General Manager"}</div><Badge className="bg-blue-500/20 text-white">HYBRID</Badge></div>
             <div className="text-xs">GM Relationship: {gmRelationship}</div>
-            <div className="h-2 rounded bg-[#252535]"><div className={`h-2 rounded ${meterColor(gmRelationship)}`} style={{ width: `${gmRelationship}%` }} /></div>
+            <div className="h-2 rounded bg-surface-3"><div className={`h-2 rounded ${meterColor(gmRelationship)}`} style={{ width: `${gmRelationship}%` }} /></div>
             <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground"><div>Draft Emphasis: MEDIUM</div><div>FA Aggression: SELECTIVE</div><div>Collaboration: Adaptive</div></div>
             <p className="text-xs text-muted-foreground">Balances data and traditional scouting to align short-term needs with sustainable roster value.</p>
             <details className="text-xs"><summary className="cursor-pointer text-blue-400">Current priorities</summary><p className="mt-1 text-muted-foreground">The GM is focused on day-two value and adding immediate rotational depth in premium spots.</p></details>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageScreen>
   );
 }
