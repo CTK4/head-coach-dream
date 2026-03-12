@@ -18,6 +18,7 @@
     "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs",
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
+    "deps:health": "node scripts/dependencyHealthReport.mjs",
     "cap:sync": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
@@ -84,7 +85,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@eslint/js": "^9.32.0",
+    "@eslint/js": "9.32.0",
     "@playwright/test": "^1.48.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
@@ -92,21 +93,21 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
-    "eslint": "^9.32.0",
+    "eslint": "9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.38.0",
     "vite": "^5.4.19",
     "vitest": "^4.0.18"
   },
   "engines": {
-    "node": "22.x",
-    "npm": ">=10"
+    "node": ">=22.17.0 <23",
+    "npm": ">=10.9.2 <11"
   },
-  "packageManager": "npm@10"
+  "packageManager": "npm@10.9.2"
 }

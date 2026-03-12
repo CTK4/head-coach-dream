@@ -3,15 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/franchise-hub/stageRouting";
 import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
 import { readSettings } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { HUB_TILE_IMAGES, type HubTileId } from "@/components/franchise-hub/tileImages";
 import { HubPhaseQuickLinks } from "@/pages/hub/PhaseSubsystemRoutes";
-import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 import SeasonAwards from "@/pages/SeasonAwards";
+import { getHubActionAvailability, resolveHubProgression } from "@/services/gameProgressionService";
 
 type HubTileConfig = {
   id: HubTileId;
@@ -42,13 +41,8 @@ export default function Hub() {
     };
   }, [state.unreadNewsCount]);
 
-  const nextStage = nextStageForNavigate(state.careerStage);
-  const missingCoordinators = !state.staff.ocId || !state.staff.dcId || !state.staff.stcId;
-  const canHireCoordinatorsInHub = ["OFFSEASON_HUB", "RESIGN", "COMBINE", "FREE_AGENCY", "PRE_DRAFT", "DRAFT", "TRAINING_CAMP", "PRESEASON", "CUTDOWNS"].includes(state.careerStage);
-  const showTrades = isTradesAllowed(state);
-  const showReSign = isReSignAllowed(state);
-  const nextLabel = stageLabel(nextStage);
-  const nextRoute = stageToRoute(nextStage);
+  const { showCoordinatorHiring, showReSign, showTrades } = getHubActionAvailability(state);
+  const { nextLabel, nextRoute, advanceText } = resolveHubProgression(state.careerStage);
 
   if (state.careerStage === "SEASON_AWARDS") {
     return <SeasonAwards />;
@@ -65,17 +59,9 @@ export default function Hub() {
     else doAdvance();
   }
 
-  let advanceText = "ADVANCE PHASE";
-  if (state.careerStage === "FREE_AGENCY") advanceText = "ADVANCE FA DAY";
-  else if (state.careerStage === "COMBINE") advanceText = "ADVANCE COMBINE DAY";
-  else if (state.careerStage === "DRAFT") advanceText = "ADVANCE PICK";
-  else if (state.careerStage === "REGULAR_SEASON") advanceText = "ADVANCE WEEK";
-  else if (state.careerStage === "RESIGN") advanceText = "ADVANCE RE-SIGN DAY";
-  else advanceText = `ADVANCE TO ${nextLabel.toUpperCase()}`;
-
   const optionalTiles: HubTileConfig[] = [
     ...(state.careerStage === "FREE_AGENCY" ? [{ id: "contracts" as HubTileId, title: "Free Agency", to: "/free-agency", imageUrl: HUB_TILE_IMAGES.contracts }] : []),
-    ...(missingCoordinators && canHireCoordinatorsInHub
+    ...(showCoordinatorHiring
       ? [{ id: "staff" as HubTileId, title: "Hire Coordinators", subtitle: "OC · DC · STC", to: "/hub/coordinator-hiring", imageUrl: HUB_TILE_IMAGES.staff, dataTest: "hub-hire-coordinators" }]
       : []),
     ...(showReSign ? [{ id: "roster" as HubTileId, title: "Re-Sign", to: "/hub/re-sign", imageUrl: HUB_TILE_IMAGES.roster }] : []),
