@@ -4,10 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
-  ci:
+  lint_typecheck:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,6 +56,8 @@ jobs:
             fi
           elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             BASE_REF="origin/main"
+          elif [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            BASE_REF="origin/main"
           else
             BASE_REF="origin/main"
           fi
@@ -70,11 +74,54 @@ jobs:
         continue-on-error: true
         run: npm run lint
 
-      - name: Build
-        run: npm run build
-
       - name: Validate JSON
         run: node scripts/validateJson.mjs
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 (pinned SHA for supply-chain security)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npx vitest run
+
+  build_smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 (pinned SHA for supply-chain security)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Smoke test
         run: npm run smoke
@@ -82,11 +129,53 @@ jobs:
       - name: Determinism tripwire
         run: npm run check:determinism
 
-      - name: Unit tests
-        run: npx vitest run
+  ui_tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: |
+      github.event_name == 'schedule' ||
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop'))
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 (pinned SHA for supply-chain security)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        # actions/cache v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/cache@v4.2.2
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: UI tests
         run: npm run test:ui
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        # actions/upload-artifact v4.4.3 (pinned SHA for supply-chain security)
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            playwright-report/
+            test-results/
