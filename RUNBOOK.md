@@ -27,7 +27,10 @@
    ```
 
 ## Environment Variables
-This app currently does **not** require env vars for core functionality.
+Core web mode is still local-only persistence by default, with an optional API mirror mode:
+
+- `VITE_ENABLE_API_SAVE_MODE` (optional): set to `"true"` to enable dual-write API mirroring for save snapshot writes/deletes.
+- `VITE_SAVE_API_BASE_URL` (optional): base URL for the save API (defaults to `http://localhost:8787`).
 
 ## Ports
 - Vite dev server: `5173` (default)
@@ -66,4 +69,4 @@ This app currently does **not** require env vars for core functionality.
 
 ## Known Limitations
 - In this execution environment, `npm ci` was blocked by upstream registry policy (`403`), so full `lint/typecheck/vitest/build` verification could not be executed end-to-end here.
-- There is no backend/API or database service in this repository; connectivity scope is static data + client runtime persistence.
+- API support now exists in `apps/api` for versioned health/metadata/snapshot CRUD; web remains local-first unless feature-flagged.

@@ -2,6 +2,7 @@ import type { GameState } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState, type SaveValidationErrorCode } from "@/lib/migrations/saveSchema";
 import { logError, logInfo, logWarn } from "@/lib/logger";
+import { createApiSaveManager, getSaveApiBaseUrl, isApiSaveModeEnabled } from "@/lib/saveApiManager";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -609,7 +610,10 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
   };
 }
 
-const defaultSaveManager = createSaveManager();
+const localSaveManager = createSaveManager();
+const defaultSaveManager = isApiSaveModeEnabled(import.meta.env)
+  ? createApiSaveManager(getSaveApiBaseUrl(import.meta.env), localSaveManager)
+  : localSaveManager;
 
 export const exportSave = defaultSaveManager.exportSave;
 export const importSave = defaultSaveManager.importSave;
