@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/validateSourceArtifacts.mjs && node scripts/validateJson.mjs && node scripts/validateGameSimSyntax.mjs",
+    "prebuild": "node scripts/validateSourceArtifacts.mjs && node scripts/validateTeamRatingCsv.mjs && node scripts/validateJson.mjs && node scripts/validateGameSimSyntax.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -29,7 +29,7 @@
     "api:dev": "npm --prefix apps/api run dev",
     "api:start": "npm --prefix apps/api run start",
     "lint:report": "mkdir -p .lint && eslint . --format json --output-file .lint/eslint-report.json",
-    "lint:policy": "node scripts/enforceLintPolicy.mjs --report .lint/eslint-report.json --baseline config/lint-baseline.json"
+    "lint:policy": "node scripts/enforceLintPolicy.mjs --report .lint/eslint-report.json --baseline config/lint-baseline.json",
     "typecheck:strictness:stages": "node scripts/checkStrictnessStages.mjs"
   },
   "dependencies": {
