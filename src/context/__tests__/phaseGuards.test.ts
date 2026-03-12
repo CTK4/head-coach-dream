@@ -99,4 +99,19 @@ describe("phaseGuards", () => {
     expect(migrated.league.phase).toBe("OFFSEASON");
   });
 
+
+  it("treats TRADE_PLAYER as a trade action in phase validation", () => {
+    const base = withCareerStage("REGULAR_SEASON");
+    const state = { ...base, league: { ...base.league, week: 12, tradeDeadlineWeek: 10 } };
+    const verdict = isActionAllowedInCurrentPhase(state, { type: "TRADE_PLAYER", payload: { playerId: "PLY_1", toTeamId: "T2", valueTier: "2nd" } } as any);
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.reason).toContain("trade deadline");
+  });
+
+  it("reducer phase-guards TRADE_PLAYER like TRADE_ACCEPT", () => {
+    const state = withCareerStage("OFFSEASON_HUB");
+    const out = gameReducer(state, { type: "TRADE_PLAYER", payload: { playerId: "PLY_1", toTeamId: "T2", valueTier: "2nd" } } as any);
+    expect(out).toBe(state);
+  });
+
 });
