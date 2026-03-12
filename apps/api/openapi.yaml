@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: Head Coach Dream Save API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8787
+paths:
+  /api/v1/health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/saves/metadata:
+    get:
+      summary: List save metadata
+      operationId: listSaveMetadata
+      responses:
+        '200':
+          description: Save metadata list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [saves]
+                properties:
+                  saves:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SaveMetadata'
+  /api/v1/saves/snapshots:
+    post:
+      summary: Create a save snapshot
+      operationId: createSaveSnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSnapshotRequest'
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveSnapshotResponse'
+  /api/v1/saves/{saveId}/snapshot:
+    get:
+      summary: Get a save snapshot
+      operationId: getSaveSnapshot
+      parameters:
+        - $ref: '#/components/parameters/SaveId'
+      responses:
+        '200':
+          description: Snapshot found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveSnapshotResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Upsert a save snapshot
+      operationId: upsertSaveSnapshot
+      parameters:
+        - $ref: '#/components/parameters/SaveId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertSnapshotRequest'
+      responses:
+        '200':
+          description: Snapshot saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveSnapshotResponse'
+    delete:
+      summary: Delete a save snapshot
+      operationId: deleteSaveSnapshot
+      parameters:
+        - $ref: '#/components/parameters/SaveId'
+      responses:
+        '204':
+          description: Snapshot deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    SaveId:
+      name: saveId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+  responses:
+    NotFound:
+      description: Resource was not found
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    SaveMetadata:
+      type: object
+      required:
+        [saveId, coachName, teamName, season, week, record, updatedAt, lastPlayed, careerStage, version]
+      properties:
+        saveId:
+          type: string
+        coachName:
+          type: string
+        teamName:
+          type: string
+        season:
+          type: number
+        week:
+          type: number
+        record:
+          type: object
+          required: [wins, losses]
+          properties:
+            wins:
+              type: number
+            losses:
+              type: number
+        updatedAt:
+          type: number
+        lastPlayed:
+          type: number
+        careerStage:
+          type: string
+        version:
+          type: number
+    SaveState:
+      type: object
+      additionalProperties: true
+      description: Existing game save/state object shape from the web app save schema.
+    SaveSnapshotResponse:
+      type: object
+      required: [saveId, metadata, state]
+      properties:
+        saveId:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/SaveMetadata'
+        state:
+          $ref: '#/components/schemas/SaveState'
+    CreateSnapshotRequest:
+      type: object
+      required: [state]
+      properties:
+        saveId:
+          type: string
+        state:
+          $ref: '#/components/schemas/SaveState'
+    UpsertSnapshotRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/SaveState'
