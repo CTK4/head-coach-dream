@@ -27,7 +27,7 @@ export default function FreePlaySetup() {
       if (ovrA != null && ovrB != null && ovrA !== ovrB) return ovrB - ovrA;
       if (ovrA != null && ovrB == null) return -1;
       if (ovrA == null && ovrB != null) return 1;
-      return `${a.region} ${a.name}`.localeCompare(`${b.region} ${b.name}`);
+      return `${a.name}`.localeCompare(`${b.name}`);
     });
   }, [teams, query, ratingsIndex]);
 
@@ -36,7 +36,7 @@ export default function FreePlaySetup() {
       <h2 className="text-2xl font-bold">Select Team</h2>
       <input
         className="w-full rounded border bg-background p-2"
-        placeholder="Search city or team"
+        placeholder="Search team"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -78,35 +78,50 @@ export default function FreePlaySetup() {
           const ratingRow = ratingsIndex[team.teamId];
           return (
             <Card key={team.teamId}>
-              <CardContent className="space-y-2 p-4">
-                <div className="font-bold">
-                  {team.region} {team.name}
+              <CardContent className="p-4">
+                <div className="flex min-h-28 items-stretch justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
+                    <div className="min-w-0 text-left font-bold">{team.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {ratingRow?.rosterRating != null ? `OVR ${ratingRow.rosterRating}` : "OVR --"}
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-fit"
+                      data-test={`team-select-${team.teamId}`}
+                      onClick={() => {
+                        if (!window.confirm(`Start your career with ${team.name}?`)) return;
+                        writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
+                        dispatch({
+                          type: "INIT_FREE_PLAY_CAREER",
+                          payload: {
+                            teamId: team.teamId,
+                            teamName: team.name,
+                            simTuningSettings: {
+                              difficultyPreset,
+                              realismPreset,
+                            },
+                          },
+                        });
+                        navigate(ROUTES.hub);
+                      }}
+                    >
+                      Select
+                    </Button>
+                  </div>
+                  <div className="flex w-24 shrink-0 items-center justify-center">
+                    {team.logoKey ? (
+                      <img
+                        src={`/icons/${team.logoKey}.png`}
+                        alt={`${team.name} logo`}
+                        className="h-20 w-20 shrink-0 rounded-sm object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="h-20 w-20 shrink-0 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />
+                    )}
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  {ratingRow?.rosterRating != null ? `OVR ${ratingRow.rosterRating}` : "OVR —"} · Prestige {40 + (team.teamId.length % 60)}
-                </div>
-                <Button
-                  size="sm"
-                  data-test={`team-select-${team.teamId}`}
-                  onClick={() => {
-                    if (!window.confirm(`Start your career with ${team.name}?`)) return;
-                    writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
-                    dispatch({
-                      type: "INIT_FREE_PLAY_CAREER",
-                      payload: {
-                        teamId: team.teamId,
-                        teamName: team.name,
-                        simTuningSettings: {
-                          difficultyPreset,
-                          realismPreset,
-                        },
-                      },
-                    });
-                    navigate(ROUTES.hub);
-                  }}
-                >
-                  Select
-                </Button>
               </CardContent>
             </Card>
           );

@@ -154,6 +154,25 @@ function buildTeamNameIndex(): Record<string, string> {
       byName[normalize(key)] = team.teamId;
     }
   }
+
+  const relocatedAliases: Record<string, string> = {
+    "birmingham vulcans": "AUGUSTA_MEAN_GREEN",
+    "chicago union": "IOWA_OXEN",
+    "los angeles stars": "LOS_ANGELES_BLITZ",
+    "nashville sound": "LOUISVILLE_LOCOMOTIVES",
+    "denver summit": "OMAHA_STAMPEDE",
+    "phoenix scorch": "ARIZONA_OUTRIDERS",
+    "washington sentinels": "VIRGINIA_VENOM",
+    "charlotte crown": "SAN_ANTONIO_CENTURIONS",
+    "san diego armada": "SAN_DIEGO_STEALTH",
+    "st. petersburg pelicans": "SILICON_VALLEY_SENTIENTS",
+    "philadelphia founders": "NEW_JERSEY_JURASSICS",
+  };
+
+  for (const [legacyName, teamId] of Object.entries(relocatedAliases)) {
+    byName[normalize(legacyName)] = teamId;
+  }
+
   return byName;
 }
 
