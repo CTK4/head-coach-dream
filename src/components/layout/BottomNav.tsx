@@ -39,6 +39,8 @@ export function BottomNav() {
           <Link
             key={item.route}
             to={item.route}
+            aria-label={item.label}
+            aria-current={isActive(item.route) ? "page" : undefined}
             className={cn(
               "flex flex-col items-center gap-1 min-w-[64px]",
               isActive(item.route) ? "text-blue-400" : "text-slate-400 hover:text-slate-200"

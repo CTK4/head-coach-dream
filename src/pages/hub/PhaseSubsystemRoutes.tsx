@@ -82,7 +82,7 @@ function FaTargets() {
       <div className="p-4 space-y-3">
         <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name or position" />
         {rows.map((r) => (
-          <Card key={r.id} className="border-white/10 bg-slate-900">
+          <Card key={r.id} className="border-white/10 bg-card">
             <CardContent className="p-3 flex items-center justify-between">
               <div>
                 <div className="font-semibold text-slate-100">{r.name}</div>
@@ -121,7 +121,7 @@ function FaTransactions() {
       <div className="p-4 space-y-2">
         {rows.length === 0 ? <div className="text-sm text-slate-400">No offseason transactions yet.</div> : null}
         {rows.map((r) => (
-          <Card key={r.id} className="border-white/10 bg-slate-900">
+          <Card key={r.id} className="border-white/10 bg-card">
             <CardContent className="p-3 text-sm text-slate-200">{r.text}</CardContent>
           </Card>
         ))}

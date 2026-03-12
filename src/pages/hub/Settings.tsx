@@ -207,7 +207,7 @@ export default function SettingsPage() {
                     <SelectTrigger className="h-9 w-[150px] border-slate-300/15 bg-slate-950/30 text-slate-100">
                       <SelectValue placeholder="Select speed" />
                     </SelectTrigger>
-                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                    <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                       <SelectItem value="SLOW">Slow</SelectItem>
                       <SelectItem value="NORMAL">Normal</SelectItem>
                       <SelectItem value="FAST">Fast</SelectItem>
@@ -229,7 +229,7 @@ export default function SettingsPage() {
                     <SelectTrigger className="h-9 w-[170px] border-slate-300/15 bg-slate-950/30 text-slate-100">
                       <SelectValue placeholder="Select preset" />
                     </SelectTrigger>
-                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                    <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                       {Object.values(DIFFICULTY_PRESETS).map((preset) => (
                         <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
                       ))}
@@ -251,7 +251,7 @@ export default function SettingsPage() {
                     <SelectTrigger className="h-9 w-[170px] border-slate-300/15 bg-slate-950/30 text-slate-100">
                       <SelectValue placeholder="Select realism" />
                     </SelectTrigger>
-                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                    <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                       {Object.values(REALISM_PRESETS).map((preset) => (
                         <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>
                       ))}
@@ -270,7 +270,7 @@ export default function SettingsPage() {
                     <SelectTrigger className="h-9 w-[190px] border-slate-300/15 bg-slate-950/30 text-slate-100">
                       <SelectValue placeholder="Select mode" />
                     </SelectTrigger>
-                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                    <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                       <SelectItem value="FULL_AUTO">Full Auto</SelectItem>
                       <SelectItem value="KEY_SITUATIONS">Key Situations</SelectItem>
                       <SelectItem value="FULL_PLAYCALLING">Full Playcalling</SelectItem>
@@ -337,7 +337,7 @@ export default function SettingsPage() {
                     <SelectTrigger className="h-9 w-[150px] border-slate-300/15 bg-slate-950/30 text-slate-100">
                       <SelectValue placeholder="Select theme" />
                     </SelectTrigger>
-                    <SelectContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+                    <SelectContent className="border-slate-300/15 bg-background text-slate-100">
                       <SelectItem value="DARK">Dark</SelectItem>
                       <SelectItem value="OLED">OLED</SelectItem>
                     </SelectContent>
@@ -363,7 +363,7 @@ export default function SettingsPage() {
         </Card>
 
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-          <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+          <DialogContent className="border-slate-300/15 bg-background text-slate-100">
             <DialogHeader>
               <DialogTitle>Reset game?</DialogTitle>
               <DialogDescription className="text-slate-200/70">
@@ -382,7 +382,7 @@ export default function SettingsPage() {
         </Dialog>
 
         <Dialog open={quitOpen} onOpenChange={setQuitOpen}>
-          <DialogContent className="border-slate-300/15 bg-slate-950 text-slate-100">
+          <DialogContent className="border-slate-300/15 bg-background text-slate-100">
             <DialogHeader>
               <DialogTitle>Save and quit?</DialogTitle>
               <DialogDescription className="text-slate-200/70">Return to main menu and keep this save available in Continue.</DialogDescription>

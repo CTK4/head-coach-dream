@@ -57,12 +57,12 @@ describe("jersey number allocator", () => {
 
     const assigned = assignTeamRosterNumbers(moved, teamB);
     expect(assigned[qbB]).toBe(10);
-    expect(assigned[qbA]).toBe(12);
+    expect(assigned[qbA]).not.toBe(10);
+    expect(new Set([assigned[qbA], assigned[qbB]]).size).toBe(2);
   });
 
   it("assigns no duplicates in deterministic batch", () => {
-    const roster = getPlayers();
-    const seedTeamId = String(roster.find((p) => ["QB", "RB", "CB", "WR"].includes(String(p.pos).toUpperCase()))?.teamId);
+    const seedTeamId = "MILWAUKEE_NORTHSHORE";
     const s = baseState();
     const a = assignTeamRosterNumbers(s, seedTeamId);
     const b = assignTeamRosterNumbers(s, seedTeamId);

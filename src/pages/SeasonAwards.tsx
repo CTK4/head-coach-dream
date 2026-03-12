@@ -93,7 +93,7 @@ export default function SeasonAwards() {
   };
 
   return (
-    <section className="min-h-screen bg-slate-950 text-slate-100 px-4 py-6 md:px-8 md:py-8">
+    <section className="min-h-screen bg-background text-slate-100 px-4 py-6 md:px-8 md:py-8">
       <div className="mx-auto flex max-w-6xl min-h-[85vh] flex-col justify-between gap-5">
         <Card className="border-slate-700 bg-slate-900/80 text-center">
           <CardHeader>

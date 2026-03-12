@@ -228,7 +228,7 @@ export default function Combine() {
 
       {/* View drawer */}
       <Sheet open={!!viewProspect} onOpenChange={(open) => { if (!open) setViewId(null); }}>
-        <SheetContent side="right" className="w-full max-w-sm overflow-y-auto bg-slate-950 text-slate-100">
+        <SheetContent side="right" className="w-full max-w-sm overflow-y-auto bg-background text-slate-100">
           {viewProspect ? (() => {
             const id = String(viewProspect.id);
             const topPercentile = topPercentileByProspectId[id];

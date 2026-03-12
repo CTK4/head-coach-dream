@@ -2,9 +2,9 @@ import { PressableButtonDemo } from "@/components/pressable/PressableButton";
 
 const PressFeedbackDemo = () => {
   return (
-    <main style={{ padding: "2rem", display: "grid", gap: "1rem" }}>
-      <h1 style={{ fontSize: "1.25rem", fontWeight: 700 }}>Press Feedback Demo</h1>
-      <p style={{ color: "#475569", margin: 0 }}>
+    <main className="grid gap-4 p-8">
+      <h1 className="text-xl font-bold">Press Feedback Demo</h1>
+      <p className="text-slate-500">
         Touch, mouse, and keyboard interactions all show immediate press feedback.
       </p>
       <PressableButtonDemo />

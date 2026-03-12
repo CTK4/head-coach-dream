@@ -201,9 +201,9 @@ const Offers = () => {
                     <div className="mt-2 space-y-2">
                       <div className="text-sm font-semibold">Their Counter</div>
                       <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Years</div><div className="font-semibold">{activeOffer.negotiation.counter.years}</div></div>
-                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Salary</div><div className="font-semibold">{money(activeOffer.negotiation.counter.salary)}</div></div>
-                        <div className="rounded-lg border border-white/10 bg-slate-950 p-2"><div className="text-xs text-muted-foreground">Autonomy</div><div className="font-semibold">{activeOffer.negotiation.counter.autonomy}</div></div>
+                        <div className="rounded-lg border border-white/10 bg-background p-2"><div className="text-xs text-muted-foreground">Years</div><div className="font-semibold">{activeOffer.negotiation.counter.years}</div></div>
+                        <div className="rounded-lg border border-white/10 bg-background p-2"><div className="text-xs text-muted-foreground">Salary</div><div className="font-semibold">{money(activeOffer.negotiation.counter.salary)}</div></div>
+                        <div className="rounded-lg border border-white/10 bg-background p-2"><div className="text-xs text-muted-foreground">Autonomy</div><div className="font-semibold">{activeOffer.negotiation.counter.autonomy}</div></div>
                       </div>
                       <div className="flex gap-2">
                         <Button variant="secondary" onClick={applyCounter}>Load Counter</Button>

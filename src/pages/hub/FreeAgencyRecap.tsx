@@ -68,7 +68,7 @@ export default function FreeAgencyRecap() {
   }, [signings]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-4 space-y-6">
+    <div className="min-h-screen bg-card text-slate-100 p-4 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-wide">FREE AGENCY RECAP</h1>
         <p className="text-sm text-slate-400 mt-1">Season {state.season} offseason summary</p>
