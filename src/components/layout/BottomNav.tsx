@@ -33,7 +33,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-slate-950/90 pb-safe backdrop-blur-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-slate-950/90 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around px-2 py-3">
         {navItems.map((item) => (
           <Link
