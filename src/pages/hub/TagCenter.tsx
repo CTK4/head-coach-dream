@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
 import { useGame, type TagType } from "@/context/GameContext";
-import { getPlayers } from "@/data/leagueDb";
-import { normalizePos, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { normalizePos, getContractSummaryForPlayer, getEffectivePlayersByTeam, getEffectivePlayer } from "@/engine/rosterOverlay";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { resolveTagCost, posTagGroup } from "@/engine/tagValues";
-import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
 import { LockedPhaseCard } from "@/components/hub/LockedPhaseCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -85,12 +83,7 @@ export default function TagCenter() {
   const hasOfferFor = (playerId: string) => decisions?.[playerId]?.action === "RESIGN";
 
   const eligible = useMemo(() => {
-    const ps = getPlayers();
-    const rosterIndex = buildRosterIndex(state);
-    const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
-
-    return ps
-      .filter((p: any) => onTeam.has(String(p.playerId)))
+    return getEffectivePlayersByTeam(state, String(teamId))
       .map((p: any) => {
         const id = String(p.playerId);
         const summary = getContractSummaryForPlayer(state, id);
@@ -160,7 +153,7 @@ export default function TagCenter() {
   // Tagged player data for pinned card
   const taggedPlayer = useMemo(() => {
     if (!applied) return null;
-    const p: any = getPlayers().find((x: any) => String(x.playerId) === String(applied.playerId));
+    const p: any = getEffectivePlayer(state, String(applied.playerId));
     if (!p) return null;
     const pos = normalizePos(String(p.pos ?? "UNK"));
     const ovr = Number(p.overall ?? 0);

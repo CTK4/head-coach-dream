@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
-import { getPlayers } from "@/data/leagueDb";
-import { getDepthSlotLabel, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
-import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
+import { getDepthSlotLabel, getContractSummaryForPlayer, getEffectivePlayersByTeam, getEffectivePlayer } from "@/engine/rosterOverlay";
 import { projectedMarketApy } from "@/engine/marketModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,9 +49,7 @@ export default function ResignPlayers() {
   const [draftOffer, setDraftOffer] = useState<ResignOffer | null>(null);
 
   const expiring = useMemo(() => {
-    const rosterIndex = buildRosterIndex(state);
-    const onTeam = new Set(rosterIndex.teamToPlayers[String(teamId)] ?? []);
-    const players = getPlayers().filter((p) => onTeam.has(String(p.playerId)));
+    const players = getEffectivePlayersByTeam(state, String(teamId));
     return players
       .map((p) => {
         const summary = getContractSummaryForPlayer(state, String(p.playerId));
@@ -66,7 +62,7 @@ export default function ResignPlayers() {
 
   const focus = useMemo(() => {
     if (!openId) return null;
-    const p = getPlayers().find((x) => String(x.playerId) === String(openId));
+    const p = getEffectivePlayer(state, String(openId));
     if (!p) return null;
     const market = projectedMarketApy(String(p.pos ?? "UNK"), Number(p.overall ?? 0), Number(p.age ?? 26));
     const decision = state.offseasonData.resigning.decisions?.[String(openId)];

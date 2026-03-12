@@ -1,5 +1,6 @@
 import type { GameState } from "@/context/GameContext";
 import type { CareerStage } from "@/types/careerStage";
+import { logError } from "@/lib/logger";
 
 export type UnifiedPhase = CareerStage;
 type LegacyUnifiedHint = "IN_SEASON" | "POSTSEASON" | "OFFSEASON_TRANSITION";
@@ -36,7 +37,7 @@ export function getUnifiedPhase(state: GameState): UnifiedPhase {
     throw new Error(`phase_utils:${msg}`);
   }
 
-  console.error(JSON.stringify({ level: "error", event: "phase_utils.invalid_career_stage", msg, careerStage: state.careerStage }));
+  logError("phase_utils.invalid_career_stage", { msg, careerStage: state.careerStage });
 
   return "OFFSEASON_HUB";
 }

@@ -1,4 +1,5 @@
 import type { PlayType } from "@/engine/gameSim";
+import { logWarn } from "@/lib/logger";
 
 export type PersonnelPackage = "10" | "11" | "12" | "21" | "22";
 export type DefensivePackage = "Base" | "Nickel" | "Dime" | "GoalLine";
@@ -196,7 +197,7 @@ export function getDistanceBucket(distance: number): DistanceBucket {
 }
 
 function warnFallback(event: string, payload: Record<string, unknown>): void {
-  console.warn(JSON.stringify({ level: "warn", event, ...payload }));
+  logWarn(event, payload);
 }
 
 export function getDefensiveReaction(down: number, distance: number, offPersonnel: PersonnelPackage): DefensiveReaction[] {

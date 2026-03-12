@@ -73,6 +73,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Report bundle chunk sizes (informational)
+        continue-on-error: true
+        run: node scripts/reportBundleChunks.mjs
+
       - name: Validate JSON
         run: node scripts/validateJson.mjs
 

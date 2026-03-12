@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { computeCapLedgerV2, type CapLedgerSnapshotV2 } from "@/engine/capLedger";
-import { getTeamById, getPlayers } from "@/data/leagueDb";
+import { getTeamById } from "@/data/leagueDb";
 import { computeCutProjection } from "@/engine/contractMath";
-import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getContractSummaryForPlayer, getEffectivePlayer } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export default function CapBaseline() {
 
   const openPlayer = useMemo(() => {
     if (!openPlayerId) return null;
-    const p: any = getPlayers().find((x: any) => String(x.playerId) === String(openPlayerId));
+    const p: any = getEffectivePlayer(state, String(openPlayerId));
     const s = getContractSummaryForPlayer(state, String(openPlayerId));
     const postJ = !!state.finances.postJune1Sim;
     const cut = computeCutProjection(state, String(openPlayerId), postJ);
@@ -52,11 +52,10 @@ export default function CapBaseline() {
 
   const designationRows = useMemo(() => {
     const des = state.offseasonData?.rosterAudit?.cutDesignations ?? {};
-    const players = getPlayers();
     return Object.entries(des)
       .filter(([, v]) => v === "POST_JUNE_1")
       .map(([playerId]) => {
-        const p: any = players.find((x: any) => String(x.playerId) === String(playerId));
+        const p: any = getEffectivePlayer(state, String(playerId));
         const proj = computeCutProjection(state, String(playerId), true);
         return {
           playerId: String(playerId),

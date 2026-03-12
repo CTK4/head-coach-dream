@@ -380,6 +380,18 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     return `${prefix}-${candidate}`;
   }
 
+  async function checkStorageQuota(): Promise<void> {
+    if (typeof navigator === "undefined" || !navigator.storage?.estimate) return;
+    const { usage, quota } = await navigator.storage.estimate();
+    if (usage != null && quota != null && quota > 0 && usage / quota > 0.8) {
+      logWarn("save.storage_quota_warning", {
+        usageMB: Math.round(usage / 1e6),
+        quotaMB: Math.round(quota / 1e6),
+        pct: Math.round((usage / quota) * 100),
+      });
+    }
+  }
+
   function syncCurrentSave(state: GameState, saveId?: string) {
     const explicitId = isPersistableSaveId(saveId) ? saveId : undefined;
     const stateSaveIdWasProvided = state.saveId !== undefined && state.saveId !== null;
@@ -400,6 +412,7 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
       writeIndex(rows.sort((a, b) => (b.updatedAt ?? b.lastPlayed) - (a.updatedAt ?? a.lastPlayed)));
       setActiveSaveId(id);
       logInfo("save.sync.success", { saveId: id, phase: state.phase, season: state.season, week: state.week });
+      void checkStorageQuota();
     } catch (error) {
       logError("save.sync.failure", { saveId: id, phase: state.phase, season: state.season, week: state.week, meta: { message: error instanceof Error ? error.message : String(error) } });
       throw error;

@@ -22,10 +22,9 @@ import {
 } from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getContractSummaryForPlayer } from "@/engine/rosterOverlay";
+import { getContractSummaryForPlayer, getEffectivePlayer } from "@/engine/rosterOverlay";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
-import { getPlayers } from "@/data/leagueDb";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -184,9 +183,7 @@ function PlayerDrawer({
 
   const player = useMemo(() => {
     if (!playerId) return null;
-    const p: any = getPlayers().find(
-      (x: any) => String(x.playerId) === String(playerId),
-    );
+    const p: any = getEffectivePlayer(state, String(playerId));
     const s = getContractSummaryForPlayer(state, playerId);
     return { p, s };
   }, [playerId, state]);

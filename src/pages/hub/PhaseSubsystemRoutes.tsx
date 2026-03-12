@@ -9,8 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
-import { getPlayers } from "@/data/leagueDb";
+import { getEffectiveFreeAgents, getEffectivePlayer } from "@/engine/rosterOverlay";
 import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 
 function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
@@ -101,9 +100,8 @@ function FaTargets() {
 
 function FaTransactions() {
   const { state } = useGame();
-  const players = getPlayers();
   const signingRows = Object.entries(state.freeAgency.signingsByPlayerId ?? {}).map(([playerId, deal]) => {
-    const player: any = players.find((p: any) => String(p.playerId) === String(playerId));
+    const player: any = getEffectivePlayer(state, String(playerId));
     return {
       id: `SIGN_${playerId}`,
       text: `${String(player?.fullName ?? playerId)} signed (${deal.years}y / $${Math.round(deal.aav / 1_000_000)}M AAV)`,
