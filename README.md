@@ -12,7 +12,7 @@ There are several ways of editing your application.
 
 **Use your preferred IDE**
 
-Requirements: Node.js 22+ and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Requirements: Node.js `>=22.17.0 <23` and npm `>=10.9.2 <11` (recommended pin: `npm@10.9.2`) — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating). See the unified matrix in `docs/toolchain-version-matrix.md`.
 
 ```sh
 # Step 1: Clone the repository.
@@ -66,7 +66,7 @@ This project is built with:
 | `npm run smoke` | Run the smoke test (data wiring + reference integrity) |
 | `npm run smoke:deploy` | Verify deployment routing for SPA fallback, API passthrough, and static assets |
 | `npm run test:ui` | Run Playwright UI tests |
-| `npm run check:repo-hygiene` | Fail if top-level executable scripts are undocumented |
+| `npm run toolchain:check` | Validate Node/npm/devDependency matrix drift across root + mobile workspaces |
 
 ## How can I deploy this project?
 
