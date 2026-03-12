@@ -1355,6 +1355,7 @@ export type GameAction =
   | { type: "CUT_APPLY"; payload: { teamId: string; playerId: string; designation?: "PRE_JUNE_1" | "POST_JUNE_1" } }
   | { type: "CUT_PLAYER"; payload: { playerId: string } }
   | { type: "TRADE_ACCEPT"; payload: { playerId: string; toTeamId: string; valueTier: string } }
+  | { type: "TRADE_PLAYER"; payload: { playerId: string; toTeamId: string; valueTier: string } }
   | { type: "ADD_NEWS_ITEM"; payload: { title: string; body?: string; category?: string } }
   | { type: "SET_PLAYER_TRADE_BLOCK"; payload: { playerId: string; isOnBlock: boolean } }
   | { type: "EXECUTE_TRADE"; payload: { teamA: string; teamB: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[]; outgoingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; incomingPicks?: Array<{ round: number; year: number; originalTeamId: string; currentTeamId: string }>; valueDelta?: number } }
@@ -5965,6 +5966,34 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let next = { ...state, offseason: { ...state.offseason, stepsComplete } };
       if (action.payload.stepId === "RESIGNING") {
         const userTeamId = String(state.acceptedOffer?.teamId ?? "");
+        const userDecisions = next.offseasonData.resigning.decisions ?? {};
+        if (userTeamId) for (const [playerId, decision] of Object.entries(userDecisions)) {
+          if (!decision) continue;
+          if (decision.action === "RESIGN" && typeof decision.apy === "number" && typeof decision.years === "number") {
+            const ovr = contractOverrideFromOffer(next, {
+              years: decision.years,
+              apy: decision.apy,
+              guaranteesPct: 0,
+              discountPct: 0,
+            });
+            next = applyCanonicalTx(next, Tx.resign(userTeamId, String(playerId), ovr));
+            continue;
+          }
+          if (decision.action === "TAG_FRANCHISE") {
+            next = gameReducer(next, { type: "TAG_APPLY", payload: { playerId: String(playerId), type: "FRANCHISE_NON_EX" } });
+            continue;
+          }
+          if (decision.action === "TAG_TRANSITION") {
+            next = gameReducer(next, { type: "TAG_APPLY", payload: { playerId: String(playerId), type: "TRANSITION" } });
+          }
+        }
+        next = {
+          ...next,
+          offseasonData: {
+            ...next.offseasonData,
+            resigning: { ...next.offseasonData.resigning, decisions: {} },
+          },
+        };
         for (const teamId of getAllTeamIds().filter((id) => id !== userTeamId)) {
           const teamCtx = buildCpuTeamContext(next, teamId);
           const expiring = getEffectivePlayersByTeam(next, teamId)
@@ -7759,7 +7788,8 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       return { ...state, freeAgency: { ...state.freeAgency, offersByPlayerId, signingsByPlayerId } };
     }
 
-    case "TRADE_ACCEPT": {
+    case "TRADE_ACCEPT":
+    case "TRADE_PLAYER": {
       const currentWeek = Number(state.league.week ?? state.week ?? 1);
       const deadlineWeek = resolveTradeDeadlineWeek(state.league.tradeDeadlineWeek);
       if (!isTradeAllowed(currentWeek, deadlineWeek)) {

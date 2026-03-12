@@ -211,4 +211,21 @@ describe("offseason regression coverage", () => {
     const phaseVerdict = isActionAllowedInCurrentPhase(migrated, { type: "FA_SUBMIT_OFFER", payload: { playerId: "PLAYER_1" } } as any);
     expect(phaseVerdict.allowed).toBe(true);
   });
+
+  it("supports legacy TRADE_PLAYER action by routing to TRADE_ACCEPT behavior", () => {
+    const base = initState();
+    const teamId = String(base.acceptedOffer?.teamId ?? "");
+    const playerId = String((getEffectivePlayersByTeam(base, teamId)[0] as any)?.playerId ?? "");
+    expect(playerId).toBeTruthy();
+
+    const deadlineBlocked: GameState = {
+      ...base,
+      week: 99,
+      league: { ...base.league, week: 99, tradeDeadlineWeek: 8 },
+    };
+
+    const out = gameReducer(deadlineBlocked, { type: "TRADE_PLAYER", payload: { playerId, toTeamId: "BOSTON_HARBOR", valueTier: "2nd" } } as any);
+    expect(out.tradeError?.code).toBe("TRADE_DEADLINE_PASSED");
+  });
+
 });
