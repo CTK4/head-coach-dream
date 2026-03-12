@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "system_id": "UGF_LEAGUE_HISTORY_V1",
   "seasons": [
     {
@@ -19,11 +19,11 @@
     },
     {
       "season": 1981,
-      "champion": "Birmingham Vulcans",
+      "champion": "Omaha Stampede",
       "runnerUp": "Indianapolis Ignition",
       "ironCrownMvp": {
         "player": "Calder Rowan",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -34,23 +34,23 @@
     },
     {
       "season": 1982,
-      "champion": "Washington Sentinels",
+      "champion": "Silicon Valley Sentients",
       "runnerUp": "Miami Tide",
       "ironCrownMvp": {
         "player": "John Rigginsley",
-        "team": "Washington Sentinels",
+        "team": "Silicon Valley Sentients",
         "position": "RB"
       },
       "regularSeasonMvp": {
         "player": "Martin Morley",
-        "team": "Washington Sentinels",
+        "team": "Silicon Valley Sentients",
         "position": "K"
       }
     },
     {
       "season": 1983,
       "champion": "Las Vegas Syndicate",
-      "runnerUp": "Washington Sentinels",
+      "runnerUp": "Silicon Valley Sentients",
       "ironCrownMvp": {
         "player": "Miles Allard",
         "team": "Las Vegas Syndicate",
@@ -58,17 +58,17 @@
       },
       "regularSeasonMvp": {
         "player": "Jace Thieson",
-        "team": "Washington Sentinels",
+        "team": "Silicon Valley Sentients",
         "position": "QB"
       }
     },
     {
       "season": 1984,
-      "champion": "Birmingham Vulcans",
+      "champion": "Omaha Stampede",
       "runnerUp": "Miami Tide",
       "ironCrownMvp": {
         "player": "Calder Rowan",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -94,26 +94,26 @@
     },
     {
       "season": 1986,
-      "champion": "Philadelphia Founders",
+      "champion": "Augusta Mean Green",
       "runnerUp": "St. Louis Archons",
       "ironCrownMvp": {
         "player": "Phil Sayers",
-        "team": "Philadelphia Founders",
+        "team": "Augusta Mean Green",
         "position": "QB"
       },
       "regularSeasonMvp": {
         "player": "Landon Tayler",
-        "team": "Philadelphia Founders",
+        "team": "Augusta Mean Green",
         "position": "LB"
       }
     },
     {
       "season": 1987,
-      "champion": "Washington Sentinels",
+      "champion": "Silicon Valley Sentients",
       "runnerUp": "St. Louis Archons",
       "ironCrownMvp": {
         "player": "Dean Whitaker",
-        "team": "Washington Sentinels",
+        "team": "Silicon Valley Sentients",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -124,11 +124,11 @@
     },
     {
       "season": 1988,
-      "champion": "Birmingham Vulcans",
+      "champion": "Omaha Stampede",
       "runnerUp": "Indianapolis Ignition",
       "ironCrownMvp": {
         "player": "Terry Royce",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "WR"
       },
       "regularSeasonMvp": {
@@ -139,41 +139,41 @@
     },
     {
       "season": 1989,
-      "champion": "Birmingham Vulcans",
+      "champion": "Omaha Stampede",
       "runnerUp": "St. Louis Archons",
       "ironCrownMvp": {
         "player": "Calder Rowan",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       },
       "regularSeasonMvp": {
         "player": "Calder Rowan",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       }
     },
     {
       "season": 1990,
-      "champion": "Philadelphia Founders",
+      "champion": "Augusta Mean Green",
       "runnerUp": "Buffalo Northwind",
       "ironCrownMvp": {
         "player": "Orin Addison",
-        "team": "Philadelphia Founders",
+        "team": "Augusta Mean Green",
         "position": "RB"
       },
       "regularSeasonMvp": {
         "player": "Calder Rowan",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       }
     },
     {
       "season": 1991,
-      "champion": "Washington Sentinels",
+      "champion": "Silicon Valley Sentients",
       "runnerUp": "Buffalo Northwind",
       "ironCrownMvp": {
         "player": "Gareth Riven",
-        "team": "Washington Sentinels",
+        "team": "Silicon Valley Sentients",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -208,17 +208,17 @@
       },
       "regularSeasonMvp": {
         "player": "Steven Yorke",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       }
     },
     {
       "season": 1994,
-      "champion": "Birmingham Vulcans",
-      "runnerUp": "San Diego Armada",
+      "champion": "Omaha Stampede",
+      "runnerUp": "San Diego Stealth",
       "ironCrownMvp": {
         "player": "Steven Yorke",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -268,7 +268,7 @@
       },
       "regularSeasonMvp": {
         "player": "Bennett Sandler",
-        "team": "Chicago Union",
+        "team": "San Antonio Centurions",
         "position": "RB"
       }
     },
@@ -289,23 +289,23 @@
     },
     {
       "season": 1999,
-      "champion": "Los Angeles Stars",
+      "champion": "Los Angeles Blitz",
       "runnerUp": "Austin Empire",
       "ironCrownMvp": {
         "player": "Kirk Weller",
-        "team": "Los Angeles Stars",
+        "team": "Los Angeles Blitz",
         "position": "QB"
       },
       "regularSeasonMvp": {
         "player": "Kirk Weller",
-        "team": "Los Angeles Stars",
+        "team": "Los Angeles Blitz",
         "position": "QB"
       }
     },
     {
       "season": 2000,
       "champion": "Detroit Assembly",
-      "runnerUp": "Philadelphia Founders",
+      "runnerUp": "Augusta Mean Green",
       "ironCrownMvp": {
         "player": "Reed Lowell",
         "team": "Detroit Assembly",
@@ -313,14 +313,14 @@
       },
       "regularSeasonMvp": {
         "player": "Marston Falkner",
-        "team": "Los Angeles Stars",
+        "team": "Los Angeles Blitz",
         "position": "RB"
       }
     },
     {
       "season": 2001,
       "champion": "Dallas Imperials",
-      "runnerUp": "Los Angeles Stars",
+      "runnerUp": "Los Angeles Blitz",
       "ironCrownMvp": {
         "player": "Toby Branton",
         "team": "Dallas Imperials",
@@ -328,7 +328,7 @@
       },
       "regularSeasonMvp": {
         "player": "Kirk Weller",
-        "team": "Los Angeles Stars",
+        "team": "Los Angeles Blitz",
         "position": "QB"
       }
     },
@@ -350,7 +350,7 @@
     {
       "season": 2003,
       "champion": "Dallas Imperials",
-      "runnerUp": "Charlotte Crown",
+      "runnerUp": "Iowa Oxen",
       "ironCrownMvp": {
         "player": "Toby Branton",
         "team": "Dallas Imperials",
@@ -373,7 +373,7 @@
       },
       "regularSeasonMvp": {
         "player": "Preston Mallory",
-        "team": "Denver Summit",
+        "team": "New Jersey Jurassics",
         "position": "QB"
       }
     },
@@ -394,26 +394,26 @@
     },
     {
       "season": 2006,
-      "champion": "Denver Summit",
+      "champion": "New Jersey Jurassics",
       "runnerUp": "Pittsburgh Ironclads",
       "ironCrownMvp": {
         "player": "Preston Mallory",
-        "team": "Denver Summit",
+        "team": "New Jersey Jurassics",
         "position": "QB"
       },
       "regularSeasonMvp": {
         "player": "Lamar Tolland",
-        "team": "San Diego Armada",
+        "team": "San Diego Stealth",
         "position": "RB"
       }
     },
     {
       "season": 2007,
-      "champion": "Philadelphia Founders",
+      "champion": "Augusta Mean Green",
       "runnerUp": "Dallas Imperials",
       "ironCrownMvp": {
         "player": "Evan Mallory",
-        "team": "Philadelphia Founders",
+        "team": "Augusta Mean Green",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -425,7 +425,7 @@
     {
       "season": 2008,
       "champion": "New York Gothic Guardians",
-      "runnerUp": "Phoenix Scorch",
+      "runnerUp": "Arizona Outriders",
       "ironCrownMvp": {
         "player": "Santino Harlan",
         "team": "New York Gothic Guardians",
@@ -433,14 +433,14 @@
       },
       "regularSeasonMvp": {
         "player": "Preston Mallory",
-        "team": "Denver Summit",
+        "team": "New Jersey Jurassics",
         "position": "QB"
       }
     },
     {
       "season": 2009,
       "champion": "New Orleans Hex",
-      "runnerUp": "Denver Summit",
+      "runnerUp": "New Jersey Jurassics",
       "ironCrownMvp": {
         "player": "Dean Brevin",
         "team": "New Orleans Hex",
@@ -448,7 +448,7 @@
       },
       "regularSeasonMvp": {
         "player": "Preston Mallory",
-        "team": "Denver Summit",
+        "team": "New Jersey Jurassics",
         "position": "QB"
       }
     },
@@ -469,11 +469,11 @@
     },
     {
       "season": 2011,
-      "champion": "Philadelphia Founders",
+      "champion": "Augusta Mean Green",
       "runnerUp": "Dallas Imperials",
       "ironCrownMvp": {
         "player": "Evan Mallory",
-        "team": "Philadelphia Founders",
+        "team": "Augusta Mean Green",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -485,7 +485,7 @@
     {
       "season": 2012,
       "champion": "Detroit Assembly",
-      "runnerUp": "Birmingham Vulcans",
+      "runnerUp": "Omaha Stampede",
       "ironCrownMvp": {
         "player": "Joey Falco",
         "team": "Detroit Assembly",
@@ -530,7 +530,7 @@
     {
       "season": 2015,
       "champion": "St. Louis Archons",
-      "runnerUp": "Charlotte Crown",
+      "runnerUp": "Iowa Oxen",
       "ironCrownMvp": {
         "player": "Vaughn Millar",
         "team": "St. Louis Archons",
@@ -538,7 +538,7 @@
       },
       "regularSeasonMvp": {
         "player": "Cal Newland",
-        "team": "Charlotte Crown",
+        "team": "Iowa Oxen",
         "position": "QB"
       }
     },
@@ -575,7 +575,7 @@
     {
       "season": 2018,
       "champion": "Dallas Imperials",
-      "runnerUp": "Los Angeles Stars",
+      "runnerUp": "Los Angeles Blitz",
       "ironCrownMvp": {
         "player": "Jules Edlin",
         "team": "Dallas Imperials",
@@ -583,17 +583,17 @@
       },
       "regularSeasonMvp": {
         "player": "Parker Mahler",
-        "team": "Nashville Sound",
+        "team": "Virginia Venom",
         "position": "QB"
       }
     },
     {
       "season": 2019,
-      "champion": "Nashville Sound",
-      "runnerUp": "Birmingham Vulcans",
+      "champion": "Virginia Venom",
+      "runnerUp": "Omaha Stampede",
       "ironCrownMvp": {
         "player": "Parker Mahler",
-        "team": "Nashville Sound",
+        "team": "Virginia Venom",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -605,7 +605,7 @@
     {
       "season": 2020,
       "champion": "Baltimore Admirals",
-      "runnerUp": "Nashville Sound",
+      "runnerUp": "Virginia Venom",
       "ironCrownMvp": {
         "player": "Toby Branton",
         "team": "Baltimore Admirals",
@@ -619,11 +619,11 @@
     },
     {
       "season": 2021,
-      "champion": "Los Angeles Stars",
+      "champion": "Los Angeles Blitz",
       "runnerUp": "Indianapolis Ignition",
       "ironCrownMvp": {
         "player": "Rick Ervin",
-        "team": "Los Angeles Stars",
+        "team": "Los Angeles Blitz",
         "position": "WR"
       },
       "regularSeasonMvp": {
@@ -634,26 +634,26 @@
     },
     {
       "season": 2022,
-      "champion": "Nashville Sound",
+      "champion": "Virginia Venom",
       "runnerUp": "Memphis Blues",
       "ironCrownMvp": {
         "player": "Parker Mahler",
-        "team": "Nashville Sound",
+        "team": "Virginia Venom",
         "position": "QB"
       },
       "regularSeasonMvp": {
         "player": "Parker Mahler",
-        "team": "Nashville Sound",
+        "team": "Virginia Venom",
         "position": "QB"
       }
     },
     {
       "season": 2023,
-      "champion": "Nashville Sound",
-      "runnerUp": "Birmingham Vulcans",
+      "champion": "Virginia Venom",
+      "runnerUp": "Omaha Stampede",
       "ironCrownMvp": {
         "player": "Parker Mahler",
-        "team": "Nashville Sound",
+        "team": "Virginia Venom",
         "position": "QB"
       },
       "regularSeasonMvp": {
@@ -665,7 +665,7 @@
     {
       "season": 2024,
       "champion": "Memphis Blues",
-      "runnerUp": "Nashville Sound",
+      "runnerUp": "Virginia Venom",
       "ironCrownMvp": {
         "player": "Jace Harlan",
         "team": "Memphis Blues",
@@ -673,14 +673,14 @@
       },
       "regularSeasonMvp": {
         "player": "Brennan Epps",
-        "team": "Birmingham Vulcans",
+        "team": "Omaha Stampede",
         "position": "QB"
       }
     },
     {
       "season": 2025,
       "champion": "Boston Harbormen",
-      "runnerUp": "Philadelphia Founders",
+      "runnerUp": "Augusta Mean Green",
       "ironCrownMvp": {
         "player": "Jamarcus Massey",
         "team": "Boston Harbormen",
@@ -697,7 +697,7 @@
     {
       "player": "Calder Rowan",
       "position": "QB",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 1995
     },
     {
@@ -709,7 +709,7 @@
     {
       "player": "Gordon Blake",
       "position": "QB",
-      "team": "San Diego Armada",
+      "team": "San Diego Stealth",
       "classYear": 1995
     },
     {
@@ -745,7 +745,7 @@
     {
       "player": "Kellan Rourke",
       "position": "DB",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2000
     },
     {
@@ -769,7 +769,7 @@
     {
       "player": "Nolan Cross",
       "position": "T",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2001
     },
     {
@@ -835,7 +835,7 @@
     {
       "player": "Bennett Sandler",
       "position": "RB",
-      "team": "Chicago Union",
+      "team": "San Antonio Centurions",
       "classYear": 2004
     },
     {
@@ -859,7 +859,7 @@
     {
       "player": "Steven Yorke",
       "position": "QB",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2005
     },
     {
@@ -889,7 +889,7 @@
     {
       "player": "Miles Carrow",
       "position": "LB",
-      "team": "Philadelphia Founders",
+      "team": "Augusta Mean Green",
       "classYear": 2006
     },
     {
@@ -901,7 +901,7 @@
     {
       "player": "Dieter Wexler",
       "position": "DB",
-      "team": "Phoenix Scorch",
+      "team": "Arizona Outriders",
       "classYear": 2007
     },
     {
@@ -913,7 +913,7 @@
     {
       "player": "Wesley Cairn",
       "position": "TE",
-      "team": "Chicago Union",
+      "team": "San Antonio Centurions",
       "classYear": 2007
     },
     {
@@ -937,7 +937,7 @@
     {
       "player": "Evan Chapel",
       "position": "WR",
-      "team": "Washington Sentinels",
+      "team": "Silicon Valley Sentients",
       "classYear": 2008
     },
     {
@@ -955,25 +955,25 @@
     {
       "player": "Reese Callahan",
       "position": "DB",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2008
     },
     {
       "player": "Evan Chapel",
       "position": "WR",
-      "team": "Washington Sentinels",
+      "team": "Silicon Valley Sentients",
       "classYear": 2008
     },
     {
       "player": "Travis Cole",
       "position": "DB",
-      "team": "Washington Sentinels",
+      "team": "Silicon Valley Sentients",
       "classYear": 2008
     },
     {
       "player": "Nolan Pryce",
       "position": "DE",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2008
     },
     {
@@ -985,7 +985,7 @@
     {
       "player": "Jalen Mercer",
       "position": "LB",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2009
     },
     {
@@ -1015,7 +1015,7 @@
     {
       "player": "Terry Royce",
       "position": "WR",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2010
     },
     {
@@ -1033,7 +1033,7 @@
     {
       "player": "Rene Leblanc",
       "position": "DB",
-      "team": "Chicago Union",
+      "team": "San Antonio Centurions",
       "classYear": 2010
     },
     {
@@ -1045,7 +1045,7 @@
     {
       "player": "Hugo Grimmond",
       "position": "G",
-      "team": "Washington Sentinels",
+      "team": "Silicon Valley Sentients",
       "classYear": 2010
     },
     {
@@ -1063,19 +1063,19 @@
     {
       "player": "Holt Richterson",
       "position": "LB",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2011
     },
     {
       "player": "Graham Hensley",
       "position": "LB",
-      "team": "Washington Sentinels",
+      "team": "Silicon Valley Sentients",
       "classYear": 2011
     },
     {
       "player": "Ronan Faulken",
       "position": "RB",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2011
     },
     {
@@ -1141,7 +1141,7 @@
     {
       "player": "Rufus Calder",
       "position": "DT",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2013
     },
     {
@@ -1159,13 +1159,13 @@
     {
       "player": "Cassian Willard",
       "position": "DB",
-      "team": "Phoenix Scorch",
+      "team": "Arizona Outriders",
       "classYear": 2014
     },
     {
       "player": "Victor Strand",
       "position": "DE",
-      "team": "Philadelphia Founders",
+      "team": "Augusta Mean Green",
       "classYear": 2014
     },
     {
@@ -1207,19 +1207,19 @@
     {
       "player": "Gavin Ward",
       "position": "G",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2015
     },
     {
       "player": "Tomas Severo",
       "position": "LB",
-      "team": "San Diego Armada",
+      "team": "San Diego Stealth",
       "classYear": 2015
     },
     {
       "player": "Brandon Hale",
       "position": "DE",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2015
     },
     {
@@ -1237,7 +1237,7 @@
     {
       "player": "Miles Stanwick",
       "position": "G",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2016
     },
     {
@@ -1249,13 +1249,13 @@
     {
       "player": "Dorian Piers",
       "position": "T",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2016
     },
     {
       "player": "Quentin Harrow",
       "position": "WR",
-      "team": "Denver Summit",
+      "team": "New Jersey Jurassics",
       "classYear": 2016
     },
     {
@@ -1273,13 +1273,13 @@
     {
       "player": "Kirk Weller",
       "position": "QB",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2017
     },
     {
       "player": "Lamar Tolland",
       "position": "RB",
-      "team": "San Diego Armada",
+      "team": "San Diego Stealth",
       "classYear": 2017
     },
     {
@@ -1315,7 +1315,7 @@
     {
       "player": "Damon Oakes",
       "position": "WR",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2018
     },
     {
@@ -1351,7 +1351,7 @@
     {
       "player": "Jasper Rowan",
       "position": "DB",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2019
     },
     {
@@ -1375,7 +1375,7 @@
     {
       "player": "Marco Galvez",
       "position": "TE",
-      "team": "Nashville Sound",
+      "team": "Virginia Venom",
       "classYear": 2019
     },
     {
@@ -1399,7 +1399,7 @@
     {
       "player": "Hugh Slayton",
       "position": "T",
-      "team": "Phoenix Scorch",
+      "team": "Arizona Outriders",
       "classYear": 2020
     },
     {
@@ -1417,13 +1417,13 @@
     {
       "player": "Nico Karsten",
       "position": "DT",
-      "team": "Chicago Union",
+      "team": "San Antonio Centurions",
       "classYear": 2020
     },
     {
       "player": "Darren Edgeworth",
       "position": "RB",
-      "team": "Denver Summit",
+      "team": "New Jersey Jurassics",
       "classYear": 2020
     },
     {
@@ -1465,7 +1465,7 @@
     {
       "player": "Elias Bruton",
       "position": "WR",
-      "team": "Los Angeles Stars",
+      "team": "Los Angeles Blitz",
       "classYear": 2020
     },
     {
@@ -1489,7 +1489,7 @@
     {
       "player": "Hugh Marlowe",
       "position": "QB",
-      "team": "Denver Summit",
+      "team": "New Jersey Jurassics",
       "classYear": 2021
     },
     {
@@ -1501,7 +1501,7 @@
     {
       "player": "Malcolm Jetson",
       "position": "WR",
-      "team": "Chicago Union",
+      "team": "San Antonio Centurions",
       "classYear": 2021
     },
     {
@@ -1513,7 +1513,7 @@
     {
       "player": "Bennett Young",
       "position": "DT",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2022
     },
     {
@@ -1543,7 +1543,7 @@
     {
       "player": "Vito Boscarino",
       "position": "T",
-      "team": "St. Petersburg Pelicans",
+      "team": "Louisville Locomotives",
       "classYear": 2022
     },
     {
@@ -1597,13 +1597,13 @@
     {
       "player": "Parker Willard",
       "position": "LB",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2024
     },
     {
       "player": "Julian Pepperell",
       "position": "DE",
-      "team": "Charlotte Crown",
+      "team": "Iowa Oxen",
       "classYear": 2024
     },
     {
@@ -1633,7 +1633,7 @@
     {
       "player": "Dorian Freeport",
       "position": "DE",
-      "team": "Denver Summit",
+      "team": "New Jersey Jurassics",
       "classYear": 2024
     },
     {
@@ -1645,7 +1645,7 @@
     {
       "player": "Rafael Gatewood",
       "position": "TE",
-      "team": "San Diego Armada",
+      "team": "San Diego Stealth",
       "classYear": 2025
     },
     {
@@ -1669,19 +1669,19 @@
     {
       "player": "Lucas Keegan",
       "position": "ILB",
-      "team": "Charlotte Crown",
+      "team": "Iowa Oxen",
       "classYear": 2026
     },
     {
       "player": "Loren Fitzpatrick",
       "position": "WR",
-      "team": "Phoenix Scorch",
+      "team": "Arizona Outriders",
       "classYear": 2026
     },
     {
       "player": "Gareth Crain",
       "position": "RB",
-      "team": "Birmingham Vulcans",
+      "team": "Omaha Stampede",
       "classYear": 2026
     },
     {
@@ -1697,15 +1697,15 @@
       "titles": 6
     },
     {
-      "team": "BIRMINGHAM VULCANS",
+      "team": "OMAHA STAMPEDE",
       "titles": 5
     },
     {
-      "team": "PHILADELPHIA FOUNDERS",
+      "team": "AUGUSTA MEAN GREEN",
       "titles": 4
     },
     {
-      "team": "NASHVILLE SOUND",
+      "team": "VIRGINIA VENOM",
       "titles": 3
     },
     {
@@ -1717,7 +1717,7 @@
       "titles": 3
     },
     {
-      "team": "WASHINGTON SENTINELS",
+      "team": "SILICON VALLEY SENTIENTS",
       "titles": 3
     },
     {
@@ -1741,7 +1741,7 @@
       "titles": 2
     },
     {
-      "team": "LOS ANGELES STARS",
+      "team": "LOS ANGELES BLITZ",
       "titles": 2
     },
     {
@@ -1761,7 +1761,7 @@
       "titles": 1
     },
     {
-      "team": "DENVER SUMMIT",
+      "team": "NEW JERSEY JURASSICS",
       "titles": 1
     },
     {
@@ -1777,11 +1777,11 @@
       "titles": 0
     },
     {
-      "team": "CHICAGO UNION",
+      "team": "SAN ANTONIO CENTURIONS",
       "titles": 0
     },
     {
-      "team": "CHARLOTTE CROWN",
+      "team": "IOWA OXEN",
       "titles": 0
     },
     {
@@ -1789,7 +1789,7 @@
       "titles": 0
     },
     {
-      "team": "PHOENIX SCORCH",
+      "team": "ARIZONA OUTRIDERS",
       "titles": 0
     },
     {
@@ -1797,11 +1797,11 @@
       "titles": 0
     },
     {
-      "team": "SAN DIEGO ARMADA",
+      "team": "SAN DIEGO STEALTH",
       "titles": 0
     },
     {
-      "team": "ST. PETERSBURG PELICANS",
+      "team": "LOUISVILLE LOCOMOTIVES",
       "titles": 0
     },
     {
@@ -1819,6 +1819,264 @@
     {
       "team": "AUSTIN EMPIRE",
       "titles": 0
+    }
+  ],
+  "teamRatings": [
+    {
+      "team": "VIRGINIA VENOM",
+      "rosterRating": 76.43,
+      "yearFounded": 1980,
+      "wins": 406,
+      "losses": 325,
+      "ties": 2
+    },
+    {
+      "team": "OMAHA STAMPEDE",
+      "rosterRating": 75.97,
+      "yearFounded": 1980,
+      "wins": 424,
+      "losses": 307,
+      "ties": 2
+    },
+    {
+      "team": "MEMPHIS BLUES",
+      "rosterRating": 75.87,
+      "yearFounded": 1980,
+      "wins": 409,
+      "losses": 319,
+      "ties": 5
+    },
+    {
+      "team": "INDIANAPOLIS IGNITION",
+      "rosterRating": 75.71,
+      "yearFounded": 1980,
+      "wins": 328,
+      "losses": 400,
+      "ties": 4
+    },
+    {
+      "team": "NEW YORK GOTHIC GUARDIANS",
+      "rosterRating": 75.59,
+      "yearFounded": 1980,
+      "wins": 435,
+      "losses": 295,
+      "ties": 3
+    },
+    {
+      "team": "DALLAS IMPERIALS",
+      "rosterRating": 75.54,
+      "yearFounded": 1980,
+      "wins": 430,
+      "losses": 303,
+      "ties": 0
+    },
+    {
+      "team": "DETROIT ASSEMBLY",
+      "rosterRating": 75.47,
+      "yearFounded": 1996,
+      "wins": 276,
+      "losses": 208,
+      "ties": 1
+    },
+    {
+      "team": "JACKSONVILLE FLEET",
+      "rosterRating": 75.03,
+      "yearFounded": 1980,
+      "wins": 404,
+      "losses": 328,
+      "ties": 1
+    },
+    {
+      "team": "LAS VEGAS SYNDICATE",
+      "rosterRating": 75.0,
+      "yearFounded": 1980,
+      "wins": 335,
+      "losses": 398,
+      "ties": 0
+    },
+    {
+      "team": "BOSTON HARBORMEN",
+      "rosterRating": 74.91,
+      "yearFounded": 1980,
+      "wins": 418,
+      "losses": 309,
+      "ties": 6
+    },
+    {
+      "team": "HOUSTON LAUNCH",
+      "rosterRating": 74.88,
+      "yearFounded": 2002,
+      "wins": 174,
+      "losses": 214,
+      "ties": 1
+    },
+    {
+      "team": "NEW ORLEANS HEX",
+      "rosterRating": 74.87,
+      "yearFounded": 1980,
+      "wins": 369,
+      "losses": 364,
+      "ties": 0
+    },
+    {
+      "team": "LOS ANGELES BLITZ",
+      "rosterRating": 74.85,
+      "yearFounded": 1980,
+      "wins": 347,
+      "losses": 385,
+      "ties": 1
+    },
+    {
+      "team": "ORLANDO KINGDOM",
+      "rosterRating": 74.81,
+      "yearFounded": 1980,
+      "wins": 395,
+      "losses": 336,
+      "ties": 2
+    },
+    {
+      "team": "PITTSBURGH IRONCLADS",
+      "rosterRating": 74.8,
+      "yearFounded": 1980,
+      "wins": 362,
+      "losses": 371,
+      "ties": 0
+    },
+    {
+      "team": "SILICON VALLEY SENTIENTS",
+      "rosterRating": 74.77,
+      "yearFounded": 1980,
+      "wins": 351,
+      "losses": 379,
+      "ties": 3
+    },
+    {
+      "team": "AUGUSTA MEAN GREEN",
+      "rosterRating": 74.72,
+      "yearFounded": 1980,
+      "wins": 354,
+      "losses": 376,
+      "ties": 3
+    },
+    {
+      "team": "SAN ANTONIO CENTURIONS",
+      "rosterRating": 74.65,
+      "yearFounded": 1980,
+      "wins": 307,
+      "losses": 423,
+      "ties": 3
+    },
+    {
+      "team": "IOWA OXEN",
+      "rosterRating": 74.63,
+      "yearFounded": 1995,
+      "wins": 227,
+      "losses": 273,
+      "ties": 1
+    },
+    {
+      "team": "MIAMI TIDE",
+      "rosterRating": 74.56,
+      "yearFounded": 1980,
+      "wins": 392,
+      "losses": 340,
+      "ties": 1
+    },
+    {
+      "team": "SEATTLE EVERGREENS",
+      "rosterRating": 74.55,
+      "yearFounded": 1980,
+      "wins": 391,
+      "losses": 341,
+      "ties": 1
+    },
+    {
+      "team": "ARIZONA OUTRIDERS",
+      "rosterRating": 74.5,
+      "yearFounded": 1980,
+      "wins": 295,
+      "losses": 434,
+      "ties": 4
+    },
+    {
+      "team": "BALTIMORE ADMIRALS",
+      "rosterRating": 74.25,
+      "yearFounded": 1980,
+      "wins": 309,
+      "losses": 423,
+      "ties": 1
+    },
+    {
+      "team": "ST. LOUIS ARCHONS",
+      "rosterRating": 74.0,
+      "yearFounded": 1980,
+      "wins": 418,
+      "losses": 314,
+      "ties": 1
+    },
+    {
+      "team": "BUFFALO NORTHWIND",
+      "rosterRating": 73.94,
+      "yearFounded": 1980,
+      "wins": 382,
+      "losses": 350,
+      "ties": 0
+    },
+    {
+      "team": "SAN DIEGO STEALTH",
+      "rosterRating": 73.94,
+      "yearFounded": 1980,
+      "wins": 361,
+      "losses": 372,
+      "ties": 0
+    },
+    {
+      "team": "LOUISVILLE LOCOMOTIVES",
+      "rosterRating": 73.91,
+      "yearFounded": 1995,
+      "wins": 215,
+      "losses": 286,
+      "ties": 0
+    },
+    {
+      "team": "MILWAUKEE NORTHSHORE",
+      "rosterRating": 73.87,
+      "yearFounded": 1980,
+      "wins": 268,
+      "losses": 415,
+      "ties": 2
+    },
+    {
+      "team": "ATLANTA APEX",
+      "rosterRating": 73.58,
+      "yearFounded": 1980,
+      "wins": 334,
+      "losses": 397,
+      "ties": 2
+    },
+    {
+      "team": "CLEVELAND FORGE",
+      "rosterRating": 73.32,
+      "yearFounded": 1980,
+      "wins": 314,
+      "losses": 417,
+      "ties": 2
+    },
+    {
+      "team": "AUSTIN EMPIRE",
+      "rosterRating": 73.26,
+      "yearFounded": 1980,
+      "wins": 352,
+      "losses": 381,
+      "ties": 0
+    },
+    {
+      "team": "NEW JERSEY JURASSICS",
+      "rosterRating": 73.18,
+      "yearFounded": 1980,
+      "wins": 366,
+      "losses": 365,
+      "ties": 2
     }
   ]
 }
