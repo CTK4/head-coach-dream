@@ -202,6 +202,12 @@ import { DEFAULT_SIDELINE } from "@/context/state/defaults/sideline";
 import { createInitialTamperingState } from "@/context/state/defaults/tampering";
 import { createInitialTelemetryState } from "@/context/state/defaults/telemetry";
 import { createInitialTransactionsState } from "@/context/state/defaults/transactions";
+import { defaultDomainReducerCompatDeps } from "@/context/domains/compatibilityWrappers";
+import { reduceContractsDomain } from "@/context/domains/contractsDomain";
+import { reduceGameplayDomain } from "@/context/domains/gameplayDomain";
+import { reduceOffseasonDomain } from "@/context/domains/offseasonDomain";
+import { reduceWithPersistenceOrchestration } from "@/context/domains/persistenceOrchestration";
+import { reduceRosterDomain } from "@/context/domains/rosterDomain";
 import { finalizeWeekController } from "@/context/controllers/weekAdvance";
 import { applyCanonicalTx } from "@/context/controllers/transactions";
 import { bootstrapInitialGameState } from "@/context/state/bootstrap";
@@ -5058,30 +5064,23 @@ function assertNever(x: never): never {
 }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
-  const blockedState = applyCentralMutationPhaseGuard(state, action);
-  if (blockedState) return blockedState;
-
-  const t = action.type;
-  if (t.startsWith("OFFSEASON_") || t === "EXPIRE_EXPIRING_CONTRACTS_TO_FA" || t === "CUT_TOGGLE") {
-    return offseasonReducer(state, action as GameAction);
-  }
-  if (t.startsWith("DRAFT_")) {
-    return draftReducer(state, action as GameAction);
-  }
-  if (t.startsWith("SEASON_") || t.startsWith("PLAYOFFS_")) {
-    return seasonReducer(state, action as GameAction);
-  }
-  if (t.startsWith("FA_") || t.startsWith("FREE_AGENCY_")) {
-    return freeAgencyReducer(state, action as GameAction);
-  }
-  if (isStaffingAction(action)) {
-    const delegated = staffingReducer(state, action, {
-      addMemoryEvent,
-      gameReducer,
-    });
-    if (delegated) return delegated;
-  }
-  return gameReducerMonolith(state, action);
+  return reduceWithPersistenceOrchestration(state, action, {
+    applyPhaseGuard: applyCentralMutationPhaseGuard,
+    reduceDomainActions: [
+      (inputState, inputAction) => reduceRosterDomain(inputState, inputAction, defaultDomainReducerCompatDeps),
+      (inputState, inputAction) => reduceContractsDomain(inputState, inputAction, defaultDomainReducerCompatDeps),
+      (inputState, inputAction) => reduceOffseasonDomain(inputState, inputAction, defaultDomainReducerCompatDeps),
+      (inputState, inputAction) => reduceGameplayDomain(inputState, inputAction, defaultDomainReducerCompatDeps),
+      (inputState, inputAction) => {
+        if (!isStaffingAction(inputAction)) return null;
+        return staffingReducer(inputState, inputAction, {
+          addMemoryEvent,
+          gameReducer,
+        });
+      },
+    ],
+    reduceMonolith: gameReducerMonolith,
+  });
 }
 
 
