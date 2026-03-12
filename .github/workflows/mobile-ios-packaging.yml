@@ -1,0 +1,65 @@
+name: Mobile iOS Packaging
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-ios-packaging.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-ios-packaging.yml'
+  workflow_dispatch:
+
+jobs:
+  mobile-ios-packaging:
+    name: Install, build, and iOS sync sanity
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 (pinned SHA for supply-chain security)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install mobile dependencies
+        run: npm ci
+        working-directory: mobile
+
+      - name: Build web bundle for Capacitor
+        run: npm run build:web
+        working-directory: mobile
+
+      - name: Sync iOS project and CocoaPods
+        run: npm run cap:sync:ios
+        working-directory: mobile
+
+      - name: iOS project sanity checks
+        shell: bash
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+
+          test -f ios/App/App.xcodeproj/project.pbxproj
+          test -f ios/App/Podfile.lock
+          test -d ios/App/Pods
+
+          xcodebuild -list -workspace ios/App/App.xcworkspace
+          xcodebuild -showBuildSettings \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App > /dev/null
