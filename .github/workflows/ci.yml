@@ -167,6 +167,29 @@ jobs:
       - name: Determinism tripwire
         run: npm run check:determinism
 
+  contract_tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (pinned SHA for supply-chain security)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        # actions/setup-node v4.4.0 (pinned SHA for supply-chain security)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: API contract tests (OpenAPI + backward compatibility)
+        run: npm run test:api:contract
+
   ui_tests:
     runs-on: ubuntu-latest
     permissions:

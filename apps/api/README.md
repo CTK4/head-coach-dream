@@ -34,3 +34,14 @@ Server behavior:
 - `GET /api/v1/saves/:saveId/snapshot`
 - `PUT /api/v1/saves/:saveId/snapshot`
 - `DELETE /api/v1/saves/:saveId/snapshot`
+
+
+## Contract tests
+
+Run contract + backward-compatibility tests:
+
+```bash
+npm run test:api:contract
+```
+
+These validate OpenAPI response schemas, example fixtures, error envelope shape, metadata pagination, timestamp format, and required version headers.

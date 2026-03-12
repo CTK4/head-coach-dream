@@ -1,0 +1,14 @@
+{
+  "saveId": "career-contract",
+  "state": {
+    "coach": { "name": "Contract Coach" },
+    "acceptedOffer": { "teamId": "BOSTON_HARBORMEN" },
+    "season": 2,
+    "week": 3,
+    "schemaVersion": 4,
+    "careerStage": "REGULAR_SEASON",
+    "currentStandings": [
+      { "teamId": "BOSTON_HARBORMEN", "wins": 2, "losses": 1 }
+    ]
+  }
+}

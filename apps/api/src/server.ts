@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 
-type SaveMetadata = {
+export type SaveMetadata = {
   saveId: string;
   coachName: string;
   teamName: string;
@@ -34,26 +35,21 @@ type MutationRecord = {
   createdAt: number;
 };
 
-type SaveDb = {
-  snapshots: Record<string, SaveSnapshot>;
-  sequenceBySaveId: Record<string, number>;
-  operationsById: Record<string, MutationRecord>;
-};
-
-type ResponseTuple = [number, Record<string, string>, string];
-
-type MutationContext = {
-  operationId: string;
-  sequence: number;
-  saveId: string;
-  method: string;
-  path: string;
-  requestHash: string;
-};
-
 const PORT = Number(process.env.PORT ?? 8787);
-function getDbPath() {
-  return resolve(process.cwd(), process.env.API_DB_PATH ?? "data/saves.json");
+const DB_PATH = resolve(process.cwd(), process.env.API_DB_PATH ?? "apps/api/data/saves.json");
+const API_VERSION = "v1";
+const CONTRACT_VERSION = "2026-03-12";
+
+function json(body: unknown, status = 200): ResponseTuple {
+  return [
+    status,
+    {
+      "content-type": "application/json",
+      "x-api-version": API_VERSION,
+      "x-contract-version": CONTRACT_VERSION,
+    },
+    JSON.stringify(body),
+  ];
 }
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): ResponseTuple {
@@ -108,85 +104,12 @@ function deriveMetadata(saveId: string, state: Record<string, unknown>): SaveMet
   };
 }
 
-function hashRequest(method: string, path: string, bodyRaw: string) {
-  const canonicalBody = bodyRaw.trim() ? JSON.stringify(JSON.parse(bodyRaw)) : "{}";
-  return `${method}::${path}::${canonicalBody}`;
-}
-
-function parseMutationContext(req: IncomingMessage, pathname: string, bodyRaw: string, derivedSaveId?: string): MutationContext | null {
-  const operationIdHeader = req.headers["x-operation-id"];
-  const sequenceHeader = req.headers["x-sequence-number"];
-  const operationId = typeof operationIdHeader === "string" ? operationIdHeader.trim() : "";
-  const sequence = Number(sequenceHeader);
-  if (!operationId || !Number.isSafeInteger(sequence) || sequence < 1) {
-    return null;
-  }
-
-  const saveIdHeader = req.headers["x-save-id"];
-  const saveId = derivedSaveId
-    ?? (typeof saveIdHeader === "string" && saveIdHeader.trim() ? saveIdHeader.trim() : "");
-
-  if (!saveId) return null;
-
-  return {
-    operationId,
-    sequence,
-    saveId,
-    method: req.method ?? "GET",
-    path: pathname,
-    requestHash: hashRequest(req.method ?? "GET", pathname, bodyRaw || "{}"),
-  };
-}
-
-function conflictResponse(code: string, expectedSequence: number, actualSequence: number) {
-  return json({ error: code, expectedSequence, actualSequence }, 409);
-}
-
-function validateAndReplayIfNeeded(db: SaveDb, mutation: MutationContext): ResponseTuple | null {
-  const previous = db.operationsById[mutation.operationId];
-  if (previous) {
-    if (previous.requestHash !== mutation.requestHash || previous.saveId !== mutation.saveId || previous.sequence !== mutation.sequence) {
-      return json({ error: "operation_id_conflict" }, 409);
-    }
-    return [
-      previous.status,
-      {
-        "content-type": "application/json",
-        "x-operation-id": previous.operationId,
-        "x-sequence-number": String(previous.sequence),
-        "x-idempotent-replay": "true",
-      },
-      previous.responseBody,
-    ];
-  }
-
-  const current = db.sequenceBySaveId[mutation.saveId] ?? 0;
-  const expected = current + 1;
-  if (mutation.sequence !== expected) {
-    return conflictResponse("sequence_conflict", expected, mutation.sequence);
-  }
-  return null;
-}
-
-function recordMutation(db: SaveDb, mutation: MutationContext, response: ResponseTuple) {
-  const [status, , body] = response;
-  db.sequenceBySaveId[mutation.saveId] = mutation.sequence;
-  db.operationsById[mutation.operationId] = {
-    operationId: mutation.operationId,
-    saveId: mutation.saveId,
-    sequence: mutation.sequence,
-    method: mutation.method,
-    path: mutation.path,
-    requestHash: mutation.requestHash,
-    status,
-    responseBody: body,
-    createdAt: Date.now(),
-  };
-}
-
-async function handle(req: IncomingMessage, bodyRaw: string): Promise<ResponseTuple> {
-  const method = req.method ?? "GET";
-  const pathname = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`).pathname;
+export async function handle(
+  method: string,
+  pathname: string,
+  searchParams: URLSearchParams,
+  bodyRaw: string,
+): Promise<ResponseTuple> {
   const db = await loadDb();
 
   if (method === "GET" && pathname === "/api/v1/health") {
@@ -194,7 +117,21 @@ async function handle(req: IncomingMessage, bodyRaw: string): Promise<ResponseTu
   }
 
   if (method === "GET" && pathname === "/api/v1/saves/metadata") {
-    return json({ saves: Object.values(db.snapshots).map((entry) => entry.metadata) });
+    const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 50), 1), 100);
+    const cursor = Math.max(Number(searchParams.get("cursor") ?? 0), 0);
+    const allSaves = Object.values(db.snapshots).map((entry) => entry.metadata);
+    const page = allSaves.slice(cursor, cursor + limit);
+    const nextOffset = cursor + limit;
+    const nextCursor = nextOffset < allSaves.length ? String(nextOffset) : null;
+
+    return json({
+      saves: page,
+      pagination: {
+        limit,
+        nextCursor,
+        total: allSaves.length,
+      },
+    });
   }
 
   if (method === "POST" && pathname === "/api/v1/saves/snapshots") {
@@ -264,33 +201,40 @@ async function handle(req: IncomingMessage, bodyRaw: string): Promise<ResponseTu
       }, ""];
       recordMutation(db, mutation, response);
       await persistDb(db);
-      return response;
+      return [204, { "x-api-version": API_VERSION, "x-contract-version": CONTRACT_VERSION }, ""];
     }
   }
 
   return json({ error: "not found" }, 404);
 }
 
-export function createApiServer() {
-  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
+export function startServer(port = PORT) {
+  return createServer(async (req, res) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", async () => {
       try {
         const bodyRaw = Buffer.concat(chunks).toString("utf8");
-        const [status, headers, body] = await handle(req, bodyRaw);
+        const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+        const [status, headers, body] = await handle(req.method ?? "GET", url.pathname, url.searchParams, bodyRaw);
         res.writeHead(status, headers);
         res.end(body);
       } catch (error) {
-        res.writeHead(500, { "content-type": "application/json" });
+        res.writeHead(500, {
+          "content-type": "application/json",
+          "x-api-version": API_VERSION,
+          "x-contract-version": CONTRACT_VERSION,
+        });
         res.end(JSON.stringify({ error: error instanceof Error ? error.message : "unknown error" }));
       }
     });
+  }).listen(port, () => {
+    console.log(`[api] listening on http://localhost:${port}`);
   });
 }
 
-if (process.env.START_API_SERVICE === "1") {
-  createApiServer().listen(PORT, () => {
-    console.log(`[api] listening on http://localhost:${PORT}`);
-  });
+const isDirectRun = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+
+if (isDirectRun && process.env.API_DISABLE_LISTEN !== "1") {
+  startServer();
 }
