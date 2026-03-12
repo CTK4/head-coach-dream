@@ -75,7 +75,10 @@ jobs:
 
       - name: Lint full repo (non-blocking debt visibility)
         continue-on-error: true
-        run: npm run lint
+        run: npm run lint:report
+
+      - name: Enforce lint baseline (blocking no-new-violations)
+        run: npm run lint:policy
 
       - name: Validate JSON
         run: node scripts/validateJson.mjs

@@ -1,0 +1,7 @@
+{
+  "errors": 1048,
+  "warnings": 124,
+  "total": 1172,
+  "capturedFrom": "npm run lint -- --format json --output-file /tmp/eslint-report.json",
+  "capturedAt": "2026-03-12"
+}

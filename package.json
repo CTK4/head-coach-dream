@@ -28,6 +28,8 @@
     "test:lint:changed": "node --test scripts/lintChangedFilesLib.test.mjs",
     "api:dev": "npm --prefix apps/api run dev",
     "api:start": "npm --prefix apps/api run start",
+    "lint:report": "mkdir -p .lint && eslint . --format json --output-file .lint/eslint-report.json",
+    "lint:policy": "node scripts/enforceLintPolicy.mjs --report .lint/eslint-report.json --baseline config/lint-baseline.json"
     "typecheck:strictness:stages": "node scripts/checkStrictnessStages.mjs"
   },
   "dependencies": {
