@@ -27,7 +27,8 @@
     "lint:changed": "node scripts/lintChangedFiles.mjs",
     "test:lint:changed": "node --test scripts/lintChangedFilesLib.test.mjs",
     "api:dev": "npm --prefix apps/api run dev",
-    "api:start": "npm --prefix apps/api run start"
+    "api:start": "npm --prefix apps/api run start",
+    "typecheck:strictness:stages": "node scripts/checkStrictnessStages.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

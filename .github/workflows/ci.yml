@@ -37,6 +37,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Strictness staged gates
+        run: npm run typecheck:strictness:stages
+
       - name: Lint changed-files helper tests
         run: npm run test:lint:changed
 
