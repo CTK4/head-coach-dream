@@ -1,6 +1,8 @@
 import type { GameState } from "@/context/GameContext";
 import { getRecentLogs } from "@/lib/logger";
 import type { SaveMetadata } from "@/lib/saveManager";
+import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
+import { createImportExportApi } from "@/lib/native/importExport";
 
 type DebugBundleParams = {
   state: GameState;
@@ -45,12 +47,27 @@ export function buildDebugBundle({ state, saveMeta }: DebugBundleParams) {
   };
 }
 
-export function exportDebugBundle({ state, saveMeta }: DebugBundleParams) {
+export async function exportDebugBundle({ state, saveMeta }: DebugBundleParams) {
   const payload = JSON.stringify(buildDebugBundle({ state, saveMeta }), null, 2);
   const blob = new Blob([payload], { type: "application/json" });
   const dateLabel = new Date().toISOString().replace(/[:.]/g, "-");
   const fileName = `hc-debug-bundle-${dateLabel}.json`;
 
+  const isNative = isCapacitorIosEnvironment();
+
+  if (isNative) {
+    // Use native share on iOS
+    try {
+      const importExportApi = await createImportExportApi();
+      await importExportApi.exportToShare(fileName, payload);
+      return { fileName, blob };
+    } catch (error) {
+      console.error("Native export failed, falling back to web download:", error);
+      // Fall through to web download
+    }
+  }
+
+  // Web download
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
