@@ -32,7 +32,7 @@
     "lint:report": "mkdir -p .lint && eslint . --format json --output-file .lint/eslint-report.json",
     "lint:policy": "node scripts/enforceLintPolicy.mjs --report .lint/eslint-report.json --baseline config/lint-baseline.json",
     "typecheck:strictness:stages": "node scripts/checkStrictnessStages.mjs",
-    "smoke:deploy": "node scripts/deploymentSmoke.mjs"
+    "check:repo-hygiene": "node scripts/checkRepoHygiene.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
