@@ -12,7 +12,7 @@ export default function SaveModeSelect() {
           <CardContent className="p-6 space-y-2">
             <div className="text-xs font-bold tracking-widest text-blue-300">RECOMMENDED</div>
             <div className="text-2xl font-bold">🎤 Story Mode</div>
-            <p className="text-sm text-muted-foreground">Begin your career with a coveted interview from three franchises — Milwaukee, Atlanta, and Birmingham. Answer their questions, negotiate your terms, and choose who to lead.</p>
+            <p className="text-sm text-muted-foreground">Begin your career with a coveted interview from three franchises — Milwaukee, Atlanta, and Omaha. Answer their questions, negotiate your terms, and choose who to lead.</p>
             <button className="text-blue-300 font-semibold" onClick={() => navigate(ROUTES.storyInterview)}>Start Story Mode →</button>
           </CardContent>
         </Card>

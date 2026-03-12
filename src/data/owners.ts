@@ -52,10 +52,10 @@ export const ownerProfilesByTeam: Record<string, OwnerProfile> = {
       risk_appetite: 1.1,
     },
   },
-  BIRMINGHAM_VULCANS: {
+  OMAHA_STAMPEDE: {
     ownerId: "CON_OWN_0001",
     displayName: "Owner",
-    teamId: "BIRMINGHAM_VULCANS",
+    teamId: "OMAHA_STAMPEDE",
     axisWeights: {
       stability: 0.9,
       aggression: 0.4,

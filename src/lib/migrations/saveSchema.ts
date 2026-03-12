@@ -64,6 +64,31 @@ const VALID_CAREER_STAGES = new Set<string>([
 
 // ---------------------------------------------------------------------------
 
+const LEGACY_TEAM_ID_MAP: Record<string, string> = {
+  BIRMINGHAM_VULCANS: "OMAHA_STAMPEDE",
+};
+
+function normalizeLegacyTeamId(teamId: unknown): string {
+  const normalized = String(teamId ?? "");
+  return LEGACY_TEAM_ID_MAP[normalized] ?? normalized;
+}
+
+function normalizeLegacyTeamIds(state: Partial<GameState>): Partial<GameState> {
+  const next: any = { ...state };
+  next.teamId = normalizeLegacyTeamId(next.teamId);
+  next.userTeamId = normalizeLegacyTeamId(next.userTeamId);
+  if (next.acceptedOffer) next.acceptedOffer = { ...next.acceptedOffer, teamId: normalizeLegacyTeamId(next.acceptedOffer.teamId) };
+  if (next.storySetup) next.storySetup = { ...next.storySetup, teamId: normalizeLegacyTeamId(next.storySetup.teamId) };
+  if (Array.isArray(next.offers)) next.offers = next.offers.map((offer: any) => ({ ...offer, teamId: normalizeLegacyTeamId(offer?.teamId) }));
+  if (Array.isArray(next.interviews?.items)) {
+    next.interviews = {
+      ...next.interviews,
+      items: next.interviews.items.map((item: any) => ({ ...item, teamId: normalizeLegacyTeamId(item?.teamId) })),
+    };
+  }
+  if (next.staffRoster?.teamId) next.staffRoster = { ...next.staffRoster, teamId: normalizeLegacyTeamId(next.staffRoster.teamId) };
+  return next;
+}
 
 const VALID_LEAGUE_PHASES = new Set<string>([
   "PRESEASON",
@@ -223,6 +248,7 @@ export function migrateSaveSchema(state: Partial<GameState>, saveId?: string): G
   };
 
   next = hardenPhaseFields(next);
+  next = normalizeLegacyTeamIds(next);
 
   return next as GameState;
 }

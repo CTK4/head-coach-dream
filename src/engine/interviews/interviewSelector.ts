@@ -25,7 +25,7 @@ type SelectInterviewQuestionsParams = {
 };
 
 type TeamPoolQuestion = InterviewQuestion & { asker: "OWNER" | "GM" };
-const STORY_FALLBACK_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "BIRMINGHAM_VULCANS"] as const;
+const STORY_FALLBACK_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX"] as const;
 
 export function stableTeamHash(teamId: string): number {
   let hash = 2166136261;

@@ -86,7 +86,7 @@ export default function FreeAgency() {
           })}
         </div>
 
-        <div className="border rounded p-3 space-y-2 h-fit">
+        <div className="border rounded border-slate-300/15 bg-slate-900/60 p-3 space-y-2 h-fit text-slate-100">
           <div className="flex items-center gap-1">
             <h2 className="font-semibold">Offer Drawer</h2>
             <ContractMarketInfoTrigger className="h-5 w-5 text-muted-foreground" />
@@ -95,15 +95,15 @@ export default function FreeAgency() {
             <>
               <div className="text-sm">{selectedPlayer.name} ({selectedPlayer.pos})</div>
               <label className="text-xs block">Years
-                <input className="w-full border rounded px-2 py-1" type="number" value={Number(selectedDraft?.years ?? selectedPlayer.market.years)} onChange={(e) => updateDraft("years", Number(e.target.value))} />
+                <input className="w-full border border-slate-500/60 bg-slate-950 text-slate-100 rounded px-2 py-1" type="number" value={Number(selectedDraft?.years ?? selectedPlayer.market.years)} onChange={(e) => updateDraft("years", Number(e.target.value))} />
               </label>
               <label className="text-xs block">APY
-                <input className="w-full border rounded px-2 py-1" type="number" value={Number(selectedDraft?.aav ?? selectedPlayer.market.apy)} onChange={(e) => updateDraft("apy", Number(e.target.value))} />
+                <input className="w-full border border-slate-500/60 bg-slate-950 text-slate-100 rounded px-2 py-1" type="number" value={Number(selectedDraft?.aav ?? selectedPlayer.market.apy)} onChange={(e) => updateDraft("apy", Number(e.target.value))} />
               </label>
               <div className="flex gap-2">
-                <button className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_SUBMIT_USER_OFFER", payload: { playerId: selectedPlayer.id } })}>Submit</button>
+                <button className="px-2 py-1 border rounded border-slate-500/60 bg-slate-800 text-slate-100" onClick={() => dispatch({ type: "FA_SUBMIT_USER_OFFER", payload: { playerId: selectedPlayer.id } })}>Submit</button>
                 {selectedOffers.filter((o: any) => o.isUser && o.status === "PENDING").map((o: any) => (
-                  <button key={o.offerId} className="px-2 py-1 border rounded" onClick={() => dispatch({ type: "FA_WITHDRAW_USER_OFFER", payload: { playerId: selectedPlayer.id, offerId: o.offerId } })}>Withdraw</button>
+                  <button key={o.offerId} className="px-2 py-1 border rounded border-slate-500/60 bg-slate-800 text-slate-100" onClick={() => dispatch({ type: "FA_WITHDRAW_USER_OFFER", payload: { playerId: selectedPlayer.id, offerId: o.offerId } })}>Withdraw</button>
                 ))}
               </div>
             </>

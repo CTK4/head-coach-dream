@@ -18,7 +18,7 @@ test("playoffs page renders bracket and playable CTA", async ({ page }) => {
         conferences: {
           EAST: {
             conferenceId: "EAST",
-            seeds: ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS", "CLEVELAND_BULLDOGS"],
+            seeds: ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "OMAHA_STAMPEDE", "CLEVELAND_BULLDOGS"],
             gamesByRound: {
               DIVISIONAL: [{
                 gameId: "DIVISIONAL:EAST:1:MILWAUKEE_NORTHSHORE:CLEVELAND_BULLDOGS",

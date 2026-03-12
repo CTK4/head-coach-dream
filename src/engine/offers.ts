@@ -2,7 +2,7 @@ import type { GameState, InterviewResult, OfferItem, OfferTier } from "@/context
 import { interviewProfiles, type TeamInterviewProfile } from "@/data/interviewProfiles";
 import { getPerkHiringModifier } from "@/engine/perkWiring";
 
-const BASE_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
+const BASE_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "OMAHA_STAMPEDE"] as const;
 
 function withBase(offer: Omit<OfferItem, "base">): OfferItem {
   return { ...offer, base: { years: offer.years, salary: offer.salary, autonomy: offer.autonomy } };
@@ -96,7 +96,7 @@ export function generateOffers(state: GameState): OfferItem[] {
 
     if (result.offerTier === "REJECT") return [];
 
-    if (teamId === "BIRMINGHAM_VULCANS" && !isPerfectBirmingham(result)) return [];
+    if (teamId === "OMAHA_STAMPEDE" && !isPerfectBirmingham(result)) return [];
 
     const perkMod = getPerkHiringModifier(state.coach, "HC");
     const score = computeTeamScore(teamId, result, profile, perkMod);

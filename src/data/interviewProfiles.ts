@@ -50,7 +50,7 @@ export const interviewProfiles: Record<string, TeamInterviewProfile> = {
     },
     offerThreshold: { ownerAlignScore: 1.2, gmTrustScore: 1, schemeFitScore: 1.4, mediaScore: 1.1 },
   },
-  BIRMINGHAM_VULCANS: {
+  OMAHA_STAMPEDE: {
     ownerPersonalityTags: ["traditional", "accountability", "locker-room-first"],
     gmBiasTags: ["development-pipeline", "physical-identity"],
     questionClusters: ["CRISIS", "DEVELOPMENT", "CULTURE", "MEDIA"],

@@ -563,7 +563,7 @@ export type NewsItem = { id: string; title: string; body?: string; createdAt: nu
 export type RetiredPlayerRecord = { playerId: string; name: string; pos: string; age: number; overall: number; season: number };
 
 const CURRENT_SAVE_VERSION = 6;
-const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"];
+const INTERVIEW_TEAMS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "OMAHA_STAMPEDE"];
 type DraftRow = Record<string, any>;
 const DRAFT_ROWS = getDraftClassRows() as DraftRow[];
 
