@@ -24,13 +24,22 @@ for (const [step, ...args] of BLOCKING_VERIFY_STEPS) {
   }
 }
 
-const fullLintResult = spawnSync("npm", ["run", "lint"], {
+const fullLintResult = spawnSync("npm", ["run", "lint:report"], {
   stdio: "inherit",
   shell: process.platform === "win32",
 });
 
 if (fullLintResult.status !== 0) {
   console.warn("[verify] WARNING: full-repo lint failed (non-blocking debt visibility).");
+}
+
+const lintPolicyResult = spawnSync("npm", ["run", "lint:policy"], {
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+
+if (lintPolicyResult.status !== 0) {
+  process.exit(lintPolicyResult.status ?? 1);
 }
 
 console.log("[verify] OK");
