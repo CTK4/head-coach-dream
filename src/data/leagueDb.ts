@@ -141,6 +141,14 @@ function normalizeTeamRow(t: any): TeamRow {
   };
 }
 
+function inferPlayerAge(p: any): number | undefined {
+  const explicitAge = coerceInt(p.age ?? p.Age);
+  if (explicitAge != null) return explicitAge;
+  const yearsPro = coerceInt(p.years_pro ?? p.yearsPro);
+  if (yearsPro == null) return undefined;
+  return Math.max(20, 21 + yearsPro);
+}
+
 function normalizePlayerRow(p: any): PlayerRow {
   const normalized: PlayerRow = {
     ...p,
@@ -149,7 +157,7 @@ function normalizePlayerRow(p: any): PlayerRow {
     pos: p.pos != null ? String(p.pos) : undefined,
     teamId: p.teamId != null ? String(p.teamId) : undefined,
     status: p.status != null ? String(p.status) : undefined,
-    age: coerceInt(p.age),
+    age: inferPlayerAge(p),
     overall: coerceInt(p.overall ?? p.ovr),
     potential: coerceInt(p.potential),
     college: p.college != null ? String(p.college) : undefined,
@@ -206,7 +214,7 @@ function normalizePersonnelRow(p: any): PersonnelRow {
     role: p.role != null ? String(p.role) : undefined,
     teamId: p.teamId != null ? String(p.teamId) : undefined,
     status: p.status != null ? String(p.status) : undefined,
-    age: coerceInt(p.age),
+    age: inferPlayerAge(p),
     reputation: coerceNumber(p.reputation) ?? 55,
     contractId: p.contractId != null ? String(p.contractId) : undefined,
     jerseyNumber: coerceInt(p.jerseyNumber),

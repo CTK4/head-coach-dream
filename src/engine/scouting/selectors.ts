@@ -75,7 +75,12 @@ export function getCanonicalProspectById(state: GameState, prospectId: string): 
 }
 
 export function getCanonicalCombineResult(state: GameState, prospectId: string): CanonicalCombineResult {
-  return (state.scoutingState?.combine.resultsByProspectId?.[prospectId] ?? {}) as Partial<CanonicalCombineResult>;
+  return (
+    state.scoutingState?.combine.resultsByProspectId?.[prospectId]
+    ?? state.offseasonData.combine.resultsByProspectId?.[prospectId]
+    ?? state.offseasonData.combine.results?.[prospectId]
+    ?? {}
+  ) as Partial<CanonicalCombineResult>;
 }
 
 export function getCanonicalCombineCoverage(state: GameState): CanonicalCombineCoverage {
@@ -145,7 +150,7 @@ export function getCanonicalScoutProfile(state: GameState, prospectId: string): 
 export function getCanonicalCombineStatus(state: GameState): CanonicalCombineStatus {
   const coverage = getCanonicalCombineCoverage(state);
   const total = coverage.totalCanonicalProspects;
-  const combineGenerated = Boolean(state.scoutingState?.combine?.generated);
+  const combineGenerated = Boolean(state.scoutingState?.combine?.generated || state.offseasonData.combine.generated);
   const hasAnyAthleticSummaryCoverage = coverage.prospectsWithAthleticSummaryMetrics > 0;
   const hasAnyPercentileCoverage = coverage.prospectsWithPercentileMetrics > 0;
   const hasAnyMetricsCoverage = coverage.prospectsWithAnyCombineMetrics > 0;

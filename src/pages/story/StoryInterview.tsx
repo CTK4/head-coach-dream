@@ -13,8 +13,14 @@ import { interviewProfiles } from "@/data/interviewProfiles";
 import { selectInterviewQuestions, type InterviewQuestion } from "@/engine/interviews/interviewSelector";
 import type { SelectedQuestion as EngineSelectedQuestion } from "@/engine/interviewHiring/types";
 
-const STORY_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "BIRMINGHAM_VULCANS"] as const;
+const STORY_TEAM_IDS = ["MILWAUKEE_NORTHSHORE", "ATLANTA_APEX", "OMAHA_STAMPEDE"] as const;
 type StoryTeamId = (typeof STORY_TEAM_IDS)[number];
+const INTERVIEW_BANK_TEAM_BY_STORY_TEAM: Record<StoryTeamId, string> = {
+  MILWAUKEE_NORTHSHORE: "MILWAUKEE_NORTHSHORE",
+  ATLANTA_APEX: "ATLANTA_APEX",
+  // Interview question bank still keys this franchise under the legacy Birmingham config.
+  OMAHA_STAMPEDE: "BIRMINGHAM_VULCANS",
+};
 
 type StoryOffer = {
   teamId: StoryTeamId;
@@ -51,7 +57,7 @@ type LocalInterviewOutcome = {
 const TEAM_META: Record<StoryTeamId, { teamName: string; city: string; gmName: string; strategyTag: string; theme: string }> = {
   MILWAUKEE_NORTHSHORE: { teamName: "Milwaukee Northshore", city: "Milwaukee, WI", gmName: "Owen Hartley", strategyTag: "steady_build", theme: "CULTURE" },
   ATLANTA_APEX: { teamName: "Atlanta Apex", city: "Atlanta, GA", gmName: "Tyler Redhut", strategyTag: "win_now", theme: "MEDIA" },
-  BIRMINGHAM_VULCANS: { teamName: "Birmingham Vulcans", city: "Birmingham, AL", gmName: "Devin Porter", strategyTag: "youth_movement", theme: "ROSTER" },
+  OMAHA_STAMPEDE: { teamName: "Omaha Stampede", city: "Omaha, NE", gmName: "Devin Porter", strategyTag: "youth_movement", theme: "ROSTER" },
 };
 
 function offerFromOutcome(teamId: StoryTeamId, outcome: EngineInterviewOutcome): StoryOffer {
@@ -91,7 +97,8 @@ function asEngineQuestionSource(questions: InterviewQuestion[]): EngineSelectedQ
 }
 
 function ownerTagsForTeam(teamId: StoryTeamId): string[] {
-  return interviewProfiles[teamId]?.ownerPersonalityTags ?? [];
+  const interviewBankTeamId = INTERVIEW_BANK_TEAM_BY_STORY_TEAM[teamId];
+  return interviewProfiles[interviewBankTeamId]?.ownerPersonalityTags ?? [];
 }
 
 export default function StoryInterview() {
@@ -123,7 +130,7 @@ export default function StoryInterview() {
     try {
       const selected = selectInterviewQuestions({
         leagueSeed: Number(state.saveSeed ?? 1),
-        teamId: activeTeamId,
+        teamId: INTERVIEW_BANK_TEAM_BY_STORY_TEAM[activeTeamId],
         saveSlotId: 1,
         weekIndex: Number(state.week ?? 1),
         interviewIndex: currentInterviewIndex,
@@ -146,7 +153,7 @@ export default function StoryInterview() {
   const currentQuestion = interviewPackResult.questions[currentQuestionIndex];
   const gmName = useMemo(() => {
     try {
-      const cfg = getTeamConfig(activeTeamId);
+      const cfg = getTeamConfig(INTERVIEW_BANK_TEAM_BY_STORY_TEAM[activeTeamId]);
       if (cfg.team.gm && typeof cfg.team.gm === "object") {
         return String((cfg.team.gm as { name?: string }).name ?? activeMeta.gmName);
       }
@@ -188,7 +195,7 @@ export default function StoryInterview() {
 
   const finalizeInterview = (finalAnswers: Record<string, string>) => {
     try {
-      const config = getTeamConfig(activeTeamId);
+      const config = getTeamConfig(INTERVIEW_BANK_TEAM_BY_STORY_TEAM[activeTeamId]);
       const engineQuestions = asEngineQuestionSource(interviewPackResult.questions);
       const score = scoreInterview(config, engineQuestions, finalAnswers, Number(state.saveSeed ?? 1) ^ currentInterviewIndex);
       const fullOutcome = deriveInterviewOutcome(score, config);
@@ -262,7 +269,7 @@ export default function StoryInterview() {
         isRehire: isRehiring,
       },
     });
-    navigate(ROUTES.onboarding);
+    navigate(ROUTES.onboarding, { replace: true });
   };
 
   if (stage === "SELECT") {

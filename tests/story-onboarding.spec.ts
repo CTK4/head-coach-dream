@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("story onboarding flows through MIL -> ATL -> BHM to hub (mobile)", async ({ page }) => {
+test("story onboarding flows through MIL -> ATL -> OMA to hub (mobile)", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
@@ -11,7 +11,7 @@ test("story onboarding flows through MIL -> ATL -> BHM to hub (mobile)", async (
   await page.locator('[data-test="create-coach-continue"]').click();
   await page.locator('[data-test="background-continue"]').first().click();
 
-  const sequence = ["MILWAUKEE", "ATLANTA", "BIRMINGHAM"];
+  const sequence = ["MILWAUKEE", "ATLANTA", "OMAHA"];
   for (const city of sequence) {
     const candidate = page.locator(`[data-test*="interview-team-"][data-test*="${city}"]`).first();
     if (await candidate.count()) {
