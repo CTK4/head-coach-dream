@@ -41,9 +41,11 @@ function DispatchCapture({ onReady }: { onReady: (dispatch: DispatchHandle) => v
   return null;
 }
 
-describe("GameProvider autosave guard", () => {
-  let container: HTMLDivElement;
-  let root: Root;
+const describeWithDom = typeof document === "undefined" ? describe.skip : describe;
+
+describeWithDom("GameProvider autosave guard", () => {
+  let container: HTMLDivElement | null = null;
+  let root: Root | null = null;
   let dispatchRef: DispatchHandle = null;
 
   beforeEach(() => {
@@ -71,9 +73,11 @@ describe("GameProvider autosave guard", () => {
 
   afterEach(() => {
     act(() => {
-      root.unmount();
+      root?.unmount();
     });
-    container.remove();
+    container?.remove();
+    root = null;
+    container = null;
     vi.useRealTimers();
   });
 
