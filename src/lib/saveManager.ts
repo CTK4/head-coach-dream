@@ -2,13 +2,13 @@ import type { GameState } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
 import { LATEST_SAVE_SCHEMA_VERSION, migrateSaveSchema, validateCriticalSaveState, type SaveValidationErrorCode } from "@/lib/migrations/saveSchema";
 import { logError, logInfo, logWarn } from "@/lib/logger";
-import { createApiSaveManager, getSaveApiBaseUrl, isApiSaveModeEnabled } from "@/lib/saveApiManager";
-
-export interface StorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
+import {
+  createCapacitorPreferencesSqliteAdapter,
+  createLocalStorageAdapter,
+  isCapacitorIosEnvironment,
+  type SaveStorageAdapter,
+  type StorageLike,
+} from "@/lib/saveStorageAdapter";
 
 export interface SaveMetadata {
   saveId: string;
@@ -40,6 +40,7 @@ const LEGACY_KEY = "hc_career_save";
 const SAVE_INDEX_KEY = "hc_career_saves_index";
 const SAVE_ACTIVE_ID_KEY = "hc_career_active_save_id";
 const SAVE_ID_COUNTER_KEY = "hc_career_save_id_counter";
+const STORAGE_MIGRATION_MARKER_KEY = "hc_career_storage_backend_migration_v1";
 const UNSLOTTED_SAVE_ID = "unslotted-initial-state";
 
 
@@ -69,6 +70,13 @@ function getDefaultStorage(): StorageLike {
   }
 
   throw new Error("localStorage is not available in this environment.");
+}
+
+function createDefaultAdapter(storage: StorageLike): SaveStorageAdapter {
+  if (isCapacitorIosEnvironment()) {
+    return createCapacitorPreferencesSqliteAdapter(storage);
+  }
+  return createLocalStorageAdapter(storage);
 }
 
 export type LoadSaveErrorCode = "MISSING_SAVE" | "CORRUPT_SAVE" | "INVALID_SAVE";
@@ -101,7 +109,7 @@ class SaveWriteError extends Error {
 function assertStorageWrite(result: StorageWriteResult, operation: "set" | "remove", key: string, context: string): void {
   if (result.ok) return;
   if (!("error" in result)) return;
-  throw new SaveWriteError(`Failed to ${operation} localStorage key \"${key}\" during ${context}.`, operation, key, result.error);
+  throw new SaveWriteError(`Failed to ${operation} storage key \"${key}\" during ${context}.`, operation, key, result.error);
 }
 
 function parseSave(raw: string | null): GameState | null {
@@ -145,8 +153,8 @@ function createDefaultStorageProxy(): StorageLike {
   };
 }
 
-export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
-  const activeStorage = storage ?? createDefaultStorageProxy();
+export function createSaveManager({ storage, adapter }: { storage?: StorageLike; adapter?: SaveStorageAdapter } = {}) {
+  const activeStorage = adapter ?? createDefaultAdapter(storage ?? createDefaultStorageProxy());
 
   function safeGetItem(key: string): string | null {
     try {
@@ -174,6 +182,103 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     }
   }
 
+
+
+  function safeListKeys(prefix?: string): string[] {
+    try {
+      return activeStorage.listKeys(prefix);
+    } catch {
+      return [];
+    }
+  }
+
+  function readMigrationMarker(): string | null {
+    return safeGetItem(STORAGE_MIGRATION_MARKER_KEY);
+  }
+
+  function validateStorageIntegrity(): boolean {
+    const rawIndex = safeGetItem(SAVE_INDEX_KEY);
+    if (!rawIndex) return true;
+
+    try {
+      const parsed = JSON.parse(rawIndex) as unknown;
+      if (!Array.isArray(parsed)) return false;
+      const rows = parsed.filter(isValidIndexRow).map(normalizeIndexRow);
+      if (rows.length === 0 && parsed.length > 0) return false;
+      return rows.every((row) => {
+        const primary = safeGetItem(row.storageKey);
+        const backup = safeGetItem(getBackupKey(row.storageKey));
+        return primary !== null || backup !== null;
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  function markMigrationComplete() {
+    const marker = JSON.stringify({ backend: activeStorage.backend, migratedAt: Date.now() });
+    assertStorageWrite(safeSetItem(STORAGE_MIGRATION_MARKER_KEY, marker), "set", STORAGE_MIGRATION_MARKER_KEY, "storage migration marker");
+  }
+
+  function rollbackMigration(snapshot: Map<string, string | null>) {
+    for (const [key, value] of snapshot.entries()) {
+      if (value === null) {
+        safeRemoveItem(key);
+      } else {
+        safeSetItem(key, value);
+      }
+    }
+  }
+
+  function migrateLegacyKeysToAdapter() {
+    const marker = readMigrationMarker();
+    if (marker) {
+      try {
+        const parsed = JSON.parse(marker) as { backend?: string };
+        if (parsed.backend === activeStorage.backend) return;
+      } catch {
+        // continue to migration if marker is corrupt
+      }
+    }
+
+    const legacyKeys = [
+      LEGACY_KEY,
+      SAVE_INDEX_KEY,
+      SAVE_ACTIVE_ID_KEY,
+      SAVE_ID_COUNTER_KEY,
+      getBackupKey(LEGACY_KEY),
+      getTempKey(LEGACY_KEY),
+      ...safeListKeys("hc_career_save__"),
+    ];
+
+    const uniqueKeys = [...new Set(legacyKeys)];
+    if (uniqueKeys.length === 0) {
+      markMigrationComplete();
+      return;
+    }
+
+    const snapshot = new Map<string, string | null>();
+    for (const key of uniqueKeys) {
+      snapshot.set(key, safeGetItem(key));
+    }
+
+    try {
+      for (const [key, value] of snapshot.entries()) {
+        if (value === null) continue;
+        assertStorageWrite(safeSetItem(key, value), "set", key, "legacy migration copy");
+      }
+      if (!validateStorageIntegrity()) {
+        rollbackMigration(snapshot);
+        throw new Error("Post-migration storage integrity validation failed.");
+      }
+      markMigrationComplete();
+      logInfo("save.storage.migration.success", { meta: { backend: activeStorage.backend, keyCount: uniqueKeys.length } });
+    } catch (error) {
+      rollbackMigration(snapshot);
+      logWarn("save.storage.migration.rollback", { meta: { backend: activeStorage.backend, message: error instanceof Error ? error.message : String(error) } });
+    }
+  }
+
   function commitAtomic(storageKey: string, serializedState: string): void {
     const tempKey = getTempKey(storageKey);
     const backupKey = getBackupKey(storageKey);
@@ -185,6 +290,8 @@ export function createSaveManager({ storage }: { storage?: StorageLike } = {}) {
     assertStorageWrite(safeSetItem(storageKey, serializedState), "set", storageKey, "primary write");
     assertStorageWrite(safeRemoveItem(tempKey), "remove", tempKey, "temp cleanup");
   }
+
+  migrateLegacyKeysToAdapter();
 
   function toMetadata(saveId: string, state: GameState): SaveMetadata {
     const now = Date.now();
