@@ -1765,9 +1765,73 @@ export function applyPracticePlanForWeek(state: GameState, teamId: string, week:
 export function applyPracticePlanForWeekAtomic(state: GameState, teamId: string, week: number, failAfterPlayerId?: string): { state: GameState; applied: boolean } {
   try {
     return { state: applyPracticePlanForWeek(state, teamId, week, failAfterPlayerId).nextState, applied: true };
-  } catch {
-    return { state, applied: false };
+  } catch (error) {
+    return {
+      state: markRecoveryMode(state, "practice.apply.atomic", "Practice recovery failed; progress paused until recovery is acknowledged.", error),
+      applied: false,
+    };
   }
+}
+
+type CatchContinuanceClass = "recoverable" | "non-recoverable";
+
+const GAME_CONTEXT_CATCH_INVENTORY: ReadonlyArray<{ key: string; classification: CatchContinuanceClass }> = [
+  { key: "practice.apply.atomic", classification: "non-recoverable" },
+  { key: "save.id.allocate", classification: "recoverable" },
+  { key: "freeAgency.teamIds.read", classification: "recoverable" },
+  { key: "cap.ledger.read", classification: "recoverable" },
+  { key: "contracts.sum.compute", classification: "recoverable" },
+  { key: "save.active.update", classification: "recoverable" },
+  { key: "franchiseTag.apply", classification: "recoverable" },
+  { key: "offseason.advance.step", classification: "non-recoverable" },
+  { key: "narrative.pulse", classification: "recoverable" },
+] as const;
+
+function classifyCatchContinuance(key: string): CatchContinuanceClass {
+  return GAME_CONTEXT_CATCH_INVENTORY.find((entry) => entry.key === key)?.classification ?? "recoverable";
+}
+
+
+function markRecoveryMode(state: GameState, source: string, message: string, error?: unknown): GameState {
+  const classification = classifyCatchContinuance(source);
+  const errorMessage = error instanceof Error ? error.message : String(error ?? "unknown error");
+  const next = {
+    ...state,
+    recoveryNeeded: true,
+    recoveryErrors: [...(state.recoveryErrors ?? []), `${source}: ${errorMessage}`].slice(-10),
+    uiToast: message,
+  };
+  logError("state.catch_continuance", {
+    phase: state.phase,
+    season: state.season,
+    week: state.week,
+    meta: { source, classification, errorMessage },
+  });
+  return ensureRecoveryInvariants(state, next, source);
+}
+
+function ensureRecoveryInvariants(previous: GameState, candidate: GameState, source: string): GameState {
+  const invariants: Array<{ ok: boolean; message: string }> = [
+    { ok: Number.isFinite(candidate.season) && candidate.season > 0, message: "season must be a positive finite number" },
+    { ok: Number.isFinite(candidate.hub.regularSeasonWeek) && Number.isFinite(candidate.hub.preseasonWeek), message: "hub week counters must be finite" },
+    { ok: !!candidate.offseason && !!candidate.freeAgency && !!candidate.finances, message: "critical state slices must exist" },
+  ];
+  const failed = invariants.filter((inv) => !inv.ok).map((inv) => inv.message);
+  if (!failed.length) return candidate;
+
+  const fallback = {
+    ...previous,
+    recoveryNeeded: true,
+    recoveryErrors: [...(previous.recoveryErrors ?? []), `${source}: invariant failure (${failed.join("; ")})`].slice(-10),
+    uiToast: "Recovery mode engaged after invariant failure. Please return to hub recovery options.",
+  };
+  logError("state.recovery.invariant_failure", {
+    phase: previous.phase,
+    season: previous.season,
+    week: previous.week,
+    meta: { source, failed },
+  });
+  return fallback;
 }
 
 function createSchedule(seed: number): LeagueSchedule {
@@ -6089,8 +6153,13 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       let nextStep: OffseasonStepId;
       try {
         nextStep = StateMachine.advanceOffseasonStep(cur, { enableTamperingStep: ENABLE_TAMPERING_STEP });
-      } catch {
-        return state;
+      } catch (error) {
+        return markRecoveryMode(
+          state,
+          "offseason.advance.step",
+          "Offseason progression could not continue. Recovery mode has been activated.",
+          error,
+        );
       }
 
       const prevStage = state.careerStage;
@@ -9000,7 +9069,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const nextWithRecovery = { ...next, playerFatigueById: applyWeeklyFatigueRecovery(next, stepped.sim.snapLoadThisGame ?? {}), qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(stepped.sim.qbRunContactsByPlayerId ?? {}) } };
       let nextWithPractice = nextWithRecovery;
       const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
-      if (!appliedPlayWeek.applied) return state;
+      if (!appliedPlayWeek.applied) return appliedPlayWeek.state;
       nextWithPractice = appliedPlayWeek.state;
 
       if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
@@ -9155,7 +9224,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
         qbRunContactExposureByPlayerId: { ...(next.qbRunContactExposureByPlayerId ?? {}), ...(sim.qbRunContactsByPlayerId ?? {}) },
       };
       const appliedPlayWeek = applyPracticePlanForWeekAtomic(nextWithRecovery, state.acceptedOffer.teamId, state.game.weekNumber ?? state.hub.regularSeasonWeek);
-      if (!appliedPlayWeek.applied) return state;
+      if (!appliedPlayWeek.applied) return appliedPlayWeek.state;
       const nextWithPractice = appliedPlayWeek.state;
 
       if (state.game.weekType === "PLAYOFFS" && state.playoffs && state.game.playoffGameId) {
@@ -9285,7 +9354,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       out = persistUserGamePlayLog(out, state.game);
       out = applyTelemetryAggregatesForGame(out, state.game);
       const appliedAdvance = applyPracticePlanForWeekAtomic(out, teamId, week);
-      if (!appliedAdvance.applied) return state;
+      if (!appliedAdvance.applied) return appliedAdvance.state;
       out = appliedAdvance.state;
       const weekKey = toWeekKey(out.season, week);
       out = finalizeWeekController(out, { season: out.season, week, gameType, weekKey, seed: out.saveSeed }, gameReducer);
