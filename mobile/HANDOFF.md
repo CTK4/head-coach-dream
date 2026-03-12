@@ -13,7 +13,7 @@
 - ✅ Vite config optimized with relative paths (`./`)
 
 ### 2. Mobile Workspace Created (Completed)
-- ✅ Dedicated Capacitor workspace at `/head-coach-dream-mobile/`
+- ✅ Dedicated Capacitor workspace at `/mobile/`
 - ✅ iOS platform added with Xcode project
 - ✅ Web assets synced to `ios/App/App/public/`
 - ✅ All configuration files in place
@@ -21,7 +21,7 @@
 
 ### 3. Project Structure
 ```
-head-coach-dream-mobile/
+mobile/
 ├── package.json              # Scripts and dependencies
 ├── capacitor.config.ts       # Capacitor config (app ID, name, web dir)
 ├── ios/
@@ -53,7 +53,7 @@ pod --version
 
 ### Step 1: Clone/Pull Latest Code
 ```bash
-cd head-coach-dream-mobile
+cd mobile
 git pull origin main
 ```
 
@@ -62,7 +62,7 @@ git pull origin main
 npm run build:web
 ```
 
-Output: `../head-coach-dream/dist/` (production-optimized web build)
+Output: `../dist/` (production-optimized web build)
 
 ### Step 3: Sync Web Assets to iOS
 ```bash
@@ -70,7 +70,7 @@ npm run cap:sync:ios
 ```
 
 This copies:
-- `../head-coach-dream/dist/` → `ios/App/App/public/`
+- `../dist/` → `ios/App/App/public/`
 - Updates `capacitor.config.json` in Xcode project
 
 ### Step 4: Open Xcode
@@ -151,7 +151,7 @@ npm run cap:sync:ios
 
 **Total changes**: 6 files, ~50 lines modified (minimal, surgical fixes only)
 
-### New Mobile Workspace (head-coach-dream-mobile/)
+### New Mobile Workspace (mobile/)
 - `package.json` - Capacitor scripts
 - `capacitor.config.ts` - Capacitor configuration
 - `ios/` - Complete Xcode project
@@ -161,7 +161,7 @@ npm run cap:sync:ios
 ## Build Artifacts
 
 ### Web Build Output
-- Location: `../head-coach-dream/dist/`
+- Location: `../dist/`
 - Size: ~8 MB (JS), ~110 KB (CSS)
 - Gzipped: ~1.3 MB (JS), ~18 KB (CSS)
 
@@ -176,7 +176,7 @@ npm run cap:sync:ios
 {
   appId: 'com.headcoachdream.app',
   appName: 'Head Coach Dream',
-  webDir: '../head-coach-dream/dist'
+  webDir: '../dist'
 }
 ```
 

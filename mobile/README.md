@@ -4,7 +4,7 @@ This is a dedicated Capacitor workspace for building the Head Coach Dream web ap
 
 ## Architecture
 
-- **Web App**: Located at `../head-coach-dream/` (Vite + React)
+- **Web App**: Located at `../` (Vite + React)
 - **Mobile Wrapper**: This directory (Capacitor + iOS)
 - **Separation**: Web and mobile tooling are intentionally separated per repo guidance
 
@@ -59,14 +59,14 @@ This command:
 ## Project Structure
 
 ```
-head-coach-dream-mobile/
+mobile/
 ├── package.json                    # Scripts and dependencies
 ├── capacitor.config.ts             # Capacitor configuration
 ├── ios/
 │   ├── App/
 │   │   ├── App.xcodeproj/         # Xcode project
 │   │   ├── App/
-│   │   │   ├── public/            # Web assets (synced from ../head-coach-dream/dist)
+│   │   │   ├── public/            # Web assets (synced from ../dist)
 │   │   │   ├── ViewController.swift
 │   │   │   └── ...
 │   │   └── Podfile                # CocoaPods dependencies
@@ -92,7 +92,7 @@ head-coach-dream-mobile/
 **App Metadata** (`capacitor.config.ts`):
 - App ID: `com.headcoachdream.app`
 - App Name: `Head Coach Dream`
-- Web Directory: `../head-coach-dream/dist`
+- Web Directory: `../dist`
 
 ## Troubleshooting
 
@@ -143,4 +143,4 @@ npm run cap:sync:ios
 
 - [Capacitor iOS Documentation](https://capacitorjs.com/docs/ios)
 - [Xcode Documentation](https://developer.apple.com/documentation/xcode)
-- [Head Coach Dream Web App](../head-coach-dream/README.md)
+- [Head Coach Dream Web App](../README.md)
