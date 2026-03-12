@@ -17,6 +17,12 @@ class LocalStorageMock {
   removeItem(key: string) {
     this.store.delete(key);
   }
+  key(index: number) {
+    return [...this.store.keys()][index] ?? null;
+  }
+  get length() {
+    return this.store.size;
+  }
   clear() {
     this.store.clear();
   }
@@ -596,7 +602,7 @@ describe("saveManager", () => {
 
     storage.failOnSetItemKey = `${storageKey}__tmp`;
 
-    expect(() => saveManager.syncCurrentSave({ ...baseState, schemaVersion: 1, season: 2026, saveId } as any, saveId)).toThrow(/Failed to set localStorage key/);
+    expect(() => saveManager.syncCurrentSave({ ...baseState, schemaVersion: 1, season: 2026, saveId } as any, saveId)).toThrow(/Failed to set storage key/);
 
     expect(storage.getItem("hc_career_saves_index")).toBe(JSON.stringify(previousIndex));
     expect(storage.getItem("hc_career_active_save_id")).toBe(saveId);
@@ -667,6 +673,18 @@ describe("saveManager", () => {
 
 
 
+
+  
+
+  it("marks adapter migration completion when existing hc_career_save* keys are present", () => {
+    storage.setItem("hc_career_save", JSON.stringify({ ...baseState, schemaVersion: 1, saveId: "career-1" }));
+
+    createSaveManager({ storage });
+
+    const marker = storage.getItem("hc_career_storage_backend_migration_v1");
+    expect(marker).toBeTruthy();
+    expect(JSON.parse(marker ?? "{}").backend).toBe("localStorage");
+  });
 
   it("syncCurrentSave allocates a real slot when state has transient save id", () => {
     storage.setItem("hc_career_active_save_id", "career-9");
