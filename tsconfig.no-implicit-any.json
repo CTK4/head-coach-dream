@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": true
+  },
+  "include": ["src/types/**/*", "src/engine/config/**/*"],
+  "exclude": []
+}
