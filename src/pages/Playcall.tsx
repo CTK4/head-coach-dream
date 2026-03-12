@@ -461,7 +461,7 @@ const Playcall = () => {
       .sort((a, b) => b.evaluation.score - a.evaluation.score);
   }, [g, aggression, tempo, personnelPackage, offensePlaybookId, defensePlaybookId, legalConcepts]);
 
-  const handlePlay = (playType: PlayType) => {
+  const handlePlay = useCallback((playType: PlayType) => {
     dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType, personnelPackage, aggression, tempo } });
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
     setSelectedPlayId(null);
@@ -730,7 +730,6 @@ const Playcall = () => {
                     ? `${g.stats[userSide].rushYards} rush yds`
                     : `${g.stats[userSide].passYards} pass yds`;
                   return (
-                    <Card key={play.id} className={`cursor-pointer transition-colors ${isSelected ? "border-primary" : "hover:border-primary/50"}`} onClick={() => { setSelectedPlayId(play.id); dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType: play.id } }); }}>
                     <Card
                       key={play.id}
                       className={`transition-colors ${pauseForUserOffenseSnap ? "cursor-pointer" : "cursor-not-allowed opacity-70"} ${isSelected ? "border-primary" : "hover:border-primary/50"}`}
