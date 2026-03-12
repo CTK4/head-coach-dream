@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
@@ -461,7 +461,7 @@ const Playcall = () => {
       .sort((a, b) => b.evaluation.score - a.evaluation.score);
   }, [g, aggression, tempo, personnelPackage, offensePlaybookId, defensePlaybookId, legalConcepts]);
 
-  const handlePlay = (playType: PlayType) => {
+  const handlePlay = useCallback((playType: PlayType) => {
     dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType, personnelPackage, aggression, tempo } });
     dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
     setSelectedPlayId(null);
