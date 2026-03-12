@@ -461,12 +461,15 @@ const Playcall = () => {
       .sort((a, b) => b.evaluation.score - a.evaluation.score);
   }, [g, aggression, tempo, personnelPackage, offensePlaybookId, defensePlaybookId, legalConcepts]);
 
-  const handlePlay = useCallback((playType: PlayType) => {
-    dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType, personnelPackage, aggression, tempo } });
-    dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
-    setSelectedPlayId(null);
-    force((x) => x + 1);
-  }, [aggression, dispatch, personnelPackage, tempo]);
+  const handlePlay = useCallback<((playType: PlayType) => void)>(
+    (playType) => {
+      dispatch({ type: "SET_PENDING_OFFENSIVE_CALL", payload: { playType, personnelPackage, aggression, tempo } });
+      dispatch({ type: "RESOLVE_PLAY", payload: { playType, personnelPackage, aggression, tempo } });
+      setSelectedPlayId(null);
+      force((x) => x + 1);
+    },
+    [aggression, dispatch, personnelPackage, tempo],
+  );
 
   const handleDefensiveConfirm = (call: DefensiveCall | "AUTO") => {
     if (call === "AUTO") {
