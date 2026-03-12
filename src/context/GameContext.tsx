@@ -7536,8 +7536,16 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     case "FA_WITHDRAW":
     case "FA_WITHDRAW_OFFER": {
       if (state.careerStage !== "FREE_AGENCY") return state;
-      const pid = String(action.payload.playerId);
-      const offerId = String(action.payload.offerId);
+      const payload = action.payload as { offerId: string; playerId?: string };
+      const offerId = String(payload.offerId);
+      const resolvedPlayerId = payload.playerId
+        ? String(payload.playerId)
+        : Object.entries(state.freeAgency.offersByPlayerId).find(([, playerOffers]) =>
+            playerOffers.some((offer) => String(offer.offerId) === offerId)
+          )?.[0];
+      if (!resolvedPlayerId) return state;
+
+      const pid = String(resolvedPlayerId);
       const offers = state.freeAgency.offersByPlayerId[pid] ?? [];
       const target = offers.find((o) => String(o.offerId) === offerId);
       if (!target) return state;

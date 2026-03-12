@@ -2,6 +2,7 @@ import { nextStageForNavigate, stageLabel, stageToRoute } from "@/components/fra
 import { isReSignAllowed, isTradesAllowed } from "@/engine/phase";
 import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
 import type { CareerStage } from "@/types/careerStage";
+import type { GameState } from "@/context/GameContext";
 
 export type HubProgressionState = {
   careerStage: CareerStage;
@@ -62,7 +63,7 @@ export function getHubActionAvailability(state: HubProgressionState & Record<str
 }
 
 export function canAccessFreeAgency(state: HubProgressionState & Record<string, unknown>): boolean {
-  const phase = getUnifiedPhase(state);
+  const phase = getUnifiedPhase(state as GameState);
   return isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
 }
 
@@ -71,7 +72,7 @@ export function canAccessReSign(state: HubProgressionState): boolean {
 }
 
 export function canAccessTrades(state: HubProgressionState & Record<string, unknown>): boolean {
-  return isInFranchiseActionWindow(getUnifiedPhase(state), "trade");
+  return isInFranchiseActionWindow(getUnifiedPhase(state as GameState), "trade");
 }
 
 export function getHubQuickLinkAvailability(state: HubProgressionState & Record<string, unknown>) {
