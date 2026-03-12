@@ -12,27 +12,69 @@ paths:
       responses:
         '200':
           description: Healthy
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+              examples:
+                default:
+                  value:
+                    status: ok
   /api/v1/saves/metadata:
     get:
       summary: List save metadata
       operationId: listSaveMetadata
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Save metadata list
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
           content:
             application/json:
               schema:
-                type: object
-                required: [saves]
-                properties:
-                  saves:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/SaveMetadata'
+                $ref: '#/components/schemas/MetadataListResponse'
+              examples:
+                default:
+                  value:
+                    saves:
+                      - saveId: career-demo
+                        coachName: Coach Carter
+                        teamName: ATLANTA_APEX
+                        season: 1
+                        week: 1
+                        record:
+                          wins: 0
+                          losses: 0
+                        updatedAt: 1710000000000
+                        lastPlayed: 1710000000000
+                        careerStage: PRE_SEASON
+                        version: 1
+                    pagination:
+                      limit: 50
+                      nextCursor: null
+                      total: 1
   /api/v1/saves/snapshots:
     post:
       summary: Create a save snapshot
@@ -46,6 +88,11 @@ paths:
       responses:
         '201':
           description: Snapshot created
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
           content:
             application/json:
               schema:
@@ -59,6 +106,11 @@ paths:
       responses:
         '200':
           description: Snapshot found
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
           content:
             application/json:
               schema:
@@ -79,6 +131,11 @@ paths:
       responses:
         '200':
           description: Snapshot saved
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
           content:
             application/json:
               schema:
@@ -91,9 +148,25 @@ paths:
       responses:
         '204':
           description: Snapshot deleted
+          headers:
+            X-Api-Version:
+              $ref: '#/components/headers/ApiVersion'
+            X-Contract-Version:
+              $ref: '#/components/headers/ContractVersion'
         '404':
           $ref: '#/components/responses/NotFound'
 components:
+  headers:
+    ApiVersion:
+      description: Backward-compatible API major version.
+      schema:
+        type: string
+        const: v1
+    ContractVersion:
+      description: Contract release version consumed by mobile clients.
+      schema:
+        type: string
+        pattern: '^\\d{4}-\\d{2}-\\d{2}$'
   parameters:
     SaveId:
       name: saveId
@@ -105,14 +178,19 @@ components:
   responses:
     NotFound:
       description: Resource was not found
+      headers:
+        X-Api-Version:
+          $ref: '#/components/headers/ApiVersion'
+        X-Contract-Version:
+          $ref: '#/components/headers/ContractVersion'
       content:
         application/json:
           schema:
-            type: object
-            required: [error]
-            properties:
-              error:
-                type: string
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                error: save not found
   schemas:
     HealthResponse:
       type: object
@@ -121,6 +199,12 @@ components:
         status:
           type: string
           enum: [ok]
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
     SaveMetadata:
       type: object
       required:
@@ -145,13 +229,42 @@ components:
             losses:
               type: number
         updatedAt:
-          type: number
+          type: integer
+          description: Unix timestamp in milliseconds.
+          minimum: 0
         lastPlayed:
-          type: number
+          type: integer
+          description: Unix timestamp in milliseconds.
+          minimum: 0
         careerStage:
           type: string
         version:
           type: number
+    Pagination:
+      type: object
+      required: [limit, nextCursor, total]
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        nextCursor:
+          oneOf:
+            - type: string
+            - type: 'null'
+        total:
+          type: integer
+          minimum: 0
+    MetadataListResponse:
+      type: object
+      required: [saves, pagination]
+      properties:
+        saves:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaveMetadata'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
     SaveState:
       type: object
       additionalProperties: true
