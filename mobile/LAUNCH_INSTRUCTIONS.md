@@ -11,7 +11,7 @@ sudo gem install cocoapods
 
 ### Launch in 3 Commands
 ```bash
-cd head-coach-dream-mobile
+cd mobile
 npm run ios:dev
 # Then in Xcode: Select simulator → Press Play
 ```
@@ -41,7 +41,7 @@ pod --version
 ### Step 2: Navigate to Mobile Workspace
 
 ```bash
-cd /path/to/head-coach-dream-mobile
+cd /path/to/head-coach-dream/mobile
 ```
 
 ### Step 3: Build Web App
@@ -169,7 +169,7 @@ xcrun simctl erase all
 
 ### "Cannot find module" Error
 ```bash
-cd head-coach-dream-mobile
+cd mobile
 npm install
 npm run cap:sync:ios
 ```
@@ -211,14 +211,14 @@ npm run cap:sync:ios
 ## 📁 File Structure Reference
 
 ```
-head-coach-dream-mobile/
+mobile/
 ├── package.json                 # npm scripts
 ├── capacitor.config.ts          # Capacitor config
 ├── ios/
 │   ├── App/
 │   │   ├── App.xcodeproj/      # ← Open this in Xcode
 │   │   ├── App/
-│   │   │   ├── public/         # Web assets (from ../head-coach-dream/dist)
+│   │   │   ├── public/         # Web assets (from ../dist)
 │   │   │   ├── ViewController.swift
 │   │   │   ├── AppDelegate.swift
 │   │   │   └── Info.plist
@@ -236,7 +236,7 @@ head-coach-dream-mobile/
 
 ```bash
 # Everything in one command (build + sync + open Xcode)
-cd head-coach-dream-mobile && npm run ios:dev
+cd mobile && npm run ios:dev
 
 # Then in Xcode: Select simulator and press Play
 ```

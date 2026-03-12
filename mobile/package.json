@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "iOS wrapper for Head Coach Dream using Capacitor",
   "scripts": {
-    "build:web": "cd ../head-coach-dream && npm run build",
+    "build:web": "cd .. && npm run build",
     "cap:sync": "cap sync",
     "cap:sync:ios": "cap sync ios",
     "cap:build:ios": "cap build ios",
