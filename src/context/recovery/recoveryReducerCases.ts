@@ -8,10 +8,26 @@ export type RecoveryReducerDeps = {
   buildMigrationEvents: (state: GameState) => TransactionState["events"];
 };
 
+
+function ensureRecoveryInvariants(previous: GameState, candidate: GameState, source: string): GameState {
+  const failures: string[] = [];
+  if (!Number.isFinite(candidate.season) || candidate.season <= 0) failures.push("season must be positive finite");
+  if (!Number.isFinite(candidate.hub?.regularSeasonWeek) || !Number.isFinite(candidate.hub?.preseasonWeek)) failures.push("hub weeks must be finite");
+  if (!candidate.offseason || !candidate.freeAgency || !candidate.finances) failures.push("critical slices must exist");
+
+  if (!failures.length) return candidate;
+  return {
+    ...previous,
+    recoveryNeeded: true,
+    recoveryErrors: [...(previous.recoveryErrors ?? []), `${source}: invariant failure (${failures.join("; ")})`].slice(-10),
+    uiToast: "Recovery mode engaged after invariant failure.",
+  };
+}
+
 export function reduceRecoveryCases(state: GameState, action: GameAction, deps: RecoveryReducerDeps): GameState | null {
   switch (action.type) {
     case "RECOVERY_RETURN_TO_HUB": {
-      return { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage };
+      return ensureRecoveryInvariants(state, { ...state, recoveryNeeded: false, recoveryErrors: [], phase: "HUB" as GamePhase, careerStage: "OFFSEASON_HUB" as CareerStage }, "RECOVERY_RETURN_TO_HUB");
     }
     case "RECOVERY_REBUILD_INDICES": {
       const sourceTeamOverrides = { ...state.playerTeamOverrides };
@@ -54,39 +70,39 @@ export function reduceRecoveryCases(state: GameState, action: GameAction, deps: 
       const ledgerConsistent = Number(rebuilt.transactionLedger.counter ?? 0) === Number(rebuilt.transactionLedger.events?.length ?? 0);
       const rebuildConsistent = teamConsistent && contractConsistent && ledgerConsistent;
 
-      return {
+      return ensureRecoveryInvariants(state, {
         ...rebuilt,
         recoveryNeeded: !rebuildConsistent,
         recoveryErrors: rebuildConsistent ? [] : ["Rebuild indices consistency check failed"],
-      };
+      }, "RECOVERY_REBUILD_INDICES");
     }
     case "RECOVERY_SKIP_STEP": {
-      const cfg = { enableTamperingStep: (state.offseason as any)?.enableTamperingStep ?? false };
+      const cfg = { enableTamperingStep: Boolean((state.offseason as { enableTamperingStep?: boolean } | undefined)?.enableTamperingStep) };
       const next = StateMachine.nextOffseasonStepId(state.offseason?.stepId ?? "RESIGNING", cfg);
       const nextStep = next ?? "RESIGNING";
-      return {
+      return ensureRecoveryInvariants(state, {
         ...state,
         recoveryNeeded: false,
         recoveryErrors: [],
         offseason: { ...state.offseason, stepId: nextStep as OffseasonStepId },
-      };
+      }, "RECOVERY_SKIP_STEP");
     }
     case "RECOVERY_RESTORE_BACKUP": {
-      return {
+      return ensureRecoveryInvariants(state, {
         ...state,
         recoveryNeeded: true,
         recoveryErrors: ["Backup restore must run from the recovery controller."],
-      };
+      }, "RECOVERY_RESTORE_BACKUP");
     }
     case "RECOVERY_HYDRATE_STATE": {
-      return action.payload.state;
+      return ensureRecoveryInvariants(state, action.payload.state, "RECOVERY_HYDRATE_STATE");
     }
     case "RECOVERY_SET_ERRORS": {
-      return {
+      return ensureRecoveryInvariants(state, {
         ...state,
         recoveryNeeded: true,
         recoveryErrors: action.payload.errors,
-      };
+      }, "RECOVERY_SET_ERRORS");
     }
     default:
       return null;

@@ -64,12 +64,15 @@ This project is built with:
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run smoke` | Run the smoke test (data wiring + reference integrity) |
+| `npm run smoke:deploy` | Verify deployment routing for SPA fallback, API passthrough, and static assets |
 | `npm run test:ui` | Run Playwright UI tests |
 | `npm run check:repo-hygiene` | Fail if top-level executable scripts are undocumented |
 
 ## How can I deploy this project?
 
 This project is configured for [Vercel](https://vercel.com) deployment. Import the repository in Vercel and it will be deployed automatically on every push to the main branch.
+
+Deployment routing behavior (SPA fallback + API prefix exemptions + static asset precedence) is documented in `docs/deployment-routing.md`. Run `npm run smoke:deploy` before rollout changes to route configuration.
 
 ## Contributor guidelines
 
