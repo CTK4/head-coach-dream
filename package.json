@@ -18,6 +18,7 @@
     "gen:league-history": "node scripts/generateLeagueHistoryFromCsv.mjs",
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
+    "deps:health": "node scripts/dependencyHealthReport.mjs",
     "cap:sync": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:android": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
     "cap:open:ios": "echo \"Capacitor tooling is isolated from root installs. Use a dedicated mobile workspace.\" && exit 0",
@@ -104,6 +105,9 @@
   "engines": {
     "node": "22.x",
     "npm": ">=10"
+  },
+  "overrides": {
+    "typescript": "$typescript"
   },
   "packageManager": "npm@10"
 }

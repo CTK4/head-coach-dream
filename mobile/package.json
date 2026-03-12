@@ -23,9 +23,17 @@
     "@capacitor/cli": "^6.1.0",
     "@capacitor/core": "^6.1.0",
     "@capacitor/ios": "^6.1.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "capacitor-secure-storage-plugin": "^0.8.0"
-  }
+  },
+  "overrides": {
+    "typescript": "$typescript"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10"
 }
