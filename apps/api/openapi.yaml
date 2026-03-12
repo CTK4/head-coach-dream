@@ -37,6 +37,9 @@ paths:
     post:
       summary: Create a save snapshot
       operationId: createSaveSnapshot
+      parameters:
+        - $ref: '#/components/parameters/OperationIdHeader'
+        - $ref: '#/components/parameters/SequenceNumberHeader'
       requestBody:
         required: true
         content:
@@ -49,7 +52,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaveSnapshotResponse'
+                $ref: '#/components/schemas/MutationResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/v1/saves/{saveId}/snapshot:
     get:
       summary: Get a save snapshot
@@ -70,6 +75,8 @@ paths:
       operationId: upsertSaveSnapshot
       parameters:
         - $ref: '#/components/parameters/SaveId'
+        - $ref: '#/components/parameters/OperationIdHeader'
+        - $ref: '#/components/parameters/SequenceNumberHeader'
       requestBody:
         required: true
         content:
@@ -82,17 +89,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaveSnapshotResponse'
+                $ref: '#/components/schemas/MutationResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
     delete:
       summary: Delete a save snapshot
       operationId: deleteSaveSnapshot
       parameters:
         - $ref: '#/components/parameters/SaveId'
+        - $ref: '#/components/parameters/OperationIdHeader'
+        - $ref: '#/components/parameters/SequenceNumberHeader'
       responses:
         '204':
           description: Snapshot deleted
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 components:
   parameters:
     SaveId:
@@ -102,7 +115,29 @@ components:
       schema:
         type: string
         minLength: 1
+    OperationIdHeader:
+      name: x-operation-id
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: Unique client-generated operation ID used for idempotent retries.
+    SequenceNumberHeader:
+      name: x-sequence-number
+      in: header
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      description: Monotonic sequence per save stream; must be previous + 1.
   responses:
+    Conflict:
+      description: Operation replay or sequence conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
     NotFound:
       description: Resource was not found
       content:
@@ -166,6 +201,26 @@ components:
           $ref: '#/components/schemas/SaveMetadata'
         state:
           $ref: '#/components/schemas/SaveState'
+    MutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SaveSnapshotResponse'
+        - type: object
+          required: [operationId, sequence]
+          properties:
+            operationId:
+              type: string
+            sequence:
+              type: integer
+    ConflictError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        expectedSequence:
+          type: integer
+        actualSequence:
+          type: integer
     CreateSnapshotRequest:
       type: object
       required: [state]

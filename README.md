@@ -64,12 +64,15 @@ This project is built with:
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run smoke` | Run the smoke test (data wiring + reference integrity) |
+| `npm run smoke:deploy` | Verify deployment routing for SPA fallback, API passthrough, and static assets |
 | `npm run test:ui` | Run Playwright UI tests |
 | `npm run toolchain:check` | Validate Node/npm/devDependency matrix drift across root + mobile workspaces |
 
 ## How can I deploy this project?
 
 This project is configured for [Vercel](https://vercel.com) deployment. Import the repository in Vercel and it will be deployed automatically on every push to the main branch.
+
+Deployment routing behavior (SPA fallback + API prefix exemptions + static asset precedence) is documented in `docs/deployment-routing.md`. Run `npm run smoke:deploy` before rollout changes to route configuration.
 
 ## Contributor guidelines
 
@@ -81,3 +84,8 @@ See `docs/patch-scope-and-verification.md` for required verification commands, C
 - Never render enum constants or internal IDs directly in UI text (e.g. `AIR_RAID`, `teamId`, `QB`, raw status codes).
 - Use centralized mapping helpers from `src/lib/displayLabels.ts` for anything surfaced to users (schemes, playbooks, positions, and other domain enums).
 - If a new enum appears in UI, add its label mapping in `src/lib/displayLabels.ts` first, then use the helper in components.
+
+## Legacy tools
+
+- Historical Python calibration harness scripts are archived under `tools/legacy/`.
+- See `tools/legacy/README.md` for ownership, purpose, and usage constraints.

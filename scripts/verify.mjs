@@ -9,6 +9,7 @@ const BLOCKING_VERIFY_STEPS = [
   ["lint:changed", "--", "--base", baseRef],
   ["build"],
   ["smoke"],
+  ["check:repo-hygiene"],
   ["check:determinism"],
   ["test"],
   ["test:ui"],
