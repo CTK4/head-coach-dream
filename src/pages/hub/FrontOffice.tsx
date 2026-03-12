@@ -24,7 +24,7 @@ export default function FrontOffice() {
   const { state } = useGame();
   const teamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
   const team = getTeamById(String(teamId));
-  const { index: teamRatingsIndex } = useTeamRatings();
+  const { index: teamRatingsIndex, error: teamRatingsError } = useTeamRatings();
   const ownerConfidence = Number(state.ownerState?.approval ?? state.owner.approval ?? 50);
   const gmRelationship = Number(state.coach.gmRelationship ?? 50);
   const prestige = Math.round(Number(state.coach.reputation?.leaguePrestige ?? state.owner.approval ?? 55));
@@ -90,6 +90,9 @@ export default function FrontOffice() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20">
       <div className="mx-auto max-w-screen-sm space-y-3 px-4 pt-4 text-sm">
         <h1 className="text-xl font-bold">Front Office</h1>
+        {teamRatingsError ? (
+          <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200">{teamRatingsError}</div>
+        ) : null}
         <Card className="border-white/10 bg-[#13131A]">
           <CardHeader><CardTitle>Franchise Overview</CardTitle></CardHeader>
           <CardContent className="space-y-2">

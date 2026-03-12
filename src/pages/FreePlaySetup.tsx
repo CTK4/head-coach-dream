@@ -17,7 +17,7 @@ export default function FreePlaySetup() {
   const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => readSettings().difficultyPreset ?? "STANDARD");
   const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettings().realismPreset ?? "BALANCED");
   const navigate = useNavigate();
-  const { index: ratingsIndex } = useTeamRatings();
+  const { index: ratingsIndex, error: teamRatingsError } = useTeamRatings();
 
   const rows = useMemo(() => {
     const filtered = teams.filter((t) => `${t.region} ${t.name}`.toLowerCase().includes(query.toLowerCase()));
@@ -40,6 +40,11 @@ export default function FreePlaySetup() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+      {teamRatingsError ? (
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-sm text-amber-200">
+          {teamRatingsError}
+        </div>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         <Card>
           <CardContent className="space-y-2 p-4">
