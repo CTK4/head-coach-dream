@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23,7 +23,17 @@ type SaveSnapshot = {
   state: Record<string, unknown>;
 };
 
-type SaveDb = { snapshots: Record<string, SaveSnapshot> };
+type MutationRecord = {
+  operationId: string;
+  saveId: string;
+  sequence: number;
+  method: string;
+  path: string;
+  requestHash: string;
+  status: number;
+  responseBody: string;
+  createdAt: number;
+};
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DB_PATH = resolve(process.cwd(), process.env.API_DB_PATH ?? "apps/api/data/saves.json");
@@ -42,21 +52,28 @@ function json(body: unknown, status = 200): ResponseTuple {
   ];
 }
 
-type ResponseTuple = [number, Record<string, string>, string];
+function json(body: unknown, status = 200, headers: Record<string, string> = {}): ResponseTuple {
+  return [status, { "content-type": "application/json", ...headers }, JSON.stringify(body)];
+}
 
 async function loadDb(): Promise<SaveDb> {
   try {
-    const raw = await readFile(DB_PATH, "utf8");
+    const raw = await readFile(getDbPath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<SaveDb>;
-    return { snapshots: parsed.snapshots ?? {} };
+    return {
+      snapshots: parsed.snapshots ?? {},
+      sequenceBySaveId: parsed.sequenceBySaveId ?? {},
+      operationsById: parsed.operationsById ?? {},
+    };
   } catch {
-    return { snapshots: {} };
+    return { snapshots: {}, sequenceBySaveId: {}, operationsById: {} };
   }
 }
 
 async function persistDb(db: SaveDb): Promise<void> {
-  await mkdir(dirname(DB_PATH), { recursive: true });
-  await writeFile(DB_PATH, JSON.stringify(db, null, 2));
+  const dbPath = getDbPath();
+  await mkdir(dirname(dbPath), { recursive: true });
+  await writeFile(dbPath, JSON.stringify(db, null, 2));
 }
 
 function deriveMetadata(saveId: string, state: Record<string, unknown>): SaveMetadata {
@@ -123,10 +140,21 @@ export async function handle(
       return json({ error: "state must be an object" }, 400);
     }
     const saveId = payload.saveId ?? `career-${randomUUID()}`;
+    const mutation = parseMutationContext(req, pathname, bodyRaw || "{}", saveId);
+    if (!mutation) return json({ error: "missing_mutation_headers" }, 400);
+
+    const replay = validateAndReplayIfNeeded(db, mutation);
+    if (replay) return replay;
+
     const snapshot: SaveSnapshot = { saveId, metadata: deriveMetadata(saveId, payload.state), state: payload.state };
     db.snapshots[saveId] = snapshot;
+    const response = json({ ...snapshot, operationId: mutation.operationId, sequence: mutation.sequence }, 201, {
+      "x-operation-id": mutation.operationId,
+      "x-sequence-number": String(mutation.sequence),
+    });
+    recordMutation(db, mutation, response);
     await persistDb(db);
-    return json(snapshot, 201);
+    return response;
   }
 
   const snapshotMatch = pathname.match(/^\/api\/v1\/saves\/([^/]+)\/snapshot$/);
@@ -144,15 +172,34 @@ export async function handle(
       if (!payload.state || typeof payload.state !== "object" || Array.isArray(payload.state)) {
         return json({ error: "state must be an object" }, 400);
       }
+      const mutation = parseMutationContext(req, pathname, bodyRaw || "{}", saveId);
+      if (!mutation) return json({ error: "missing_mutation_headers" }, 400);
+      const replay = validateAndReplayIfNeeded(db, mutation);
+      if (replay) return replay;
+
       const snapshot: SaveSnapshot = { saveId, metadata: deriveMetadata(saveId, payload.state), state: payload.state };
       db.snapshots[saveId] = snapshot;
+      const response = json({ ...snapshot, operationId: mutation.operationId, sequence: mutation.sequence }, 200, {
+        "x-operation-id": mutation.operationId,
+        "x-sequence-number": String(mutation.sequence),
+      });
+      recordMutation(db, mutation, response);
       await persistDb(db);
-      return json(snapshot);
+      return response;
     }
 
     if (method === "DELETE") {
+      const mutation = parseMutationContext(req, pathname, bodyRaw || "{}", saveId);
+      if (!mutation) return json({ error: "missing_mutation_headers" }, 400);
+      const replay = validateAndReplayIfNeeded(db, mutation);
+      if (replay) return replay;
       if (!db.snapshots[saveId]) return json({ error: "save not found" }, 404);
       delete db.snapshots[saveId];
+      const response: ResponseTuple = [204, {
+        "x-operation-id": mutation.operationId,
+        "x-sequence-number": String(mutation.sequence),
+      }, ""];
+      recordMutation(db, mutation, response);
       await persistDb(db);
       return [204, { "x-api-version": API_VERSION, "x-contract-version": CONTRACT_VERSION }, ""];
     }

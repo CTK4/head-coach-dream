@@ -3,11 +3,13 @@ import { spawnSync } from "node:child_process";
 
 const baseRef = process.env.LINT_CHANGED_BASE || "origin/main";
 const BLOCKING_VERIFY_STEPS = [
+  ["toolchain:check"],
   ["typecheck"],
   ["test:lint:changed"],
   ["lint:changed", "--", "--base", baseRef],
   ["build"],
   ["smoke"],
+  ["check:repo-hygiene"],
   ["check:determinism"],
   ["test"],
   ["test:ui"],

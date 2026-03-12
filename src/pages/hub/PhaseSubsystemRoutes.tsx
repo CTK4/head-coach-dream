@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
-import { getUnifiedPhase, isInFranchiseActionWindow } from "@/engine/phaseUtils";
+import { canAccessFreeAgency, canAccessReSign, canAccessTrades, getHubQuickLinkAvailability } from "@/services/gameProgressionService";
 
 function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
   const { state, dispatch } = useGame();
@@ -132,9 +132,7 @@ function FaTransactions() {
 
 export function FreeAgencyRoutes() {
   const { state } = useGame();
-  const phase = getUnifiedPhase(state);
-  const canAccessFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
-  if (!canAccessFreeAgency) return <Navigate to="/hub" replace />;
+  if (!canAccessFreeAgency(state)) return <Navigate to="/hub" replace />;
   return (
     <>
       <Routes>
@@ -151,8 +149,7 @@ export function FreeAgencyRoutes() {
 
 export function ReSignRoutes() {
   const { state } = useGame();
-  const canAccessReSign = state.careerStage === "RESIGN" || state.offseason?.stepId === "RESIGNING";
-  if (!canAccessReSign) return <Navigate to="/hub" replace />;
+  if (!canAccessReSign(state)) return <Navigate to="/hub" replace />;
   return (
     <>
       <Routes>
@@ -167,7 +164,7 @@ export function ReSignRoutes() {
 
 export function TradesRoutes() {
   const { state } = useGame();
-  if (!isInFranchiseActionWindow(getUnifiedPhase(state), "trade")) return <Navigate to="/hub" replace />;
+  if (!canAccessTrades(state)) return <Navigate to="/hub" replace />;
   return (
     <Routes>
       <Route index element={<Navigate to="block" replace />} />
@@ -185,9 +182,7 @@ export function ProspectProfileScreen() {
 
 export function HubPhaseQuickLinks() {
   const { state } = useGame();
-  const phase = getUnifiedPhase(state);
-  const isFreeAgency = isInFranchiseActionWindow(phase, "free-agency") || state.offseason?.stepId === "FREE_AGENCY";
-  const isTradeWindow = isInFranchiseActionWindow(phase, "trade");
+  const { freeAgency: isFreeAgency, trades: isTradeWindow } = getHubQuickLinkAvailability(state);
   return (
     <div className="grid grid-cols-3 gap-2 text-xs">
       {isFreeAgency ? <Link to="/free-agency" className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2">Free Agency</Link> : null}

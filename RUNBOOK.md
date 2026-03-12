@@ -57,6 +57,10 @@ Core web mode is still local-only persistence by default, with an optional API m
   ```bash
   npm run lint
   ```
+- Repo hygiene check (top-level executable docs coverage):
+  ```bash
+  npm run check:repo-hygiene
+  ```
 
 ## Smoke-Test Checklist (manual)
 1. Start app (`npm run dev`) and open `/`.
@@ -70,3 +74,7 @@ Core web mode is still local-only persistence by default, with an optional API m
 ## Known Limitations
 - In this execution environment, `npm ci` was blocked by upstream registry policy (`403`), so full `lint/typecheck/vitest/build` verification could not be executed end-to-end here.
 - API support now exists in `apps/api` for versioned health/metadata/snapshot CRUD; web remains local-first unless feature-flagged.
+
+## Legacy tooling
+- Archived Python calibration harness scripts live under `tools/legacy/`.
+- Usage and constraints are documented in `tools/legacy/README.md`.
