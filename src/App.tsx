@@ -1,8 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import HallOfFame from "@/pages/hub/HallOfFame";
-import LeagueHistory from "@/pages/hub/LeagueHistory";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense, lazy, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
@@ -10,70 +8,99 @@ import { GameProvider, useGame, type GameState } from "@/context/GameContext";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
 import { logError } from "@/lib/logger";
-import CreateCoach from "./pages/CreateCoach";
-import ChooseBackground from "./pages/ChooseBackground";
-import Offers from "./pages/Offers";
-import CoordinatorHiring from "./pages/CoordinatorHiring";
-import Hub from "./pages/Hub";
-import NotFound from "./pages/NotFound";
+// Keep layout primitives and always-needed components eager
 import { AppShell } from "@/components/layout/AppShell";
-import StaffRoutes from "@/pages/hub/StaffRoutes";
-import RosterRoutes from "@/pages/hub/RosterRoutes";
-import ContractsRoutes from "@/pages/hub/ContractsRoutes";
-import StrategyRoutes from "@/pages/hub/StrategyRoutes";
-import LeagueNews from "./pages/hub/LeagueNews";
-import SettingsPage from "./pages/hub/Settings";
-import OffseasonRoutes from "@/pages/hub/offseason/OffseasonRoutes";
-import ScoutingLayout from "@/pages/hub/scouting/ScoutingLayout";
-import ScoutingHome from "@/pages/hub/scouting/ScoutingHome";
-import BigBoard from "@/pages/hub/scouting/BigBoard";
-import ScoutingCombine from "@/pages/hub/scouting/ScoutingCombine";
-import PrivateWorkouts from "@/pages/hub/scouting/PrivateWorkouts";
-import ScoutingInterviews from "@/pages/hub/scouting/ScoutingInterviews";
-import MedicalBoard from "@/pages/hub/scouting/MedicalBoard";
-import ScoutAllocation from "@/pages/hub/scouting/ScoutAllocation";
-import InSeasonScouting from "@/pages/hub/scouting/InSeasonScouting";
-import { FreeAgencyRoutes, ProspectProfileScreen, ReSignRoutes, TradesRoutes } from "@/pages/hub/PhaseSubsystemRoutes";
-import DraftResults from "@/pages/hub/DraftResults";
-import FreeAgencyRecap from "@/pages/hub/FreeAgencyRecap";
-import PreseasonWeek from "./pages/hub/PreseasonWeek";
-import RegularSeason from "./pages/hub/RegularSeason";
-import Playcall from "./pages/Playcall";
-import TradesPage from "./pages/hub/Trades";
-import ReSignPage from "./pages/hub/ReSign";
-import CapBaseline from "./pages/hub/CapBaseline";
-import SkillTree from "@/pages/SkillTree";
-import StatsPage from "./pages/hub/Stats";
-import TeamStrategy from "./pages/hub/TeamStrategy";
-import OwnerRelations from "./pages/hub/OwnerRelations";
-import ActivityLog from "./pages/hub/ActivityLog";
-import PressFeedbackDemo from "./pages/PressFeedbackDemo";
-import FrontOffice from "@/pages/hub/FrontOffice";
-import FiringMeter from "@/pages/hub/FiringMeter";
-import PowerRankings from "@/pages/hub/PowerRankings";
-import CoachOfficeRoutes from "@/pages/hub/CoachOfficeRoutes";
 import OfferResultModalHost from "@/components/feedback/OfferResultModalHost";
-import Landing from "@/pages/Landing";
-import LoadSave from "@/pages/LoadSave";
-import SaveModeSelect from "@/pages/SaveModeSelect";
-import StoryInterview from "@/pages/story/StoryInterview";
-import FiredScreen from "@/pages/FiredScreen";
-import FreePlaySetup from "@/pages/FreePlaySetup";
-import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES } from "@/routes/appRoutes";
 import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
 import { getUserTeamId } from "@/lib/userTeam";
-import PlayoffsPage from "@/pages/hub/Playoffs";
-import GameplanPage from "@/pages/hub/Gameplan";
-import PlayoffBracketPage from "@/pages/hub/PlayoffBracket";
-import PlayoffGamePage from "@/pages/hub/PlayoffGame";
-import GameDetails from "@/pages/hub/schedule/GameDetails";
-import TeamSchedule from "@/pages/hub/schedule/TeamSchedule";
-import WeekSlate from "@/pages/hub/schedule/WeekSlate";
-import ScheduleHome from "@/pages/hub/schedule/ScheduleHome";
-import AnalyticsPage from "@/pages/hub/Analytics";
+import NotFound from "./pages/NotFound";
+import Landing from "@/pages/Landing";
 import RecoveryModePage from "@/pages/RecoveryModePage";
+import StoryErrorScreen from "@/pages/story/StoryErrorScreen";
+
+// ---------------------------------------------------------------------------
+// Lazy-loaded page chunks — split by feature area for optimal caching.
+// Each lazy() call becomes a separate JS chunk in the build output.
+// ---------------------------------------------------------------------------
+
+// Onboarding flow (only used once per save; safe to load on-demand)
+const CreateCoach = lazy(() => import("./pages/CreateCoach"));
+const ChooseBackground = lazy(() => import("./pages/ChooseBackground"));
+const Offers = lazy(() => import("./pages/Offers"));
+const CoordinatorHiring = lazy(() => import("./pages/CoordinatorHiring"));
+
+// Pre-hub flows
+const LoadSave = lazy(() => import("@/pages/LoadSave"));
+const SaveModeSelect = lazy(() => import("@/pages/SaveModeSelect"));
+const StoryInterview = lazy(() => import("@/pages/story/StoryInterview"));
+const FreePlaySetup = lazy(() => import("@/pages/FreePlaySetup"));
+const FiredScreen = lazy(() => import("@/pages/FiredScreen"));
+
+// Hub main
+const Hub = lazy(() => import("./pages/Hub"));
+
+// Hub route groups (large feature sub-trees)
+const StaffRoutes = lazy(() => import("@/pages/hub/StaffRoutes"));
+const RosterRoutes = lazy(() => import("@/pages/hub/RosterRoutes"));
+const ContractsRoutes = lazy(() => import("@/pages/hub/ContractsRoutes"));
+const StrategyRoutes = lazy(() => import("@/pages/hub/StrategyRoutes"));
+const OffseasonRoutes = lazy(() => import("@/pages/hub/offseason/OffseasonRoutes"));
+const CoachOfficeRoutes = lazy(() => import("@/pages/hub/CoachOfficeRoutes"));
+const FreeAgencyRoutes = lazy(() => import("@/pages/hub/PhaseSubsystemRoutes").then((m) => ({ default: m.FreeAgencyRoutes })));
+const ReSignRoutes = lazy(() => import("@/pages/hub/PhaseSubsystemRoutes").then((m) => ({ default: m.ReSignRoutes })));
+const TradesRoutes = lazy(() => import("@/pages/hub/PhaseSubsystemRoutes").then((m) => ({ default: m.TradesRoutes })));
+const ProspectProfileScreen = lazy(() => import("@/pages/hub/PhaseSubsystemRoutes").then((m) => ({ default: m.ProspectProfileScreen })));
+
+// Scouting sub-tree
+const ScoutingLayout = lazy(() => import("@/pages/hub/scouting/ScoutingLayout"));
+const ScoutingHome = lazy(() => import("@/pages/hub/scouting/ScoutingHome"));
+const BigBoard = lazy(() => import("@/pages/hub/scouting/BigBoard"));
+const ScoutingCombine = lazy(() => import("@/pages/hub/scouting/ScoutingCombine"));
+const PrivateWorkouts = lazy(() => import("@/pages/hub/scouting/PrivateWorkouts"));
+const ScoutingInterviews = lazy(() => import("@/pages/hub/scouting/ScoutingInterviews"));
+const MedicalBoard = lazy(() => import("@/pages/hub/scouting/MedicalBoard"));
+const ScoutAllocation = lazy(() => import("@/pages/hub/scouting/ScoutAllocation"));
+const InSeasonScouting = lazy(() => import("@/pages/hub/scouting/InSeasonScouting"));
+
+// Gameplay (heaviest runtime pages)
+const Playcall = lazy(() => import("./pages/Playcall"));
+const RegularSeason = lazy(() => import("./pages/hub/RegularSeason"));
+const PreseasonWeek = lazy(() => import("./pages/hub/PreseasonWeek"));
+const GameplanPage = lazy(() => import("@/pages/hub/Gameplan"));
+const PlayoffsPage = lazy(() => import("@/pages/hub/Playoffs"));
+const PlayoffBracketPage = lazy(() => import("@/pages/hub/PlayoffBracket"));
+const PlayoffGamePage = lazy(() => import("@/pages/hub/PlayoffGame"));
+
+// Schedule pages
+const ScheduleHome = lazy(() => import("@/pages/hub/schedule/ScheduleHome"));
+const WeekSlate = lazy(() => import("@/pages/hub/schedule/WeekSlate"));
+const TeamSchedule = lazy(() => import("@/pages/hub/schedule/TeamSchedule"));
+const GameDetails = lazy(() => import("@/pages/hub/schedule/GameDetails"));
+
+// Transactions & contracts
+const TradesPage = lazy(() => import("./pages/hub/Trades"));
+const ReSignPage = lazy(() => import("./pages/hub/ReSign"));
+const CapBaseline = lazy(() => import("./pages/hub/CapBaseline"));
+const DraftResults = lazy(() => import("@/pages/hub/DraftResults"));
+const FreeAgencyRecap = lazy(() => import("@/pages/hub/FreeAgencyRecap"));
+
+// Informational / infrequent hub pages
+const LeagueNews = lazy(() => import("./pages/hub/LeagueNews"));
+const SettingsPage = lazy(() => import("./pages/hub/Settings"));
+const StatsPage = lazy(() => import("./pages/hub/Stats"));
+const TeamStrategy = lazy(() => import("./pages/hub/TeamStrategy"));
+const OwnerRelations = lazy(() => import("./pages/hub/OwnerRelations"));
+const ActivityLog = lazy(() => import("./pages/hub/ActivityLog"));
+const FrontOffice = lazy(() => import("@/pages/hub/FrontOffice"));
+const FiringMeter = lazy(() => import("@/pages/hub/FiringMeter"));
+const PowerRankings = lazy(() => import("@/pages/hub/PowerRankings"));
+const AnalyticsPage = lazy(() => import("@/pages/hub/Analytics"));
+const HallOfFame = lazy(() => import("@/pages/hub/HallOfFame"));
+const LeagueHistory = lazy(() => import("@/pages/hub/LeagueHistory"));
+const SkillTree = lazy(() => import("@/pages/SkillTree"));
+const PressFeedbackDemo = lazy(() => import("./pages/PressFeedbackDemo"));
 
 const queryClient = new QueryClient();
 const shouldEnableDevPanel = DEV_TOOLS_ENABLED;
@@ -180,6 +207,7 @@ function AppRoutes() {
   return <ErrorBoundary onExportDebugBundle={handleExportDebugBundle} onResetToMainMenu={handleResetToMainMenu} onError={(error, errorInfo) => logError("ui.app_routes.crash", { phase: state.phase, saveId: getActiveSaveMetadata()?.saveId, season: state.season, week: state.week, meta: { message: error.message, stack: errorInfo.componentStack?.slice(0, 1000) } })}>
     <BrowserRouter>
       {DevPanel ? <Suspense fallback={null}><DevPanel /></Suspense> : null}
+      <Suspense fallback={null}>
       <Routes>
         <Route path="/onboarding" element={<OnboardingRouteGuard><PhaseGate requiredPhase={["CREATE"]}><CreateCoach /></PhaseGate></OnboardingRouteGuard>} />
         <Route path="/onboarding/background" element={<PhaseGate requiredPhase={["BACKGROUND"]}><ChooseBackground /></PhaseGate>} />
@@ -204,6 +232,7 @@ function AppRoutes() {
         <Route path="/press-feedback-demo" element={<PressFeedbackDemo />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   </ErrorBoundary>;
 }
