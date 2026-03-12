@@ -10,12 +10,16 @@ This is a dedicated Capacitor workspace for building the Head Coach Dream web ap
 
 ## Quick Start
 
+Toolchain support is unified with the root workspace. See `../docs/toolchain-version-matrix.md`.
+
+
 ### Prerequisites
 
 **macOS Only** (required for iOS development):
 - Xcode 15+ with Command Line Tools
 - CocoaPods: `sudo gem install cocoapods`
-- Node.js 18+
+- Node.js `>=22.17.0 <23`
+- npm `>=10.9.2 <11`
 
 ### Development Workflow
 
@@ -86,6 +90,7 @@ mobile/
 | `cap:run:ios` | Build and run on simulator |
 | `ios:dev` | Full dev workflow (build + sync + open) |
 | `ios:build` | Full production build workflow |
+| `toolchain:check` | Validate root/mobile Node/npm/devDependency drift policy |
 
 ## Configuration
 
