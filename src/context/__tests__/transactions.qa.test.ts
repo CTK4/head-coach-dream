@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { gameReducer, migrateSave, type GameState } from "@/context/GameContext";
+import { gameReducer, migrateSave, tradeCapDelta, type GameState } from "@/context/GameContext";
 import { getContractById, getPersonnel, getPersonnelById, getPlayersByTeam, getTeamById, upsertContract } from "@/data/leagueDb";
 import { computeTeamGameRatings } from "@/engine/game/teamRatings";
 import { getEffectiveFreeAgents, getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
@@ -83,13 +83,22 @@ describe("transactions QA closure", () => {
     const userTeamId = String(base.acceptedOffer?.teamId ?? "");
     const destinationTeamId = "ATLANTA_APEX";
     const tradePlayer = getEffectivePlayersByTeam(base, userTeamId)
+      .filter((p: any) => !!getContractById(String(p.contractId ?? "")))
       .filter((p: any) => String(p.pos ?? "").toUpperCase().startsWith("QB"))
+      .filter((p: any) => Number(base.finances.capSpace ?? 0) + tradeCapDelta(base, userTeamId, String(p.playerId), destinationTeamId) >= 0)
       .sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0))[0];
 
     expect(tradePlayer).toBeTruthy();
-    const before = computeTeamGameRatings(base, destinationTeamId);
 
-    const next = gameReducer(base, {
+    const baseWithOpenTradeWindow: GameState = {
+      ...base,
+      careerStage: "REGULAR_SEASON",
+      week: 1,
+      league: { ...base.league, week: 1, tradeDeadlineWeek: 8 },
+    };
+    const before = computeTeamGameRatings(baseWithOpenTradeWindow, destinationTeamId);
+
+    const next = gameReducer(baseWithOpenTradeWindow, {
       type: "TRADE_ACCEPT",
       payload: { playerId: String(tradePlayer.playerId), toTeamId: destinationTeamId, valueTier: "MID" },
     });
