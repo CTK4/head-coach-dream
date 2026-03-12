@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useReducer } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react";
 import type { Injury } from "@/engine/injuryTypes";
 import draftClassJson from "@/data/draftClass.json";
 import { doesProspectExist, getDraftClassRows, getProspectById } from "@/data/draftClass";
@@ -28,8 +28,7 @@ import { expectedSalary, offerQualityScore, offerSalary } from "@/engine/staffSa
 import { isOfferAccepted } from "@/engine/coachAcceptance";
 import { applyFlagsToContext } from "@/engine/perkEngine";
 import { getPerkHiringModifier, getPerkFaInterestModifier } from "@/engine/perkWiring";
-import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PendingOffensiveCall } from "@/engine/gameSim";
-import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PlaySelectionFn } from "@/engine/gameSim";
+import { initGameSim, stepPlay, autoPickPlay, buildGameBoxScore, type GameSim, type PlayType, type AggressionLevel, type TempoMode, type Possession, type PendingOffensiveCall, type PlaySelectionFn } from "@/engine/gameSim";
 import type { DefensiveCall } from "@/engine/defense/defensiveCalls";
 import { buildPercentiles, upsertSeasonPercentiles, type TelemetryPercentilesBySeason } from "@/engine/telemetry/percentiles";
 import { buildGameAggFromPlayLog } from "@/engine/telemetry/aggregateGame";
@@ -9848,7 +9847,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return { week, matchup: getTeamMatchup(weekSchedule, teamId) };
   };
 
-  return <GameContext.Provider value={{ state, dispatch, getCurrentTeamMatchup }}>{children}</GameContext.Provider>;
+  const contextValue = useMemo(
+    () => ({ state, dispatch, getCurrentTeamMatchup }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state]
+  );
+
+  return <GameContext.Provider value={contextValue}>{children}</GameContext.Provider>;
 }
 
 export function useGame() {

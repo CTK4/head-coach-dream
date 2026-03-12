@@ -42,11 +42,24 @@ export class StateMachine {
     const raw = state?.phase ?? state?.careerStage ?? state?.seasonPhase ?? state?.hubPhase ?? "UNKNOWN";
     const p = upper(raw);
 
-    if (p.includes("RETENTION") || p.includes("RESIGN") || p.includes("PHASE_2_RETENTION")) return PhaseKeyEnum.PHASE_2_RETENTION;
-    if (p.includes("COMBINE"))                                                               return PhaseKeyEnum.PHASE_3_COMBINE;
-    if (p.includes("FREE_AGENCY") || p.includes("TAMPERING"))                               return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
-    if (p.includes("DRAFT"))                                                                 return PhaseKeyEnum.DRAFT;
-    if (p.includes("REGULAR") || p.includes("WEEK"))                                        return PhaseKeyEnum.REGULAR_SEASON_WEEK;
+    // Exact enum matches first — covers all modern (post-migration) saves and
+    // eliminates false-positive substring matches if new phases are added later.
+    switch (p) {
+      case PhaseKeyEnum.PHASE_2_RETENTION: return PhaseKeyEnum.PHASE_2_RETENTION;
+      case PhaseKeyEnum.PHASE_3_COMBINE:   return PhaseKeyEnum.PHASE_3_COMBINE;
+      case PhaseKeyEnum.PHASE_4_FREE_AGENCY: return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
+      case PhaseKeyEnum.DRAFT:             return PhaseKeyEnum.DRAFT;
+      case PhaseKeyEnum.REGULAR_SEASON_WEEK: return PhaseKeyEnum.REGULAR_SEASON_WEEK;
+    }
+
+    // Substring fallback for legacy save shapes that predate the canonical
+    // `phase` field. These patterns intentionally remain broad to cover the
+    // varied legacy formats that existed before schema v1.
+    if (p.includes("RETENTION") || p.includes("RESIGN")) return PhaseKeyEnum.PHASE_2_RETENTION;
+    if (p.includes("COMBINE"))                            return PhaseKeyEnum.PHASE_3_COMBINE;
+    if (p.includes("FREE_AGENCY") || p.includes("TAMPERING")) return PhaseKeyEnum.PHASE_4_FREE_AGENCY;
+    if (p === "PRE_DRAFT" || p.includes("DRAFT"))         return PhaseKeyEnum.DRAFT;
+    if (p.includes("REGULAR") || p.includes("WEEK"))      return PhaseKeyEnum.REGULAR_SEASON_WEEK;
     return PhaseKeyEnum.UNKNOWN;
   }
 
