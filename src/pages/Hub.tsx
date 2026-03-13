@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { HubMissionControl } from "@/components/hub/HubMissionControl";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
@@ -107,26 +108,7 @@ export default function Hub() {
       <div className={`relative z-10 mx-auto max-w-7xl space-y-6 p-4 md:p-6 ${HUB_FRAME}`}>
         <FranchiseHeader />
 
-        <div className="grid grid-cols-2 gap-3 md:gap-4">
-          {optionalTiles.map((tile) => (
-            <div key={`${tile.id}-${tile.to}`} data-test={tile.dataTest}>
-              <HubTile {...tile} />
-            </div>
-          ))}
-          {optionalTiles.length % 2 !== 0 ? <div aria-hidden="true" /> : null}
-          {mainTiles.map((tile) => (
-            <HubTile key={`${tile.id}-${tile.to}`} {...tile} />
-          ))}
-        </div>
-
-        <HubPhaseQuickLinks />
-
-        <Button
-          onClick={onAdvanceClick}
-          className="w-full border border-blue-500/30 bg-gradient-to-r from-blue-900 to-slate-900 py-6 text-lg font-bold tracking-widest shadow-lg transition-all hover:from-blue-800 hover:to-slate-800"
-        >
-          {advanceText}
-        </Button>
+        <HubMissionControl />
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
