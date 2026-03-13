@@ -2,6 +2,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { deleteSave, exportSave, importSave, listSaves, loadSaveResult } from "@/lib/saveManager";
 import { toDisplayLabel } from "@/lib/displayLabels";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
@@ -41,6 +42,7 @@ export default function LoadSave() {
     if (!quickSaveId) return;
     const loaded = loadSaveResult(quickSaveId);
     if (loaded.ok) {
+      setError(null);
       window.location.href = "/hub";
       return;
     }
@@ -105,7 +107,21 @@ export default function LoadSave() {
           <Button variant="secondary" disabled>Import (use Files app)</Button>
         )}
       </div>
-      {error ? <Card><CardContent className="p-4 text-sm text-red-300">{error} You can delete the affected save and import a backup.</CardContent></Card> : null}
+      {error ? (
+        <Alert variant="destructive" className="sticky top-16 z-10 relative border-red-500/40 bg-red-950/30 text-red-300">
+          <AlertDescription className="pr-10">{error} You can delete the affected save and import a backup.</AlertDescription>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute top-2 right-2"
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+          >
+            X
+          </Button>
+        </Alert>
+      ) : null}
       {!saves.length ? (
         <Card><CardContent className="p-6">No saves found. Start a new game. <Button className="ml-2" onClick={() => navigate('/new-save')}>New Save</Button></CardContent></Card>
       ) : saves.map((save) => (

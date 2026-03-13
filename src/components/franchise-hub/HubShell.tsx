@@ -87,12 +87,14 @@ function TeamLogo({
   teamName,
   pathname,
   alt,
+  abbreviation,
 }: {
   logoKey?: string;
   teamId?: string;
   teamName?: string;
   pathname?: string;
   alt: string;
+  abbreviation?: string;
 }) {
   const [attemptIndex, setAttemptIndex] = useState(0);
 
@@ -128,8 +130,16 @@ function TeamLogo({
           `expected files (place in public/icons):\n${expected}`
       );
     }
+    const fallbackAbbreviation = (abbreviation ?? teamName ?? "TEAM").slice(0, 4).toUpperCase();
+    const size = 40;
     return (
-      <div className="h-10 w-10 rounded-sm border border-slate-300/15 bg-slate-950/30" aria-label="Team logo placeholder" />
+      <div
+        className="flex items-center justify-center rounded-md bg-slate-800 border border-white/10 text-amber-300 font-black tracking-wide"
+        style={{ width: size, height: size, fontSize: size * 0.35 }}
+        aria-label="Team logo placeholder"
+      >
+        {fallbackAbbreviation}
+      </div>
     );
   }
 
@@ -280,6 +290,7 @@ export function HubShell({
               teamName={teamName}
               pathname={location?.pathname}
               alt={`${teamName ?? "Team"} logo`}
+              abbreviation={team?.abbrev}
             />
             <h1 className="text-center text-2xl font-black tracking-[0.12em] text-slate-100">{title}</h1>
             <div className={`text-2xl font-bold ${HUB_TEXT_GOLD}`}>{state.season}</div>
