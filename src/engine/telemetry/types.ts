@@ -1,5 +1,6 @@
 import type { PlayType, Possession } from "@/engine/gameSim";
 import type { GameType } from "@/engine/schedule";
+import type { PlayAssignmentLog } from "@/engine/assignments/types";
 
 export type PlayEventV1Minimal = {
   version: 1;
@@ -53,6 +54,7 @@ export type PassResolverDiagV1 = {
 
 export type PlayEventV1Expanded = PlayEventV1Minimal & {
   passDiag?: PassResolverDiagV1;
+  assignmentLog?: PlayAssignmentLog;
 };
 
 export type TeamGameAggV1 = {
