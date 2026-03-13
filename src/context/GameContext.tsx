@@ -3163,7 +3163,7 @@ function applyOffseasonAgingAndRetirement(state: GameState): GameState {
   const retirementNews = generateRetirementNews(retirees as any[], {
     week: 0,
     season: Number(state.season),
-    userTeamId: String(state.acceptedOffer?.teamId ?? ""),
+    userTeamId: String(state.userTeamId ?? state.acceptedOffer?.teamId ?? ""),
   });
 
   return {
@@ -8112,7 +8112,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
     }
 
     case "DRAFT_INIT": {
-      const userTeamId = String(state.acceptedOffer?.teamId ?? "MILWAUKEE_NORTHSHORE");
+      const userTeamId = String(state.userTeamId ?? state.acceptedOffer?.teamId);
       const season = state.season;
       const sim = initDraftSim({ saveSeed: state.saveSeed, season, userTeamId });
       const pool = state.upcomingDraftClass?.length ? state.upcomingDraftClass : generateDraftClass({ year: season, count: 224, leagueSeed: state.saveSeed, saveSlotId: Number(getActiveSaveId() ?? 0) || 0 });

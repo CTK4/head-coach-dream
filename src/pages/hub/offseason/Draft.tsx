@@ -7,7 +7,7 @@ import { getPositionLabel } from "@/lib/displayLabels";
 import { normalizeProspectPosition } from "@/lib/prospectPosition";
 import { hashSeed, mulberry32 } from "@/engine/rng";
 
-type DraftTab = "RESULTS" | "POOL" | "MY_PICKS";
+type DraftTab = "ROOM" | "RESULTS" | "POOL" | "MY_PICKS";
 
 function clampDelay(value: number): number {
   if (Number.isNaN(value)) return 800;
@@ -31,10 +31,11 @@ function getDeterministicCpuDelayMs(params: {
 
 export default function Draft() {
   const { state, dispatch } = useGame();
-  const [tab, setTab] = useState<DraftTab>("POOL");
+  const [tab, setTab] = useState<DraftTab>("RESULTS");
   const [pos, setPos] = useState("ALL");
   const [cpuDelayMinMs, setCpuDelayMinMs] = useState(800);
   const [cpuDelayMaxMs, setCpuDelayMaxMs] = useState(1500);
+  const [fastForward, setFastForward] = useState(false);
   const resultsEndRef = useRef<HTMLDivElement | null>(null);
 
   const sim = state.draft;
@@ -45,11 +46,18 @@ export default function Draft() {
   const onClock = !!currentSlot && currentSlot.teamId === sim.userTeamId;
 
   useEffect(() => {
+    // Keep the experience board-driven: show results while CPU is picking; jump to the pool when it's your turn.
+    if (onClock) setTab("POOL");
+  }, [onClock]);
+
+  useEffect(() => {
     if (!sim.started) dispatch({ type: "DRAFT_INIT" });
   }, [dispatch, sim.started]);
 
   useEffect(() => {
+    if (fastForward) return;
     if (!sim.started || sim.complete || onClock) return;
+    if (tab !== "RESULTS" && tab !== "ROOM") return;
 
     const delay = getDeterministicCpuDelayMs({
       minDelayMs: cpuDelayMinMs,
@@ -70,13 +78,29 @@ export default function Draft() {
     cpuDelayMaxMs,
     cpuDelayMinMs,
     dispatch,
+    fastForward,
     onClock,
     sim.complete,
     sim.cursor,
     sim.started,
     state.saveSeed,
     state.season,
+    tab,
   ]);
+
+  useEffect(() => {
+    if (!fastForward) return;
+    if (!sim.started || sim.complete || onClock) {
+      setFastForward(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      dispatch({ type: "DRAFT_CPU_ADVANCE" });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [dispatch, fastForward, onClock, sim.complete, sim.started]);
 
   const available = useMemo(() => {
     let list = sim.prospectPool.filter((p) => !sim.takenProspectIds[p.prospectId]);
@@ -167,13 +191,30 @@ export default function Draft() {
               }
             />
           </div>
-          <div className="text-right text-sm">
-            <div className="font-semibold">{sim.complete ? "Draft complete" : onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div>
-            {currentSlot && !sim.complete && (
-              <div className="text-xs text-slate-500">
-                Round {currentSlot.round}, Pick {currentSlot.pickInRound} · Overall {currentSlot.overall}
-              </div>
-            )}
+          <div className="text-right text-sm space-y-2">
+            <div>
+              <div className="font-semibold">{sim.complete ? "Draft complete" : onClock ? "YOU ARE ON THE CLOCK" : "CPU SIMULATING"}</div>
+              {currentSlot && !sim.complete && (
+                <div className="text-xs text-slate-500">
+                  Round {currentSlot.round}, Pick {currentSlot.pickInRound} · Overall {currentSlot.overall}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              {!onClock && !sim.complete && (
+                <button
+                  className="min-h-11 rounded border px-3 py-1 text-xs"
+                  onClick={() => setFastForward(true)}
+                >
+                  Sim to My Pick
+                </button>
+              )}
+              {fastForward && (
+                <button className="min-h-11 rounded border px-3 py-1 text-xs" onClick={() => setFastForward(false)}>
+                  Pause
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="rounded border p-3 space-y-2">
@@ -206,8 +247,9 @@ export default function Draft() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 rounded border bg-slate-50 p-1">
+      <div className="grid grid-cols-4 gap-2 rounded border bg-slate-50 p-1">
         {[
+          { key: "ROOM", label: "Draft Room" },
           { key: "RESULTS", label: "Draft Results" },
           { key: "POOL", label: "Player Pool" },
           { key: "MY_PICKS", label: "My Picks" },
@@ -225,7 +267,7 @@ export default function Draft() {
         })}
       </div>
 
-      {tab === "POOL" && (
+      {(tab === "POOL" || tab === "ROOM") && (
         <section className="space-y-3">
           <div className="overflow-x-auto pb-1">
             <div className="flex min-w-max gap-2">
@@ -277,7 +319,7 @@ export default function Draft() {
         </section>
       )}
 
-      {tab === "RESULTS" && (
+      {(tab === "RESULTS" || tab === "ROOM") && (
         <section className="space-y-2">
           <div className="text-sm text-slate-500">Chronological pick feed</div>
           <div className="max-h-[60vh] overflow-y-auto space-y-2 border rounded p-2">
