@@ -1,10 +1,15 @@
 import { DEFAULT_SIM_TUNING, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
+import { loadCapacitorPreferences } from "@/lib/capacitorRuntime";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
-import { Preferences } from "@capacitor/preferences";
 
 export const SETTINGS_KEY = "hcd:settings";
 
 export type OffensePlaycallingMode = "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
+
+type PreferencesApi = {
+  get(options: { key: string }): Promise<{ value: string | null }>;
+  set(options: { key: string; value: string }): Promise<void>;
+};
 
 export type UserSettings = {
   simSpeed?: "SLOW" | "NORMAL" | "FAST";
@@ -29,11 +34,13 @@ const DEFAULT_SETTINGS: Required<Pick<UserSettings, "confirmAutoAdvance" | "show
   offensePlaycallingMode: "FULL_AUTO",
 };
 
-async function getNativeStorage() {
+async function getNativeStorage(): Promise<PreferencesApi | null> {
   if (!isCapacitorIosEnvironment()) {
     return null;
   }
-  return Preferences;
+  const module = await loadCapacitorPreferences();
+  const preferences = module?.Preferences as PreferencesApi | undefined;
+  return preferences ?? null;
 }
 
 export async function readSettings(): Promise<UserSettings> {

@@ -4,16 +4,32 @@
  * Marks migration complete in Preferences; does NOT delete localStorage.
  */
 
-import { Preferences } from "@capacitor/preferences";
+import { loadCapacitorPreferences } from "@/lib/capacitorRuntime";
 import { logInfo, logWarn } from "@/lib/logger";
 import type { SaveStoreApi } from "@/lib/native/saveStore";
 
 const MIGRATION_MARKER_KEY = "hc_native_migration_complete_v1";
 
+type PreferencesApi = {
+  get(options: { key: string }): Promise<{ value: string | null }>;
+  set(options: { key: string; value: string }): Promise<void>;
+};
+
+async function getPreferences(): Promise<PreferencesApi | null> {
+  const module = await loadCapacitorPreferences();
+  const preferences = module?.Preferences as PreferencesApi | undefined;
+  return preferences ?? null;
+}
+
 export async function performNativeMigrationIfNeeded(nativeStore: SaveStoreApi): Promise<void> {
   try {
+    const preferences = await getPreferences();
+    if (!preferences) {
+      return;
+    }
+
     // Check if already migrated
-    const marker = await Preferences.get({ key: MIGRATION_MARKER_KEY });
+    const marker = await preferences.get({ key: MIGRATION_MARKER_KEY });
     if (marker.value) {
       logInfo("native.migration.already_done", {});
       return;
@@ -36,7 +52,7 @@ export async function performNativeMigrationIfNeeded(nativeStore: SaveStoreApi):
 
     if (localStorageData.size === 0) {
       logInfo("native.migration.no_saves_found", {});
-      await Preferences.set({
+      await preferences.set({
         key: MIGRATION_MARKER_KEY,
         value: JSON.stringify({ migratedAt: Date.now(), count: 0 }),
       });
@@ -47,7 +63,7 @@ export async function performNativeMigrationIfNeeded(nativeStore: SaveStoreApi):
     await nativeStore.migrate(localStorageData);
 
     // Mark migration complete
-    await Preferences.set({
+    await preferences.set({
       key: MIGRATION_MARKER_KEY,
       value: JSON.stringify({ migratedAt: Date.now(), count: localStorageData.size }),
     });

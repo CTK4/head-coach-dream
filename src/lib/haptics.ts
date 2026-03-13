@@ -1,11 +1,26 @@
+import { loadCapacitorHaptics, loadCapacitorPreferences } from "@/lib/capacitorRuntime";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
-import { Preferences } from "@capacitor/preferences";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 const HAPTICS_STORAGE_KEY = "hapticsEnabled";
 let lastGestureId: number | null = null;
 let lastTriggeredAt = 0;
 let hapticsEnabledCache: boolean | null = null;
+
+type PreferencesApi = {
+  get(options: { key: string }): Promise<{ value: string | null }>;
+  set(options: { key: string; value: string }): Promise<void>;
+};
+
+type HapticsApi = {
+  impact(options: { style: string }): Promise<void>;
+};
+
+type HapticsModule = {
+  Haptics?: HapticsApi;
+  ImpactStyle?: {
+    Light?: string;
+  };
+};
 
 function supportsVibrate(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
@@ -15,11 +30,13 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
 }
 
-async function getNativeStorage() {
+async function getNativeStorage(): Promise<PreferencesApi | null> {
   if (!isCapacitorIosEnvironment()) {
     return null;
   }
-  return Preferences;
+  const module = await loadCapacitorPreferences();
+  const preferences = module?.Preferences as PreferencesApi | undefined;
+  return preferences ?? null;
 }
 
 export async function getHapticsEnabled(): Promise<boolean> {
@@ -121,8 +138,12 @@ export async function triggerHapticTap(gestureId?: number): Promise<void> {
 
   try {
     if (isCapacitorIosEnvironment()) {
-      // Use native haptics on iOS
-      await Haptics.impact({ style: ImpactStyle.Light });
+      const module = (await loadCapacitorHaptics()) as HapticsModule | null;
+      const haptics = module?.Haptics;
+      const impactStyle = module?.ImpactStyle?.Light;
+      if (haptics && impactStyle) {
+        await haptics.impact({ style: impactStyle });
+      }
     } else if (supportsVibrate()) {
       // Fall back to navigator.vibrate on web
       navigator.vibrate(10);
