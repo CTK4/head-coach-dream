@@ -1,11 +1,46 @@
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
-import { Preferences } from "@capacitor/preferences";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 const HAPTICS_STORAGE_KEY = "hapticsEnabled";
 let lastGestureId: number | null = null;
 let lastTriggeredAt = 0;
 let hapticsEnabledCache: boolean | null = null;
+
+type PreferencesApi = {
+  get(options: { key: string }): Promise<{ value: string | null }>;
+  set(options: { key: string; value: string }): Promise<void>;
+};
+
+type HapticsApi = {
+  impact(options: { style: string }): Promise<void>;
+};
+
+async function getPreferences(): Promise<PreferencesApi | null> {
+  if (!isCapacitorIosEnvironment()) {
+    return null;
+  }
+
+  try {
+    const moduleName = "@capacitor/preferences";
+    const { Preferences } = await import(/* @vite-ignore */ moduleName);
+    return Preferences;
+  } catch {
+    return null;
+  }
+}
+
+async function getNativeHaptics(): Promise<HapticsApi | null> {
+  if (!isCapacitorIosEnvironment()) {
+    return null;
+  }
+
+  try {
+    const moduleName = "@capacitor/haptics";
+    const { Haptics } = await import(/* @vite-ignore */ moduleName);
+    return Haptics;
+  } catch {
+    return null;
+  }
+}
 
 function supportsVibrate(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
@@ -15,25 +50,17 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
 }
 
-async function getNativeStorage() {
-  if (!isCapacitorIosEnvironment()) {
-    return null;
-  }
-  return Preferences;
-}
-
 export async function getHapticsEnabled(): Promise<boolean> {
   if (typeof window === "undefined") {
     return false;
   }
 
-  // Return cached value if available
   if (hapticsEnabledCache !== null) {
     return hapticsEnabledCache;
   }
 
   try {
-    const nativeStorage = await getNativeStorage();
+    const nativeStorage = await getPreferences();
     if (nativeStorage) {
       const stored = await nativeStorage.get({ key: HAPTICS_STORAGE_KEY });
       if (stored.value === "true") {
@@ -76,7 +103,7 @@ export async function setHapticsEnabled(enabled: boolean): Promise<void> {
   hapticsEnabledCache = enabled;
 
   try {
-    const nativeStorage = await getNativeStorage();
+    const nativeStorage = await getPreferences();
     if (nativeStorage) {
       await nativeStorage.set({
         key: HAPTICS_STORAGE_KEY,
@@ -95,11 +122,6 @@ export async function setHapticsEnabled(enabled: boolean): Promise<void> {
   }
 }
 
-/**
- * Best-effort haptic tap for user-initiated press gestures.
- * Uses Capacitor Haptics on iOS, navigator.vibrate on web.
- * Call only inside pointer/touch event handlers.
- */
 export async function triggerHapticTap(gestureId?: number): Promise<void> {
   const enabled = await getHapticsEnabled();
   if (!enabled) {
@@ -120,11 +142,10 @@ export async function triggerHapticTap(gestureId?: number): Promise<void> {
   }
 
   try {
-    if (isCapacitorIosEnvironment()) {
-      // Use native haptics on iOS
-      await Haptics.impact({ style: ImpactStyle.Light });
+    const nativeHaptics = await getNativeHaptics();
+    if (nativeHaptics) {
+      await nativeHaptics.impact({ style: "LIGHT" });
     } else if (supportsVibrate()) {
-      // Fall back to navigator.vibrate on web
       navigator.vibrate(10);
     }
   } catch {
@@ -132,9 +153,6 @@ export async function triggerHapticTap(gestureId?: number): Promise<void> {
   }
 }
 
-/**
- * Backward-compatible adapter used by existing screens.
- */
 export async function hapticTap(_kind: "light" | "medium" | "heavy" = "light"): Promise<void> {
   await triggerHapticTap();
 }

@@ -1,7 +1,7 @@
 /**
  * Native save store for Capacitor iOS using Filesystem + Preferences.
  * Provides migration-safe persistence that survives force-quit.
- * 
+ *
  * Architecture:
  * - Each save is a JSON file in app's Documents directory
  * - Preferences stores an index of all saves (list of saveIds)
@@ -9,8 +9,6 @@
  * - One-time migration from localStorage; localStorage NOT deleted
  */
 
-import { Preferences } from "@capacitor/preferences";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 
 const SAVE_INDEX_KEY = "hc_native_save_index";
@@ -24,11 +22,39 @@ export interface SaveStoreApi {
   migrate(localStorageData: Map<string, string>): Promise<void>;
 }
 
+type NativeModule = {
+  Preferences: {
+    get(options: { key: string }): Promise<{ value: string | null }>;
+    set(options: { key: string; value: string }): Promise<void>;
+  };
+  Filesystem: {
+    mkdir(options: { path: string; directory: string; recursive?: boolean }): Promise<void>;
+    writeFile(options: { path: string; data: string; directory: string; encoding?: string }): Promise<void>;
+    readFile(options: { path: string; directory: string; encoding?: string }): Promise<{ data: string }>;
+    deleteFile(options: { path: string; directory: string }): Promise<void>;
+    rename(options: { from: string; to: string; directory: string }): Promise<void>;
+  };
+  Directory: { Documents: string };
+  Encoding: { UTF8: string };
+};
+
+async function getNativeModule(): Promise<NativeModule> {
+  const preferencesModuleName = "@capacitor/preferences";
+  const filesystemModuleName = "@capacitor/filesystem";
+  const [{ Preferences }, { Filesystem, Directory, Encoding }] = await Promise.all([
+    import(/* @vite-ignore */ preferencesModuleName),
+    import(/* @vite-ignore */ filesystemModuleName),
+  ]);
+  return { Preferences, Filesystem, Directory, Encoding };
+}
+
 /**
  * Create a native save store for Capacitor iOS.
  * Handles Filesystem + Preferences for migration-safe persistence.
  */
 export async function createNativeSaveStore(): Promise<SaveStoreApi> {
+  const { Preferences, Filesystem, Directory, Encoding } = await getNativeModule();
+
   // Ensure save directory exists
   try {
     await Filesystem.mkdir({
