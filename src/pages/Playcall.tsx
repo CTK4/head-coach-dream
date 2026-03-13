@@ -23,6 +23,8 @@ import GameLog from "@/components/GameLog/GameLog";
 import { adaptDriveLog } from "@/components/GameLog/adaptDriveLog";
 import PlayRibbon from "@/components/game/PlayRibbon";
 import DefensiveCallDrawer from "@/components/game/DefensiveCallDrawer";
+import HalftimeOverlay from "@/components/game/HalftimeOverlay";
+import OffensiveCallSheet from "@/components/game/OffensiveCallSheet";
 
 // ─── Play catalog ──────────────────────────────────────────────────────────
 
@@ -375,6 +377,8 @@ const Playcall = () => {
   const [, force] = useState(0);
   const [selectedPlayId, setSelectedPlayId] = useState<PlayType | null>(null);
   const [selectedFormation, setSelectedFormation] = useState<PlayFormation>("SHOTGUN");
+  const [halftimeDismissed, setHalftimeDismissed] = useState(false);
+  const [offensiveSheetOpen, setOffensiveSheetOpen] = useState(false);
   const offensePlaybookId = state.playbooks?.offensePlaybookId;
   const defensePlaybookId = state.playbooks?.defensePlaybookId;
 
@@ -390,6 +394,8 @@ const Playcall = () => {
 
   const invalid = !teamId || !opp || !g.weekType || !g.weekNumber;
   const isOver = g.clock.quarter === 4 && g.clock.timeRemainingSec === 0;
+  const isHalftime = g.clock.quarter === 2 && g.clock.timeRemainingSec === 0;
+  const showHalftime = isHalftime && !halftimeDismissed;
   const canShowPlay = useMemo(() => !invalid && !isOver, [invalid, isOver]);
 
   const roster = useMemo(
@@ -409,6 +415,10 @@ const Playcall = () => {
   const offenseUserMode = resolveOffensiveUserMode(g.controlMode);
   const pauseForUserOffenseSnap = userOffensivePossession
     && (offenseUserMode === "FULL_PLAYCALLING" || (offenseUserMode === "KEY_SITUATIONS" && isKeySituation(g)));
+
+  useEffect(() => {
+    setHalftimeDismissed(false);
+  }, [g.weekType, g.weekNumber, g.homeTeamId, g.awayTeamId]);
 
   useEffect(() => {
     if (g.pendingOffensiveCall) return;
@@ -826,6 +836,19 @@ const Playcall = () => {
         </Card>
 
       </div>
+      {canShowPlay ? (
+        <div className="fixed bottom-16 left-0 right-0 p-3 z-10">
+          <Button
+            className="w-full bg-blue-700 hover:bg-blue-600"
+            onClick={() => setOffensiveSheetOpen(true)}
+            disabled={!selectedCard || needsDefensiveCall || !pauseForUserOffenseSnap}
+          >
+            Call Play
+          </Button>
+        </div>
+      ) : null}
+      <HalftimeOverlay open={showHalftime} onDismiss={() => setHalftimeDismissed(true)} />
+      <OffensiveCallSheet open={offensiveSheetOpen} onClose={() => setOffensiveSheetOpen(false)} />
       {g.defensiveCallSituation ? (
         <DefensiveCallDrawer
           open={needsDefensiveCall}

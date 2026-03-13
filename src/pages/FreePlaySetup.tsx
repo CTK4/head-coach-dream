@@ -9,6 +9,7 @@ import { ROUTES } from "@/routes/appRoutes";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
 import { readSettings, writeSettings } from "@/lib/settings";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function FreePlaySetup() {
   const teams = useMemo(() => getTeams(), []);
@@ -18,6 +19,9 @@ export default function FreePlaySetup() {
   const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettings().realismPreset ?? "BALANCED");
   const navigate = useNavigate();
   const { index: ratingsIndex, error: teamRatingsError } = useTeamRatings();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [confirmMessage, setConfirmMessage] = useState("");
 
   const rows = useMemo(() => {
     const filtered = teams.filter((t) => `${t.region} ${t.name}`.toLowerCase().includes(query.toLowerCase()));
@@ -32,6 +36,7 @@ export default function FreePlaySetup() {
   }, [teams, query, ratingsIndex]);
 
   return (
+    <>
     <div className="mx-auto max-w-6xl space-y-4 p-6">
       <h2 className="text-2xl font-bold">Select Team</h2>
       <input
@@ -90,20 +95,23 @@ export default function FreePlaySetup() {
                       className="w-fit"
                       data-test={`team-select-${team.teamId}`}
                       onClick={() => {
-                        if (!window.confirm(`Start your career with ${team.name}?`)) return;
-                        writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
-                        dispatch({
-                          type: "INIT_FREE_PLAY_CAREER",
-                          payload: {
-                            teamId: team.teamId,
-                            teamName: team.name,
-                            simTuningSettings: {
-                              difficultyPreset,
-                              realismPreset,
+                        setConfirmMessage(`Start your career with ${team.name}?`);
+                        setPendingAction(() => () => {
+                          writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
+                          dispatch({
+                            type: "INIT_FREE_PLAY_CAREER",
+                            payload: {
+                              teamId: team.teamId,
+                              teamName: team.name,
+                              simTuningSettings: {
+                                difficultyPreset,
+                                realismPreset,
+                              },
                             },
-                          },
+                          });
+                          navigate(ROUTES.hub);
                         });
-                        navigate(ROUTES.hub);
+                        setConfirmOpen(true);
                       }}
                     >
                       Select
@@ -128,5 +136,20 @@ export default function FreePlaySetup() {
         })}
       </div>
     </div>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start Free Play?</AlertDialogTitle>
+            <AlertDialogDescription>{confirmMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { pendingAction?.(); setConfirmOpen(false); }}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
