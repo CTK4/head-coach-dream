@@ -14,6 +14,14 @@ const capacitorPreferencesAlias = (() => {
   }
 })();
 
+const capacitorCoreAlias = (() => {
+  try {
+    return require.resolve("@capacitor/core");
+  } catch {
+    return path.resolve(__dirname, "./src/shims/capacitorCore.ts");
+  }
+})();
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
@@ -28,6 +36,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@capacitor/core": capacitorCoreAlias,
       "@capacitor/preferences": capacitorPreferencesAlias,
     },
   },
