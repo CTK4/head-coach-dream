@@ -1351,7 +1351,7 @@ export default function SabanCover4MatchPlaybook() {
         SABAN COVER 4 MATCH · 40 CALLS · TAP TO DETAIL
       </div>
 
-      {selected && <PlayModal play={play} onClose={() => setSelected(null)} />}
+      {selected && <PlayModal play={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
