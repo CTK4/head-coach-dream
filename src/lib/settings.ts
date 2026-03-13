@@ -34,8 +34,8 @@ async function getNativeStorage() {
   }
 
   try {
-    const moduleName = "@capacitor/preferences";
-    const { Preferences } = await import(/* @vite-ignore */ moduleName);
+    const dynamicImport = new Function("moduleName", "return import(moduleName)") as (moduleName: string) => Promise<{ Preferences?: unknown }>;
+    const { Preferences } = await dynamicImport("@capacitor/preferences");
     return Preferences;
   } catch {
     return null;
