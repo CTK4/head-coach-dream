@@ -801,7 +801,7 @@ function PlayField({ play, large = false }) {
 
       {play.rt.map((r, i) => <Route key={i} {...r} />)}
 
-      {olX.map((x, i) => <Player key={i} x={x} y={LOS} t="OL" large={large} />}
+      {olX.map((x, i) => <Player key={i} x={x} y={LOS} t="OL" large={large} />)}
       {play.sk.map((p, i) => <Player key={i} x={p.x} y={p.y} t={p.t} large={large} />)}
 
       <ellipse cx={88} cy={LOS - 1} rx={3.5} ry={2.2}
