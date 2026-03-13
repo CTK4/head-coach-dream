@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function SEATTLE_COVER_3() {
-  return <PlaceholderPlaybook side="Defense" schemeId="SEATTLE_COVER_3" />;
-}
+import Cover3 from "../COVER_3";
+export default Cover3;

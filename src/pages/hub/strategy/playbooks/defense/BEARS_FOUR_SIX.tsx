@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function BEARS_FOUR_SIX() {
-  return <PlaceholderPlaybook side="Defense" schemeId="BEARS_FOUR_SIX" />;
-}
+import BEARS_FOUR_SIX from "../BEARS_FOUR_SIX";
+export default BEARS_FOUR_SIX;

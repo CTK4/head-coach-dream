@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function TAMPA_2() {
-  return <PlaceholderPlaybook side="Defense" schemeId="TAMPA_2" />;
-}
+import TAMPA_2 from "../TAMPA_2";
+export default TAMPA_2;

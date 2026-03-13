@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function WEST_COAST() {
-  return <OffensePlaybookTemplate schemeId="WEST_COAST" />;
-}
+import WEST_COAST from "../WEST_COAST";
+export default WEST_COAST;

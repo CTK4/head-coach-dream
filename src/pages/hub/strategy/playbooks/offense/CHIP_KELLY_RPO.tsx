@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function CHIP_KELLY_RPO() {
-  return <OffensePlaybookTemplate schemeId="CHIP_KELLY_RPO" />;
-}
+import CHIP_KELLY_RPO from "../CHIP_KELLY_RPO";
+export default CHIP_KELLY_RPO;

@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function COVER_SIX() {
-  return <PlaceholderPlaybook side="Defense" schemeId="COVER_SIX" />;
-}
+import COVER_SIX from "../COVER_SIX";
+export default COVER_SIX;

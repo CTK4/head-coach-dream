@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function LEBEAU_ZONE_BLITZ_THREE_FOUR() {
-  return <PlaceholderPlaybook side="Defense" schemeId="LEBEAU_ZONE_BLITZ_THREE_FOUR" />;
-}
+import LEBEAU_ZONE_BLITZ_THREE_FOUR from "../LEBEAU_ZONE_BLITZ_THREE_FOUR";
+export default LEBEAU_ZONE_BLITZ_THREE_FOUR;

@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function PRO_STYLE_BALANCED() {
-  return <OffensePlaybookTemplate schemeId="PRO_STYLE_BALANCED" />;
-}
+import PRO_STYLE_BALANCED from "../PRO_STYLE_BALANCED";
+export default PRO_STYLE_BALANCED;

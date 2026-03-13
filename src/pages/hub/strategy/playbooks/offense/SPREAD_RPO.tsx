@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function SPREAD_RPO() {
-  return <OffensePlaybookTemplate schemeId="SPREAD_RPO" />;
-}
+import SPREAD_RPO from "../SPREAD_RPO";
+export default SPREAD_RPO;

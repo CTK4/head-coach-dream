@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function RYAN_NICKEL_PRESSURE() {
-  return <PlaceholderPlaybook side="Defense" schemeId="RYAN_NICKEL_PRESSURE" />;
-}
+import RYAN_NICKEL_PRESSURE from "../RYAN_NICKEL_PRESSURE";
+export default RYAN_NICKEL_PRESSURE;

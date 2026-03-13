@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function MODERN_TRIPLE_OPTION() {
-  return <OffensePlaybookTemplate schemeId="MODERN_TRIPLE_OPTION" />;
-}
+import MODERN_TRIPLE_OPTION from "../MODERN_TRIPLE_OPTION";
+export default MODERN_TRIPLE_OPTION;
