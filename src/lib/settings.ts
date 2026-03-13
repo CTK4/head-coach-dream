@@ -1,6 +1,5 @@
 import { DEFAULT_SIM_TUNING, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
-import { Preferences } from "@capacitor/preferences";
 
 export const SETTINGS_KEY = "hcd:settings";
 
@@ -33,7 +32,13 @@ async function getNativeStorage() {
   if (!isCapacitorIosEnvironment()) {
     return null;
   }
-  return Preferences;
+
+  try {
+    const { Preferences } = await import("@capacitor/preferences");
+    return Preferences;
+  } catch {
+    return null;
+  }
 }
 
 export async function readSettings(): Promise<UserSettings> {
