@@ -9,12 +9,46 @@
  * - One-time migration from localStorage; localStorage NOT deleted
  */
 
-import { Preferences } from "@capacitor/preferences";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
+import { loadCapacitorFilesystem, loadCapacitorPreferences } from "@/lib/capacitorRuntime";
 import { logInfo, logWarn, logError } from "@/lib/logger";
 
 const SAVE_INDEX_KEY = "hc_native_save_index";
 const SAVE_DIR = "saves";
+
+type PreferencesApi = {
+  get(options: { key: string }): Promise<{ value: string | null }>;
+  set(options: { key: string; value: string }): Promise<void>;
+};
+
+type FilesystemApi = {
+  mkdir(options: { path: string; directory: string; recursive?: boolean }): Promise<void>;
+  readFile(options: { path: string; directory: string; encoding: string }): Promise<{ data: string }>;
+  writeFile(options: { path: string; data: string; directory: string; encoding: string }): Promise<void>;
+  deleteFile(options: { path: string; directory: string }): Promise<void>;
+  rename(options: { from: string; to: string; directory: string }): Promise<void>;
+};
+
+type FilesystemModule = {
+  Filesystem?: FilesystemApi;
+  Directory?: { Documents?: string };
+  Encoding?: { UTF8?: string };
+};
+
+async function getNativeApis(): Promise<{ preferences: PreferencesApi; filesystem: FilesystemApi; documentsDir: string; utf8: string } | null> {
+  const [prefsModule, fsModule] = await Promise.all([loadCapacitorPreferences(), loadCapacitorFilesystem()]);
+  const preferences = prefsModule?.Preferences as PreferencesApi | undefined;
+  const filesystemModule = fsModule as FilesystemModule | null;
+  const filesystem = filesystemModule?.Filesystem;
+  const documentsDir = filesystemModule?.Directory?.Documents;
+  const utf8 = filesystemModule?.Encoding?.UTF8;
+
+  if (!preferences || !filesystem || !documentsDir || !utf8) {
+    return null;
+  }
+
+  return { preferences, filesystem, documentsDir, utf8 };
+}
+
 
 export interface SaveStoreApi {
   list(): Promise<string[]>;
@@ -29,11 +63,16 @@ export interface SaveStoreApi {
  * Handles Filesystem + Preferences for migration-safe persistence.
  */
 export async function createNativeSaveStore(): Promise<SaveStoreApi> {
+  const apis = await getNativeApis();
+  if (!apis) {
+    throw new Error("Capacitor native save APIs are unavailable.");
+  }
+
   // Ensure save directory exists
   try {
-    await Filesystem.mkdir({
+    await apis.filesystem.mkdir({
       path: SAVE_DIR,
-      directory: Directory.Documents,
+      directory: apis.documentsDir,
       recursive: true,
     });
   } catch (error) {
@@ -42,7 +81,7 @@ export async function createNativeSaveStore(): Promise<SaveStoreApi> {
 
   async function getSaveIndex(): Promise<string[]> {
     try {
-      const result = await Preferences.get({ key: SAVE_INDEX_KEY });
+      const result = await apis.preferences.get({ key: SAVE_INDEX_KEY });
       if (!result.value) return [];
       const parsed = JSON.parse(result.value) as unknown;
       return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
@@ -54,7 +93,7 @@ export async function createNativeSaveStore(): Promise<SaveStoreApi> {
 
   async function setSaveIndex(saveIds: string[]): Promise<void> {
     try {
-      await Preferences.set({
+      await apis.preferences.set({
         key: SAVE_INDEX_KEY,
         value: JSON.stringify(saveIds),
       });
@@ -80,56 +119,56 @@ export async function createNativeSaveStore(): Promise<SaveStoreApi> {
 
     try {
       // 1. Write to temp file
-      await Filesystem.writeFile({
+      await apis.filesystem.writeFile({
         path: tempPath,
         data,
-        directory: Directory.Documents,
-        encoding: Encoding.UTF8,
+        directory: apis.documentsDir,
+        encoding: apis.utf8,
       });
 
       // 2. Backup existing file if it exists
       try {
-        const existing = await Filesystem.readFile({
+        const existing = await apis.filesystem.readFile({
           path: filePath,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
+          directory: apis.documentsDir,
+          encoding: apis.utf8,
         });
-        await Filesystem.writeFile({
+        await apis.filesystem.writeFile({
           path: backupPath,
           data: existing.data,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
+          directory: apis.documentsDir,
+          encoding: apis.utf8,
         });
       } catch {
         // No existing file to backup
       }
 
       // 3. Move temp to primary
-      await Filesystem.deleteFile({
+      await apis.filesystem.deleteFile({
         path: filePath,
-        directory: Directory.Documents,
+        directory: apis.documentsDir,
       }).catch(() => {
         // File may not exist
       });
 
-      await Filesystem.rename({
+      await apis.filesystem.rename({
         from: tempPath,
         to: fileName,
-        directory: Directory.Documents,
+        directory: apis.documentsDir,
       });
 
       // 4. Clean up temp (in case rename didn't remove it)
-      await Filesystem.deleteFile({
+      await apis.filesystem.deleteFile({
         path: tempPath,
-        directory: Directory.Documents,
+        directory: apis.documentsDir,
       }).catch(() => {
         // Already cleaned
       });
     } catch (error) {
       // Cleanup on error
-      await Filesystem.deleteFile({
+      await apis.filesystem.deleteFile({
         path: tempPath,
-        directory: Directory.Documents,
+        directory: apis.documentsDir,
       }).catch(() => {
         // Ignore cleanup errors
       });
@@ -145,10 +184,10 @@ export async function createNativeSaveStore(): Promise<SaveStoreApi> {
     async load(saveId: string): Promise<string | null> {
       try {
         const filePath = await getSaveFilePath(saveId);
-        const result = await Filesystem.readFile({
+        const result = await apis.filesystem.readFile({
           path: filePath,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
+          directory: apis.documentsDir,
+          encoding: apis.utf8,
         });
         return typeof result.data === "string" ? result.data : null;
       } catch (error) {
@@ -178,9 +217,9 @@ export async function createNativeSaveStore(): Promise<SaveStoreApi> {
     async delete(saveId: string): Promise<void> {
       try {
         const filePath = await getSaveFilePath(saveId);
-        await Filesystem.deleteFile({
+        await apis.filesystem.deleteFile({
           path: filePath,
-          directory: Directory.Documents,
+          directory: apis.documentsDir,
         });
 
         // Update index

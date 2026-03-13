@@ -3,11 +3,27 @@
  * Handles file I/O for save bundles with proper error handling.
  */
 
-import { Share } from "@capacitor/share";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
+import { loadCapacitorFilesystem, loadCapacitorShare } from "@/lib/capacitorRuntime";
 import { logInfo, logError } from "@/lib/logger";
 
 const TEMP_EXPORT_DIR = "temp_exports";
+
+type ShareApi = {
+  share(options: { title: string; text: string; url: string; dialogTitle: string }): Promise<void>;
+};
+
+type FilesystemApi = {
+  mkdir(options: { path: string; directory: string; recursive?: boolean }): Promise<void>;
+  writeFile(options: { path: string; data: string; directory: string; encoding: string }): Promise<void>;
+  getUri(options: { path: string; directory: string }): Promise<{ uri: string }>;
+  deleteFile(options: { path: string; directory: string }): Promise<void>;
+};
+
+type FilesystemModule = {
+  Filesystem?: FilesystemApi;
+  Directory?: { Documents?: string };
+  Encoding?: { UTF8?: string };
+};
 
 export interface ImportExportApi {
   exportToShare(fileName: string, jsonData: string): Promise<void>;
@@ -19,11 +35,22 @@ export interface ImportExportApi {
  * Note: Document picker requires a native plugin; this provides the Filesystem/Share integration.
  */
 export async function createImportExportApi(): Promise<ImportExportApi> {
+  const [shareModule, fsModule] = await Promise.all([loadCapacitorShare(), loadCapacitorFilesystem()]);
+  const share = shareModule?.Share as ShareApi | undefined;
+  const filesystemModule = fsModule as FilesystemModule | null;
+  const filesystem = filesystemModule?.Filesystem;
+  const documentsDir = filesystemModule?.Directory?.Documents;
+  const utf8 = filesystemModule?.Encoding?.UTF8;
+
+  if (!share || !filesystem || !documentsDir || !utf8) {
+    throw new Error("Capacitor import/export APIs are unavailable.");
+  }
+
   // Ensure temp directory exists
   try {
-    await Filesystem.mkdir({
+    await filesystem.mkdir({
       path: TEMP_EXPORT_DIR,
-      directory: Directory.Documents,
+      directory: documentsDir,
       recursive: true,
     });
   } catch (error) {
@@ -38,21 +65,21 @@ export async function createImportExportApi(): Promise<ImportExportApi> {
         const filePath = `${TEMP_EXPORT_DIR}/${fileName}`;
 
         // Write JSON to Filesystem
-        await Filesystem.writeFile({
+        await filesystem.writeFile({
           path: filePath,
           data: jsonData,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
+          directory: documentsDir,
+          encoding: utf8,
         });
 
         // Get the file URI for sharing
-        const fileUri = await Filesystem.getUri({
+        const fileUri = await filesystem.getUri({
           path: filePath,
-          directory: Directory.Documents,
+          directory: documentsDir,
         });
 
         // Share the file
-        await Share.share({
+        await share.share({
           title: "Export Head Coach Dream Save",
           text: `Exporting save: ${fileName}`,
           url: fileUri.uri,
@@ -64,9 +91,9 @@ export async function createImportExportApi(): Promise<ImportExportApi> {
         // Clean up after share
         setTimeout(async () => {
           try {
-            await Filesystem.deleteFile({
+            await filesystem.deleteFile({
               path: filePath,
-              directory: Directory.Documents,
+              directory: documentsDir,
             });
           } catch {
             // Ignore cleanup errors

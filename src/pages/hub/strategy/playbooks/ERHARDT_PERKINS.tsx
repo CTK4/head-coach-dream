@@ -612,7 +612,7 @@ const PLAYS = [
       {d:CB([104,QB_Y],[100,84],[96,76],[94,70]), c:CLR.run,w:2,a:true,dsh:true},
       {d:P([58,LOS],[58,LOS-2]), c:CLR.protect,w:1.5,a:false},
       {d:CB([58,LOS-2],[74,58],[96,62],[116,62]), c:CLR.pa,w:2.4,a:true},
-      {d:P([182,LOS],[182,20]), c:CLR.pa,w:2a=true},
+      {d:P([182,LOS],[182,20]), c:CLR.pa,w:2,a:true},
       {d:P([166,LOS],[166,24]), c:CLR.pa,w:1.6,a:true},
       {d:P([14,LOS],[14,24]), c:CLR.pa,w:1.6,a:true},
       {d:CB([96,QB_Y+3],[108,84],[118,78],[126,74]), c:CLR.protect,w:1.5,a:false},
@@ -801,7 +801,7 @@ function PlayField({ play, large = false }) {
 
       {play.rt.map((r, i) => <Route key={i} {...r} />)}
 
-      {olX.map((x, i) => <Player key={i} x={x} y={LOS} t="OL" large={large} />}
+      {olX.map((x, i) => <Player key={i} x={x} y={LOS} t="OL" large={large} />)}
       {play.sk.map((p, i) => <Player key={i} x={p.x} y={p.y} t={p.t} large={large} />)}
 
       <ellipse cx={88} cy={LOS - 1} rx={3.5} ry={2.2}
