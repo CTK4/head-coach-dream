@@ -368,7 +368,7 @@ const PLAYS = [
     sk:[...DOUBLES_SKILL],
     rt:[
       {d:CB([102,QB_Y],[112,84],[126,70],[144,52]), c:CLR.read,w:2.2,a:true,dsh:true},
-      {d:CB([88,QB_Y],[86,80],[82,66],[80,50]), c:CLR.run,w:2,a:true,dsh:true}
+      {d:CB([88,QB_Y],[86,80],[82,66],[80,50]), c:CLR.run,w:2,a:true,dsh:true},
     ],
   },
   {
