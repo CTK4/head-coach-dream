@@ -3,11 +3,26 @@
  * Handles file I/O for save bundles with proper error handling.
  */
 
-import { Share } from "@capacitor/share";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { logInfo, logError } from "@/lib/logger";
 
 const TEMP_EXPORT_DIR = "temp_exports";
+
+type SharePlugin = {
+  share(options: { title?: string; text?: string; url?: string; dialogTitle?: string }): Promise<void>;
+};
+
+async function loadSharePlugin(): Promise<SharePlugin | null> {
+  try {
+    const mod = await import(/* @vite-ignore */ "@capacitor/share");
+    return mod.Share as SharePlugin;
+  } catch (error) {
+    logError("native.importexport.share.unavailable", {
+      meta: { message: error instanceof Error ? error.message : String(error) },
+    });
+    return null;
+  }
+}
 
 export interface ImportExportApi {
   exportToShare(fileName: string, jsonData: string): Promise<void>;
@@ -51,8 +66,13 @@ export async function createImportExportApi(): Promise<ImportExportApi> {
           directory: Directory.Documents,
         });
 
+        const sharePlugin = await loadSharePlugin();
+        if (!sharePlugin) {
+          throw new Error("@capacitor/share is not available in this environment");
+        }
+
         // Share the file
-        await Share.share({
+        await sharePlugin.share({
           title: "Export Head Coach Dream Save",
           text: `Exporting save: ${fileName}`,
           url: fileUri.uri,

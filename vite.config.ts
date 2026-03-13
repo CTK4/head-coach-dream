@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     rollupOptions: {
+      external: [/^@capacitor\//],
       output: {
         manualChunks: {
           // Core React runtime — cached independently from app code
