@@ -335,7 +335,7 @@ export default function CoordinatorHiring() {
                           max={5}
                           value={offerYears}
                           onChange={(e) => setOfferYears(Number(e.target.value) || 1)}
-                          className="mt-1 w-20 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                          className="mt-1 min-w-[5rem] w-full max-w-[8rem] min-h-[44px] rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
                         />
                       </label>
                       <label className="text-xs text-muted-foreground">
@@ -346,7 +346,7 @@ export default function CoordinatorHiring() {
                           step={0.05}
                           value={(offerSalaryValue / 1_000_000).toFixed(2)}
                           onChange={(e) => setOfferSalaryValue(Math.round((Number(e.target.value) || 0) * 1_000_000))}
-                          className="mt-1 w-32 rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
+                          className="mt-1 min-w-[5rem] w-full max-w-[8rem] min-h-[44px] rounded border border-slate-400/30 bg-transparent px-2 py-1 text-sm"
                         />
                       </label>
                       <Button size="sm" onClick={(event) => { event.stopPropagation(); submitOffer(p.personId); }} disabled={offerSalaryValue <= 0}>

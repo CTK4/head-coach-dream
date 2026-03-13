@@ -510,14 +510,27 @@ const Playcall = () => {
   };
 
   if (invalid) {
+    const homeTeam = g.homeTeamId ? getTeamById(g.homeTeamId) : null;
+    const awayTeam = g.awayTeamId ? getTeamById(g.awayTeamId) : null;
     return (
       <div className="min-h-screen p-4 md:p-8">
-        <Card className="max-w-xl mx-auto">
-          <CardContent className="p-6 space-y-3">
-            <p className="text-sm text-muted-foreground">No active game.</p>
-            <Button onClick={() => navigate("/hub")}>Back to Hub</Button>
-          </CardContent>
-        </Card>
+        <div className="max-w-4xl mx-auto space-y-4">
+          {typeof g.homeScore === "number" && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="text-xs text-muted-foreground">Home</div>
+                <div className="font-semibold">{homeTeam?.name ?? "Home"} {g.homeScore}</div>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <div className="text-xs text-muted-foreground">Away</div>
+                <div className="font-semibold">{awayTeam?.name ?? "Away"} {g.awayScore}</div>
+              </div>
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">This game has ended or hasn't started yet.</p>
+          <Button className="w-full" onClick={() => navigate("/hub")}>Return to Hub</Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/hub/schedule")}>View Season Schedule</Button>
+        </div>
       </div>
     );
   }
@@ -526,7 +539,20 @@ const Playcall = () => {
   const awayName = opp?.name ?? "Away";
 
   if (missingPlaybookSelection) {
-    return <div className="min-h-screen p-4 md:p-8 text-amber-300 font-semibold">Select Playbook before calling plays.</div>;
+    return (
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-sm text-muted-foreground">Select a playbook before calling plays.</p>
+              <Button className="w-full mt-3" onClick={() => navigate("/hub/gameplan")}>
+                Go to Gameplan Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -568,13 +594,13 @@ const Playcall = () => {
               <Button variant="ghost" onClick={exit}>Exit</Button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <Badge variant="secondary">Q{g.clock.quarter} {fmtClock(g.clock.timeRemainingSec)}</Badge>
-              <Badge variant="outline" className="font-bold text-base">{g.homeScore} – {g.awayScore}</Badge>
-              <Badge variant="outline">{possessionLabel(g)}</Badge>
-              <Badge variant="outline">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
-              <Badge variant="outline">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
-              <Badge variant="outline">{formatWeatherSummary(g.weather)}</Badge>
+            <div className="flex flex-nowrap overflow-x-auto items-center gap-3 text-sm">
+              <Badge variant="secondary" className="whitespace-nowrap">Q{g.clock.quarter} {fmtClock(g.clock.timeRemainingSec)}</Badge>
+              <Badge variant="outline" className="font-bold text-base whitespace-nowrap">{g.homeScore} – {g.awayScore}</Badge>
+              <Badge variant="outline" className="whitespace-nowrap">{possessionLabel(g)}</Badge>
+              <Badge variant="outline" className="whitespace-nowrap">{g.down}&amp;{g.distance} @ {g.ballOn}</Badge>
+              <Badge variant="outline" className="whitespace-nowrap">{g.clock.clockRunning ? "⏱ Running" : "⏱ Stopped"}</Badge>
+              <Badge variant="outline" className="whitespace-nowrap">{formatWeatherSummary(g.weather)}</Badge>
             </div>
 
             {/* Last result + tags */}

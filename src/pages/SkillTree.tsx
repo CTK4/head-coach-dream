@@ -79,9 +79,12 @@ export default function SkillTree() {
       setConnectorLines(nextLines);
     };
 
-    computeLines();
+    const frameId = requestAnimationFrame(computeLines);
     window.addEventListener("resize", computeLines);
-    return () => window.removeEventListener("resize", computeLines);
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", computeLines);
+    };
   }, [nodes, unlockedSet]);
 
   const getNodeState = (node: PerkNode): NodeVisualState => {

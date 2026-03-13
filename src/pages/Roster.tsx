@@ -4,6 +4,7 @@ import { getDepthSlotLabel, getEffectivePlayersByTeam } from "@/engine/rosterOve
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { HubEmptyState } from "@/components/franchise-hub/states/HubEmptyState";
 
 const POS_GROUPS: Record<string, string[]> = {
   Offense: ["QB", "RB", "WR", "TE", "OT", "OG", "C", "OL", "FB", "HB"],
@@ -24,7 +25,15 @@ export default function Roster() {
   const [tab, setTab] = useState<keyof typeof POS_GROUPS>("Offense");
 
   const teamId = state.acceptedOffer?.teamId ?? (state as any).userTeamId ?? (state as any).teamId;
-  if (!teamId) return null;
+  if (!teamId) {
+    return (
+      <HubEmptyState
+        title="No team selected"
+        description="Return to the Hub to continue your career."
+        action={{ label: "Go to Hub", to: "/hub" }}
+      />
+    );
+  }
 
   const { allPlayers, sorted } = useMemo(() => {
     const all = getEffectivePlayersByTeam(state, String(teamId));
