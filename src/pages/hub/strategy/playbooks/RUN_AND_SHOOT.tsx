@@ -802,7 +802,7 @@ function PlayCard({ play, onClick }) {
         overflow: 'hidden',
         transition: 'all 0.18s ease',
         transform: hov ? 'translateY(-2px)' : 'none',
-        boxShadow: hov ? `0 6px 24px ${meta.accent}28` : '0 2px 8px rgba(0,0,0,0.5)`,
+        boxShadow: hov ? `0 6px 24px ${meta.accent}28` : '0 2px 8px rgba(0,0,0,0.5)',
       }}
     >
       <div style={{ position: 'relative' }}>

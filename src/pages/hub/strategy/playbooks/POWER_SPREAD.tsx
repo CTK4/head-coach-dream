@@ -368,7 +368,7 @@ const PLAYS = [
     sk:[...DOUBLES_SKILL],
     rt:[
       {d:CB([102,QB_Y],[112,84],[126,70],[144,52]), c:CLR.read,w:2.2,a:true,dsh:true},
-      {d:CB([88,QB_Y],[86,80],[82,66],[80,50]), c:CLR.run,w:2a:true,dsh:true}
+      {d:CB([88,QB_Y],[86,80],[82,66],[80,50]), c:CLR.run,w:2,a:true,dsh:true}
     ],
   },
   {
@@ -526,7 +526,7 @@ const PLAYS = [
     rt:[
       {d:CB([8,LOS],[8,34],[34,20],[62,16]),       c:CLR.pass,w:2.3,a:true},
       {d:P([180,LOS],[180,28]),                    c:CLR.pass,w:1.8,a:true},
-      {d:CB([162,LOS],[162,34],[146,22],[128,18]), c:CLR.pass,w:2a:true},
+      {d:CB([162,LOS],[162,34],[146,22],[128,18]), c:CLR.pass,w:2,a:true},
       {d:P([100,LOS],[100,28]),                    c:CLR.pass,w:1.7,a:true},
       {d:CB([102,QB_Y],[104,84],[110,80],[118,78]),c:CLR.playact,w:1.8,a:false,dsh:true},
       {d:P([88,QB_Y],[88,QB_Y+10]),                c:CLR.qbmove,w:1.5,a:false,dsh:true},
