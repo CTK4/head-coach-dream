@@ -28,6 +28,17 @@ const DEFAULT_SETTINGS: Required<Pick<UserSettings, "confirmAutoAdvance" | "show
   offensePlaycallingMode: "FULL_AUTO",
 };
 
+function normalizeSettings(parsed: UserSettings | null | undefined): UserSettings {
+  return {
+    ...parsed,
+    confirmAutoAdvance: parsed?.confirmAutoAdvance ?? DEFAULT_SETTINGS.confirmAutoAdvance,
+    showTooltips: parsed?.showTooltips ?? DEFAULT_SETTINGS.showTooltips,
+    difficultyPreset: parsed?.difficultyPreset ?? DEFAULT_SETTINGS.difficultyPreset,
+    realismPreset: parsed?.realismPreset ?? DEFAULT_SETTINGS.realismPreset,
+    offensePlaycallingMode: parsed?.offensePlaycallingMode ?? DEFAULT_SETTINGS.offensePlaycallingMode,
+  };
+}
+
 async function getNativeStorage() {
   if (!isCapacitorIosEnvironment()) {
     return null;
@@ -48,15 +59,7 @@ export async function readSettings(): Promise<UserSettings> {
     if (nativeStorage) {
       const result = await nativeStorage.get({ key: SETTINGS_KEY });
       if (!result.value) return DEFAULT_SETTINGS;
-      const parsed = JSON.parse(result.value) as UserSettings;
-      return {
-        ...parsed,
-        confirmAutoAdvance: parsed?.confirmAutoAdvance ?? DEFAULT_SETTINGS.confirmAutoAdvance,
-        showTooltips: parsed?.showTooltips ?? DEFAULT_SETTINGS.showTooltips,
-        difficultyPreset: parsed?.difficultyPreset ?? DEFAULT_SETTINGS.difficultyPreset,
-        realismPreset: parsed?.realismPreset ?? DEFAULT_SETTINGS.realismPreset,
-        offensePlaycallingMode: parsed?.offensePlaycallingMode ?? DEFAULT_SETTINGS.offensePlaycallingMode,
-      };
+      return normalizeSettings(JSON.parse(result.value) as UserSettings);
     }
   } catch {
     // Fall through to localStorage
@@ -65,39 +68,42 @@ export async function readSettings(): Promise<UserSettings> {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as UserSettings;
-    return {
-      ...parsed,
-      confirmAutoAdvance: parsed?.confirmAutoAdvance ?? DEFAULT_SETTINGS.confirmAutoAdvance,
-      showTooltips: parsed?.showTooltips ?? DEFAULT_SETTINGS.showTooltips,
-      difficultyPreset: parsed?.difficultyPreset ?? DEFAULT_SETTINGS.difficultyPreset,
-      realismPreset: parsed?.realismPreset ?? DEFAULT_SETTINGS.realismPreset,
-      offensePlaycallingMode: parsed?.offensePlaycallingMode ?? DEFAULT_SETTINGS.offensePlaycallingMode,
-    };
+    return normalizeSettings(JSON.parse(raw) as UserSettings);
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
-export async function writeSettings(settings: UserSettings): Promise<void> {
-  const serialized = JSON.stringify(settings);
-
+export function readSettingsSync(): UserSettings {
   try {
-    const nativeStorage = await getNativeStorage();
-    if (nativeStorage) {
-      await nativeStorage.set({
-        key: SETTINGS_KEY,
-        value: serialized,
-      });
-      return;
-    }
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    return normalizeSettings(JSON.parse(raw) as UserSettings);
   } catch {
-    // Fall through to localStorage
+    return DEFAULT_SETTINGS;
   }
+}
+
+export function writeSettings(settings: UserSettings): void {
+  const serialized = JSON.stringify(settings);
 
   try {
     localStorage.setItem(SETTINGS_KEY, serialized);
   } catch {
     // ignore
   }
+
+  void (async () => {
+    try {
+      const nativeStorage = await getNativeStorage();
+      if (nativeStorage) {
+        await nativeStorage.set({
+          key: SETTINGS_KEY,
+          value: serialized,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  })();
 }

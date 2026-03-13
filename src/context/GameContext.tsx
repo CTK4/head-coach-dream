@@ -167,7 +167,7 @@ import { DEFAULT_SIM_TUNING, type SimTuningSettings } from "@/config/simTuning";
 import { migrateSave as migrateSaveBoot } from "@/context/boot/migrateSave";
 import { DEFAULT_DEFENSE_SCHEME_ID, DEFAULT_OFFENSE_SCHEME_ID, type DefenseSchemeId, type OffenseSchemeId } from "@/lib/schemeLabels";
 import { getUserTeamId, resolveCurrentUserTeamId } from "@/lib/userTeam";
-import { readSettings, type OffensePlaycallingMode } from "@/lib/settings";
+import { readSettingsSync, type OffensePlaycallingMode } from "@/lib/settings";
 import { buildMigrationEvents, type TransactionState } from "@/engine/transactions/transactionLedger";
 import { Tx } from "@/engine/transactions/transactionAPI";
 import { buildContractIndex } from "@/engine/transactions/contractIndex";
@@ -9000,7 +9000,7 @@ export function gameReducerMonolith(state: GameState, action: GameAction): GameS
       const weekType = (gameType ?? "REGULAR_SEASON") as "PRESEASON" | "REGULAR_SEASON" | "PLAYOFFS";
       const weekNumber = Number(action.payload.weekNumber ?? action.payload.week ?? 0);
       const persistedWeather = resolvePersistedWeather(base, { weekType, weekNumber, homeTeamId: teamId, awayTeamId: action.payload.opponentTeamId });
-      const persistedSettings = readSettings();
+      const persistedSettings = readSettingsSync();
       const offenseUserMode = base.game.offenseUserMode ?? persistedSettings.offensePlaycallingMode ?? "FULL_AUTO";
       let started: GameState = {
         ...base,

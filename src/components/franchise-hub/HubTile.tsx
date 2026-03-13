@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { readSettings } from "@/lib/settings";
+import { readSettingsSync } from "@/lib/settings";
 import { HUB_TILE_FALLBACK_IMAGE } from "@/components/franchise-hub/tileImages";
 
 export type HubBadgeKind = "unread" | "task" | "cap" | "scouting" | "info";
@@ -38,7 +38,7 @@ export type HubTileProps = {
 
 export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, badgeHint, badgeKind, imageObjectPosition }: HubTileProps) {
   const navigate = useNavigate();
-  const showTooltips = !!readSettings().showTooltips;
+  const showTooltips = !!readSettingsSync().showTooltips;
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>(imageUrl);
 
   useEffect(() => {

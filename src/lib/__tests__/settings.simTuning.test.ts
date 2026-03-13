@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { readSettings, writeSettings } from "@/lib/settings";
+import { readSettingsSync, writeSettings } from "@/lib/settings";
 
 class LocalStorageMock {
   private store = new Map<string, string>();
@@ -28,7 +28,7 @@ describe("settings sim tuning persistence", () => {
 
   it("persists and restores difficulty/realism presets", () => {
     writeSettings({ difficultyPreset: "CHALLENGING", realismPreset: "SIM" });
-    const loaded = readSettings();
+    const loaded = readSettingsSync();
     expect(loaded.difficultyPreset).toBe("CHALLENGING");
     expect(loaded.realismPreset).toBe("SIM");
   });

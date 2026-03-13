@@ -8,14 +8,14 @@ import { useTeamRatings } from "@/hooks/useTeamRatings";
 import { ROUTES } from "@/routes/appRoutes";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
-import { readSettings, writeSettings } from "@/lib/settings";
+import { readSettingsSync, writeSettings } from "@/lib/settings";
 
 export default function FreePlaySetup() {
   const teams = useMemo(() => getTeams(), []);
   const [query, setQuery] = useState("");
   const { dispatch } = useGame();
-  const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => readSettings().difficultyPreset ?? "STANDARD");
-  const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettings().realismPreset ?? "BALANCED");
+  const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => readSettingsSync().difficultyPreset ?? "STANDARD");
+  const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettingsSync().realismPreset ?? "BALANCED");
   const navigate = useNavigate();
   const { index: ratingsIndex, error: teamRatingsError } = useTeamRatings();
 
@@ -91,7 +91,7 @@ export default function FreePlaySetup() {
                       data-test={`team-select-${team.teamId}`}
                       onClick={() => {
                         if (!window.confirm(`Start your career with ${team.name}?`)) return;
-                        writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
+                        writeSettings({ ...readSettingsSync(), difficultyPreset, realismPreset });
                         dispatch({
                           type: "INIT_FREE_PLAY_CAREER",
                           payload: {
