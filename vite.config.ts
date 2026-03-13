@@ -68,5 +68,14 @@ export default defineConfig(({ mode }) => ({
   test: {
     // Exclude Playwright e2e specs; those run via `npm run test:ui`
     exclude: ["tests/**", "node_modules/**"],
+    // Prefer process-based workers in this CI/container environment.
+    // Thread-based pools can hang at shutdown and require manual termination.
+    pool: "forks",
+    // Keep all test files in a single worker process to avoid worker
+    // teardown deadlocks in constrained environments.
+    fileParallelism: false,
+    maxWorkers: 1,
+    // Fail fast if worker teardown gets stuck instead of hanging indefinitely.
+    teardownTimeout: 10_000,
   },
 }));

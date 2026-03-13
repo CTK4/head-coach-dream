@@ -29,11 +29,47 @@ export interface ImportExportApi {
   importFromFiles(): Promise<string | null>;
 }
 
+type NativeModule = {
+  Share: {
+    share(options: { title: string; text: string; url: string; dialogTitle: string }): Promise<void>;
+  };
+  Filesystem: {
+    mkdir(options: { path: string; directory: string; recursive?: boolean }): Promise<void>;
+    writeFile(options: { path: string; data: string; directory: string; encoding?: string }): Promise<void>;
+    getUri(options: { path: string; directory: string }): Promise<{ uri: string }>;
+    deleteFile(options: { path: string; directory: string }): Promise<void>;
+  };
+  Directory: { Documents: string };
+  Encoding: { UTF8: string };
+};
+
+async function getNativeModule(): Promise<NativeModule | null> {
+  try {
+    const shareModuleName = "@capacitor/share";
+    const filesystemModuleName = "@capacitor/filesystem";
+    const [{ Share }, { Filesystem, Directory, Encoding }] = await Promise.all([
+      import(/* @vite-ignore */ shareModuleName),
+      import(/* @vite-ignore */ filesystemModuleName),
+    ]);
+    return { Share, Filesystem, Directory, Encoding };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Create import/export API for Capacitor iOS.
  * Note: Document picker requires a native plugin; this provides the Filesystem/Share integration.
  */
 export async function createImportExportApi(): Promise<ImportExportApi> {
+  const nativeModule = await getNativeModule();
+
+  if (!nativeModule) {
+    throw new Error("Native import/export unavailable");
+  }
+
+  const { Filesystem, Directory, Encoding, Share } = nativeModule;
+
   // Ensure temp directory exists
   try {
     await Filesystem.mkdir({

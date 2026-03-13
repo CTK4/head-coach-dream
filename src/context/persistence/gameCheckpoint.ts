@@ -9,7 +9,8 @@ async function getNativeStorage() {
   }
 
   try {
-    const { Preferences } = await import("@capacitor/preferences");
+    const moduleName = "@capacitor/preferences";
+    const { Preferences } = await import(/* @vite-ignore */ moduleName);
     return Preferences;
   } catch {
     return null;
