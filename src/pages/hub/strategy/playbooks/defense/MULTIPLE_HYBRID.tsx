@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function MULTIPLE_HYBRID() {
-  return <PlaceholderPlaybook side="Defense" schemeId="MULTIPLE_HYBRID" />;
-}
+import MULTIPLE_HYBRID from "../MULTIPLE_HYBRID";
+export default MULTIPLE_HYBRID;

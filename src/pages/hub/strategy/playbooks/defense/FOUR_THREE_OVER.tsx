@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function FOUR_THREE_OVER() {
-  return <PlaceholderPlaybook side="Defense" schemeId="FOUR_THREE_OVER" />;
-}
+import FOUR_THREE_OVER from "../FOUR_THREE_OVER";
+export default FOUR_THREE_OVER;

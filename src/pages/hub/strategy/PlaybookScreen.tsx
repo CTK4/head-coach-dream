@@ -37,6 +37,7 @@ import FOUR_THREE_OVER from "./playbooks/defense/FOUR_THREE_OVER";
 import SINGLE_HIGH_COVER_3 from "./playbooks/defense/SINGLE_HIGH_COVER_3";
 import SABAN_COVER_4_MATCH from "./playbooks/defense/SABAN_COVER_4_MATCH";
 import RYAN_NICKEL_PRESSURE from "./playbooks/defense/RYAN_NICKEL_PRESSURE";
+import SpecialTeams from "./playbooks/Special_Teams";
 import {
   getSchemeDisplayName,
   type DefenseSchemeId,
@@ -192,9 +193,12 @@ function MixBar({ run, pass }: { run: number; pass: number }) {
   );
 }
 
+type Tab = "OFFENSE" | "DEFENSE" | "SPECIAL_TEAMS";
+
 export default function PlaybookScreen() {
   const { state, dispatch } = useGame();
-  const [side, setSide] = useState<Side>("OFFENSE");
+  const [tab, setTab] = useState<Tab>("OFFENSE");
+  const side: Side = tab === "SPECIAL_TEAMS" ? "OFFENSE" : tab;
 
   const coordinator = useMemo(() => findCoordinatorSystem(state, side), [state, side]);
   const coordinatorScheme = useMemo(() => canonicalSchemeId(coordinator.systemRaw, side), [coordinator.systemRaw, side]);
@@ -206,13 +210,14 @@ export default function PlaybookScreen() {
   const meta = schemes.find((scheme) => scheme.id === activeScheme) ?? schemes[0];
 
   const playbookNode = useMemo(() => {
-    if (side === "OFFENSE") {
+    if (tab === "SPECIAL_TEAMS") return <SpecialTeams />;
+    if (tab === "OFFENSE") {
       const Component = OFFENSE_COMPONENTS[activeScheme as OffenseSchemeId];
       return <Component />;
     }
     const Component = DEFENSE_COMPONENTS[activeScheme as DefenseSchemeId];
     return <Component />;
-  }, [activeScheme, side]);
+  }, [activeScheme, tab]);
 
   return (
     <div className="min-w-0">
@@ -220,7 +225,7 @@ export default function PlaybookScreen() {
       <div className="space-y-4 p-4">
         <Card>
           <CardContent className="space-y-4 p-4">
-            <Tabs value={side} onValueChange={(value) => setSide(value as Side)}>
+            <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
               <TabsList className="w-full">
                 <TabsTrigger className="flex-1" value="OFFENSE">
                   Offense
@@ -228,74 +233,81 @@ export default function PlaybookScreen() {
                 <TabsTrigger className="flex-1" value="DEFENSE">
                   Defense
                 </TabsTrigger>
+                <TabsTrigger className="flex-1" value="SPECIAL_TEAMS">
+                  Special Teams
+                </TabsTrigger>
               </TabsList>
             </Tabs>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Active System</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div>
-                  Active Scheme: <span className="font-semibold text-slate-100">{getSchemeDisplayName(activeScheme)}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Selected ID: <span className="font-mono">{side === "OFFENSE" ? state.playbooks?.offensePlaybookId ?? "(unset)" : state.playbooks?.defensePlaybookId ?? "(unset)"}</span>
-                </div>
-                <div>
-                  {side === "OFFENSE" ? "OC" : "DC"}: <span className="font-semibold">{coordinator.coachName}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Source: <span className="font-mono">{coordinator.source}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Raw system: <span className="font-mono">{coordinator.systemRaw}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base">Coordinator Notes</CardTitle>
-                  <Badge variant="secondary">{meta.label}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">{meta.description}</p>
-                <div className="flex flex-wrap gap-2">
-                  {meta.tags.map((tag) => (
-                    <Badge key={tag} variant="outline">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-                {side === "OFFENSE" ? (
-                  <div>
-                    <div className="mb-1 text-xs font-semibold">Play Mix Target</div>
-                    {meta.playMix ? <MixBar run={meta.playMix.run} pass={meta.playMix.pass} /> : <div className="text-xs text-muted-foreground">—</div>}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-2 md:grid-cols-2">
-              {schemes.map((scheme) => {
-                const isActive = scheme.id === activeScheme;
-                return (
-                  <div
-                    key={scheme.id}
-                    className={`rounded-lg border p-3 ${isActive ? "border-accent bg-accent/10" : "border-white/10 bg-white/5"}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-sm">{scheme.label}</div>
-                      {isActive ? <Badge className="bg-accent text-black">ACTIVE</Badge> : <button className="rounded border border-white/20 px-2 py-0.5 text-[10px]" onClick={() => dispatch({ type: "SET_PLAYBOOK", payload: { side, playbookId: scheme.id } })}>SELECT</button>}
+            {tab !== "SPECIAL_TEAMS" && (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Active System</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div>
+                      Active Scheme: <span className="font-semibold text-slate-100">{getSchemeDisplayName(activeScheme)}</span>
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{scheme.description}</div>
-                  </div>
-                );
-              })}
-            </div>
+                    <div className="text-xs text-muted-foreground">
+                      Selected ID: <span className="font-mono">{side === "OFFENSE" ? state.playbooks?.offensePlaybookId ?? "(unset)" : state.playbooks?.defensePlaybookId ?? "(unset)"}</span>
+                    </div>
+                    <div>
+                      {side === "OFFENSE" ? "OC" : "DC"}: <span className="font-semibold">{coordinator.coachName}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Source: <span className="font-mono">{coordinator.source}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Raw system: <span className="font-mono">{coordinator.systemRaw}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base">Coordinator Notes</CardTitle>
+                      <Badge variant="secondary">{meta.label}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">{meta.description}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {meta.tags.map((tag) => (
+                        <Badge key={tag} variant="outline">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    {side === "OFFENSE" ? (
+                      <div>
+                        <div className="mb-1 text-xs font-semibold">Play Mix Target</div>
+                        {meta.playMix ? <MixBar run={meta.playMix.run} pass={meta.playMix.pass} /> : <div className="text-xs text-muted-foreground">—</div>}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-2 md:grid-cols-2">
+                  {schemes.map((scheme) => {
+                    const isActive = scheme.id === activeScheme;
+                    return (
+                      <div
+                        key={scheme.id}
+                        className={`rounded-lg border p-3 ${isActive ? "border-accent bg-accent/10" : "border-white/10 bg-white/5"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-semibold text-sm">{scheme.label}</div>
+                          {isActive ? <Badge className="bg-accent text-black">ACTIVE</Badge> : <button className="rounded border border-white/20 px-2 py-0.5 text-[10px]" onClick={() => dispatch({ type: "SET_PLAYBOOK", payload: { side, playbookId: scheme.id } })}>SELECT</button>}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{scheme.description}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

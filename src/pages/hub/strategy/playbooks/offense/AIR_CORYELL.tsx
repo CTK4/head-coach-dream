@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function AIR_CORYELL() {
-  return <OffensePlaybookTemplate schemeId="AIR_CORYELL" />;
-}
+import AIR_CORYELL from "../AIR_CORYELL";
+export default AIR_CORYELL;

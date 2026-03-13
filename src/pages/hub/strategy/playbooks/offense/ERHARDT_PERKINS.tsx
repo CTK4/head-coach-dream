@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function ERHARDT_PERKINS() {
-  return <OffensePlaybookTemplate schemeId="ERHARDT_PERKINS" />;
-}
+import ERHARDT_PERKINS from "../ERHARDT_PERKINS";
+export default ERHARDT_PERKINS;

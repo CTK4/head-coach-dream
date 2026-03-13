@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function VERTICAL_PASSING() {
-  return <OffensePlaybookTemplate schemeId="VERTICAL_PASSING" />;
-}
+import VERTICAL_PASSING from "../VERTICAL_PASSING";
+export default VERTICAL_PASSING;

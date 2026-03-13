@@ -1,5 +1,2 @@
-import OffensePlaybookTemplate from "./OffensePlaybookTemplate";
-
-export default function POWER_GAP() {
-  return <OffensePlaybookTemplate schemeId="POWER_GAP" />;
-}
+import POWER_GAP from "../POWER_GAP";
+export default POWER_GAP;

@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function CHAOS_FRONT() {
-  return <PlaceholderPlaybook side="Defense" schemeId="CHAOS_FRONT" />;
-}
+import CHAOS_FRONT from "../CHAOS_FRONT";
+export default CHAOS_FRONT;

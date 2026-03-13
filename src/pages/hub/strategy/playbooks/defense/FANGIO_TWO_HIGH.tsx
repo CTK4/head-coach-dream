@@ -1,5 +1,2 @@
-import PlaceholderPlaybook from "../PlaceholderPlaybook";
-
-export default function FANGIO_TWO_HIGH() {
-  return <PlaceholderPlaybook side="Defense" schemeId="FANGIO_TWO_HIGH" />;
-}
+import FANGIO_TWO_HIGH from "../FANGIO_TWO_HIGH";
+export default FANGIO_TWO_HIGH;
