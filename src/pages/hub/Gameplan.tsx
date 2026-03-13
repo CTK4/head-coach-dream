@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DEFAULT_WEEKLY_GAMEPLAN, deriveOpponentTendencies } from "@/engine/gameplan";
 import { buildWeatherGameKey, formatWeatherSummary } from "@/engine/weather/generateGameWeather";
 import type { LeaguePhase } from "@/engine/leaguePhase";
-import { readSettings, writeSettings, type OffensePlaycallingMode } from "@/lib/settings";
+import { readSettingsSync, writeSettings, type OffensePlaycallingMode } from "@/lib/settings";
 
 // Phases that represent playoff rounds - used to branch opponent/lock logic
 const PLAYOFF_PHASES: LeaguePhase[] = ["WILD_CARD", "DIVISIONAL", "CONFERENCE", "CHAMPIONSHIP"];
@@ -97,11 +97,11 @@ export default function GameplanPage() {
     ? `Playoff Gameplan · ${String(state.league.phase).replace("_", " ")}`
     : "Weekly Gameplan";
 
-  const offensePlaycallingMode = state.game.offenseUserMode ?? readSettings().offensePlaycallingMode ?? "FULL_AUTO";
+  const offensePlaycallingMode = state.game.offenseUserMode ?? readSettingsSync().offensePlaycallingMode ?? "FULL_AUTO";
 
   const onOffensePlaycallingModeChange = (mode: OffensePlaycallingMode) => {
     dispatch({ type: "SET_OFFENSE_USER_MODE", payload: { mode } });
-    writeSettings({ ...readSettings(), offensePlaycallingMode: mode });
+    writeSettings({ ...readSettingsSync(), offensePlaycallingMode: mode });
   };
 
   return (

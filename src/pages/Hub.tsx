@@ -4,7 +4,7 @@ import { useGame } from "@/context/GameContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HubTile, type HubBadgeKind } from "@/components/franchise-hub/HubTile";
-import { readSettings } from "@/lib/settings";
+import { readSettingsSync } from "@/lib/settings";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { HUB_TILE_IMAGES, type HubTileId } from "@/components/franchise-hub/tileImages";
@@ -54,7 +54,7 @@ export default function Hub() {
   }
 
   function onAdvanceClick() {
-    const settings = readSettings();
+    const settings = readSettingsSync();
     if (settings.confirmAutoAdvance) setConfirmOpen(true);
     else doAdvance();
   }

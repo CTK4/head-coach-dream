@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { readSettings } from "@/lib/settings";
+import { readSettingsSync } from "@/lib/settings";
 
 function pillClass(
   kind: "unread" | "task" | "cap" | "scouting" | "info",
@@ -59,7 +59,7 @@ export function ContextBar({ state }: { state: GameState }) {
   const unread = (state.hub.news ?? []).filter(
     (n) => !state.hub.newsReadIds?.[n.id],
   ).length;
-  const showTooltips = !!readSettings().showTooltips;
+  const showTooltips = !!readSettingsSync().showTooltips;
 
   const notifications = [
     {

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { readSettings, writeSettings, type OffensePlaycallingMode, type UserSettings } from "@/lib/settings";
+import { readSettingsSync, writeSettings, type OffensePlaycallingMode, type UserSettings } from "@/lib/settings";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId, DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
@@ -103,7 +103,7 @@ export default function SettingsPage() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
 
-  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettings() }));
+  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettingsSync() }));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [quitOpen, setQuitOpen] = useState(false);
 
