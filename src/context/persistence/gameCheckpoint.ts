@@ -1,6 +1,5 @@
 import type { GameState } from "@/context/GameContext";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
-import { Preferences } from "@capacitor/preferences";
 
 export const GAME_CHECKPOINT_KEY = "hc_game_checkpoint";
 
@@ -8,7 +7,13 @@ async function getNativeStorage() {
   if (!isCapacitorIosEnvironment()) {
     return null;
   }
-  return Preferences;
+
+  try {
+    const { Preferences } = await import("@capacitor/preferences");
+    return Preferences;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearGameCheckpoint() {
