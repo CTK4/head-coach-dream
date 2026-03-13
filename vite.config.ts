@@ -1,7 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { createRequire } from "module";
 import { componentTagger } from "lovable-tagger";
+
+const require = createRequire(import.meta.url);
+
+const capacitorPreferencesAlias = (() => {
+  try {
+    return require.resolve("@capacitor/preferences");
+  } catch {
+    return path.resolve(__dirname, "./src/shims/capacitorPreferences.ts");
+  }
+})();
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -17,6 +28,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@capacitor/preferences": capacitorPreferencesAlias,
     },
   },
   build: {
