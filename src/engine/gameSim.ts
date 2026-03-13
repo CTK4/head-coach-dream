@@ -873,9 +873,6 @@ export function getPlayParticipants(sim: GameSim, assignmentLog?: PlayAssignment
   const qbId = offense.QB1 ?? offense.QB;
   const rbId = offense.RB1 ?? offense.RB;
   const targetRole = assignmentLog?.targetRole ?? assignmentLog?.primaryReadRole;
-  if (assignmentLog && !assignmentLog.targetRole && assignmentLog.primaryReadRole) {
-    assignmentLog.notes = Array.from(new Set([...(assignmentLog.notes ?? []), "target-role-inferred:primaryReadRole"]));
-  }
   const targetPlayerId = assignmentLog?.targetPlayerId
     ?? (targetRole ? assignmentLog?.offenseRolesAtSnap?.[targetRole] : undefined)
     ?? (targetRole === "RB"
@@ -917,7 +914,7 @@ export function buildBadgeContextInput(sim: GameSim, playType: PlayType, assignm
   const participants = getPlayParticipants(sim, assignmentLog);
   const offenseTracked = sim.trackedPlayers[sim.possession] ?? {};
   const defenseTracked = sim.trackedPlayers[otherSide(sim.possession)] ?? {};
-  const targetRole = assignmentLog?.targetRole;
+  const targetRole = participants.targetRole;
   const targetPlayerId = participants.targetPlayerId;
   const rbResp = assignmentLog?.responsibleDefenderByRole?.RB;
   const yResp = assignmentLog?.responsibleDefenderByRole?.Y;

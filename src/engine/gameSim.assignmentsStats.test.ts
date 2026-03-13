@@ -176,7 +176,7 @@ describe("game sim assignment participants wiring", () => {
     const participants = getPlayParticipants(sim, assignmentLog);
     expect(participants.targetRole).toBe("Y");
     expect(participants.targetPlayerId).toBe("HOME_Y");
-    expect(assignmentLog.notes).toContain("target-role-inferred:primaryReadRole");
+    expect(assignmentLog.notes ?? []).toEqual([]);
   });
 
 
