@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGame } from "@/context/GameContext";
 import { ARCHETYPE_LABELS, safeLabel } from "@/lib/displayLabels";
+import { HubErrorState } from "@/components/franchise-hub/states/HubErrorState";
 
 const CATEGORY_ICON = (source: string) => {
   if (source.toLowerCase().includes("credibility") || source.toLowerCase().includes("culture") || source.toLowerCase().includes("identity")) return "◆";
@@ -79,7 +80,15 @@ export default function SeasonAwards() {
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [summary, seasonalEntries.length]);
 
-  if (!summary) return null;
+  if (!summary) {
+    return (
+      <HubErrorState
+        title="Season summary unavailable"
+        description="Advance the season to generate awards."
+        onRetry={() => navigate("/hub")}
+      />
+    );
+  }
 
   const badge = playoffBadge(summary.playoffResult);
   const displayEntries = seasonalEntries.length
