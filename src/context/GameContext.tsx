@@ -3595,11 +3595,13 @@ function ensureMinimumFreeAgencyPool(state: GameState): GameState {
 function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: number): GameState {
   let next = state;
 
-  for (const p of getPlayers()) {
+  // IMPORTANT: expire based on the same "effective" roster view the UI uses,
+  // not only the base DB player list + overrides.
+  for (const p of getEffectivePlayers(next)) {
     const playerId = String((p as any).playerId ?? "");
     if (!playerId) continue;
 
-    const currentTeamId = String(next.playerTeamOverrides[playerId] ?? (p as any).teamId ?? "");
+    const currentTeamId = String((p as any).teamId ?? "");
     if (!currentTeamId || currentTeamId === "FREE_AGENT") continue;
 
     const tagged = next.franchiseTags[playerId];
@@ -3619,6 +3621,7 @@ function expireExpiringContractsToFreeAgency(state: GameState, nextSeason: numbe
     const contract = getContractById(contractId);
     if (!contract || String((contract as any).entityType ?? "") !== "PLAYER") continue;
 
+    // If the contract ends before next season starts, the player must enter FA.
     if (Number((contract as any).endSeason ?? 0) < nextSeason) {
       next = applyCanonicalTx(next, Tx.release(currentTeamId, playerId, "CONTRACT_EXPIRED"));
     }
