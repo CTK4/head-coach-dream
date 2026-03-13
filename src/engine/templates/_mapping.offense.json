@@ -1,0 +1,104 @@
+[
+  {
+    "id": "air-raid-mesh",
+    "name": "Mesh",
+    "templateId": "P11",
+    "source": "explicit"
+  },
+  {
+    "id": "air-raid-y-cross",
+    "name": "Y-Cross",
+    "templateId": "P16",
+    "source": "explicit"
+  },
+  {
+    "id": "air-raid-inside-zone",
+    "name": "Inside Zone",
+    "templateId": "R1",
+    "source": "explicit"
+  },
+  {
+    "id": "core-quick-game",
+    "name": "Quick Slant/Flat",
+    "templateId": "P12",
+    "source": "explicit"
+  },
+  {
+    "id": "core-gap-run",
+    "name": "Gap Run",
+    "templateId": "R4",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:DROPBACK",
+    "name": "DROPBACK",
+    "templateId": "P5",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:FG",
+    "name": "FG",
+    "templateId": "P12",
+    "source": "inferred"
+  },
+  {
+    "id": "playType:INSIDE_ZONE",
+    "name": "INSIDE ZONE",
+    "templateId": "R1",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:KNEEL",
+    "name": "KNEEL",
+    "templateId": "P12",
+    "source": "inferred"
+  },
+  {
+    "id": "playType:OUTSIDE_ZONE",
+    "name": "OUTSIDE ZONE",
+    "templateId": "R2",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:PLAY_ACTION",
+    "name": "PLAY ACTION",
+    "templateId": "PA1",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:POWER",
+    "name": "POWER",
+    "templateId": "R3",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:PUNT",
+    "name": "PUNT",
+    "templateId": "P12",
+    "source": "inferred"
+  },
+  {
+    "id": "playType:QUICK_GAME",
+    "name": "QUICK GAME",
+    "templateId": "P12",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:RPO_READ",
+    "name": "RPO READ",
+    "templateId": "R7",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:SCREEN",
+    "name": "SCREEN",
+    "templateId": "S1",
+    "source": "explicit"
+  },
+  {
+    "id": "playType:SPIKE",
+    "name": "SPIKE",
+    "templateId": "P12",
+    "source": "inferred"
+  }
+]

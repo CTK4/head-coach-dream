@@ -29,6 +29,11 @@ import { describeUnicornBoost, resolveUnicornModifiers } from "@/engine/unicorns
 import { resolveBadgeSimModifiers } from "@/engine/badges/effects";
 import type { PlayerBadge } from "@/engine/badges/types";
 import type { OffenseSchemeId } from "@/lib/schemeLabels";
+import { buildAssignments } from "@/engine/assignments/buildAssignments";
+import { chooseTargetRole } from "@/engine/passing/targetSelection";
+import { getCanonicalRating } from "@/engine/ratings/ratingAdapter";
+import type { OffenseEligibleRole, PlayAssignmentLog } from "@/engine/assignments/types";
+import type { TrackedPlayers } from "@/engine/types/trackedPlayers";
 
 // ─── Play types ────────────────────────────────────────────────────────────
 /** Legacy play types kept for backward-compat; new granular types added below */
@@ -206,6 +211,7 @@ export type DriveLogEntry = {
   result: string;
   resultTags: ResultTag[];
   explanation?: PlayExplanation;
+  assignmentLog?: PlayAssignmentLog;
   homeScore: number;
   awayScore: number;
 };
@@ -284,7 +290,7 @@ export type GameSim = {
   /** Runtime snap load for current game */
   snapLoadThisGame: Record<string, number>;
   /** Tracked participant mapping by side */
-  trackedPlayers: Record<Possession, Partial<Record<FatigueTrackedPosition, string>>>;
+  trackedPlayers: TrackedPlayers;
   specialistsBySide: Record<Possession, Partial<Record<"K" | "P", string>>>;
   currentPersonnelPackage: PersonnelPackage;
   likelyDefensiveReactions: Array<{ defensivePackage: DefensivePackage; probability: number }>;
@@ -308,6 +314,7 @@ export type GameSim = {
   lastPlayResult?: PlayResult;
   /** Deterministic pass resolver diagnostics for last snap (transient state) */
   lastPlayDiag?: PassPlayDiag;
+  lastAssignmentLog?: PlayAssignmentLog;
   offenseUserMode?: "FULL_AUTO" | "KEY_SITUATIONS" | "FULL_PLAYCALLING";
   pendingOffensiveCall?: PendingOffensiveCall;
   defenseUserMode?: "OFF" | "KEY_DOWNS" | "ALWAYS";
@@ -557,7 +564,7 @@ export function composeExecutionModifiers(params: { fatigueMod: number; matchupM
 }
 
 function executionState(sim: GameSim, playType: PlayType, matchup: MatchupModifier): number {
-  const tracked = sim.trackedPlayers[sim.possession];
+  const tracked = sim.trackedPlayers[sim.possession] ?? {};
   const runPlay = isRunPlay(playType);
   const weighted: Array<{ pos: FatigueTrackedPosition; w: number }> =
     runPlay
@@ -588,7 +595,7 @@ function computePAS(playType: PlayType, look: DefensiveLook, sim: GameSim, match
   const me = off && def ? matchupEdge(playType, off, def, sim) : 0;
   const sf = situationFit(playType, sim);
   const exec = executionState(sim, playType, matchup);
-  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qbId = sim.trackedPlayers[sim.possession]?.QB1 ?? sim.trackedPlayers[sim.possession]?.QB;
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
   const schemeId = sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId;
@@ -816,6 +823,191 @@ function currentWeatherLabel(sim: GameSim): string {
   return String(sim.weather?.condition ?? "CLEAR").toUpperCase();
 }
 
+type PlayParticipants = {
+  qbId?: string;
+  rbId?: string;
+  targetRole?: OffenseEligibleRole;
+  targetPlayerId?: string;
+  primaryDefenderId?: string;
+  rusherIds: string[];
+  blockerIds: string[];
+  primaryRusherId?: string;
+};
+
+function emptyPlayerBoxLine(playerId: string, side: Possession): PlayerBoxScore {
+  return {
+    playerId,
+    side,
+    snaps: 0,
+    passing: { attempts: 0, completions: 0, yards: 0, tds: 0, ints: 0, sacksTaken: 0 },
+    rushing: { attempts: 0, yards: 0, tds: 0 },
+    receiving: { targets: 0, receptions: 0, yards: 0, tds: 0 },
+    defense: { tackles: 0, sacks: 0, tfl: 0, hurries: 0, interceptionsDef: 0, passDeflections: 0, coverageGrade: 0 },
+    specialTeams: {
+      fieldGoalsMade: 0,
+      fieldGoalAttempts: 0,
+      fgMadeShort: 0,
+      fgMadeMid: 0,
+      fgMadeLong: 0,
+      extraPointsMade: 0,
+      punts: 0,
+      puntYards: 0,
+      puntsInside20: 0,
+    },
+  };
+}
+
+function upsertPlayerLine(players: PlayerBoxScore[], playerId: string, side: Possession): PlayerBoxScore {
+  let line = players.find((p) => p.playerId === playerId && p.side === side);
+  if (!line) {
+    line = emptyPlayerBoxLine(playerId, side);
+    players.push(line);
+  }
+  return line;
+}
+
+export function getPlayParticipants(sim: GameSim, assignmentLog?: PlayAssignmentLog): PlayParticipants {
+  const offense = sim.trackedPlayers[sim.possession] ?? {};
+  const defenseSide = otherSide(sim.possession);
+  const defense = sim.trackedPlayers[defenseSide] ?? {};
+  const qbId = offense.QB1 ?? offense.QB;
+  const rbId = offense.RB1 ?? offense.RB;
+  const targetRole = assignmentLog?.targetRole ?? assignmentLog?.primaryReadRole;
+  const targetPlayerId = assignmentLog?.targetPlayerId
+    ?? (targetRole ? assignmentLog?.offenseRolesAtSnap?.[targetRole] : undefined)
+    ?? (targetRole === "RB"
+      ? (offense.RB1 ?? offense.RB)
+      : targetRole === "Y"
+        ? (offense.TE1 ?? offense.TE)
+        : targetRole === "Z"
+          ? (assignmentLog?.offenseRolesAtSnap?.Z ?? offense.WR2 ?? offense.WR1 ?? offense.WR)
+          : targetRole === "H"
+            ? (assignmentLog?.offenseRolesAtSnap?.H ?? offense.WR3 ?? offense.FB1 ?? offense.WR2 ?? offense.WR)
+            : (assignmentLog?.offenseRolesAtSnap?.X ?? offense.WR1 ?? offense.WR));
+  const primaryDefenderId = assignmentLog?.defenderId
+    ?? (targetRole && targetRole !== "QB" ? assignmentLog?.responsibleDefenderByRole?.[targetRole] : undefined)
+    ?? defense.CB1
+    ?? defense.DB;
+
+  const rushMatchups = assignmentLog?.rushMatchups ?? [];
+  const rusherIds = rushMatchups.map((m) => String(m.rusherId));
+  const blockerIds = rushMatchups.flatMap((m) => m.blockerIds.map((id) => String(id)));
+  const primaryRusherId = rushMatchups.find((m) => (m.note ?? "").toLowerCase().includes("protection side"))?.rusherId
+    ?? rushMatchups[0]?.rusherId
+    ?? defense.EDGE_L
+    ?? defense.DL
+    ?? defense.LB;
+
+  return {
+    qbId: qbId ? String(qbId) : undefined,
+    rbId: rbId ? String(rbId) : undefined,
+    targetRole,
+    targetPlayerId: targetPlayerId ? String(targetPlayerId) : undefined,
+    primaryDefenderId: primaryDefenderId ? String(primaryDefenderId) : undefined,
+    rusherIds,
+    blockerIds,
+    primaryRusherId: primaryRusherId ? String(primaryRusherId) : undefined,
+  };
+}
+
+export function buildBadgeContextInput(sim: GameSim, playType: PlayType, assignmentLog?: PlayAssignmentLog) {
+  const participants = getPlayParticipants(sim, assignmentLog);
+  const offenseTracked = sim.trackedPlayers[sim.possession] ?? {};
+  const defenseTracked = sim.trackedPlayers[otherSide(sim.possession)] ?? {};
+  const targetRole = participants.targetRole;
+  const targetPlayerId = participants.targetPlayerId;
+  const rbResp = assignmentLog?.responsibleDefenderByRole?.RB;
+  const yResp = assignmentLog?.responsibleDefenderByRole?.Y;
+  const lbByResponsibility = [rbResp, yResp].find((id) => id && (
+    id === assignmentLog?.defenseRolesAtSnap?.LB1
+    || id === assignmentLog?.defenseRolesAtSnap?.LB2
+    || id === defenseTracked.LB
+  ));
+  return {
+    playType,
+    ballOn: sim.ballOn,
+    offenseIds: {
+      QB: participants.qbId,
+      RB: targetRole === "RB" ? targetPlayerId : (participants.rbId ?? offenseTracked.RB1 ?? offenseTracked.RB),
+      WR: (targetRole === "X" || targetRole === "Z" || targetRole === "H") ? targetPlayerId : (assignmentLog?.offenseRolesAtSnap?.X ?? offenseTracked.WR1 ?? offenseTracked.WR),
+      TE: targetRole === "Y" ? targetPlayerId : (assignmentLog?.offenseRolesAtSnap?.Y ?? offenseTracked.TE1 ?? offenseTracked.TE),
+    },
+    defenseIds: {
+      DL: participants.primaryRusherId ?? defenseTracked.DL,
+      LB: lbByResponsibility ?? defenseTracked.LB1 ?? defenseTracked.LB,
+      DB: participants.primaryDefenderId ?? defenseTracked.CB1 ?? defenseTracked.DB,
+    },
+    specialistIds: { K: sim.specialistsBySide[sim.possession]?.K, P: sim.specialistsBySide[sim.possession]?.P },
+  };
+}
+
+export function applyPlayerStatsForResolvedPlay(
+  sim: GameSim,
+  params: { playType: PlayType; yards: number; sack: boolean; scramble: boolean; incomplete: boolean; turnover: boolean; turnoverKind?: "INT" | "FUMBLE"; td: boolean; assignmentLog?: PlayAssignmentLog },
+): GameSim {
+  const offenseSide = sim.possession;
+  const defenseSide = otherSide(sim.possession);
+  const players = [...(sim.boxScore?.players ?? [])];
+  const participants = getPlayParticipants(sim, params.assignmentLog);
+  const isRun = params.playType === "INSIDE_ZONE" || params.playType === "OUTSIDE_ZONE" || params.playType === "POWER" || params.playType === "RUN" || params.playType === "QB_KEEP";
+
+  if (isRun) {
+    const carrier = params.playType === "QB_KEEP" ? participants.qbId : participants.rbId;
+    if (carrier) {
+      const line = upsertPlayerLine(players, carrier, offenseSide);
+      line.rushing.attempts += 1;
+      if (!params.turnover) {
+        line.rushing.yards += Math.max(0, params.yards);
+        if (params.td) line.rushing.tds += 1;
+      }
+    }
+  } else {
+    if (params.scramble && participants.qbId) {
+      const qbRunLine = upsertPlayerLine(players, participants.qbId, offenseSide);
+      qbRunLine.rushing.attempts += 1;
+      if (!params.turnover) {
+        qbRunLine.rushing.yards += Math.max(0, params.yards);
+        if (params.td) qbRunLine.rushing.tds += 1;
+      }
+      return { ...sim, boxScore: { ...(sim.boxScore ?? buildGameBoxScore(sim, sim.weekNumber ?? 0)), players } };
+    }
+
+    if (participants.qbId) {
+      const qbLine = upsertPlayerLine(players, participants.qbId, offenseSide);
+      if (!params.sack) qbLine.passing.attempts += 1;
+      if (!params.sack && !params.incomplete && !params.turnover) {
+        qbLine.passing.completions += 1;
+        qbLine.passing.yards += Math.max(0, params.yards);
+        if (params.td) qbLine.passing.tds += 1;
+      }
+      if (params.sack) qbLine.passing.sacksTaken += 1;
+      if (params.turnoverKind === "INT") qbLine.passing.ints += 1;
+    }
+
+    if (!params.sack && participants.targetPlayerId) {
+      const targetLine = upsertPlayerLine(players, participants.targetPlayerId, offenseSide);
+      targetLine.receiving.targets += 1;
+      if (!params.sack && !params.incomplete && !params.turnover) {
+        targetLine.receiving.receptions += 1;
+        targetLine.receiving.yards += Math.max(0, params.yards);
+        if (params.td) targetLine.receiving.tds += 1;
+      }
+    }
+
+    if (params.turnoverKind === "INT" && participants.primaryDefenderId) {
+      const defender = upsertPlayerLine(players, participants.primaryDefenderId, defenseSide);
+      defender.defense.interceptionsDef += 1;
+    }
+
+    if (params.sack && participants.primaryRusherId) {
+      const rusher = upsertPlayerLine(players, participants.primaryRusherId, defenseSide);
+      rusher.defense.sacks += 1;
+    }
+  }
+
+  return { ...sim, boxScore: { ...(sim.boxScore ?? buildGameBoxScore(sim, sim.weekNumber ?? 0)), players } };
+}
+
 
 function getUnicornForPlayer(sim: GameSim, playerId: string | undefined): PlayerUnicorn | undefined {
   if (!playerId) return undefined;
@@ -831,7 +1023,7 @@ function resolveWithPAS(
   aggression: AggressionLevel,
   snapKey: string,
   defensiveCall?: DefensiveCall,
-): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; td: boolean; sack: boolean; incomplete: boolean; diag?: PassPlayDiag; unicornImpact?: { playerId: string; archetypeId: UnicornArchetypeId; description: string } } {
+): { yards: number; tags: ResultTag[]; outcomeLabel: string; turnover: boolean; turnoverKind?: "INT" | "FUMBLE"; td: boolean; sack: boolean; scramble: boolean; incomplete: boolean; diag?: PassPlayDiag; unicornImpact?: { playerId: string; archetypeId: UnicornArchetypeId; description: string }; assignmentLog?: PlayAssignmentLog } {
   const matchup = getMatchupModifier(sim.currentPersonnelPackage, sim.selectedDefensivePackage ?? "Nickel");
   const passive = resolveArchetypePassives(
     { archetypeId: sim.coachArchetypeId, tenureYear: sim.coachTenureYear },
@@ -847,34 +1039,31 @@ function resolveWithPAS(
   const isRun = playType === "INSIDE_ZONE" || playType === "OUTSIDE_ZONE" || playType === "POWER" || playType === "RUN" || playType === "QB_KEEP";
   const isPass = !isRun && playType !== "SPIKE" && playType !== "KNEEL" && playType !== "PUNT" && playType !== "FG";
   const offenseSchemeId = (sim.possession === "HOME" ? sim.homeGameplan?.offenseSchemeId : sim.awayGameplan?.offenseSchemeId) ?? undefined;
-  const qbId = sim.trackedPlayers[sim.possession]?.QB;
+  const qbId = sim.trackedPlayers[sim.possession]?.QB1 ?? sim.trackedPlayers[sim.possession]?.QB;
   const qb = qbId ? (getPlayerById(String(qbId)) as any) : undefined;
   const qbTag = qb ? resolveQbArchetypeTag(qb) : "GAME_MANAGER";
   const schemeFit = getQbSchemeFitMultiplier(qbTag, offenseSchemeId);
   const weatherLabel = currentWeatherLabel(sim);
   const qbUnicorn = getUnicornForPlayer(sim, qbId);
-  const rbId = sim.trackedPlayers[sim.possession]?.RB;
+  const rbId = sim.trackedPlayers[sim.possession]?.RB1 ?? sim.trackedPlayers[sim.possession]?.RB;
   const rbUnicorn = getUnicornForPlayer(sim, rbId);
-  const edgeId = sim.trackedPlayers[otherSide(sim.possession)]?.DL ?? sim.trackedPlayers[otherSide(sim.possession)]?.LB;
+  const participants = getPlayParticipants(sim, sim.lastAssignmentLog);
+  const defenseTracked = sim.trackedPlayers[otherSide(sim.possession)] ?? {};
+  const edgeId = participants.primaryRusherId ?? defenseTracked.EDGE_L ?? defenseTracked.DL ?? defenseTracked.LB;
   const edgeUnicorn = getUnicornForPlayer(sim, edgeId);
-  const badgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, {
-    playType,
-    ballOn: sim.ballOn,
-    offenseIds: { QB: qbId, RB: rbId, WR: sim.trackedPlayers[sim.possession]?.WR, TE: sim.trackedPlayers[sim.possession]?.TE },
-    defenseIds: { DL: sim.trackedPlayers[otherSide(sim.possession)]?.DL, LB: sim.trackedPlayers[otherSide(sim.possession)]?.LB, DB: sim.trackedPlayers[otherSide(sim.possession)]?.DB },
-    specialistIds: { K: sim.specialistsBySide[sim.possession]?.K, P: sim.specialistsBySide[sim.possession]?.P },
-  });
-
-  const passAccuracyDelta = passivePas + perkPas + badgeMods.pasDelta;
+  let badgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, buildBadgeContextInput(sim, playType, sim.lastAssignmentLog));
 
   let yards = 0;
   let turnover = false;
   let td = false;
   let sack = false;
+  let scramble = false;
   let incomplete = false;
   let outcomeLabel = "normal";
+  let turnoverKind: "INT" | "FUMBLE" | undefined;
   let diag: PassPlayDiag | undefined;
   let unicornImpact: { playerId: string; archetypeId: UnicornArchetypeId; description: string } | undefined;
+  let assignmentLogUpdate: PlayAssignmentLog | undefined;
 
   const baseTags = buildResultTags(sim, playType, look, pasComp, "SUCCESS", aggression);
   const resolverTags: ResultTag[] = [];
@@ -899,9 +1088,32 @@ function resolveWithPAS(
     }
     const contactRng = contextualRng(sim.seed, `${snapKey}:contact`);
     const rbMods = resolveUnicornModifiers(rbUnicorn?.archetypeId, { weather: weatherLabel, down: sim.down, distance: sim.distance });
+    const carrierId = playType === "QB_KEEP" ? (sim.trackedPlayers[sim.possession]?.QB1 ?? sim.trackedPlayers[sim.possession]?.QB) : (sim.trackedPlayers[sim.possession]?.RB1 ?? sim.trackedPlayers[sim.possession]?.RB);
+    const carrier = carrierId ? (getPlayerById(String(carrierId)) as any) : undefined;
+    const primaryDefender = participants.primaryDefenderId ? (getPlayerById(String(participants.primaryDefenderId)) as any) : undefined;
     const contactInput: ContactInput = {
-      ballcarrier: { weightLb: 215, strength: 74 + (rbMods.runTruck ?? 0), balance: 73, agility: 77, accel: 78 + (rbMods.runBurst ?? 0), tackling: 25, heightIn: 71, jump: 75, fatigue01: 0.25 },
-      tackler: { weightLb: look.box === "HEAVY" ? 248 : 228, strength: Math.round((look.box === "HEAVY" ? 80 : 74) * callFx.runStuff), balance: 66, agility: 69, accel: 70, tackling: look.blitz === "LIKELY" ? 78 : 72, heightIn: 74, jump: 70, fatigue01: 0.22 },
+      ballcarrier: {
+        weightLb: getCanonicalRating(carrier, "Weight_Lbs", playType === "QB_KEEP" ? 215 : 208),
+        strength: getCanonicalRating(carrier, "Strength", 74) + (rbMods.runTruck ?? 0),
+        balance: getCanonicalRating(carrier, "Body_Control", 73),
+        agility: getCanonicalRating(carrier, "Agility", 77),
+        accel: getCanonicalRating(carrier, "Acceleration", 78) + (rbMods.runBurst ?? 0),
+        tackling: 25,
+        heightIn: getCanonicalRating(carrier, "Height_Inches", playType === "QB_KEEP" ? 74 : 71),
+        jump: getCanonicalRating(carrier, "Jumping", 75),
+        fatigue01: 0.25,
+      },
+      tackler: {
+        weightLb: getCanonicalRating(primaryDefender, "Weight_Lbs", look.box === "HEAVY" ? 248 : 228),
+        strength: Math.round(getCanonicalRating(primaryDefender, "Strength", look.box === "HEAVY" ? 80 : 74) * callFx.runStuff),
+        balance: getCanonicalRating(primaryDefender, "Body_Control", 66),
+        agility: getCanonicalRating(primaryDefender, "Agility", 69),
+        accel: getCanonicalRating(primaryDefender, "Acceleration", 70),
+        tackling: getCanonicalRating(primaryDefender, "Tackling", look.blitz === "LIKELY" ? 78 : 72),
+        heightIn: getCanonicalRating(primaryDefender, "Height_Inches", 74),
+        jump: getCanonicalRating(primaryDefender, "Jumping", 70),
+        fatigue01: 0.22,
+      },
       move: { type: playType === "OUTSIDE_ZONE" ? "JUKE" : playType === "POWER" ? "STIFF_ARM" : "NONE", timing01: 0.55 },
       context: {
         angleDeg: look.blitz === "LIKELY" ? 18 : look.shell === "SINGLE_HIGH" ? 34 : 46,
@@ -916,7 +1128,7 @@ function resolveWithPAS(
     yards = Math.max(yards, contact.yacYards);
     // Apply RB fatigue as a direct yards reduction (after contact resolution to preserve RNG sequence)
     {
-      const rbPlayerId = sim.trackedPlayers[sim.possession]?.RB;
+      const rbPlayerId = sim.trackedPlayers[sim.possession]?.RB1 ?? sim.trackedPlayers[sim.possession]?.RB;
       const rbFatigueLevel = rbPlayerId ? clampFatigue(sim.playerFatigue[rbPlayerId] ?? 50) : 50;
       yards = Math.max(-8, yards - Math.floor(Math.max(0, rbFatigueLevel - 40) * 0.04));
     }
@@ -930,6 +1142,7 @@ function resolveWithPAS(
       contextualRng(sim.seed, `${snapKey}:fumble-run`),
     );
     turnover = runFumble.fumble && runFumble.recoveredBy === "DEFENSE";
+    turnoverKind = turnover ? "FUMBLE" : undefined;
     outcomeLabel = turnover ? "turnover" : contact.tackled ? "success" : contact.yacYards >= 12 ? "explosive" : "success";
     resolverTags.push(...contact.resultTags, ...runFumble.resultTags);
     if (rbUnicorn && (rbMods.runBurst || rbMods.runTruck)) {
@@ -966,6 +1179,7 @@ function resolveWithPAS(
         contextualRng(sim.seed, `${snapKey}:fumble-sack`),
       );
       turnover = sackFumble.fumble && sackFumble.recoveredBy === "DEFENSE";
+      turnoverKind = turnover ? "FUMBLE" : undefined;
       resolverTags.push(...sackFumble.resultTags);
       outcomeLabel = "negative";
     } else {
@@ -984,10 +1198,43 @@ function resolveWithPAS(
             context: { angleDeg: 30, padLevelOff01: 0.5, padLevelDef01: 0.65, shortYardage: sim.distance <= 2, pile: false, surface: "DRY" },
           }, contextualRng(sim.seed, `${snapKey}:qb-contact`));
           yards = Math.max(0, qbContact.yacYards);
+          scramble = true;
           outcomeLabel = yards >= 12 ? "explosive" : "success";
           if (qbId) sim.qbRunContactsByPlayerId[qbId] = (sim.qbRunContactsByPlayerId[qbId] ?? 0) + (qbContact.tackled ? 1 : 0);
           resolverTags.push(...qbContact.resultTags, { kind: "EXECUTION", text: "QB_SCRAMBLE" });
           diag = { ...(diag ?? {}), scrambleContact: qbContact.diag };
+          assignmentLogUpdate = {
+            ...((sim.lastAssignmentLog ?? {}) as PlayAssignmentLog),
+            targetRole: undefined,
+            targetPlayerId: undefined,
+            defenderId: participants.primaryRusherId ?? sim.lastAssignmentLog?.defenderId,
+          };
+          const scrambleFumble = resolveFumble(
+            {
+              carrier: { balanceZ: ratingZ(Number(qb?.truckContactBalance ?? 66)), strengthZ: ratingZ(Number(qb?.strength ?? 70)), fatigue01: 0.24 },
+              hitter: { hitPowerZ: ratingZ(76), tackleZ: ratingZ(75) },
+              context: { impulseProxy: qbContact.tackled ? 1 : 0.7, surface: "DRY", contactType: "RUN" },
+            },
+            contextualRng(sim.seed, `${snapKey}:fumble-scramble`),
+          );
+          if (scrambleFumble.fumble && scrambleFumble.recoveredBy === "DEFENSE") {
+            turnover = true;
+            turnoverKind = "FUMBLE";
+            outcomeLabel = "turnover";
+          }
+          resolverTags.push(...scrambleFumble.resultTags);
+          const scrambleBadgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, {
+            ...buildBadgeContextInput(sim, "RUN", assignmentLogUpdate),
+            offenseIds: { QB: qbId ? String(qbId) : undefined, RB: undefined, WR: undefined, TE: undefined },
+            defenseIds: {
+              DL: participants.primaryRusherId ?? defenseTracked.DL,
+              LB: participants.primaryDefenderId ?? defenseTracked.LB1 ?? defenseTracked.LB,
+              DB: undefined,
+            },
+          });
+          if (scrambleBadgeMods.runYardsDelta !== 0) {
+            yards = Math.max(0, yards + scrambleBadgeMods.runYardsDelta);
+          }
         } else {
           sack = true;
           yards = -Math.round(tri(rng, 3, 6, 10));
@@ -1006,21 +1253,93 @@ function resolveWithPAS(
         contextualRng(sim.seed, `${snapKey}:ballistics`),
       );
       const catchRng = contextualRng(sim.seed, `${snapKey}:catch`);
-      const passCompShift = Math.max(-10, Math.min(10, Math.round(passAccuracyDelta * 80)));
+      const assignmentLog = sim.lastAssignmentLog;
+      const primaryRead = (assignmentLog?.primaryReadRole && assignmentLog.primaryReadRole !== "QB") ? assignmentLog.primaryReadRole : "X";
+      const progressionReads = (assignmentLog?.progressionRoles ?? []).filter((r) => r !== "QB" && r !== primaryRead);
+      const readsOrder: OffenseEligibleRole[] = [primaryRead, ...progressionReads];
+      const qbProfile = {
+        footballIq: getCanonicalRating(qb, "Football_IQ", 72),
+        vision: getCanonicalRating(qb, "Vision", 72),
+        awareness: getCanonicalRating(qb, "Awareness", 72),
+        focus: getCanonicalRating(qb, "Focus", 70),
+        poise: getCanonicalRating(qb, "Poise", 70),
+        pocketPresence: getCanonicalRating(qb, "Pocket_Presence", 70),
+        release: getCanonicalRating(qb, "Release", 72),
+      };
+      const baseOpen = (role: OffenseEligibleRole) => {
+        const trackedOffense = sim.trackedPlayers[sim.possession] ?? {};
+        const rolePlayerId = assignmentLog?.offenseRolesAtSnap?.[role]
+          ?? (role === "RB"
+            ? (trackedOffense.RB1 ?? trackedOffense.RB)
+            : role === "Y"
+              ? (trackedOffense.TE1 ?? trackedOffense.TE)
+              : role === "QB"
+                ? (trackedOffense.QB1 ?? trackedOffense.QB)
+                : (trackedOffense.WR1 ?? trackedOffense.WR ?? qbId));
+        const defId = role === "QB"
+          ? assignmentLog?.responsibleDefenderByRole?.RB ?? assignmentLog?.defenderId
+          : assignmentLog?.responsibleDefenderByRole?.[role] ?? assignmentLog?.defenderId;
+        const wrP = rolePlayerId ? (getPlayerById(String(rolePlayerId)) as any) : undefined;
+        const cbP = defId ? (getPlayerById(String(defId)) as any) : undefined;
+        const sep = ((getCanonicalRating(wrP, "Route_Running", 72) + getCanonicalRating(wrP, "Speed", 72) + getCanonicalRating(wrP, "Acceleration", 72)) / 3 - (getCanonicalRating(cbP, "Man_Coverage", 72) + getCanonicalRating(cbP, "Zone_Coverage", 72) + getCanonicalRating(cbP, "Speed", 72)) / 3) / 50;
+        const covMod = assignmentLog?.coverageFamily === "Cover0" ? -0.08 : assignmentLog?.coverageFamily === "Drop8" ? -0.06 : assignmentLog?.coverageFamily === "Cover3" ? -0.02 : 0.03;
+        return sep + covMod;
+      };
+      const openScoreByRole: Partial<Record<OffenseEligibleRole, number>> = {
+        QB: -1,
+        RB: baseOpen("RB"),
+        X: baseOpen("X"),
+        Z: baseOpen("Z"),
+        H: baseOpen("H"),
+        Y: baseOpen("Y"),
+      };
+      const timeToPressureMs = Math.max(600, 2400 - (rushOutcome.diag?.pressureScore ?? 0) * 11);
+      const selectedTarget = chooseTargetRole({
+        reads: { primary: readsOrder[0] ?? "X", progression: readsOrder.slice(1) },
+        qb: qbProfile,
+        openScoreByRole,
+        timeToPressureMs,
+      });
+      const targetRole = selectedTarget.chosenRole;
+      const trackedOffense = sim.trackedPlayers[sim.possession] ?? {};
+      const targetPlayerId = assignmentLog?.offenseRolesAtSnap?.[targetRole]
+        ?? (targetRole === "RB"
+          ? (trackedOffense.RB1 ?? trackedOffense.RB)
+          : targetRole === "Y"
+            ? (trackedOffense.TE1 ?? trackedOffense.TE)
+            : (trackedOffense.WR1 ?? trackedOffense.WR));
+      // QB should never be selected for a pass target; this branch is a defensive guard fallback.
+      const targetDefenderId = targetRole === "QB"
+        ? assignmentLog?.responsibleDefenderByRole?.RB ?? assignmentLog?.defenderId
+        : assignmentLog?.responsibleDefenderByRole?.[targetRole] ?? assignmentLog?.defenderId;
+      const wrPlayer = targetPlayerId ? (getPlayerById(String(targetPlayerId)) as any) : undefined;
+      const cbPlayer = targetDefenderId ? (getPlayerById(String(targetDefenderId)) as any) : undefined;
+
+      assignmentLogUpdate = {
+        ...(assignmentLog ?? sim.lastAssignmentLog),
+        primaryReadRole: primaryRead,
+        targetRole,
+        targetPlayerId: targetPlayerId ? String(targetPlayerId) : undefined,
+        defenderId: targetDefenderId ? String(targetDefenderId) : undefined,
+        progressionIndexUsed: selectedTarget.progressionIndexUsed,
+      };
+
+      const passBadgeMods = resolveBadgeSimModifiers(sim.playerBadges ?? {}, buildBadgeContextInput(sim, playType, assignmentLogUpdate));
+      badgeMods = passBadgeMods;
+      const passCompShift = Math.max(-10, Math.min(10, Math.round((passivePas + perkPas + passBadgeMods.pasDelta) * 80)));
+
       const catchInput: CatchInput = {
         qb: { accuracy: Math.round((Number((throwOnRun ? qb?.armOnRunAccuracy : qb?.accuracyMid) ?? 76) + Number(qbMods.throwOnMove ?? 0)) * schemeFit) + passCompShift, arm: Number(qb?.armStrength ?? 78) + Number(qbMods.armStrength ?? 0), decision: Math.round(Number(qb?.decisionSpeed ?? 74) * callFx.pInt) + passCompShift, pressure01: Math.min(0.95, (look.blitz === "LIKELY" ? 0.62 : 0.34) * callFx.sackProb), fatigue01: 0.22 },
-        wr: { heightIn: 73, weightLb: 198, speed: Math.round(84 * callFx.pExpl), hands: Math.round(79 * callFx.pComp), jump: 80, strength: 68, balance: 76, fatigue01: 0.24 },
-        cb: { heightIn: 72, speed: 81, coverage: 77, ballSkills: 73, strength: 70, fatigue01: 0.22 },
+        wr: { heightIn: getCanonicalRating(wrPlayer, "Height_Inches", 73), weightLb: getCanonicalRating(wrPlayer, "Weight_Lbs", 198), speed: Math.round((getCanonicalRating(wrPlayer, "Speed", 84) + getCanonicalRating(wrPlayer, "Acceleration", 84)) / 2 * callFx.pExpl), hands: Math.round(getCanonicalRating(wrPlayer, "Hands", 79) * callFx.pComp), jump: getCanonicalRating(wrPlayer, "Jumping", 80), strength: getCanonicalRating(wrPlayer, "Strength", 68), balance: getCanonicalRating(wrPlayer, "Body_Control", 76), fatigue01: 0.24 },
+        cb: { heightIn: getCanonicalRating(cbPlayer, "Height_Inches", 72), speed: (getCanonicalRating(cbPlayer, "Speed", 81) + getCanonicalRating(cbPlayer, "Acceleration", 81)) / 2, coverage: (getCanonicalRating(cbPlayer, "Man_Coverage", 77) + getCanonicalRating(cbPlayer, "Zone_Coverage", 77)) / 2, ballSkills: (getCanonicalRating(cbPlayer, "Ball_Skills", 73) + getCanonicalRating(cbPlayer, "Awareness", 73)) / 2, strength: getCanonicalRating(cbPlayer, "Strength", 70), fatigue01: 0.22 },
         context: {
           targetDepth: playType === "SCREEN" || playType === "QUICK_GAME" ? "SHORT" : playType === "DROPBACK" ? "MID" : "DEEP",
-          separationYds: (playType === "SCREEN" ? 1.8 : 1.1) + (throwOnRun ? 0.25 : 0),
+          separationYds: (playType === "SCREEN" ? 1.8 : 1.1) + (openScoreByRole[targetRole] ?? 0),
           routeBreakSeverity01: playType === "QUICK_GAME" ? 0.35 : playType === "DROPBACK" ? 0.55 : 0.42,
           highPoint: playType === "DROPBACK",
           contactAtCatch: look.shell === "SINGLE_HIGH" ? "LIGHT" : "NONE",
           surface: "DRY",
-          // Single-path PAS application: passive/perk/badge PAS deltas only enter pass resolution
-          // through catch-resolver QB inputs (accuracy/decision), never via generic yards conversion.
-          throwQualityAdj: ballistics.throwQualityAdj - (rushOutcome.pressured ? 0.14 : 0),
+          throwQualityAdj: ballistics.throwQualityAdj - (rushOutcome.pressured ? 0.14 : 0) - Math.max(0, selectedTarget.progressionIndexUsed - 1) * 0.03,
           deepVarianceMult: ballistics.deepVarianceMult,
           wobbleChance: ballistics.wobbleChance,
         },
@@ -1029,6 +1348,7 @@ function resolveWithPAS(
       diag = { ...(diag ?? {}), catchPoint: catchOutcome.diag };
       incomplete = !catchOutcome.completed;
       turnover = catchOutcome.intercepted || (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE");
+      turnoverKind = catchOutcome.intercepted ? "INT" : (catchOutcome.fumble && catchOutcome.recoveredBy === "DEFENSE" ? "FUMBLE" : undefined);
       yards = catchOutcome.completed ? Math.round((catchOutcome.yacYards + (playType === "DROPBACK" ? 9 : playType === "PLAY_ACTION" ? 6 : 4)) * callFx.pExpl) : 0;
       outcomeLabel = turnover ? "turnover" : incomplete ? "incomplete" : yards >= Math.round(18 * (2 - callFx.pExpl)) ? "explosive" : "success";
       resolverTags.push(...catchOutcome.resultTags);
@@ -1049,7 +1369,7 @@ function resolveWithPAS(
 
   const tags: ResultTag[] = [...baseTags, ...resolverTags, { kind: "EXECUTION", text: `SNAP_KEY:${snapKey}` }];
 
-  if (isPass && !sack && !incomplete && !turnover && badgeMods.passYardsDelta !== 0) {
+  if (isPass && !scramble && !sack && !incomplete && !turnover && badgeMods.passYardsDelta !== 0) {
     yards += badgeMods.passYardsDelta;
   }
 
@@ -1058,7 +1378,7 @@ function resolveWithPAS(
     yards = 100 - sim.ballOn;
   }
 
-  return { yards, tags, outcomeLabel, turnover, td, sack, incomplete, diag, unicornImpact };
+  return { yards, tags, outcomeLabel, turnover, turnoverKind, td, sack, scramble, incomplete, diag, unicornImpact, assignmentLog: assignmentLogUpdate ?? sim.lastAssignmentLog };
 }
 
 // ─── Existing helpers (unchanged) ─────────────────────────────────────────
@@ -1180,6 +1500,7 @@ function setNewSeries(sim: GameSim, ballOn: number): GameSim {
   };
 }
 
+
 function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
   const entry: DriveLogEntry = {
     drive: sim.driveNumber,
@@ -1198,6 +1519,7 @@ function pushLog(sim: GameSim, playType: PlayType, result: string): GameSim {
     personnelPackage: sim.currentPersonnelPackage,
     defensivePackage: sim.selectedDefensivePackage,
     explanation: sim.lastPlayResult?.explanation,
+    assignmentLog: sim.lastAssignmentLog,
   };
   return {
     ...sim,
@@ -1321,16 +1643,17 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (defensePlan?.defensiveFocus === "STOP_RUN" && isRunP) resolved = { ...resolved, yards: Math.floor(resolved.yards * 0.92) };
     if (defensePlan?.defensiveFocus === "STOP_PASS" && !isRunP) resolved = { ...resolved, incomplete: resolved.incomplete || rng() < 0.22, yards: Math.floor(resolved.yards * 0.9) };
     if (defensePlan?.pressureRate === "HIGH" && !isRunP) resolved = { ...resolved, sack: resolved.sack || rng() < 0.12 };
-    const { yards, tags, sack, incomplete, turnover: isTO, diag, unicornImpact } = resolved;
+    const { yards, tags, sack, scramble, incomplete, turnover: isTO, turnoverKind, diag, unicornImpact, assignmentLog } = resolved;
+    const simWithAssignment = assignmentLog ? { ...sim, lastAssignmentLog: assignmentLog } : sim;
 
     // Update stats
     const updatedStats = { ...sim.stats };
     const side = sim.possession === "HOME" ? updatedStats.home : updatedStats.away;
-    if (isRunP) {
+    if (isRunP || scramble) {
       side.rushAttempts += 1;
       if (!isTO) { side.rushYards += Math.max(0, yards); side.topRusherYards += Math.max(0, yards); }
     } else {
-      side.passAttempts += 1;
+      if (!sack) side.passAttempts += 1;
       if (!incomplete && !sack && !isTO) {
         side.completions += 1;
         side.passYards += Math.max(0, yards);
@@ -1341,8 +1664,20 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
 
     if (isTO) {
       side.turnovers += 1;
-      const desc = sack ? `Sack for ${yards}y.` : incomplete ? "Intercepted!" : `Fumble! Ball lost.`;
-      let turnoverSim: GameSim = { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags };
+    }
+
+    const simWithPlayerStats = applyPlayerStatsForResolvedPlay(
+      { ...simWithAssignment, stats: updatedStats },
+      { playType, yards, sack, scramble, incomplete, turnover: isTO, turnoverKind, td: resolved.td, assignmentLog },
+    );
+
+    if (isTO) {
+      const desc = sack
+        ? (turnoverKind === "FUMBLE" ? "Strip-sack! Ball lost." : `Sack for ${yards}y.`)
+        : turnoverKind === "INT"
+          ? "Intercepted!"
+          : `Fumble! Ball lost.`;
+      let turnoverSim: GameSim = { ...simWithPlayerStats, lastResult: desc, lastResultTags: tags };
       if (unicornImpact) turnoverSim = { ...turnoverSim, unicornImpactLog: [...(turnoverSim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       if (sack) {
         const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
@@ -1357,7 +1692,7 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     if (sack) {
       const nextBallOn = clamp(sim.ballOn + yards, 1, 99);
       const desc = `Sack for ${yards}y.`;
-      let sackSim = advanceDown({ ...sim, stats: updatedStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
+      let sackSim = advanceDown({ ...simWithPlayerStats, ballOn: nextBallOn, lastResult: desc, lastResultTags: tags }, yards);
       if (unicornImpact) sackSim = { ...sackSim, unicornImpactLog: [...(sackSim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
       return { sim: sackSim, tag: "IN_BOUNDS" as const, live: liveTime(rng, "SACK"), admin: adminTime(rng, "ROUTINE"), playDiag: !isRunP ? diag : undefined };
     }
@@ -1366,8 +1701,8 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
       const desc = "Incomplete.";
       return {
         sim: unicornImpact
-          ? { ...sim, stats: updatedStats, lastResult: `${desc} 🦄 ${unicornImpact.description}`.trim(), lastResultTags: tags, unicornImpactLog: [...(sim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] }
-          : { ...sim, stats: updatedStats, lastResult: desc, lastResultTags: tags },
+          ? { ...simWithPlayerStats, lastResult: `${desc} 🦄 ${unicornImpact.description}`.trim(), lastResultTags: tags, unicornImpactLog: [...(sim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] }
+          : { ...simWithPlayerStats, lastResult: desc, lastResultTags: tags },
         tag: "INCOMPLETE" as const,
         live: liveTime(rng, "INCOMPLETE"),
         admin: adminTime(rng, "ROUTINE"),
@@ -1375,7 +1710,9 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     }
 
     const oob = !isRunP && rng() < (yards >= 16 ? 0.18 : 0.12);
-    const label = isRunP
+    const label = scramble
+      ? `QB scramble for ${yards}y${oob ? " (OOB)" : ""}.`
+      : isRunP
       ? `${playType.replace(/_/g, " ")} for ${yards}y${oob ? " (OOB)" : ""}.`
       : `${playType.replace(/_/g, " ")} complete for ${yards}y${oob ? " (OOB)" : ""}.`;
     const newBallOn = clamp(sim.ballOn + yards, 1, 99);
@@ -1385,12 +1722,12 @@ function resolveNormalPlay(sim: GameSim, rng: () => number, playType: PlayType, 
     }
 
     const labelWithUnicorn = unicornImpact ? `${label} 🦄 ${unicornImpact.description}` : label;
-    let resolvedPlaySim = advanceDown({ ...sim, stats: updatedStats, ballOn: newBallOn, lastResult: labelWithUnicorn, lastResultTags: tags }, yards);
+    let resolvedPlaySim = advanceDown({ ...simWithPlayerStats, ballOn: newBallOn, lastResult: labelWithUnicorn, lastResultTags: tags }, yards);
     if (unicornImpact) resolvedPlaySim = { ...resolvedPlaySim, unicornImpactLog: [...(resolvedPlaySim.unicornImpactLog ?? []), { playId: snapKey, side: sim.possession, ...unicornImpact }] };
     return {
       sim: resolvedPlaySim,
       tag: oob ? ("OOB" as const) : ("IN_BOUNDS" as const),
-      live: liveTime(rng, oob ? (isRunP ? "RUN_OOB" : "SHORT_OOB") : isRunP ? "RUN_IN_BOUNDS" : yards >= 16 ? "DEEP_IN_BOUNDS" : "SHORT_IN_BOUNDS"),
+      live: liveTime(rng, oob ? ((isRunP || scramble) ? "RUN_OOB" : "SHORT_OOB") : (isRunP || scramble) ? "RUN_IN_BOUNDS" : yards >= 16 ? "DEEP_IN_BOUNDS" : "SHORT_IN_BOUNDS"),
       admin: adminTime(rng, yards >= sim.distance ? "FIRST_DOWN" : "ROUTINE"),
       playDiag: !isRunP ? diag : undefined,
     };
@@ -1602,7 +1939,7 @@ export function initGameSim(params: {
     controlMode: params.controlMode ?? "HYBRID",
     playerFatigue: { ...(params.playerFatigue ?? {}) },
     snapLoadThisGame: {},
-    trackedPlayers: params.trackedPlayers ?? { HOME: {}, AWAY: {} },
+    trackedPlayers: { HOME: params.trackedPlayers?.HOME ?? {}, AWAY: params.trackedPlayers?.AWAY ?? {} },
     specialistsBySide: params.specialistsBySide ?? { HOME: {}, AWAY: {} },
     currentPersonnelPackage: params.currentPersonnelPackage ?? "11",
     likelyDefensiveReactions: [],
@@ -1665,7 +2002,7 @@ function trackedForPlay(playType: PlayType): FatigueTrackedPosition[] {
 
 function applySnapFatigue(sim: GameSim, playType: PlayType): GameSim {
   const side = sim.possession;
-  const tracked = sim.trackedPlayers[side];
+  const tracked = sim.trackedPlayers[side] ?? {};
   const nextFatigue = { ...sim.playerFatigue };
   const nextLoads = { ...sim.snapLoadThisGame };
   const playId = `${sim.driveNumber}-${sim.playNumberInDrive + 1}`;
@@ -1750,6 +2087,14 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     defensiveCallSituation: undefined,
   };
 
+  const preAssignments = buildAssignments(s, {
+    playType,
+    personnelPackage,
+    defensivePackage: selectedDefensivePackage,
+    defensiveCall: activeDefensiveCall,
+  });
+  s = { ...s, lastAssignmentLog: preAssignments.log };
+
   let tag: "IN_BOUNDS" | "OOB" | "INCOMPLETE" | "SCORE" | "CHANGE" = "IN_BOUNDS";
   let live = 0;
   let admin = 0;
@@ -1810,6 +2155,7 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     },
   };
   const playIndex = (s.playLog.at(-1)?.playIndex ?? 0) + 1;
+
   s = appendPlayLog(s, {
     version: 1,
     playIndex,
@@ -1826,6 +2172,7 @@ export function stepPlay(sim: GameSim, playType: PlayType, personnelPackage: Per
     homeScore: s.homeScore,
     awayScore: s.awayScore,
     ...(s.lastPlayDiag ? { passDiag: s.lastPlayDiag } : {}),
+    assignmentLog: s.lastAssignmentLog,
   });
   s = pushLog(s, playType, s.lastResult ?? "");
   return { sim: s, ended: s.clock.quarter === 4 && s.clock.timeRemainingSec === 0 };
@@ -1932,7 +2279,7 @@ export function buildGameBoxScore(sim: GameSim, season: number): GameBoxScore {
       sacks: sim.stats.away.sacks,
       tds: sim.stats.away.tds,
     },
-    players: [],
-    finalized: true,
+    players: sim.boxScore?.players ?? [],
+    finalized: sim.clock.quarter === 4 && sim.clock.timeRemainingSec === 0,
   };
 }

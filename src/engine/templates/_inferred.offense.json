@@ -1,0 +1,22 @@
+[
+  {
+    "id": "playType:FG",
+    "name": "FG",
+    "templateId": "P12"
+  },
+  {
+    "id": "playType:KNEEL",
+    "name": "KNEEL",
+    "templateId": "P12"
+  },
+  {
+    "id": "playType:PUNT",
+    "name": "PUNT",
+    "templateId": "P12"
+  },
+  {
+    "id": "playType:SPIKE",
+    "name": "SPIKE",
+    "templateId": "P12"
+  }
+]

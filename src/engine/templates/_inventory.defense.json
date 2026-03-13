@@ -1,0 +1,146 @@
+[
+  {
+    "id": "call:cover-2",
+    "name": "Cover 2",
+    "tags": []
+  },
+  {
+    "id": "call:cover-3",
+    "name": "Cover 3",
+    "tags": []
+  },
+  {
+    "id": "call:quarters",
+    "name": "Quarters",
+    "tags": []
+  },
+  {
+    "id": "call:man-press",
+    "name": "Man Press",
+    "tags": []
+  },
+  {
+    "id": "call:sim",
+    "name": "Sim",
+    "tags": []
+  },
+  {
+    "id": "call:blitz",
+    "name": "Blitz",
+    "tags": []
+  },
+  {
+    "id": "call:light-box",
+    "name": "Light box",
+    "tags": []
+  },
+  {
+    "id": "call:normal-box",
+    "name": "Normal box",
+    "tags": []
+  },
+  {
+    "id": "call:heavy-box",
+    "name": "Heavy box",
+    "tags": []
+  },
+  {
+    "id": "call:spy-qb",
+    "name": "Spy QB",
+    "tags": []
+  },
+  {
+    "id": "call:bracket-star",
+    "name": "Bracket Star",
+    "tags": []
+  },
+  {
+    "id": "call:prevent",
+    "name": "Prevent",
+    "tags": []
+  },
+  {
+    "id": "runtime:cover-2",
+    "name": "cover 2",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:cover-3",
+    "name": "cover 3",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:quarters",
+    "name": "quarters",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:man",
+    "name": "man",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:sim",
+    "name": "sim",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:blitz",
+    "name": "blitz",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:light-box",
+    "name": "light box",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:normal-box",
+    "name": "normal box",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:heavy-box",
+    "name": "heavy box",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:spy-qb",
+    "name": "spy qb",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:bracket-star",
+    "name": "bracket star",
+    "tags": [
+      "runtime"
+    ]
+  },
+  {
+    "id": "runtime:prevent",
+    "name": "prevent",
+    "tags": [
+      "runtime"
+    ]
+  }
+]

@@ -1,0 +1,146 @@
+[
+  {
+    "id": "call:cover-2",
+    "name": "Cover 2",
+    "templateId": "D4",
+    "source": "explicit"
+  },
+  {
+    "id": "call:cover-3",
+    "name": "Cover 3",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "call:quarters",
+    "name": "Quarters",
+    "templateId": "D8",
+    "source": "explicit"
+  },
+  {
+    "id": "call:man-press",
+    "name": "Man Press",
+    "templateId": "D1",
+    "source": "explicit"
+  },
+  {
+    "id": "call:sim",
+    "name": "Sim",
+    "templateId": "D13",
+    "source": "explicit"
+  },
+  {
+    "id": "call:blitz",
+    "name": "Blitz",
+    "templateId": "D12",
+    "source": "explicit"
+  },
+  {
+    "id": "call:light-box",
+    "name": "Light box",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "call:normal-box",
+    "name": "Normal box",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "call:heavy-box",
+    "name": "Heavy box",
+    "templateId": "D16",
+    "source": "explicit"
+  },
+  {
+    "id": "call:spy-qb",
+    "name": "Spy QB",
+    "templateId": "D2",
+    "source": "explicit"
+  },
+  {
+    "id": "call:bracket-star",
+    "name": "Bracket Star",
+    "templateId": "D14",
+    "source": "explicit"
+  },
+  {
+    "id": "call:prevent",
+    "name": "Prevent",
+    "templateId": "D11",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:cover-2",
+    "name": "cover 2",
+    "templateId": "D4",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:cover-3",
+    "name": "cover 3",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:quarters",
+    "name": "quarters",
+    "templateId": "D8",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:man",
+    "name": "man",
+    "templateId": "D1",
+    "source": "inferred"
+  },
+  {
+    "id": "runtime:sim",
+    "name": "sim",
+    "templateId": "D13",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:blitz",
+    "name": "blitz",
+    "templateId": "D12",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:light-box",
+    "name": "light box",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:normal-box",
+    "name": "normal box",
+    "templateId": "D5",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:heavy-box",
+    "name": "heavy box",
+    "templateId": "D16",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:spy-qb",
+    "name": "spy qb",
+    "templateId": "D2",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:bracket-star",
+    "name": "bracket star",
+    "templateId": "D14",
+    "source": "explicit"
+  },
+  {
+    "id": "runtime:prevent",
+    "name": "prevent",
+    "templateId": "D11",
+    "source": "explicit"
+  }
+]

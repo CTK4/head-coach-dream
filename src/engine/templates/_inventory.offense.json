@@ -1,0 +1,138 @@
+[
+  {
+    "id": "air-raid-mesh",
+    "name": "Mesh",
+    "playType": "PASS",
+    "familyHints": [
+      "Quick Game"
+    ]
+  },
+  {
+    "id": "air-raid-y-cross",
+    "name": "Y-Cross",
+    "playType": "PASS",
+    "familyHints": [
+      "Dropback"
+    ]
+  },
+  {
+    "id": "air-raid-inside-zone",
+    "name": "Inside Zone",
+    "playType": "RUN",
+    "familyHints": [
+      "Run Game"
+    ]
+  },
+  {
+    "id": "core-quick-game",
+    "name": "Quick Slant/Flat",
+    "playType": "PASS",
+    "familyHints": [
+      "Quick Game"
+    ]
+  },
+  {
+    "id": "core-gap-run",
+    "name": "Gap Run",
+    "playType": "RUN",
+    "familyHints": [
+      "Run Game"
+    ]
+  },
+  {
+    "id": "playType:DROPBACK",
+    "name": "DROPBACK",
+    "playType": "PASS",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:FG",
+    "name": "FG",
+    "playType": "SPECIAL",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:INSIDE_ZONE",
+    "name": "INSIDE ZONE",
+    "playType": "RUN",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:KNEEL",
+    "name": "KNEEL",
+    "playType": "SPECIAL",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:OUTSIDE_ZONE",
+    "name": "OUTSIDE ZONE",
+    "playType": "RUN",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:PLAY_ACTION",
+    "name": "PLAY ACTION",
+    "playType": "PASS",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:POWER",
+    "name": "POWER",
+    "playType": "RUN",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:PUNT",
+    "name": "PUNT",
+    "playType": "SPECIAL",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:QUICK_GAME",
+    "name": "QUICK GAME",
+    "playType": "PASS",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:RPO_READ",
+    "name": "RPO READ",
+    "playType": "RUN",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:SCREEN",
+    "name": "SCREEN",
+    "playType": "PASS",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  },
+  {
+    "id": "playType:SPIKE",
+    "name": "SPIKE",
+    "playType": "SPECIAL",
+    "familyHints": [
+      "runtime-playtype"
+    ]
+  }
+]
