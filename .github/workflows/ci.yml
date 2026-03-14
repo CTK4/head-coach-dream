@@ -36,11 +36,6 @@ jobs:
       - name: Dependency health report
         run: DEPS_DUPLICATE_THRESHOLD=2 npm run deps:health
 
-  ci:
-    - cron: "0 6 * * *"
-  workflow_dispatch:
-
-jobs:
   lint_typecheck:
     runs-on: ubuntu-latest
     permissions:
