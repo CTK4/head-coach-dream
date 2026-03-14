@@ -140,7 +140,7 @@ export default function SkillTree() {
               )}
             </PopoverContent>
           </Popover>
-          <Button variant="secondary" onClick={() => navigate((location.state as any)?.from ?? -1)}>Back</Button>
+          <Button variant="secondary" onClick={() => navigate((location.state as any)?.from ?? "/hub")}>Back</Button>
         </div>
       </header>
       {perkPoints === 0 && state.careerStage === "REGULAR_SEASON" ? <p className="text-xs text-slate-400 mb-2">Earn points via season milestones and events.</p> : null}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useGame } from "@/context/GameContext";
 import { expectedSalary, offerSalary, type SalaryOfferLevel } from "@/engine/staffSalary";
 import { getCoordinatorFreeAgents, getCoordinatorFreeAgentsAll, type PersonnelRow } from "@/data/leagueDb";
@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { HubShell } from "@/components/franchise-hub/HubShell";
 import { Avatar } from "@/components/common/Avatar";
 import { CoordinatorCandidateDrawer } from "@/components/staff/CoordinatorCandidateDrawer";
+import { HubSkeleton } from "@/components/franchise-hub/states/HubSkeleton";
 import { DEFENSE_SCHEMES, OFFENSE_SCHEMES, canonicalSchemeId, getSchemeMeta, type Side } from "@/lib/schemeCatalog";
 
 function money(n: number) {
@@ -30,6 +31,9 @@ export default function CoordinatorHiring() {
   const [offerYears, setOfferYears] = useState(3);
   const [offerSalaryValue, setOfferSalaryValue] = useState(0);
   const [negotiatingOfferId, setNegotiatingOfferId] = useState<string | null>(null);
+  const [listKey, setListKey] = useState(0);
+  const prevRoleRef = useRef(role);
+  const [showSkeleton, setShowSkeleton] = useState(false);
 
   const remainingBudget = state.staffBudget.total - state.staffBudget.used;
 
@@ -47,6 +51,19 @@ export default function CoordinatorHiring() {
   );
 
   const level = LEVELS[levelIdx];
+
+  useEffect(() => {
+    if (prevRoleRef.current !== role) {
+      prevRoleRef.current = role;
+      setListKey((k) => k + 1);
+    }
+  }, [role]);
+
+  useEffect(() => {
+    setShowSkeleton(true);
+    const t = window.setTimeout(() => setShowSkeleton(false), 80);
+    return () => window.clearTimeout(t);
+  }, [listKey]);
 
   const candidates = useMemo(() => {
     const strict: Cand[] = getCoordinatorFreeAgents(role)
@@ -232,7 +249,11 @@ export default function CoordinatorHiring() {
 
       <Card>
         <CardContent className="p-4 space-y-2">
-          {candidates.length ? (
+          {showSkeleton ? (
+            <div className="rounded border border-white/10 bg-slate-900/40 p-3">
+              <HubSkeleton variant="table" rows={3} />
+            </div>
+          ) : candidates.length ? (
             candidates.map((candidate) => {
               const { p, exp, salary, safety, emergency } = candidate;
               const latest = latestOfferByPerson[p.personId];

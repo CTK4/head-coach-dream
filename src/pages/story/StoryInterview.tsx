@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useGame } from "@/context/GameContext";
 import { ROUTES } from "@/routes/appRoutes";
 import { getTeamConfig } from "@/engine/interviewHiring/bankLoader";
@@ -321,6 +322,11 @@ export default function StoryInterview() {
   if (stage === "RESULT") {
     const result = outcomesByTeam[activeTeamId];
     const offer = receivedOffers[activeTeamId];
+    const hasSystemError = Object.values(outcomesByTeam).some((teamResult) =>
+      teamResult?.gateReasons?.some((reason) =>
+        typeof reason === "string" && (reason.includes("Error") || reason.includes("Unable") || reason.length > 60)
+      )
+    );
     return (
       <div className="mx-auto max-w-3xl p-6">
         <Card>
@@ -356,6 +362,14 @@ export default function StoryInterview() {
                 {currentInterviewIndex === STORY_TEAM_IDS.length - 1 ? "Review Offers" : "Continue"}
               </Button>
             </div>
+            {hasSystemError && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTitle>Interview scoring error</AlertTitle>
+                <AlertDescription>
+                  We ran into a problem scoring your interview. This isn&apos;t a rejection — try reloading the page to retake the interview.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       </div>

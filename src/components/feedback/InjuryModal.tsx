@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Injury } from "@/engine/injuryTypes";
@@ -13,8 +14,21 @@ interface InjuryModalProps {
 }
 
 export default function InjuryModal({ injury, player, depthChartImpact, onDismiss }: InjuryModalProps) {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onDismiss();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onDismiss]);
+
   return (
-    <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-[70] bg-slate-950/60 flex items-center justify-center p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onDismiss();
+      }}
+    >
       <Card className="w-full max-w-lg border-red-500/70">
         <CardContent className="p-4 space-y-3">
           <h3 className="text-lg font-semibold text-red-300">Critical Injury Alert</h3>

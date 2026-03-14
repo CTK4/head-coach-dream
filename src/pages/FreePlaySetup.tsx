@@ -134,6 +134,11 @@ export default function FreePlaySetup() {
             </Card>
           );
         })}
+        {rows.length === 0 && (
+          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
+            No teams match "{query}".
+          </p>
+        )}
       </div>
     </div>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

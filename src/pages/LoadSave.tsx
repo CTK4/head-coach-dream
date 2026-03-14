@@ -1,8 +1,10 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { HubSkeleton } from "@/components/franchise-hub/states/HubSkeleton";
 import { deleteSave, exportSave, importSave, listSaves, loadSaveResult } from "@/lib/saveManager";
 import { toDisplayLabel } from "@/lib/displayLabels";
 import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
@@ -33,6 +35,7 @@ export default function LoadSave() {
   const [query] = useSearchParams();
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const saves = useMemo(() => listSaves(), [tick]);
   const [isNative] = useState(() => isCapacitorIosEnvironment());
@@ -40,6 +43,7 @@ export default function LoadSave() {
   const quickSaveId = query.get("saveId");
   useEffect(() => {
     if (!quickSaveId) return;
+    setLoading(true);
     const loaded = loadSaveResult(quickSaveId);
     if (loaded.ok) {
       setError(null);
@@ -48,6 +52,7 @@ export default function LoadSave() {
     }
     if (!loaded.ok && "message" in loaded) {
       setError(`Could not load save: ${loaded.message}`);
+      setLoading(false);
     }
   }, [quickSaveId]);
 
@@ -100,7 +105,7 @@ export default function LoadSave() {
         {!isNative && (
           <>
             <input ref={importInputRef} type="file" accept="application/json" onChange={onImport} className="hidden" />
-            <Button variant="secondary" onClick={() => importInputRef.current?.click()}>Import Save</Button>
+            <Button variant="secondary" disabled={loading} onClick={() => importInputRef.current?.click()}>Import Save</Button>
           </>
         )}
         {isNative && (
@@ -116,14 +121,24 @@ export default function LoadSave() {
             size="sm"
             className="absolute top-2 right-2"
             onClick={() => setError(null)}
+            disabled={loading}
             aria-label="Dismiss error"
           >
             X
           </Button>
         </Alert>
       ) : null}
+      {loading ? (
+        <div className="rounded border border-white/10 bg-slate-900/40 p-3">
+          <HubSkeleton variant="page" />
+          <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading save…
+          </div>
+        </div>
+      ) : null}
       {!saves.length ? (
-        <Card><CardContent className="p-6">No saves found. Start a new game. <Button className="ml-2" onClick={() => navigate('/new-save')}>New Save</Button></CardContent></Card>
+        <Card><CardContent className="p-6">No saves found. Start a new game. <Button className="ml-2" disabled={loading} onClick={() => navigate('/new-save')}>New Save</Button></CardContent></Card>
       ) : saves.map((save) => (
         <Card key={save.saveId}>
           <CardHeader><CardTitle>{save.coachName} · {save.teamName}</CardTitle></CardHeader>
@@ -133,6 +148,7 @@ export default function LoadSave() {
             <div className="text-muted-foreground">Last played: {rel(save.lastPlayed)}</div>
             <div className="flex gap-2">
               <Button onClick={() => {
+                setLoading(true);
                 const result = loadSaveResult(save.saveId);
                 if (result.ok) {
                   setError(null);
@@ -141,13 +157,14 @@ export default function LoadSave() {
                 }
                 if (!result.ok && "message" in result) {
                   setError(`Could not load \"${save.teamName}\": ${result.message}`);
+                  setLoading(false);
                 }
-              }}>Load</Button>
-              <Button variant="secondary" onClick={() => handleExport(save)}>Export</Button>
+              }} disabled={loading}>Load</Button>
+              <Button variant="secondary" disabled={loading} onClick={() => handleExport(save)}>Export</Button>
               
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive">Delete</Button>
+                  <Button variant="destructive" disabled={loading}>Delete</Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -157,9 +174,10 @@ export default function LoadSave() {
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
                     <AlertDialogAction 
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      disabled={loading}
                       onClick={() => {
                         deleteSave(save.saveId);
                         setTick((v) => v + 1);
