@@ -8,19 +8,21 @@ import { useTeamRatings } from "@/hooks/useTeamRatings";
 import { ROUTES } from "@/routes/appRoutes";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
-import { readSettings, writeSettings } from "@/lib/settings";
+import { getSettingsSnapshot, writeSettings } from "@/lib/settings";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function FreePlaySetup() {
   const teams = useMemo(() => getTeams(), []);
   const [query, setQuery] = useState("");
   const { dispatch } = useGame();
-  const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => readSettings().difficultyPreset ?? "STANDARD");
-  const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => readSettings().realismPreset ?? "BALANCED");
+  const hydratedSettings = useUserSettings();
+  const [difficultyPreset, setDifficultyPreset] = useState<DifficultyPresetId>(() => getSettingsSnapshot().difficultyPreset ?? "STANDARD");
+  const [realismPreset, setRealismPreset] = useState<RealismPresetId>(() => getSettingsSnapshot().realismPreset ?? "BALANCED");
   const navigate = useNavigate();
   const { index: ratingsIndex, error: teamRatingsError } = useTeamRatings();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
   const [confirmMessage, setConfirmMessage] = useState("");
 
   const rows = useMemo(() => {
@@ -96,8 +98,8 @@ export default function FreePlaySetup() {
                       data-test={`team-select-${team.teamId}`}
                       onClick={() => {
                         setConfirmMessage(`Start your career with ${team.name}?`);
-                        setPendingAction(() => () => {
-                          writeSettings({ ...readSettings(), difficultyPreset, realismPreset });
+                        setPendingAction(() => async () => {
+                          await writeSettings({ ...hydratedSettings, difficultyPreset, realismPreset });
                           dispatch({
                             type: "INIT_FREE_PLAY_CAREER",
                             payload: {
@@ -149,7 +151,12 @@ export default function FreePlaySetup() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { pendingAction?.(); setConfirmOpen(false); }}>
+            <AlertDialogAction onClick={() => {
+              void (async () => {
+                await pendingAction?.();
+                setConfirmOpen(false);
+              })();
+            }}>
               Confirm
             </AlertDialogAction>
           </AlertDialogFooter>

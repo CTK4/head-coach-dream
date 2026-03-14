@@ -26,9 +26,9 @@ describe("settings sim tuning persistence", () => {
     });
   });
 
-  it("persists and restores difficulty/realism presets", () => {
-    writeSettings({ difficultyPreset: "CHALLENGING", realismPreset: "SIM" });
-    const loaded = readSettings();
+  it("persists and restores difficulty/realism presets", async () => {
+    await writeSettings({ difficultyPreset: "CHALLENGING", realismPreset: "SIM" });
+    const loaded = await readSettings();
     expect(loaded.difficultyPreset).toBe("CHALLENGING");
     expect(loaded.realismPreset).toBe("SIM");
   });

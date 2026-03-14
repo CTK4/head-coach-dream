@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { GameProvider, useGame, type GameState } from "@/context/GameContext";
 import { exportDebugBundle } from "@/lib/debugBundle";
@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES } from "@/routes/appRoutes";
 import { DEV_TOOLS_ENABLED, isDevToolsEnabled, type DevToolsEnv } from "@/dev/devToolsGate";
 import { getUserTeamId } from "@/lib/userTeam";
+import { readSettings } from "@/lib/settings";
 import NotFound from "./pages/NotFound";
 import Landing from "@/pages/Landing";
 import RecoveryModePage from "@/pages/RecoveryModePage";
@@ -252,6 +253,10 @@ function AppRoutes() {
 
 function AppContent() {
   const { state } = useGame();
+
+  useEffect(() => {
+    void readSettings();
+  }, []);
   if (shouldRenderRecoveryMode(state)) {
     return <RecoveryModePage />;
   }

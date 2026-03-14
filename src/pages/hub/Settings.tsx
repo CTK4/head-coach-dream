@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { HubShell } from "@/components/franchise-hub/HubShell";
 import { UtilityIcon } from "@/components/franchise-hub/UtilityIcon";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { readSettings, writeSettings, type OffensePlaycallingMode, type UserSettings } from "@/lib/settings";
+import { getSettingsSnapshot, readSettings, writeSettings, type OffensePlaycallingMode, type UserSettings } from "@/lib/settings";
 import { DIFFICULTY_PRESETS, REALISM_PRESETS, type DifficultyPresetId, type RealismPresetId, DEFAULT_SIM_TUNING } from "@/config/simTuning";
 import { exportDebugBundle } from "@/lib/debugBundle";
 import { getActiveSaveMetadata } from "@/lib/saveManager";
@@ -103,23 +103,34 @@ export default function SettingsPage() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
 
-  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...readSettings() }));
+  const [settings, setSettings] = useState<UserSettings>(() => ({ ...DEFAULT_SETTINGS, ...getSettingsSnapshot() }));
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [quitOpen, setQuitOpen] = useState(false);
 
   const seasonLabel = useMemo(() => `${state.season}`, [state.season]);
 
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const hydrated = await readSettings();
+      if (alive) setSettings((prev) => ({ ...prev, ...hydrated }));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   function update(patch: Partial<UserSettings>) {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
-      writeSettings(next);
+      void writeSettings(next);
       return next;
     });
   }
 
   function resetToDefaults() {
     setSettings(DEFAULT_SETTINGS);
-    writeSettings(DEFAULT_SETTINGS);
+    void writeSettings(DEFAULT_SETTINGS);
     (dispatch as any)({ type: "SET_SIM_TUNING", payload: { ...DEFAULT_SIM_TUNING } });
   }
 
