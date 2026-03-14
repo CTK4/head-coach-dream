@@ -9,11 +9,11 @@ export function confirmAutoAdvance(
   message: string,
 ): boolean {
   if (!shouldConfirmAutoAdvance(settings)) return true;
-  if (typeof window !== "undefined" && typeof window.confirm === "function") {
-    return window.confirm(message);
-  }
   if (typeof globalThis.confirm === "function") {
     return globalThis.confirm(message);
+  }
+  if (typeof window !== "undefined" && typeof window.confirm === "function") {
+    return window.confirm(message);
   }
   return true;
 }
