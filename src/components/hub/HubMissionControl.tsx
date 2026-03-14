@@ -12,7 +12,9 @@ import {
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { Button } from "@/components/ui/button";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { HUB_CARD } from "@/components/franchise-hub/theme";
 import { HubTile } from "@/components/franchise-hub/HubTile";
 import { HUB_TILE_IMAGES } from "@/components/franchise-hub/tileImages";
@@ -125,6 +127,7 @@ function Zone2Card({
 export function HubMissionControl() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
+  const settings = useUserSettings();
   const [zone3Open, setZone3Open] = useState(false);
   const [confirmAdvanceOpen, setConfirmAdvanceOpen] = useState(false);
   const settings = useUserSettings();
