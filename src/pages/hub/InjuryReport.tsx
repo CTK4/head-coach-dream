@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HUB_BG, HUB_TEXTURE, HUB_VIGNETTE, HUB_FRAME } from "@/components/franchise-hub/theme";
 import { Activity, AlertTriangle, ChevronRight, Shield, Sparkles, Users } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -476,6 +477,7 @@ function isInjuryActiveInWeek(injury: Injury, week: number): boolean {
 
 export default function InjuryReport() {
   const { state, dispatch } = useGame();
+  const [searchParams] = useSearchParams();
 
   const userTeamId = state.acceptedOffer?.teamId ?? state.userTeamId ?? state.teamId ?? "";
   const currentWeek = (state.week ?? state.hub?.regularSeasonWeek ?? state.hub?.preseasonWeek ?? 1);
@@ -489,15 +491,17 @@ export default function InjuryReport() {
   // Drawer state
   const [drawerInjuryId, setDrawerInjuryId] = useState<string | null>(null);
 
+  const mockModeEnabled = import.meta.env.DEV && searchParams.get("mockInjuries") === "1";
+
   const mockInjuries = useMemo(() => {
-    if (!import.meta.env.DEV) return [] as Injury[];
+    if (!mockModeEnabled) return [] as Injury[];
     const teams = getTeams().filter((t) => t.isActive !== false).slice(0, 8);
     const mocked: Injury[] = [];
     for (const team of teams) {
       mocked.push(...generateMockInjuries(state, team.teamId, state.saveSeed, currentWeek));
     }
     return mocked;
-  }, [state.playerTeamOverrides, state.playerContractOverrides, state.saveSeed, currentWeek]);
+  }, [mockModeEnabled, state.playerTeamOverrides, state.playerContractOverrides, state.saveSeed, currentWeek]);
 
   // Build the injury list: prefer real data, fall back to mock data in dev mode
   const allInjuries = useMemo(() => {
@@ -550,6 +554,12 @@ export default function InjuryReport() {
             </Badge>
           ) : null}
         </div>
+
+        {mockModeEnabled ? (
+          <div className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Mock injury data enabled (dev only)
+          </div>
+        ) : null}
 
         {/* Medical Staff Banner */}
         <MedicalStaffBanner rating={medicalRating} />

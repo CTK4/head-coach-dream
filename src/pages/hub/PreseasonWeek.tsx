@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamRosterPlayers } from "@/data/leagueDb";
@@ -10,8 +10,9 @@ import PreseasonSnaps from "@/pages/hub/PreseasonSnaps";
 import { getPositionLabel } from "@/lib/displayLabels";
 
 export default function PreseasonWeek() {
-  const { state, dispatch } = useGame();
+  const { state, dispatch, getCurrentTeamMatchup } = useGame();
   const navigate = useNavigate();
+  const [startError, setStartError] = useState<string | null>(null);
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
@@ -57,12 +58,24 @@ export default function PreseasonWeek() {
   }, [teamId, activeIds]);
 
   const week = state.hub.preseasonWeek ?? 1;
+  const matchup = getCurrentTeamMatchup("PRESEASON")?.matchup ?? null;
+  const opponentTeamId = matchup
+    ? matchup.homeTeamId === teamId
+      ? matchup.awayTeamId
+      : matchup.homeTeamId
+    : null;
 
-  const startGame = () =>
+  const startGame = () => {
+    if (!opponentTeamId) {
+      setStartError("Opponent not set");
+      return;
+    }
+    setStartError(null);
     dispatch({
       type: "START_GAME",
-      payload: { opponentTeamId: "TBD", week, gameType: "PRESEASON" },
+      payload: { opponentTeamId, week, gameType: "PRESEASON" },
     });
+  };
 
   return (
     <div className="space-y-4 p-4 md:p-8">
@@ -74,8 +87,10 @@ export default function PreseasonWeek() {
           <div className="flex flex-wrap gap-2 text-sm">
             <Badge variant="secondary">Active {activeRoster.length}/53</Badge>
             <Badge variant="outline">Delegation: MVP</Badge>
+            {opponentTeamId ? <Badge variant="outline">Opponent {opponentTeamId}</Badge> : null}
           </div>
-          <Button onClick={startGame}>Start Preseason Game</Button>
+          <Button onClick={startGame} disabled={!opponentTeamId}>Start Preseason Game</Button>
+          {startError ? <div className="w-full text-sm text-red-300">{startError}</div> : null}
         </CardContent>
       </Card>
 

@@ -1,5 +1,4 @@
 import { DEFAULT_SIM_TUNING, type DifficultyPresetId, type RealismPresetId } from "@/config/simTuning";
-import { isCapacitorIosEnvironment } from "@/lib/saveStorageAdapter";
 
 export const SETTINGS_KEY = "hcd:settings";
 
@@ -28,40 +27,7 @@ const DEFAULT_SETTINGS: Required<Pick<UserSettings, "confirmAutoAdvance" | "show
   offensePlaycallingMode: "FULL_AUTO",
 };
 
-async function getNativeStorage() {
-  if (!isCapacitorIosEnvironment()) {
-    return null;
-  }
-
-  try {
-    const dynamicImport = new Function("moduleName", "return import(moduleName)") as (moduleName: string) => Promise<{ Preferences?: unknown }>;
-    const { Preferences } = await dynamicImport("@capacitor/preferences");
-    return Preferences;
-  } catch {
-    return null;
-  }
-}
-
-export async function readSettings(): Promise<UserSettings> {
-  try {
-    const nativeStorage = await getNativeStorage();
-    if (nativeStorage) {
-      const result = await nativeStorage.get({ key: SETTINGS_KEY });
-      if (!result.value) return DEFAULT_SETTINGS;
-      const parsed = JSON.parse(result.value) as UserSettings;
-      return {
-        ...parsed,
-        confirmAutoAdvance: parsed?.confirmAutoAdvance ?? DEFAULT_SETTINGS.confirmAutoAdvance,
-        showTooltips: parsed?.showTooltips ?? DEFAULT_SETTINGS.showTooltips,
-        difficultyPreset: parsed?.difficultyPreset ?? DEFAULT_SETTINGS.difficultyPreset,
-        realismPreset: parsed?.realismPreset ?? DEFAULT_SETTINGS.realismPreset,
-        offensePlaycallingMode: parsed?.offensePlaycallingMode ?? DEFAULT_SETTINGS.offensePlaycallingMode,
-      };
-    }
-  } catch {
-    // Fall through to localStorage
-  }
-
+export function readSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
@@ -79,24 +45,9 @@ export async function readSettings(): Promise<UserSettings> {
   }
 }
 
-export async function writeSettings(settings: UserSettings): Promise<void> {
-  const serialized = JSON.stringify(settings);
-
+export function writeSettings(settings: UserSettings): void {
   try {
-    const nativeStorage = await getNativeStorage();
-    if (nativeStorage) {
-      await nativeStorage.set({
-        key: SETTINGS_KEY,
-        value: serialized,
-      });
-      return;
-    }
-  } catch {
-    // Fall through to localStorage
-  }
-
-  try {
-    localStorage.setItem(SETTINGS_KEY, serialized);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch {
     // ignore
   }

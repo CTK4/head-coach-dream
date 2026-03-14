@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import FreeAgencyPage from "./FreeAgency";
 import ResignPlayers from "./ResignPlayers";
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEffectiveFreeAgents } from "@/engine/rosterOverlay";
 import { getPlayers } from "@/data/leagueDb";
+import { getProspectById } from "@/data/draftClass";
 import { canAccessFreeAgency, canAccessReSign, canAccessTrades, getHubQuickLinkAvailability } from "@/services/gameProgressionService";
 
 function StepFooter({ stepId, completeLabel }: { stepId: "FREE_AGENCY" | "RESIGNING"; completeLabel: string }) {
@@ -177,7 +178,58 @@ export function TradesRoutes() {
 }
 
 export function ProspectProfileScreen() {
-  return <PhaseLocked title="PROSPECT PROFILE" detail="Prospect report, combine metrics, and notes." />;
+  const { state } = useGame();
+  const { prospectId } = useParams<{ prospectId: string }>();
+
+  const draftPoolProspect = (state.draft?.prospectPool ?? []).find((p) => String((p as { prospectId?: string }).prospectId ?? "") === String(prospectId ?? "")) as
+    | { prospectId?: string; fullName?: string; name?: string; pos?: string; school?: string; overall?: number; dev?: number }
+    | undefined;
+  const draftClassProspect = prospectId ? (getProspectById(prospectId) as Record<string, unknown> | null) : null;
+
+  const name = draftPoolProspect?.fullName
+    ?? draftPoolProspect?.name
+    ?? String(draftClassProspect?.fullName ?? draftClassProspect?.name ?? "");
+  const position = draftPoolProspect?.pos ?? String(draftClassProspect?.pos ?? "UNK");
+  const school = draftPoolProspect?.school ?? String(draftClassProspect?.school ?? draftClassProspect?.college ?? "Unknown");
+  const overall = draftPoolProspect?.overall ?? Number(draftClassProspect?.overall ?? draftClassProspect?.ovr ?? NaN);
+  const dev = draftPoolProspect?.dev ?? Number(draftClassProspect?.dev ?? NaN);
+
+  if (!(state.draft?.prospectPool?.length ?? 0) && !prospectId) {
+    return <PhaseLocked title="PROSPECT PROFILE" detail="No prospects available." />;
+  }
+
+  if (!prospectId || (!draftPoolProspect && !draftClassProspect)) {
+    return (
+      <div>
+        <ScreenHeader title="PROSPECT PROFILE" showBack />
+        <div className="p-4 space-y-3">
+          <div className="text-sm text-slate-300">Prospect not found.</div>
+          <Button asChild variant="secondary"><Link to="/scouting">Back to Scouting</Link></Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <ScreenHeader title="PROSPECT PROFILE" showBack />
+      <div className="p-4 space-y-3">
+        <Card className="border-white/10 bg-card">
+          <CardContent className="p-4 space-y-1">
+            <div className="text-lg font-semibold text-slate-100">{name || "Unknown Prospect"}</div>
+            <div className="text-sm text-slate-400">{position} · {school}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-white/10 bg-card">
+          <CardContent className="p-4 space-y-2 text-sm text-slate-200">
+            <div>Overall: {Number.isFinite(overall) ? overall : "—"}</div>
+            <div>Development: {Number.isFinite(dev) ? dev : "—"}</div>
+            <div>Prospect ID: {prospectId}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 export function HubPhaseQuickLinks() {
