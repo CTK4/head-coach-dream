@@ -96,7 +96,7 @@ export default function OffensiveCallSheet({ open, onClose }: OffensiveCallSheet
                   className={`w-full text-left rounded-lg border p-3 transition-colors ${selectedCard ? "border-blue-300/45 bg-blue-950/30" : "border-white/10 bg-slate-900/40 hover:border-white/20"}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-100">{play.playType.replaceAll("_", " ")}</span>
+                    <span className="text-sm font-semibold text-slate-100">{play.playType.replace(/_/g, " ")}</span>
                     <Badge variant="outline" className="text-[10px]">Fit {Math.round(play.score * 100)}</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">Expected yards: {play.yards.low}/{play.yards.median}/{play.yards.high}</div>

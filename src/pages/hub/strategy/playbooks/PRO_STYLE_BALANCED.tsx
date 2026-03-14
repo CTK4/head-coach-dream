@@ -749,11 +749,15 @@ function PlayCard({ play, onClick }) {
   const meta = CAT_META[play.cat];
   const [hov, setHov] = useState(false);
   return (
-    <div onClick={onClick}
+    <button
+         type="button"
+         onClick={onClick}
          onMouseEnter={() => setHov(true)}
          onMouseLeave={() => setHov(false)}
          style={{
            cursor: 'pointer',
+           width: '100%',
+           textAlign: 'left',
            background: hov ? '#160d2e' : '#0f0920',
            border: `1px solid ${hov ? meta.accent + '55' : '#1c0f38'}`,
            borderRadius: 10,
@@ -789,7 +793,7 @@ function PlayCard({ play, onClick }) {
           fontFamily: "'Courier New', monospace",
         }}>{play.name}</div>
       </div>
-    </div>
+    </button>
   );
 }
 

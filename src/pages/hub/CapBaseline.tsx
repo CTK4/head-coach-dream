@@ -91,7 +91,7 @@ export default function CapBaseline() {
             <Button variant="secondary" size="sm" onClick={() => downloadJson(`cap_summary_${teamId}_${state.season}.json`, snap)}>
               Export
             </Button>
-            <Link to="/hub/finances">
+            <Link to="/contracts/summary">
               <Button variant="ghost" size="sm">
                 ← Finances
               </Button>
