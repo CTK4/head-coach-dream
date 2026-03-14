@@ -2,6 +2,8 @@ import { getPositionLabel } from "@/lib/displayLabels";
 import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,7 @@ function FlagChip({ className, children }: { className: string; children: ReactN
 
 export default function DraftResults() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const nav = useNavigate();
 
   const userTeamId = String(state.acceptedOffer?.teamId ?? "");
@@ -50,6 +53,11 @@ export default function DraftResults() {
 
   const my = byTeam[userTeamId] ?? [];
 
+  const handleContinue = () => {
+    if (!confirmAutoAdvance(settings, "Advance to the next stage?")) return;
+    dispatch({ type: "ADVANCE_CAREER_STAGE" });
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -58,7 +66,7 @@ export default function DraftResults() {
           <div className="flex items-center gap-2">
             <Badge variant="outline">Picks {state.draft.leaguePicks.length}</Badge>
             <Button variant="outline" onClick={() => nav("/hub/draft")}>Back</Button>
-            <Button onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })} disabled={!state.draft.completed}>Continue →</Button>
+            <Button onClick={handleContinue} disabled={!state.draft.completed}>Continue →</Button>
           </div>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">

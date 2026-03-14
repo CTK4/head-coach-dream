@@ -39,7 +39,7 @@ export type HubTileProps = {
 export function HubTile({ title, subtitle, to, badgeCount, cornerBubbleCount, imageUrl, badgeHint, badgeKind, imageObjectPosition }: HubTileProps) {
   const navigate = useNavigate();
   const settings = useUserSettings();
-  const showTooltips = !!settings.showTooltips;
+  const showTooltips = settings.showTooltips ?? true;
   const [currentImageUrl, setCurrentImageUrl] = useState<string | undefined>(imageUrl);
 
   useEffect(() => {
