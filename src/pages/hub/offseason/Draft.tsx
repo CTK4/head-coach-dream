@@ -36,6 +36,9 @@ export default function Draft() {
   const [cpuDelayMinMs, setCpuDelayMinMs] = useState(800);
   const [cpuDelayMaxMs, setCpuDelayMaxMs] = useState(1500);
   const [fastForward, setFastForward] = useState(false);
+  const [stableProspects, setStableProspects] = useState(() => state.draft.prospectPool);
+  const [refreshed, setRefreshed] = useState(false);
+  const [showStillEmpty, setShowStillEmpty] = useState(false);
   const resultsEndRef = useRef<HTMLDivElement | null>(null);
 
   const sim = state.draft;
@@ -44,6 +47,7 @@ export default function Draft() {
   const draftStepComplete = state.offseason.stepsComplete.DRAFT === true;
   const currentSlot = sim.slots[sim.cursor];
   const onClock = !!currentSlot && currentSlot.teamId === sim.userTeamId;
+  const cpuSelecting = !onClock && !sim.complete && sim.started;
 
   useEffect(() => {
     // Keep the experience board-driven: show results while CPU is picking; jump to the pool when it's your turn.
@@ -108,6 +112,11 @@ export default function Draft() {
     return list;
   }, [sim.prospectPool, sim.takenProspectIds, pos]);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setStableProspects(available), 150);
+    return () => window.clearTimeout(t);
+  }, [available]);
+
   const selectionsByOverall = useMemo(() => {
     const map = new Map<number, (typeof sim.selections)[number]>();
     for (const selection of sim.selections) {
@@ -143,6 +152,31 @@ export default function Draft() {
   );
 
   useEffect(() => {
+    if (incomingTradeOffers.length > 0) {
+      setShowStillEmpty(false);
+    }
+  }, [incomingTradeOffers.length]);
+
+  useEffect(() => {
+    if (!refreshed) return;
+    setShowStillEmpty(false);
+    const t = window.setTimeout(() => {
+      if (incomingTradeOffers.length === 0) {
+        setShowStillEmpty(true);
+      }
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [incomingTradeOffers.length, refreshed]);
+
+  useEffect(() => {
+    if (!refreshed) return;
+    const t = window.setTimeout(() => {
+      setRefreshed(false);
+    }, 2000);
+    return () => window.clearTimeout(t);
+  }, [refreshed]);
+
+  useEffect(() => {
     if (!sim.started || sim.complete || !currentSlot || !shouldShowTradeOffers) return;
     if (sim.tradeOffersForOverall === currentSlot.overall && incomingTradeOffers.length > 0) return;
     dispatch({ type: "DRAFT_SHOP" });
@@ -170,6 +204,11 @@ export default function Draft() {
 
   const declineTradeOffer = (offerId: string) => {
     dispatch({ type: "DRAFT_DECLINE_OFFER", payload: { offerId } });
+  };
+
+  const handleRefreshOffers = () => {
+    dispatch({ type: "DRAFT_SHOP" });
+    setRefreshed(true);
   };
 
   return (
@@ -269,6 +308,12 @@ export default function Draft() {
 
       {(tab === "POOL" || tab === "ROOM") && (
         <section className="space-y-3">
+          {cpuSelecting && (
+            <div className="flex w-fit items-center gap-2 rounded-full border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-muted-foreground">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" />
+              CPU selecting…
+            </div>
+          )}
           <div className="overflow-x-auto pb-1">
             <div className="flex min-w-max gap-2">
               {["ALL", "QB", "RB", "WR", "TE", "OL", "DT", "EDGE", "LB", "CB", "S"].map((x) => (
@@ -278,7 +323,7 @@ export default function Draft() {
               ))}
             </div>
           </div>
-          {available.slice(0, 80).map((p) => {
+          {stableProspects.slice(0, 80).map((p) => {
             const taken = !!sim.takenProspectIds[p.prospectId];
             return (
               <div key={p.prospectId} className="border rounded p-3 flex items-center justify-between gap-3">
@@ -376,6 +421,7 @@ export default function Draft() {
             )}
             {shouldShowTradeOffers && (
               <div className="space-y-2">
+                {/* TODO: Trade composer ask-back pick selector is not present in this file; no native <select> exists to replace with shadcn Select. */}
                 {incomingTradeOffers.length === 0 && <div className="text-sm text-slate-500">No offers right now.</div>}
                 {incomingTradeOffers.map((offer) => (
                   <div key={offer.offerId} className="rounded border p-2 text-sm space-y-2">
@@ -392,9 +438,14 @@ export default function Draft() {
                     </div>
                   </div>
                 ))}
-                <button className="min-h-11 rounded border px-3 py-1 text-sm" onClick={() => dispatch({ type: "DRAFT_SHOP" })}>
+                <button className="min-h-11 rounded border px-3 py-1 text-sm" onClick={handleRefreshOffers} disabled={refreshed}>
                   Refresh Offers
                 </button>
+                {showStillEmpty && (
+                  <p className="py-2 text-center text-xs text-muted-foreground">
+                    No teams interested in this pick right now.
+                  </p>
+                )}
               </div>
             )}
           </div>

@@ -56,7 +56,7 @@ const ChooseBackground = () => {
                 className={cn(
                   "transition-all",
                   isTouchDevice ? "cursor-default" : "cursor-pointer hover:border-primary hover:shadow-lg hover:shadow-primary/10",
-                  isExpanded && "border-primary shadow-lg shadow-primary/10",
+                  isExpanded ? "border-blue-300/45 ring-1 ring-blue-400/20" : "border-white/10",
                 )}
                 onMouseEnter={() => !isTouchDevice && setExpandedId(archetype.id)}
                 onMouseLeave={() => !isTouchDevice && setExpandedId((cur) => (cur === archetype.id ? null : cur))}
@@ -64,7 +64,7 @@ const ChooseBackground = () => {
                 onBlur={() => !isTouchDevice && setExpandedId((cur) => (cur === archetype.id ? null : cur))}
                 onClick={() => {
                   if (isTouchDevice) {
-                    setExpandedId((cur) => (cur === archetype.id ? null : archetype.id));
+                    setExpandedId(archetype.id);
                     return;
                   }
                   handleSelect(archetype);

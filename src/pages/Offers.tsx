@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { getTeamById } from "@/data/leagueDb";
@@ -29,6 +29,16 @@ const Offers = () => {
   const [draftSalary, setDraftSalary] = useState<number>(2_000_000);
   const [draftAutonomy, setDraftAutonomy] = useState<number>(50);
   const [showCounter, setShowCounter] = useState<boolean>(false);
+
+  const isStoryMode = state.phase !== "HUB";
+  const backDestination = isStoryMode ? ROUTES.storyInterview : ROUTES.hub;
+  const backLabel = isStoryMode ? "Back to Interview" : "Return to Hub";
+
+  useEffect(() => {
+    if (state.offers.length === 0 && !isStoryMode && state.phase === "HUB") {
+      navigate(ROUTES.hub, { replace: true });
+    }
+  }, [isStoryMode, navigate, state.offers.length, state.phase]);
 
   const activeOffer = useMemo(
     () => (openTeamId ? state.offers.find((o) => o.teamId === openTeamId) ?? null : null),
@@ -76,7 +86,7 @@ const Offers = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-6 text-center">
             <p className="text-lg">No offers yet. Complete all interviews first.</p>
-            <Button onClick={() => navigate(ROUTES.storyInterview)} className="mt-4">Back to Story Interviews</Button>
+            <Button onClick={() => navigate(backDestination)} className="mt-4">{backLabel}</Button>
           </CardContent>
         </Card>
       </div>
