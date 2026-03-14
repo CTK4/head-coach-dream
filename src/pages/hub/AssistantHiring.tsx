@@ -19,6 +19,8 @@ import { Separator } from "@/components/ui/separator";
 import { HubPageCard } from "@/components/franchise-hub/HubPageCard";
 import { Avatar } from "@/components/common/Avatar";
 import { stageToRoute } from "@/components/franchise-hub/stageRouting";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 
 const ROLE_ORDER: Array<{ key: keyof AssistantStaff; label: string; role?: PositionCoachRole; focus: RoleFocus }> = [
   { key: "assistantHcId", label: "Assistant HC", focus: "GEN" },
@@ -53,6 +55,7 @@ function repNumber(p: PersonnelRow): number {
 
 export default function AssistantHiring() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const navigate = useNavigate();
   const teamId = resolveUserTeamId(state);
   const coordinatorsReady = !!(state.staff?.ocId && state.staff?.dcId && state.staff?.stcId);
@@ -218,6 +221,7 @@ export default function AssistantHiring() {
 
   const handleContinue = () => {
     if (!allFilled) return;
+    if (!confirmAutoAdvance(settings, "Advance to roster review?")) return;
     dispatch({ type: "ADVANCE_CAREER_STAGE" });
     navigate(stageToRoute("ROSTER_REVIEW"));
   };

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { labelUserOfferForUi, upcomingUserPickSlots } from "@/engine/draftSim";
 import { getPositionLabel } from "@/lib/displayLabels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function Draft() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -79,7 +82,7 @@ export default function Draft() {
     if (!giveOveralls.length) return;
     if (giveOveralls.length > 10) return;
 
-    if (!window.confirm("Send this offer?")) return;
+    if (!confirmAutoAdvance(settings, "Send this offer?")) return;
     dispatch({
       type: "DRAFT_SEND_TRADE_UP_OFFER",
       payload: { giveOveralls, askBackOverall: composeAskBack === "NONE" ? null : composeAskBack },
@@ -88,7 +91,7 @@ export default function Draft() {
   };
 
   const acceptTrade = (offerId: string) => {
-    if (!window.confirm("Accept this trade?")) return;
+    if (!confirmAutoAdvance(settings, "Accept this trade?")) return;
     dispatch({ type: "DRAFT_ACCEPT_TRADE", payload: { offerId } });
   };
 

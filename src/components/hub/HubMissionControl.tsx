@@ -1,4 +1,14 @@
 import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { useGame } from "@/context/GameContext";
@@ -12,6 +22,8 @@ import {
   nextCareerStage,
 } from "@/components/franchise-hub/stageRouting";
 import type { CareerStage } from "@/types/careerStage";
+import { shouldConfirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
+import { useUserSettings } from "@/hooks/useUserSettings";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -114,6 +126,8 @@ export function HubMissionControl() {
   const { state, dispatch } = useGame();
   const navigate = useNavigate();
   const [zone3Open, setZone3Open] = useState(false);
+  const [confirmAdvanceOpen, setConfirmAdvanceOpen] = useState(false);
+  const settings = useUserSettings();
 
   const { careerStage, coach, hub, currentStandings, userTeamId, staff, firing } =
     state;
@@ -174,6 +188,10 @@ export function HubMissionControl() {
         navigate("/hub/preseason");
         break;
       case "OFFSEASON_HUB":
+        if (shouldConfirmAutoAdvance(settings)) {
+          setConfirmAdvanceOpen(true);
+          return;
+        }
         dispatch({ type: "ADVANCE_CAREER_STAGE" });
         navigate(stageToRoute("ASSISTANT_HIRING"));
         break;
@@ -433,6 +451,29 @@ export function HubMissionControl() {
           {ctaLabel}
         </Button>
       </div>
+
+      <AlertDialog open={confirmAdvanceOpen} onOpenChange={setConfirmAdvanceOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Advance to assistant hiring?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move your career stage into offseason assistant hiring.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmAdvanceOpen(false);
+                dispatch({ type: "ADVANCE_CAREER_STAGE" });
+                navigate(stageToRoute("ASSISTANT_HIRING"));
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Zone 2: This Week's Work ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

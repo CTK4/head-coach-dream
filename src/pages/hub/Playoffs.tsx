@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTeamById } from "@/data/leagueDb";
@@ -8,6 +10,7 @@ import { getPlayoffRoundGames } from "@/engine/playoffsSim";
 
 export default function PlayoffsPage() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const navigate = useNavigate();
   if (state.careerStage !== "PLAYOFFS") return <Navigate to="/hub" replace />;
   if (!["WILD_CARD", "DIVISIONAL", "CONFERENCE", "CHAMPIONSHIP"].includes(state.league.phase)) return <Navigate to="/hub" replace />;
@@ -21,7 +24,10 @@ export default function PlayoffsPage() {
     dispatch({ type: "PLAYOFFS_TICK" });
   }, [dispatch]);
 
-  const advancePlayoffs = () => dispatch({ type: "PLAYOFFS_TICK" });
+  const advancePlayoffs = () => {
+    if (!confirmAutoAdvance(settings, "Advance playoffs to the next simulation step?")) return;
+    dispatch({ type: "PLAYOFFS_TICK" });
+  };
 
   const playNext = () => {
     if (!pending) return;

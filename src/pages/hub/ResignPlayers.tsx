@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { getPlayers } from "@/data/leagueDb";
 import { getDepthSlotLabel, getContractSummaryForPlayer } from "@/engine/rosterOverlay";
 import { buildRosterIndex } from "@/engine/transactions/applyTransactions";
@@ -43,12 +45,18 @@ function cloneOffer(offer: ResignOffer): ResignOffer {
 
 export default function ResignPlayers() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const navigate = useNavigate();
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [draftOffer, setDraftOffer] = useState<ResignOffer | null>(null);
+
+  const handleContinue = () => {
+    if (!confirmAutoAdvance(settings, "Advance to the next stage?")) return;
+    dispatch({ type: "ADVANCE_CAREER_STAGE" });
+  };
 
   const expiring = useMemo(() => {
     const rosterIndex = buildRosterIndex(state);
@@ -110,7 +118,7 @@ export default function ResignPlayers() {
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Re-sign Window</CardTitle>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+          <Button variant="secondary" onClick={handleContinue}>
             Continue
           </Button>
         </div>

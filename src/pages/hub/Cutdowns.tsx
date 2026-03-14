@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { useGame } from "@/context/GameContext";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,16 +10,22 @@ import { getPositionLabel } from "@/lib/displayLabels";
 
 export default function Cutdowns() {
   const { state, dispatch } = useGame();
+  const settings = useUserSettings();
   const teamId = state.acceptedOffer?.teamId;
   if (!teamId) return null;
 
   const roster = useMemo(() => getEffectivePlayersByTeam(state, teamId).sort((a: any, b: any) => Number(b.overall ?? 0) - Number(a.overall ?? 0)), [state, teamId]);
 
+  const handleContinue = () => {
+    if (!confirmAutoAdvance(settings, "Advance to the next stage?")) return;
+    dispatch({ type: "ADVANCE_CAREER_STAGE" });
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Final Cutdowns</CardTitle>
-        <Button variant="secondary" onClick={() => dispatch({ type: "ADVANCE_CAREER_STAGE" })}>
+        <Button variant="secondary" onClick={handleContinue}>
           Continue
         </Button>
       </CardHeader>

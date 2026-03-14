@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getEffectivePlayersByTeam } from "@/engine/rosterOverlay";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { confirmAutoAdvance } from "@/lib/autoAdvanceConfirm";
 import {
   DEFAULT_PRACTICE_PLAN,
   PRACTICE_POINTS_BUDGET,
@@ -69,6 +71,7 @@ const CATEGORY_COPY: Record<PracticeCategory, { title: string; tradeoff: string 
 const RegularSeason = () => {
   const { state, dispatch, getCurrentTeamMatchup } = useGame();
   const navigate = useNavigate();
+  const settings = useUserSettings();
 
   if (state.careerStage === "PLAYOFFS") return <Navigate to="/hub/playoffs" replace />;
   if (state.careerStage !== "REGULAR_SEASON") return <Navigate to="/hub/offseason" replace />;
@@ -121,9 +124,15 @@ const RegularSeason = () => {
 
   const gameInProgress = state.league.phase === "REGULAR_SEASON_GAME" && state.game.homeTeamId !== "HOME";
 
+  const handleAdvanceWeek = () => {
+    if (!confirmAutoAdvance(settings, "Advance to the next week?")) return;
+    dispatch({ type: "ADVANCE_WEEK" });
+  };
+
   const kickoff = () => {
     if (!opponentId || !current) return;
     if (state.league.phase === "REGULAR_SEASON") {
+      if (!confirmAutoAdvance(settings, "Advance to the next week?")) return;
       dispatch({ type: "ADVANCE_WEEK" });
       navigate("/hub/gameplan");
       return;
@@ -200,7 +209,13 @@ const RegularSeason = () => {
           </div>
 
           <div className="flex gap-2">
-            <Button data-test="advance-week" variant="secondary" onClick={() => dispatch({ type: "ADVANCE_WEEK" })}>Advance Week</Button>
+            <Button
+              data-test="advance-week"
+              variant="secondary"
+              onClick={handleAdvanceWeek}
+            >
+              Advance Week
+            </Button>
           </div>
           {state.lastPracticeOutcomeSummary ? <p className="text-sm text-muted-foreground">{state.lastPracticeOutcomeSummary}</p> : null}
           {state.uiToast ? <p className="text-xs text-muted-foreground">{state.uiToast}</p> : null}

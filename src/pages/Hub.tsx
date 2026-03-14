@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { HubMissionControl } from "@/components/hub/HubMissionControl";
 import { useGame } from "@/context/GameContext";
 import { FranchiseHeader } from "@/components/franchise-hub/FranchiseHeader";
